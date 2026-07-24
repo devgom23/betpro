@@ -21,6 +21,7 @@ BETPRO API 서버 (FastAPI) - 골격
 ================================================================
 """
 import os
+import re
 import sys
 
 # 루트/‘api’ 를 import 경로에 등록 (betpro_paths, betpro_auth, engine)
@@ -177,14 +178,18 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
         return {"seasons": [], "rounds_by_season": {}, "latest": None}
 
     seasons = sorted([s for s in df["S"].dropna().unique().tolist()], reverse=True)
+
+    def _round_sort_key(v):
+        # "9R"/"38R"처럼 숫자+문자 혼합 라벨은 float() 변환이 항상 실패해
+        # 문자열 정렬로 빠지면 "9R" > "38R"가 되는 버그가 생긴다.
+        # 라벨 안의 숫자만 뽑아 그 값으로 정렬한다(원본 _round_key와 동일 규칙).
+        m = re.search(r"\d+", str(v))
+        return int(m.group()) if m else 0
+
     rounds_by_season = {}
     for s in seasons:
         rs = df.loc[df["S"] == s, "R"].dropna().unique().tolist()
-        # 라운드는 숫자면 숫자순, 아니면 문자열순
-        try:
-            rs = sorted(rs, key=lambda x: float(x), reverse=True)
-        except (TypeError, ValueError):
-            rs = sorted([str(x) for x in rs], reverse=True)
+        rs = sorted(rs, key=_round_sort_key, reverse=True)
         rounds_by_season[str(s)] = [str(x) for x in rs]
 
     latest_season = str(seasons[0]) if seasons else None
@@ -196,17 +201,31 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
     }
 
 
+ODDS_FILTER_COLS = ["KW", "KD", "KL", "KHW", "KHD", "KHL", "FW", "FD", "FL"]
+ODDS_TOLERANCE = 0.005   # 원본 조회 필터와 동일한 부동소수 오차 허용
+
+
 @app.get("/api/leagues/{code}")
 def league_rows(code: str,
                 scope: str = PATHS.SCOPE_MASTER,
-                season: Optional[str] = None,
-                round: Optional[str] = None,   # noqa: A002
+                season: Optional[str] = None,   # None=최근시즌 자동, "ALL"=전체, 그외=정확히 일치
+                round: Optional[str] = None,    # noqa: A002  (None/"ALL" 규칙 동일)
+                kw: Optional[float] = None,
+                kd: Optional[float] = None,
+                kl: Optional[float] = None,
+                khw: Optional[float] = None,
+                khd: Optional[float] = None,
+                khl: Optional[float] = None,
+                fw: Optional[float] = None,
+                fd: Optional[float] = None,
+                fl: Optional[float] = None,
                 limit: int = 500,
                 offset: int = 0,
                 user: dict = Depends(get_current_user)):
     """
     대형 분석표 데이터. 저장된 값을 '불러오기만' 한다(재계산 없음 — 원칙 6-3).
-    season/round 미지정 시 최근 시즌·최근 라운드를 기본 선택.
+    season/round 미지정 시 최근 시즌·최근 라운드를 기본 선택. "ALL"이면 그 축은 필터 없음.
+    배당 9종(kw~fl)을 넘기면 ±0.005 오차로 근사 일치하는 경기만 추린다(원본 조회 필터와 동일 규칙).
     """
     _check_league(code)
     db = _resolve_scope_db(scope, user)
@@ -215,20 +234,36 @@ def league_rows(code: str,
         return {"columns": [], "rows": [], "total": 0,
                 "season": None, "round": None}
 
-    # 기본값: 최근 시즌·최근 라운드
+    # 기본값: 최근 시즌·최근 라운드. "ALL"이면 해당 축은 필터하지 않는다.
     if season is None and "S" in df.columns and not df["S"].dropna().empty:
         season = str(sorted(df["S"].dropna().unique().tolist())[-1])
+    elif season == "ALL":
+        season = None
+
     sub = df
     if season is not None and "S" in sub.columns:
         sub = sub[sub["S"].astype(str) == str(season)]
+
     if round is None and "R" in sub.columns and not sub["R"].dropna().empty:
         try:
             round = str(sorted(sub["R"].dropna().unique().tolist(),
                                key=lambda x: float(x))[-1])
         except (TypeError, ValueError):
             round = str(sorted(sub["R"].dropna().astype(str).unique().tolist())[-1])
+    elif round == "ALL":
+        round = None
+
     if round is not None and "R" in sub.columns:
         sub = sub[sub["R"].astype(str) == str(round)]
+
+    odds_query = {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
+                  "KHL": khl, "FW": fw, "FD": fd, "FL": fl}
+    for col in ODDS_FILTER_COLS:
+        target = odds_query[col]
+        if target is None or col not in sub.columns:
+            continue
+        series = pd.to_numeric(sub[col], errors="coerce")
+        sub = sub[(series - target).abs() < ODDS_TOLERANCE]
 
     total = len(sub)
     page = sub.iloc[offset: offset + limit]

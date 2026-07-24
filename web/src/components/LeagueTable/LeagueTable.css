@@ -1,0 +1,99 @@
+.league-table-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 220px);
+  border: 1px solid #334155;
+  border-radius: 8px;
+}
+
+.league-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  color: #e2e8f0;
+}
+
+.league-table th,
+.league-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #334155;
+  border-right: 1px solid #293548;
+  text-align: center;
+}
+
+.league-table thead th {
+  position: sticky;
+  background: #1e293b;
+  color: #cbd5e1;
+  z-index: 2;
+  font-weight: 600;
+}
+
+.league-table thead tr:first-child th {
+  top: 0;
+  z-index: 3;
+}
+
+.league-table thead tr:nth-child(2) th {
+  top: 46px;
+}
+
+.group-header {
+  line-height: 1.4;
+}
+
+.group-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.group-subtitle {
+  font-size: 10px;
+  font-weight: 400;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.sub-header {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.checkbox-col {
+  width: 34px;
+}
+
+.sticky-col {
+  position: sticky;
+  left: 0;
+  background: #1e293b;
+  z-index: 4;
+}
+
+td.sticky-col {
+  background: #0f172a;
+  z-index: 1;
+}
+
+.row-selected td {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.row-selected td.sticky-col {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+.league-table tbody tr:hover td {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.league-table tbody tr.row-selected:hover td {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.table-empty {
+  color: #94a3b8;
+  font-size: 14px;
+  padding: 24px 0;
+}

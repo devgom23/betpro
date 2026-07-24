@@ -1,17 +1,26 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../api/client'
+import LeaguePage from './LeaguePage'
 import './MainPage.css'
 
 export default function MainPage() {
   const { user, logout } = useAuth()
   const [scope, setScope] = useState('master')
+  const [leagues, setLeagues] = useState([])
+  const [activeTab, setActiveTab] = useState('dashboard')
+
   const [dashboard, setDashboard] = useState(null)
-  const [error, setError] = useState('')
+  const [dashboardError, setDashboardError] = useState('')
 
   useEffect(() => {
+    api.get('/api/leagues').then(setLeagues).catch(() => setLeagues([]))
+  }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'dashboard') return
     let cancelled = false
-    setError('')
+    setDashboardError('')
     setDashboard(null)
     api
       .get(`/api/dashboard?scope=${scope}`)
@@ -19,12 +28,12 @@ export default function MainPage() {
         if (!cancelled) setDashboard(data)
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message)
+        if (!cancelled) setDashboardError(err.message)
       })
     return () => {
       cancelled = true
     }
-  }, [scope])
+  }, [scope, activeTab])
 
   return (
     <div className="main-page">
@@ -58,37 +67,61 @@ export default function MainPage() {
         </div>
       </header>
 
-      <main className="content">
-        <h2 className="section-title">리그별 업로드 현황</h2>
-        {error && <p className="error-text">{error}</p>}
-        {!dashboard && !error && <p className="loading-text">불러오는 중...</p>}
+      <nav className="tab-bar">
+        <button
+          className={activeTab === 'dashboard' ? 'active' : ''}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          📈 현황
+        </button>
+        {leagues.map((lg) => (
+          <button
+            key={lg.code}
+            className={activeTab === lg.code ? 'active' : ''}
+            onClick={() => setActiveTab(lg.code)}
+          >
+            {lg.label}
+          </button>
+        ))}
+      </nav>
 
-        {dashboard && (
-          <table className="dashboard-table">
-            <thead>
-              <tr>
-                <th>리그</th>
-                <th>경기수</th>
-                <th>시즌</th>
-                <th>결과보유</th>
-                <th>예정</th>
-                <th>국내배당</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dashboard.rows.map((row) => (
-                <tr key={row.코드}>
-                  <td>{row.리그}</td>
-                  <td>{row.경기수.toLocaleString()}</td>
-                  <td>{row.시즌}</td>
-                  <td>{row.결과보유.toLocaleString()}</td>
-                  <td>{row.예정.toLocaleString()}</td>
-                  <td>{row.국내배당.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <main className="content">
+        {activeTab === 'dashboard' && (
+          <>
+            <h2 className="section-title">리그별 업로드 현황</h2>
+            {dashboardError && <p className="error-text">{dashboardError}</p>}
+            {!dashboard && !dashboardError && <p className="loading-text">불러오는 중...</p>}
+
+            {dashboard && (
+              <table className="dashboard-table">
+                <thead>
+                  <tr>
+                    <th>리그</th>
+                    <th>경기수</th>
+                    <th>시즌</th>
+                    <th>결과보유</th>
+                    <th>예정</th>
+                    <th>국내배당</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dashboard.rows.map((row) => (
+                    <tr key={row.코드}>
+                      <td>{row.리그}</td>
+                      <td>{row.경기수.toLocaleString()}</td>
+                      <td>{row.시즌}</td>
+                      <td>{row.결과보유.toLocaleString()}</td>
+                      <td>{row.예정.toLocaleString()}</td>
+                      <td>{row.국내배당.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
+
+        {activeTab !== 'dashboard' && <LeaguePage code={activeTab} scope={scope} />}
       </main>
     </div>
   )
