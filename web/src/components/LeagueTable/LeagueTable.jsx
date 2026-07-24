@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { buildColumnGroups, formatCell, cellStyle } from './columnGroups'
+import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import './LeagueTable.css'
 
-export default function LeagueTable({ columns, rows }) {
+export default function LeagueTable({ columns, rows, scope }) {
   const groups = useMemo(() => buildColumnGroups(columns || []), [columns])
   const [selected, setSelected] = useState(() => new Set())
+  const [detailRow, setDetailRow] = useState(null)
 
   function toggleRow(idx) {
     setSelected((prev) => {
@@ -35,6 +37,7 @@ export default function LeagueTable({ columns, rows }) {
                 onChange={toggleAll}
               />
             </th>
+            <th className="detail-col sticky-col-2" rowSpan={2}></th>
             {groups.map((g, gi) => (
               <th key={gi} colSpan={g.cols.length} className="group-header">
                 <div className="group-title">{g.label1}</div>
@@ -62,6 +65,15 @@ export default function LeagueTable({ columns, rows }) {
                   onChange={() => toggleRow(ri)}
                 />
               </td>
+              <td className="detail-col sticky-col-2">
+                <button
+                  className="detail-btn"
+                  title="상세 경기 정보"
+                  onClick={() => setDetailRow(row)}
+                >
+                  🔍
+                </button>
+              </td>
               {groups.flatMap((g, gi) =>
                 g.cols.map((c, ci) => {
                   const value = row[c.key]
@@ -77,6 +89,10 @@ export default function LeagueTable({ columns, rows }) {
           ))}
         </tbody>
       </table>
+
+      {detailRow && (
+        <MatchDetailModal row={detailRow} scope={scope} onClose={() => setDetailRow(null)} />
+      )}
     </div>
   )
 }

@@ -64,6 +64,10 @@
   width: 34px;
 }
 
+.detail-col {
+  width: 34px;
+}
+
 .sticky-col {
   position: sticky;
   left: 0;
@@ -71,16 +75,39 @@
   z-index: 4;
 }
 
-td.sticky-col {
+.sticky-col-2 {
+  position: sticky;
+  left: 34px;
+  background: #1e293b;
+  z-index: 4;
+}
+
+td.sticky-col,
+td.sticky-col-2 {
   background: #0f172a;
   z-index: 1;
+}
+
+.detail-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.detail-btn:hover {
+  background: rgba(59, 130, 246, 0.3);
 }
 
 .row-selected td {
   background: rgba(59, 130, 246, 0.12);
 }
 
-.row-selected td.sticky-col {
+.row-selected td.sticky-col,
+.row-selected td.sticky-col-2 {
   background: rgba(59, 130, 246, 0.25);
 }
 

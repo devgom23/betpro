@@ -16,7 +16,8 @@ BETPRO API 서버 (FastAPI) - 골격
   GET  /api/dashboard                  스코프별 리그 업로드 현황
   GET  /api/leagues                    리그 코드/라벨 목록
   GET  /api/leagues/{code}/filters     시즌·라운드 선택지
-  GET  /api/leagues/{code}             대형 분석표 데이터(시즌/라운드 필터)
+  GET  /api/leagues/{code}             대형 분석표 데이터(시즌/라운드/배당 필터)
+  GET  /api/head_to_head               두 팀 상대전적 (상세 팝업용)
   POST /api/analyze                    엔진 실시간 분석(임의 배당 1경기)
 ================================================================
 """
@@ -167,6 +168,14 @@ def _check_league(code: str):
         raise HTTPException(status_code=404, detail=f"알 수 없는 리그: {code}")
 
 
+def _round_sort_key(v):
+    # "9R"/"38R"처럼 숫자+문자 혼합 라벨은 float() 변환이 항상 실패해
+    # 문자열 정렬로 빠지면 "9R" > "38R"가 되는 버그가 생긴다.
+    # 라벨 안의 숫자만 뽑아 그 값으로 정렬한다(원본 betpro_ui._round_num과 동일 규칙).
+    m = re.search(r"\d+", str(v))
+    return int(m.group()) if m else 0
+
+
 @app.get("/api/leagues/{code}/filters")
 def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
                    user: dict = Depends(get_current_user)):
@@ -178,14 +187,6 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
         return {"seasons": [], "rounds_by_season": {}, "latest": None}
 
     seasons = sorted([s for s in df["S"].dropna().unique().tolist()], reverse=True)
-
-    def _round_sort_key(v):
-        # "9R"/"38R"처럼 숫자+문자 혼합 라벨은 float() 변환이 항상 실패해
-        # 문자열 정렬로 빠지면 "9R" > "38R"가 되는 버그가 생긴다.
-        # 라벨 안의 숫자만 뽑아 그 값으로 정렬한다(원본 _round_key와 동일 규칙).
-        m = re.search(r"\d+", str(v))
-        return int(m.group()) if m else 0
-
     rounds_by_season = {}
     for s in seasons:
         rs = df.loc[df["S"] == s, "R"].dropna().unique().tolist()
@@ -274,6 +275,70 @@ def league_rows(code: str,
         "season": season,
         "round": round,
         "can_write": PATHS.can_write(scope, user.get("role")),
+    }
+
+
+# ─────────────────────────── 상대전적 (상세 팝업용) ───────────────────────────
+RT_LABELS = {1: "핸승", 2: "핸무", 3: "무", 4: "역"}
+
+
+def _rt_label(v):
+    if v is None:
+        return None
+    try:
+        if pd.isna(v):
+            return None
+        return RT_LABELS.get(int(float(v)))
+    except (TypeError, ValueError):
+        return None
+
+
+@app.get("/api/head_to_head")
+def head_to_head(scope: str = PATHS.SCOPE_MASTER,
+                 home: str = "",
+                 away: str = "",
+                 limit: int = 15,
+                 user: dict = Depends(get_current_user)):
+    """
+    두 팀의 과거 맞대결 기록(betpro_ui._head_to_head 이식).
+    결과(RT)는 '각 경기의 홈팀 기준' — 지금 보고 있는 경기의 홈팀 관점으로
+    재해석하지 않는다(원본과 동일한 주의사항).
+    """
+    db = _resolve_scope_db(scope, user)
+    total_df = DATA.load_total_df(db)
+
+    ht, at = str(home).strip(), str(away).strip()
+    empty = {"summary": None, "matches": [], "total": 0}
+    if total_df.empty or "HT" not in total_df.columns or "AT" not in total_df.columns:
+        return empty
+
+    h = total_df["HT"].astype(str).str.strip()
+    a = total_df["AT"].astype(str).str.strip()
+    m = total_df[((h == ht) & (a == at)) | ((h == at) & (a == ht))].copy()
+    if m.empty:
+        return empty
+
+    m["_r_num"] = m["R"].map(_round_sort_key) if "R" in m.columns else 0
+    sort_cols = [c for c in ["S", "_r_num"] if c in m.columns or c == "_r_num"]
+    m = m.sort_values(sort_cols, ascending=False).drop(columns=["_r_num"])
+
+    summary = {"핸승": 0, "핸무": 0, "무": 0, "역": 0}
+    for v in m.get("RT", []):
+        lab = _rt_label(v)
+        if lab in summary:
+            summary[lab] += 1
+    summary["총"] = int(sum(summary.values()))
+
+    cols = [c for c in ["S", "R", "DT", "HT", "HS", "AS", "AT", "RT", "FW", "FD", "FL"]
+            if c in m.columns]
+    out = m[cols].head(limit).copy()
+    if "RT" in out.columns:
+        out["RT_label"] = out["RT"].map(_rt_label)
+
+    return {
+        "summary": summary,
+        "matches": DATA.df_to_records(out),
+        "total": len(m),
     }
 
 

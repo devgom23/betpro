@@ -88,7 +88,7 @@ export default function LeaguePage({ code, scope }) {
           <strong>{data.total.toLocaleString()}</strong>경기
         </span>
       </div>
-      <LeagueTable columns={data.columns} rows={data.rows} />
+      <LeagueTable columns={data.columns} rows={data.rows} scope={scope} />
     </div>
   )
 }
