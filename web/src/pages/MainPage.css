@@ -1,0 +1,111 @@
+.main-page {
+  min-height: 100vh;
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+}
+
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.app-name {
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+}
+
+.scope-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.scope-toggle button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.scope-toggle button.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.user-info {
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.logout-button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: transparent;
+  color: #f8fafc;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  background: #334155;
+}
+
+.content {
+  padding: 24px;
+}
+
+.section-title {
+  font-size: 16px;
+  margin: 0 0 16px;
+  color: #f1f5f9;
+}
+
+.loading-text,
+.error-text {
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.error-text {
+  color: #f87171;
+}
+
+.dashboard-table {
+  width: 100%;
+  max-width: 640px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #334155;
+}
+
+.dashboard-table th {
+  color: #94a3b8;
+  font-weight: 600;
+}
