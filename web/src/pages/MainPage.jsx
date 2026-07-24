@@ -12,7 +12,7 @@ export default function MainPage() {
   const { user, logout } = useAuth()
   const [scope, setScope] = useState('master')
   const [leagues, setLeagues] = useState([])
-  const [activeTab, setActiveTab] = useState('total')
+  const [activeTab, setActiveTab] = useState('EPL')
 
   useEffect(() => {
     api.get('/api/leagues').then(setLeagues).catch(() => setLeagues([]))
