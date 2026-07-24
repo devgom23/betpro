@@ -151,3 +151,273 @@
   color: #94a3b8;
   font-weight: 600;
 }
+
+/* ── 통합DB 탭: 재계산 박스 ── */
+.recompute-box {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+  max-width: 720px;
+}
+
+.recompute-box h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: #f1f5f9;
+}
+
+.recompute-caption {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.btn-primary,
+.btn-danger {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+}
+
+.btn-primary {
+  background: #3b82f6;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
+}
+
+.btn-danger {
+  background: #dc2626;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+.btn-primary:disabled,
+.btn-danger:disabled {
+  background: #475569;
+  cursor: not-allowed;
+}
+
+.expander {
+  margin-top: 14px;
+}
+
+.expander-toggle {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.expander-body {
+  margin-top: 10px;
+  padding: 12px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+}
+
+.confirm-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #fca5a5;
+  margin-bottom: 10px;
+}
+
+.recompute-notice {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #93c5fd;
+}
+
+.total-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.total-filters select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 13px;
+}
+
+.total-count {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.rt-metrics {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.rt-metric {
+  flex: 1;
+  max-width: 140px;
+  padding: 10px 14px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rt-metric-name {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.rt-metric-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.rt-metric-pct {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* ── 상대전적 탭 ── */
+.h2h-team-select {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.h2h-team-select select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 13px;
+  min-width: 160px;
+}
+
+.h2h-team-select span {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.h2h-metrics {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.h2h-metric {
+  flex: 1;
+  max-width: 200px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.h2h-metric-name {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.h2h-metric-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.h2h-metric.win-a {
+  border-color: #1565C0;
+}
+
+.h2h-metric.win-b {
+  border-color: #C62828;
+}
+
+.h2h-total {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0 0 14px;
+}
+
+.rt-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+/* ── 관리자 화면 공용 ── */
+.admin-caption {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+
+.admin-subheader {
+  font-size: 14px;
+  color: #f1f5f9;
+  margin: 0 0 10px;
+}
+
+.admin-subheader-sm {
+  font-size: 13px;
+  color: #cbd5e1;
+  margin: 14px 0 8px;
+}
+
+.admin-divider {
+  border: none;
+  border-top: 1px solid #334155;
+  margin: 18px 0;
+}
+
+.admin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.admin-row select,
+.admin-row input {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 13px;
+}
+
+.admin-row input[type='text'],
+.admin-row input:not([type]) {
+  min-width: 140px;
+}

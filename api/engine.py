@@ -8,15 +8,20 @@ FastAPI 등 어떤 환경에서도 그대로 재사용할 수 있습니다.
 포함 함수:
   find_header_row, normalize_team_names, _map_rt_value, preprocess_data,
   compute_domestic_nh_share(_fast), _prep_domestic_cache, _prep_db,
-  get_samples(_fast), analyze_row, compute_plushandi, analyze_dataframe
+  get_samples(_fast), analyze_row, compute_plushandi, analyze_dataframe,
+  recompute_pending_matches, recompute_all_matches (WEB_BET_PRO.py 1638~1738줄 이식)
 포함 상수:
   RT_TEXT_MAP, PH_F_CODES, PH_K_CODES, PH_TABLE, PH_MIN_SAMPLE, PH_BASE_RATE
 
 ⚠️ 계산 로직은 절대 수정 금지 (오랜 실측 검증으로 확정된 부분).
    원본과 동기화가 필요하면 WEB_BET_PRO.py 해당 줄을 다시 복사하세요.
 """
+import os
+import sqlite3
 import pandas as pd
 import numpy as np
+
+import betpro_paths as PATHS
 
 
 def find_header_row(df_temp):
@@ -577,3 +582,100 @@ def analyze_dataframe(df_tot, total_db):
         )
     res = pd.DataFrame(rows_out, index=df_tot.index)
     return res
+
+
+# ════════════════════════════════════════════════════════════
+# 💡 재계산 (WEB_BET_PRO.py 1638~1738줄 이식)
+#   통합DB 탭의 재계산 버튼 2종이 호출하는 로직. 계산 자체는 위 analyze_row와
+#   동일하며, 여기서는 "어떤 행을 다시 계산해 DB에 되쓸지"만 다룬다.
+#   원본의 st.cache_data.clear() 호출은 제거했다 — FastAPI 쪽 캐시(data_access.py)는
+#   (파일경로, mtime) 키를 쓰므로 아래 PATHS.stamp_updated()가 DB 파일을 건드리는
+#   순간 자동으로 무효화된다. 별도 캐시 클리어가 필요 없다.
+# ════════════════════════════════════════════════════════════
+def _recompute_indicators_for_subset(sub_df, league_full_df, total_df):
+    """sub_df(RT 없는 행)만 26개 지표를 재계산해 인덱스가 맞는 DataFrame으로 반환.
+    개별리그 지표는 league_full_df, 통합(TF-/TK-) 지표는 total_df 기준."""
+    db_cache = _prep_db(league_full_df)
+    total_cache = _prep_db(total_df)
+    dom_cache = _prep_domestic_cache(total_df)
+    rows_out = []
+    for _, row in sub_df.iterrows():
+        rows_out.append(
+            analyze_row(row, league_full_df, total_df,
+                        db_cache=db_cache, total_cache=total_cache, dom_cache=dom_cache))
+    return pd.DataFrame(rows_out, index=sub_df.index)
+
+
+def _recompute_by_mask(db_path, include_historical):
+    """공통 재계산 로직.
+    include_historical=False → RT 없는 예정 경기만 (일상 사용, 빠름)
+    include_historical=True  → 전체 경기(과거 포함) 재계산 (초기 세팅/오류 수정용, 느림)
+    반환: {리그코드: 갱신건수} 딕셔너리."""
+    if not db_path or not os.path.exists(db_path):
+        return {}
+
+    conn = sqlite3.connect(db_path)
+    try:
+        tabs = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+
+        # 최신 통합DB (이 함수 호출 시점 기준, 6개 리그 전체 합산)
+        frames = []
+        for lg in PATHS.LEAGUES:
+            if lg not in tabs:
+                continue
+            d = pd.read_sql(f'SELECT * FROM "{lg}"', conn)
+            if len(d) > 0:
+                d['Source_League'] = lg
+                frames.append(d)
+        total_df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+        summary = {}
+        for lg in PATHS.LEAGUES:
+            if lg not in tabs:
+                continue
+            league_df = pd.read_sql(f'SELECT * FROM "{lg}"', conn)
+            if league_df.empty or 'RT' not in league_df.columns:
+                continue
+
+            rt_num = pd.to_numeric(league_df['RT'], errors='coerce')
+            if include_historical:
+                mask = pd.Series(True, index=league_df.index)   # 전체 경기
+            else:
+                mask = rt_num.isna()                             # RT 없음(예정 경기)만
+            n_target = int(mask.sum())
+            summary[lg] = n_target
+            if n_target == 0:
+                continue
+
+            sub = league_df[mask]
+
+            # ① 26개 지표(+플핸 예측 PH_*) 재계산
+            #    플핸 예측(PH_F/PH_K/PH_PICK/PH_HIT/PH_DOM)은 analyze_row() 안의
+            #    compute_plushandi()에서 지표와 함께 계산되므로, 지표 재계산
+            #    한 번으로 플핸 예측도 같이 갱신된다.
+            new_ind = _recompute_indicators_for_subset(sub, league_df, total_df)
+            for c in new_ind.columns:
+                if c not in league_df.columns:
+                    league_df[c] = np.nan
+                league_df.loc[new_ind.index, c] = new_ind[c].values
+
+            league_df.to_sql(lg, conn, if_exists='replace', index=False)
+    finally:
+        conn.close()
+
+    PATHS.stamp_updated(db_path)
+    return summary
+
+
+def recompute_pending_matches(db_path):
+    """RT 없는 예정 경기만 골라 최신 통합DB 기준으로 26지표+예측을 재계산해 저장.
+    RT 있는 과거 경기는 전혀 수정하지 않는다. (일상적으로 자주 쓰는 빠른 버전)
+    반환: {리그코드: 갱신건수} 딕셔너리."""
+    return _recompute_by_mask(db_path, include_historical=False)
+
+
+def recompute_all_matches(db_path):
+    """RT 유무와 무관하게 전체 경기를 최신 통합DB 기준으로 26지표+예측 재계산.
+    반환: {리그코드: 갱신건수} 딕셔너리."""
+    return _recompute_by_mask(db_path, include_historical=True)

@@ -17,12 +17,32 @@ BETPRO API 서버 (FastAPI) - 골격
   GET  /api/leagues                    리그 코드/라벨 목록
   GET  /api/leagues/{code}/filters     시즌·라운드 선택지
   GET  /api/leagues/{code}             대형 분석표 데이터(시즌/라운드/배당 필터)
-  GET  /api/head_to_head               두 팀 상대전적 (상세 팝업용)
+  GET  /api/head_to_head               두 팀 상대전적 (상세 팝업/상대전적 탭 공용)
+  GET  /api/teams                      전체 팀명 목록 (상대전적 탭)
+  GET  /api/total                      통합DB(6대 리그 합산) 조회
+  POST /api/recompute/pending          예정 경기만 최신 통합DB 기준 재계산
+  POST /api/recompute/all              전체(과거 포함) 재계산 — confirm 필수
   POST /api/analyze                    엔진 실시간 분석(임의 배당 1경기)
+
+  ── 관리자 전용 (role=admin) ──
+  GET  /api/admin/master/status        master.db 현황 + 백업 목록
+  POST /api/admin/master/backup        지금 백업
+  POST /api/admin/master/restore       백업 롤백
+  POST /api/admin/master/delete_league 리그 테이블 삭제(자동 백업 후)
+  GET  /api/admin/users                계정 목록
+  POST /api/admin/users                계정 추가
+  POST /api/admin/users/{u}/expiry     이용기간 변경
+  POST /api/admin/users/{u}/password   비밀번호 변경
+  DELETE /api/admin/users/{u}          계정 삭제(본인 불가)
+  GET  /api/admin/customer_data        고객 업로드 현황
+  GET  /api/admin/customer_data/{u}/leagues   해당 고객의 데이터 보유 리그
+  GET  /api/admin/customer_data/{u}/{league}  고객 원본 열람(읽기전용, 로그 기록)
+  GET  /api/admin/access_log           열람 기록
 ================================================================
 """
 import os
 import re
+import sqlite3
 import sys
 
 # 루트/‘api’ 를 import 경로에 등록 (betpro_paths, betpro_auth, engine)
@@ -42,7 +62,7 @@ import betpro_paths as PATHS  # noqa: E402
 import betpro_auth as AUTH    # noqa: E402
 import engine                 # noqa: E402
 import data_access as DATA    # noqa: E402
-from deps import get_current_user, COOKIE_NAME  # noqa: E402
+from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
 ALLOWED_ORIGINS = [
@@ -366,3 +386,275 @@ def analyze(body: AnalyzeBody, user: dict = Depends(get_current_user)):
     row = pd.Series(body.row)
     result = engine.analyze_row(row, league_df, total_df)  # 캐시는 내부 생성
     return {"result": DATA.series_to_dict(result)}
+
+
+# ─────────────────────────── 통합DB 탭 ───────────────────────────
+@app.get("/api/total")
+def total_view(scope: str = PATHS.SCOPE_MASTER,
+              league: str = "ALL",
+              season: str = "ALL",
+              limit: int = 2000,
+              user: dict = Depends(get_current_user)):
+    """
+    통합DB(6대 리그 합산) 조회. 리그/시즌 필터 + RT 결과분포 요약.
+    저장된 값을 불러오기만 한다 (재계산은 /api/recompute/* 별도 호출).
+    """
+    db = _resolve_scope_db(scope, user)
+    total_df = DATA.load_total_df(db)
+    if total_df.empty:
+        return {"columns": [], "rows": [], "total": 0, "grand_total": 0,
+                "seasons": [], "rt_summary": None}
+
+    view = total_df
+    if league != "ALL" and "Source_League" in view.columns:
+        _check_league(league)
+        view = view[view["Source_League"] == league]
+
+    seasons = sorted(view["S"].dropna().astype(str).unique().tolist(), reverse=True) \
+        if "S" in view.columns else []
+    if season != "ALL" and "S" in view.columns:
+        view = view[view["S"].astype(str) == season]
+
+    rt_summary = None
+    if "RT" in view.columns:
+        rt = pd.to_numeric(view["RT"], errors="coerce").dropna()
+        if len(rt):
+            rt_summary = {
+                "핸승": int((rt == 1).sum()), "핸무": int((rt == 2).sum()),
+                "무": int((rt == 3).sum()), "역": int((rt == 4).sum()),
+                "총": int(len(rt)),
+            }
+
+    return {
+        "columns": list(total_df.columns),
+        "rows": DATA.df_to_records(view.head(limit)),
+        "total": len(view),
+        "grand_total": len(total_df),
+        "seasons": seasons,
+        "rt_summary": rt_summary,
+    }
+
+
+# ─────────────────────────── 재계산 (통합DB 탭 버튼 2종) ───────────────────────────
+class RecomputeBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    confirm: bool = False   # 전체 재계산 시 "확인" 체크 여부(프론트에서 강제)
+
+
+@app.post("/api/recompute/pending")
+def recompute_pending(body: RecomputeBody, user: dict = Depends(get_current_user)):
+    """RT 없는 예정 경기만 최신 통합DB 기준으로 재계산 (과거 경기 무수정)."""
+    db = _resolve_scope_db(body.scope, user)
+    if not PATHS.can_write(body.scope, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+    summary = engine.recompute_pending_matches(db)
+    return {"summary": summary}
+
+
+@app.post("/api/recompute/all")
+def recompute_all(body: RecomputeBody, user: dict = Depends(get_current_user)):
+    """과거 경기 포함 전체 재계산 (초기 세팅/오류 수정용, 느림). confirm=true 필수."""
+    db = _resolve_scope_db(body.scope, user)
+    if not PATHS.can_write(body.scope, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
+    summary = engine.recompute_all_matches(db)
+    return {"summary": summary}
+
+
+# ─────────────────────────── 상대전적 탭 ───────────────────────────
+@app.get("/api/teams")
+def teams(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_current_user)):
+    """통합DB에 등장하는 전체 팀명 목록(상대전적 탭의 팀 선택용)."""
+    db = _resolve_scope_db(scope, user)
+    total_df = DATA.load_total_df(db)
+    if total_df.empty or "HT" not in total_df.columns or "AT" not in total_df.columns:
+        return {"teams": []}
+    names = set(total_df["HT"].dropna().astype(str).unique()) | \
+        set(total_df["AT"].dropna().astype(str).unique())
+    return {"teams": sorted(names)}
+
+
+# ─────────────────────────── 🛠 마스터 관리 (관리자 전용) ───────────────────────────
+@app.get("/api/admin/master/status")
+def admin_master_status(admin: dict = Depends(get_admin_user)):
+    mdb = PATHS.get_master_db()
+    backups = [
+        {"name": os.path.basename(p), "size_mb": PATHS.db_filesize_mb(p)}
+        for p in PATHS.list_backups()
+    ]
+    return {
+        "rows": PATHS.league_dashboard(mdb),
+        "total_rows": PATHS.db_total_rows(mdb),
+        "file_path": mdb,
+        "size_mb": PATHS.db_filesize_mb(mdb),
+        "updated_at": PATHS.get_meta(mdb, "updated_at"),
+        "backups": backups,
+    }
+
+
+@app.post("/api/admin/master/backup")
+def admin_master_backup(admin: dict = Depends(get_admin_user)):
+    path = PATHS.backup_master()
+    if not path:
+        raise HTTPException(status_code=400, detail="백업할 데이터가 없습니다.")
+    return {"name": os.path.basename(path)}
+
+
+class RestoreBody(BaseModel):
+    name: str
+    confirm: bool = False
+
+
+@app.post("/api/admin/master/restore")
+def admin_master_restore(body: RestoreBody, admin: dict = Depends(get_admin_user)):
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
+    # 클라이언트가 임의 경로를 보낼 수 없도록, 실제 백업 목록에서만 이름을 찾는다.
+    match = next((p for p in PATHS.list_backups() if os.path.basename(p) == body.name), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="백업 파일을 찾을 수 없습니다.")
+    try:
+        PATHS.restore_backup(match)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"롤백 실패: {e}")
+    return {"ok": True}
+
+
+class DeleteLeagueBody(BaseModel):
+    league: str
+    confirm: bool = False
+
+
+@app.post("/api/admin/master/delete_league")
+def admin_master_delete_league(body: DeleteLeagueBody, admin: dict = Depends(get_admin_user)):
+    _check_league(body.league)
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
+    mdb = PATHS.get_master_db()
+    PATHS.backup_master()   # 삭제 전 자동 백업
+    con = sqlite3.connect(mdb)
+    try:
+        con.execute(f'DROP TABLE IF EXISTS "{body.league}"')
+        con.commit()
+    finally:
+        con.close()
+    PATHS.stamp_updated(mdb)
+    return {"ok": True}
+
+
+# ─────────────────────────── 👑 계정 관리 (관리자 전용) ───────────────────────────
+@app.get("/api/admin/users")
+def admin_list_users(admin: dict = Depends(get_admin_user)):
+    return {"users": AUTH.list_users(PATHS.get_auth_db())}
+
+
+class AddUserBody(BaseModel):
+    username: str
+    password: str
+    expiry: str = "permanent"
+    role: str = "user"
+
+
+@app.post("/api/admin/users")
+def admin_add_user(body: AddUserBody, admin: dict = Depends(get_admin_user)):
+    if not PATHS.is_valid_username(body.username.strip()):
+        raise HTTPException(status_code=400,
+                            detail="아이디 형식 오류: 영문/숫자/_/- 3~32자만 사용 가능합니다.")
+    ok, msg = AUTH.add_user(PATHS.get_auth_db(), body.username, body.password,
+                            body.expiry, body.role)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    try:
+        PATHS.on_account_created(body.username.strip())
+    except Exception as e:
+        return {"ok": True, "msg": msg, "warning": f"데이터 공간 생성 실패: {e}"}
+    return {"ok": True, "msg": msg}
+
+
+class ExpiryBody(BaseModel):
+    expiry: str
+
+
+@app.post("/api/admin/users/{username}/expiry")
+def admin_update_expiry(username: str, body: ExpiryBody, admin: dict = Depends(get_admin_user)):
+    ok, msg = AUTH.update_expiry(PATHS.get_auth_db(), username, body.expiry)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"ok": True, "msg": msg}
+
+
+class PasswordBody(BaseModel):
+    password: str
+
+
+@app.post("/api/admin/users/{username}/password")
+def admin_change_password(username: str, body: PasswordBody, admin: dict = Depends(get_admin_user)):
+    ok, msg = AUTH.change_password(PATHS.get_auth_db(), username, body.password)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"ok": True, "msg": msg}
+
+
+@app.delete("/api/admin/users/{username}")
+def admin_delete_user(username: str, confirm: bool = False,
+                      admin: dict = Depends(get_admin_user)):
+    if not confirm:
+        raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
+    if username == admin["username"]:
+        raise HTTPException(status_code=400, detail="현재 로그인한 본인 계정은 삭제할 수 없습니다.")
+    ok, msg = AUTH.delete_user(PATHS.get_auth_db(), username)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    try:
+        PATHS.on_account_deleted(username)
+    except Exception as e:
+        return {"ok": True, "msg": msg, "warning": f"폴더 삭제 실패: {e}"}
+    return {"ok": True, "msg": msg}
+
+
+# ─────────────────────────── 👑 고객 데이터 열람 (C안: 읽기전용 + 로그) ───────────────────────────
+@app.get("/api/admin/customer_data")
+def admin_customer_data(admin: dict = Depends(get_admin_user)):
+    return {"customers": PATHS.user_storage_summary()}
+
+
+@app.get("/api/admin/customer_data/{username}/leagues")
+def admin_customer_leagues(username: str, admin: dict = Depends(get_admin_user)):
+    udb = PATHS.get_user_db(username)
+    rows = [d for d in PATHS.league_dashboard(udb) if d["경기수"] > 0]
+    return {"leagues": [{"code": d["코드"], "label": d["리그"], "rows": d["경기수"]} for d in rows]}
+
+
+_CUSTOMER_VIEW_COLS = ["L", "S", "R", "No", "DT", "TM", "HT", "HS", "RT", "AS", "AT",
+                       "KW", "KD", "KL", "KH", "KHW", "KHD", "KHL",
+                       "FW", "FD", "FL", "FH", "FHW", "FHD", "FHL"]
+
+
+@app.get("/api/admin/customer_data/{username}/{league}")
+def admin_view_customer_data(username: str, league: str, admin: dict = Depends(get_admin_user)):
+    """
+    고객 업로드 원본을 읽기전용으로 열람. 관리자는 물리적으로 수정할 수 없다
+    (읽기전용 접속). 열람 시 access_log 에 기록되어 분쟁 시 근거가 된다.
+    """
+    _check_league(league)
+    udb = PATHS.get_user_db(username)
+    try:
+        con = sqlite3.connect(f"file:{udb}?mode=ro", uri=True)
+        try:
+            df = pd.read_sql(f'SELECT * FROM "{league}"', con)
+        finally:
+            con.close()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"열람 실패: {e}")
+
+    PATHS.log_access(admin["username"], username, league, "view", len(df))
+    show_cols = [c for c in _CUSTOMER_VIEW_COLS if c in df.columns]
+    view = df[show_cols] if show_cols else df
+    return {"columns": list(view.columns), "rows": DATA.df_to_records(view), "total": len(view)}
+
+
+@app.get("/api/admin/access_log")
+def admin_access_log(admin: dict = Depends(get_admin_user)):
+    return {"logs": PATHS.list_access_log(100)}
