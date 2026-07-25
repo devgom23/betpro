@@ -72,10 +72,6 @@
   color: var(--text-muted);
 }
 
-.checkbox-col {
-  width: 34px;
-}
-
 .detail-col {
   width: 34px;
 }
@@ -87,15 +83,7 @@
   z-index: 4;
 }
 
-.sticky-col-2 {
-  position: sticky;
-  left: 34px;
-  background: var(--bg-surface);
-  z-index: 4;
-}
-
-td.sticky-col,
-td.sticky-col-2 {
+td.sticky-col {
   background: var(--bg-page);
   z-index: 1;
 }
@@ -114,21 +102,8 @@ td.sticky-col-2 {
   background: rgba(59, 130, 246, 0.3);
 }
 
-.row-selected td {
-  background: rgba(59, 130, 246, 0.12);
-}
-
-.row-selected td.sticky-col,
-.row-selected td.sticky-col-2 {
-  background: rgba(59, 130, 246, 0.25);
-}
-
 .league-table tbody tr:hover td {
   background: rgba(148, 163, 184, 0.08);
-}
-
-.league-table tbody tr.row-selected:hover td {
-  background: rgba(59, 130, 246, 0.2);
 }
 
 .table-empty {
@@ -181,4 +156,15 @@ td.sticky-col-2 {
 .league-table.font-large tbody td {
   font-size: 13px;
   padding: 6px 9px;
+}
+
+/* ── 배당 조회에 쓰인 컬럼 강조 (검색 조건이었던 칸을 표에서 표시) ── */
+.league-table .col-highlight {
+  background: rgba(245, 158, 11, 0.18);
+  color: #f59e0b;
+}
+
+.league-table td.cell-highlight {
+  box-shadow: inset 0 0 0 2px #f59e0b;
+  font-weight: 700;
 }

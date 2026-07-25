@@ -191,6 +191,19 @@
   margin-bottom: 0;
 }
 
+/* ── 리그 표 아래 위험 구역 (관리자·공식데이터 전용, 현재 리그 데이터 전체 삭제) ── */
+.danger-zone {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+}
+
+.danger-zone .confirm-check {
+  margin-bottom: 8px;
+}
+
 /* ── RT 결과분포 한 줄 색상 배지 (리그 대시보드/조회결과 요약에서 사용) ── */
 .rt-summary-inline {
   display: flex;

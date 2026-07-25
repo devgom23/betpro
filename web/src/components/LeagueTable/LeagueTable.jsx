@@ -1,32 +1,34 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildColumnGroups, formatCell, cellStyle } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import { useFontSize } from '../../context/FontSizeContext'
 import './LeagueTable.css'
 
+const VISIBLE_ROWS = 20
+
 function groupKey(g) {
   return g.label1
 }
 
-export default function LeagueTable({ columns, rows, scope }) {
+export default function LeagueTable({ columns, rows, scope, highlightCols = [] }) {
   const groups = useMemo(() => buildColumnGroups(columns || []), [columns])
-  const [selected, setSelected] = useState(() => new Set())
   const [detailRow, setDetailRow] = useState(null)
   const [collapsed, setCollapsed] = useState(() => new Set())
   const { fontSize } = useFontSize() // 'small' | 'large' — 상단바 토글로 전역 제어, 표 데이터 셀에만 적용
+  const scrollRef = useRef(null)
 
-  function toggleRow(idx) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(idx)) next.delete(idx)
-      else next.add(idx)
-      return next
-    })
-  }
-
-  function toggleAll() {
-    setSelected((prev) => (prev.size === rows.length ? new Set() : new Set(rows.map((_, i) => i))))
-  }
+  // 화면에는 항상 딱 20행만 보이게 높이를 고정하고, 그 이상은 표 내부 스크롤로 본다.
+  // 헤더 2줄 + 실제 데이터 행 높이(글씨 크기에 따라 달라짐)를 직접 측정해서 계산한다.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const thead = el.querySelector('thead')
+    const firstRow = el.querySelector('tbody tr')
+    if (!thead || !firstRow) return
+    const headerH = thead.getBoundingClientRect().height
+    const rowH = firstRow.getBoundingClientRect().height
+    el.style.maxHeight = `${headerH + rowH * VISIBLE_ROWS}px`
+  }, [rows, fontSize])
 
   function toggleGroup(key) {
     setCollapsed((prev) => {
@@ -43,18 +45,11 @@ export default function LeagueTable({ columns, rows, scope }) {
 
   return (
     <div>
-      <div className="league-table-scroll">
+      <div className="league-table-scroll" ref={scrollRef}>
         <table className={`league-table ${fontSize === 'large' ? 'font-large' : ''}`}>
           <thead>
             <tr>
-              <th className="checkbox-col sticky-col" rowSpan={2}>
-                <input
-                  type="checkbox"
-                  checked={selected.size === rows.length}
-                  onChange={toggleAll}
-                />
-              </th>
-              <th className="detail-col sticky-col-2" rowSpan={2}></th>
+              <th className="detail-col sticky-col" rowSpan={2}></th>
               {groups.map((g, gi) => {
                 const key = groupKey(g)
                 const isCollapsed = collapsed.has(key)
@@ -97,7 +92,10 @@ export default function LeagueTable({ columns, rows, scope }) {
                   return [<th key={`${gi}-c`} className="sub-header collapsed-cell">···</th>]
                 }
                 return g.cols.map((c, ci) => (
-                  <th key={`${gi}-${ci}`} className="sub-header">
+                  <th
+                    key={`${gi}-${ci}`}
+                    className={`sub-header ${highlightCols.includes(c.key) ? 'col-highlight' : ''}`}
+                  >
                     {c.sub}
                   </th>
                 ))
@@ -106,15 +104,8 @@ export default function LeagueTable({ columns, rows, scope }) {
           </thead>
           <tbody>
             {rows.map((row, ri) => (
-              <tr key={ri} className={selected.has(ri) ? 'row-selected' : ''}>
-                <td className="checkbox-col sticky-col">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(ri)}
-                    onChange={() => toggleRow(ri)}
-                  />
-                </td>
-                <td className="detail-col sticky-col-2">
+              <tr key={ri}>
+                <td className="detail-col sticky-col">
                   <button
                     className="detail-btn"
                     title="상세 경기 정보"
@@ -131,8 +122,13 @@ export default function LeagueTable({ columns, rows, scope }) {
                   return g.cols.map((c, ci) => {
                     const value = row[c.key]
                     const style = cellStyle(g, c, value)
+                    const isHighlighted = highlightCols.includes(c.key)
                     return (
-                      <td key={`${gi}-${ci}`} style={style || undefined}>
+                      <td
+                        key={`${gi}-${ci}`}
+                        className={isHighlighted ? 'cell-highlight' : undefined}
+                        style={style || undefined}
+                      >
                         {formatCell(g, c, value)}
                       </td>
                     )

@@ -11,6 +11,7 @@ const ODDS_FIELDS = [
 ]
 
 const BLANK_ODDS = { kw: '', kd: '', kl: '', khw: '', khd: '', khl: '', fw: '', fd: '', fl: '' }
+const ODDS_KEYS = ODDS_FIELDS.flatMap(({ fields }) => fields.map(([key]) => key))
 
 function makeDefaultDraft(latest) {
   return {
@@ -40,6 +41,13 @@ export default function FilterForm({ filters, defaultQuery, onSearch, teams = []
     setH2hHome((prev) => (teams.includes(prev) ? prev : ''))
     setH2hAway((prev) => (teams.includes(prev) ? prev : ''))
   }, [teams])
+
+  // 홈팀·원정팀이 모두 선택되면(또는 교차보기를 바꾸면) 별도 버튼 없이 바로 조회한다.
+  useEffect(() => {
+    if (h2hHome && h2hAway && h2hHome !== h2hAway && onH2HSearch) {
+      onH2HSearch({ home: h2hHome, away: h2hAway, cross: h2hCross })
+    }
+  }, [h2hHome, h2hAway, h2hCross])
 
   const seasonOptions = [SEASON_ALL, ...(filters?.seasons ?? [])]
   const roundOptions =
@@ -78,6 +86,14 @@ export default function FilterForm({ filters, defaultQuery, onSearch, teams = []
     } else {
       setWarning('')
     }
+    // 배당값으로 조회할 땐 특정 시즌/라운드에 갇히지 않고 전체 기간에서 찾는 게
+    // 자연스러우므로, 배당 조건이 하나라도 있으면 시즌·라운드를 전체로 바꿔서 조회한다.
+    const hasOdds = ODDS_KEYS.some((k) => q[k] !== undefined)
+    if (hasOdds) {
+      q.season = SEASON_ALL
+      q.round = ROUND_ALL
+      setDraft((prev) => ({ ...prev, season: SEASON_ALL, round: ROUND_ALL }))
+    }
     onSearch(q)
   }
 
@@ -86,11 +102,6 @@ export default function FilterForm({ filters, defaultQuery, onSearch, teams = []
     setDraft(next)
     setWarning('')
     onSearch(buildQuery(next).q)
-  }
-
-  function handleH2HSearch() {
-    if (!h2hHome || !h2hAway || h2hHome === h2hAway || !onH2HSearch) return
-    onH2HSearch({ home: h2hHome, away: h2hAway, cross: h2hCross })
   }
 
   return (
@@ -177,17 +188,6 @@ export default function FilterForm({ filters, defaultQuery, onSearch, teams = []
         <button type="submit" className="btn-search">
           🔍 조회
         </button>
-        {teams.length > 0 && (
-          <button
-            type="button"
-            className="btn-search btn-h2h"
-            disabled={!h2hHome || !h2hAway || h2hHome === h2hAway}
-            onClick={handleH2HSearch}
-            title="상대전적을 조회하면 현재 조회된 결과 대신 상대전적을 보여줍니다."
-          >
-            🆚 상대전적 조회
-          </button>
-        )}
       </div>
 
       {warning && <p className="filter-warning">{warning}</p>}

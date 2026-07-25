@@ -2,7 +2,7 @@
   display: flex;
   align-items: flex-end;
   flex-wrap: wrap;
-  gap: 18px;
+  gap: 12px;
   padding: 12px 16px;
   margin-bottom: 14px;
   background: var(--bg-surface);
@@ -89,7 +89,7 @@
 }
 
 .h2h-row select {
-  width: 160px;
+  width: 128px;
 }
 
 .h2h-vs {
@@ -101,29 +101,23 @@
 .h2h-cross {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
   font-size: 11px;
   color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
-  margin-left: 8px;
+  /* .h2h-row 자체에 이미 gap: 6px가 있으므로, 셀렉트-체크박스 간격을 정확히
+     8px로 맞추려면 부족한 2px만 추가한다 (6px + 2px = 8px). */
+  margin-left: 2px;
 }
 
 .h2h-cross input {
+  /* .filter-row input 규칙(width:92px 등 셀렉트용 스타일)이 체크박스에도
+     적용되는 걸 막고 원래 체크박스 크기로 되돌린다. */
+  width: auto;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: none;
   margin: 0;
-}
-
-.btn-h2h {
-  background: transparent;
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-}
-
-.btn-h2h:hover:not(:disabled) {
-  background: var(--border);
-}
-
-.btn-h2h:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }

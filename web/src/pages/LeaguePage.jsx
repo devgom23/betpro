@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { useAuth } from '../context/AuthContext'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
 import FilterForm from '../components/FilterForm/FilterForm'
 import HeadToHeadResult from '../components/HeadToHead/HeadToHeadResult'
@@ -35,12 +36,18 @@ function describeQuery(query) {
 }
 
 export default function LeaguePage({ code, scope }) {
+  const { user } = useAuth()
   const [filters, setFilters] = useState(null)
   const [query, setQuery] = useState(null)
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [teams, setTeams] = useState([])
   const [h2h, setH2h] = useState(null) // {home, away, cross} | null — 있으면 표 대신 상대전적 표시
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const [delConfirm, setDelConfirm] = useState(false)
+  const [busyDelete, setBusyDelete] = useState(false)
+  const [deleteNotice, setDeleteNotice] = useState('')
 
   // 리그/스코프가 바뀌면 시즌·라운드 선택지부터 다시 불러온다
   useEffect(() => {
@@ -61,7 +68,26 @@ export default function LeaguePage({ code, scope }) {
     return () => {
       cancelled = true
     }
-  }, [code, scope])
+  }, [code, scope, reloadKey])
+
+  async function handleDeleteLeagueData() {
+    if (!delConfirm) {
+      setDeleteNotice('동의 체크박스를 선택하세요.')
+      return
+    }
+    setBusyDelete(true)
+    setDeleteNotice('')
+    try {
+      await api.post('/api/admin/master/delete_league', { league: code, confirm: true })
+      setDeleteNotice(`'${code}' 데이터를 모두 삭제했습니다.`)
+      setDelConfirm(false)
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setDeleteNotice(`실패: ${err.message}`)
+    } finally {
+      setBusyDelete(false)
+    }
+  }
 
   // 스코프/리그/현재 조회 시즌이 바뀌면 상대전적 조회용 팀 목록도 그 시즌 기준으로 다시 불러온다
   useEffect(() => {
@@ -131,8 +157,30 @@ export default function LeaguePage({ code, scope }) {
             </span>
             <RtSummaryBar summary={data.rt_summary} inline />
           </div>
-          <LeagueTable columns={data.columns} rows={data.rows} scope={scope} />
+          <LeagueTable
+            columns={data.columns}
+            rows={data.rows}
+            scope={scope}
+            highlightCols={ODDS_KEYS.filter((k) => query?.[k] !== undefined).map((k) => k.toUpperCase())}
+          />
         </>
+      )}
+
+      {user.role === 'admin' && scope === 'master' && (
+        <div className="danger-zone">
+          <label className="confirm-check">
+            <input
+              type="checkbox"
+              checked={delConfirm}
+              onChange={(e) => setDelConfirm(e.target.checked)}
+            />
+            Data를 삭제하시면 현재 등록된 모든 Data가 삭제가 됩니다. 동의하십니까?
+          </label>
+          <button className="btn-danger" disabled={busyDelete} onClick={handleDeleteLeagueData}>
+            {busyDelete ? '삭제 중...' : '경기 Data 모두삭제'}
+          </button>
+          {deleteNotice && <p className="recompute-notice">{deleteNotice}</p>}
+        </div>
       )}
     </div>
   )
