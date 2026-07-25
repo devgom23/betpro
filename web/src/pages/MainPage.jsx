@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { api } from '../api/client'
 import LeaguePage from './LeaguePage'
 import TotalDbPage from './TotalDbPage'
@@ -10,6 +11,7 @@ import './MainPage.css'
 
 export default function MainPage() {
   const { user, logout } = useAuth()
+  const { theme, setTheme } = useTheme()
   const [scope, setScope] = useState('master')
   const [leagues, setLeagues] = useState([])
   const [activeTab, setActiveTab] = useState('EPL')
@@ -44,6 +46,14 @@ export default function MainPage() {
             {user.role === 'admin' ? ' (관리자)' : ''}
             {user.days_left != null ? ` · D-${user.days_left}` : ' · 기간 무제한'}
           </span>
+          <div className="theme-toggle">
+            <button className={theme === 'light' ? 'active' : ''} onClick={() => setTheme('light')}>
+              ☀ Light
+            </button>
+            <button className={theme === 'dark' ? 'active' : ''} onClick={() => setTheme('dark')}>
+              Dark ☾
+            </button>
+          </div>
           <button className="logout-button" onClick={logout}>
             로그아웃
           </button>

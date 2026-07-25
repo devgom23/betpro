@@ -12,4 +12,65 @@ body,
 body {
   font-family: system-ui, 'Segoe UI', 'Malgun Gothic', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background: var(--bg-page);
+  color: var(--text-secondary);
+}
+
+/* ════════════════════════════════════════════════════════════
+   테마 변수 (라이트/다크)
+   - 로그인 화면 이후의 앱 전체(상단바/표/필터/팝업/관리자화면)가 참조.
+   - RT 결과색(핸승/핸무/무/역), PICK 등급색 같은 "데이터 의미" 색상은
+     테마와 무관하게 고정이라 이 변수 체계에 포함하지 않는다.
+   - 기본값(:root)은 다크. data-theme="light" 를 <html> 에 설정하면 라이트로 전환.
+   ════════════════════════════════════════════════════════════ */
+:root {
+  --bg-page: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-surface-2: #16202f;
+  --bg-input: #0f172a;
+
+  --border: #334155;
+  --border-strong: #475569;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-muted-2: #64748b;
+
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-text: #f87171;
+  --warning-text: #fca5a5;
+  --notice-text: #93c5fd;
+
+  --highlight-text: #fde68a;
+}
+
+:root[data-theme='light'] {
+  --bg-page: #f1f5f9;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #f8fafc;
+  --bg-input: #ffffff;
+
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-muted-2: #94a3b8;
+
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-text: #dc2626;
+  --warning-text: #b91c1c;
+  --notice-text: #1d4ed8;
+
+  --highlight-text: #92400e;
 }

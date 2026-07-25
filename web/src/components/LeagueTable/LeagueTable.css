@@ -1,7 +1,7 @@
 .league-table-scroll {
   overflow: auto;
   max-height: calc(100vh - 220px);
-  border: 1px solid #334155;
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 
@@ -10,21 +10,21 @@
   border-spacing: 0;
   font-size: 12px;
   white-space: nowrap;
-  color: #e2e8f0;
+  color: var(--text-secondary);
 }
 
 .league-table th,
 .league-table td {
   padding: 5px 8px;
-  border-bottom: 1px solid #334155;
-  border-right: 1px solid #293548;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   text-align: center;
 }
 
 .league-table thead th {
   position: sticky;
-  background: #1e293b;
-  color: #cbd5e1;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
   z-index: 2;
   font-weight: 600;
 }
@@ -57,19 +57,19 @@
 .group-title {
   font-size: 12px;
   font-weight: 700;
-  color: #f1f5f9;
+  color: var(--text-primary);
 }
 
 .group-subtitle {
   font-size: 10px;
   font-weight: 400;
-  color: #94a3b8;
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
 .sub-header {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .checkbox-col {
@@ -83,20 +83,20 @@
 .sticky-col {
   position: sticky;
   left: 0;
-  background: #1e293b;
+  background: var(--bg-surface);
   z-index: 4;
 }
 
 .sticky-col-2 {
   position: sticky;
   left: 34px;
-  background: #1e293b;
+  background: var(--bg-surface);
   z-index: 4;
 }
 
 td.sticky-col,
 td.sticky-col-2 {
-  background: #0f172a;
+  background: var(--bg-page);
   z-index: 1;
 }
 
@@ -132,7 +132,7 @@ td.sticky-col-2 {
 }
 
 .table-empty {
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 14px;
   padding: 24px 0;
 }
@@ -147,8 +147,8 @@ td.sticky-col-2 {
 .font-size-toggle {
   display: flex;
   gap: 4px;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 3px;
 }
@@ -158,24 +158,24 @@ td.sticky-col-2 {
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
 }
 
 .font-size-toggle button.active {
-  background: #3b82f6;
+  background: var(--accent);
   color: #fff;
 }
 
 /* ── 표 그룹 접기/펼치기 ──
    글자 길이·컬럼 폭과 무관하게 항상 눈에 띄도록, 접힘/펼침 버튼 모두
-   같은 파란 배경 박스 스타일을 쓴다(방향만 반대: 펼침=▾ / 접힘=▸). */
+   같은 파란 배경 박스 스타일을 쓴다(방향만 반대: 펼침=◂ / 접힘=▸). */
 .fold-btn {
   border: none;
   cursor: pointer;
   font-weight: 700;
-  color: #93c5fd;
+  color: var(--accent);
   background: rgba(59, 130, 246, 0.15);
   border-radius: 4px;
 }
@@ -204,7 +204,7 @@ td.sticky-col-2 {
 }
 
 .collapsed-cell {
-  color: #64748b;
+  color: var(--text-muted-2);
   background: rgba(148, 163, 184, 0.06);
 }
 

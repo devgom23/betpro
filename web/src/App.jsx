@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ThemeProvider } from './context/ThemeContext'
 import LoginPage from './pages/LoginPage'
 import MainPage from './pages/MainPage'
 
@@ -14,8 +15,8 @@ function RequireAuth({ children }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#0f172a',
-          color: '#94a3b8',
+          background: 'var(--bg-page)',
+          color: 'var(--text-muted)',
         }}
       >
         로그인 확인 중...
@@ -48,9 +49,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   )
 }
