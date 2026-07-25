@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
-
-const RT_ORDER = ['핸승', '핸무', '무', '역']
+import RtSummaryBar from '../components/RtSummaryBar/RtSummaryBar'
 
 export default function TotalDbPage({ scope }) {
   const [dashboard, setDashboard] = useState(null)
@@ -200,19 +199,7 @@ export default function TotalDbPage({ scope }) {
             </span>
           </div>
 
-          {data.rt_summary && (
-            <div className="rt-metrics">
-              {RT_ORDER.map((name) => (
-                <div className="rt-metric" key={name}>
-                  <span className="rt-metric-name">{name}</span>
-                  <span className="rt-metric-value">{data.rt_summary[name].toLocaleString()}</span>
-                  <span className="rt-metric-pct">
-                    {((data.rt_summary[name] / data.rt_summary.총) * 100).toFixed(1)}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          <RtSummaryBar summary={data.rt_summary} />
 
           <LeagueTable columns={data.columns} rows={data.rows} scope={scope} />
         </>

@@ -8,6 +8,7 @@ const SAVED_USERNAME_KEY = 'betpro_saved_username'
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [checking, setChecking] = useState(true) // 최초 로딩 시 자동로그인 확인 중
+  const [loginTime, setLoginTime] = useState(null) // 상단바 "접속시간" 표시용
 
   useEffect(() => {
     // 새로고침 시 저장된 토큰이 아직 유효한지 서버에 확인
@@ -19,6 +20,7 @@ export function AuthProvider({ children }) {
       try {
         const me = await api.get('/api/me')
         setUser(me)
+        setLoginTime(new Date())
       } catch {
         clearToken()
       } finally {
@@ -36,6 +38,7 @@ export function AuthProvider({ children }) {
     })
     setToken(data.token, keepLogin)
     setUser(data.user)
+    setLoginTime(new Date())
 
     if (saveUsername) {
       localStorage.setItem(SAVED_USERNAME_KEY, username)
@@ -52,6 +55,7 @@ export function AuthProvider({ children }) {
     }
     clearToken()
     setUser(null)
+    setLoginTime(null)
   }
 
   function getSavedUsername() {
@@ -59,7 +63,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, checking, login, logout, getSavedUsername }}>
+    <AuthContext.Provider value={{ user, checking, loginTime, login, logout, getSavedUsername }}>
       {children}
     </AuthContext.Provider>
   )

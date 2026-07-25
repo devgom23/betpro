@@ -11,15 +11,18 @@ export default function AdminAccountsPage() {
   // 계정 추가
   const [newId, setNewId] = useState('')
   const [newPw, setNewPw] = useState('')
+  const [newStartDate, setNewStartDate] = useState('')
   const [newExpiry, setNewExpiry] = useState('permanent')
   const [newRole, setNewRole] = useState('user')
   const [busyAdd, setBusyAdd] = useState(false)
 
   // 계정 수정
   const [target, setTarget] = useState('')
+  const [targetStartDate, setTargetStartDate] = useState('')
   const [targetExpiry, setTargetExpiry] = useState('permanent')
   const [targetPw, setTargetPw] = useState('')
   const [delConfirm, setDelConfirm] = useState(false)
+  const [busyStartDate, setBusyStartDate] = useState(false)
   const [busyExpiry, setBusyExpiry] = useState(false)
   const [busyPw, setBusyPw] = useState(false)
   const [busyDel, setBusyDel] = useState(false)
@@ -51,6 +54,15 @@ export default function AdminAccountsPage() {
   }, [])
 
   useEffect(() => {
+    if (!target || !users) return
+    const u = users.find((x) => x.username === target)
+    if (u) {
+      setTargetStartDate(u.start_date || '')
+      setTargetExpiry(u.expiry || 'permanent')
+    }
+  }, [target, users])
+
+  useEffect(() => {
     if (!viewUser) {
       setViewLeagues([])
       return
@@ -74,10 +86,12 @@ export default function AdminAccountsPage() {
         password: newPw,
         expiry: newExpiry,
         role: newRole,
+        start_date: newStartDate || null,
       })
       setNotice(res.warning ? `${res.msg} (${res.warning})` : res.msg)
       setNewId('')
       setNewPw('')
+      setNewStartDate('')
       setNewExpiry('permanent')
       setNewRole('user')
       loadUsers()
@@ -85,6 +99,22 @@ export default function AdminAccountsPage() {
       setNotice(`실패: ${err.message}`)
     } finally {
       setBusyAdd(false)
+    }
+  }
+
+  async function handleStartDate() {
+    setBusyStartDate(true)
+    setNotice('')
+    try {
+      const res = await api.post(`/api/admin/users/${encodeURIComponent(target)}/start_date`, {
+        start_date: targetStartDate,
+      })
+      setNotice(res.msg)
+      loadUsers()
+    } catch (err) {
+      setNotice(`실패: ${err.message}`)
+    } finally {
+      setBusyStartDate(false)
     }
   }
 
@@ -171,6 +201,7 @@ export default function AdminAccountsPage() {
           <tr>
             <th>아이디</th>
             <th>역할</th>
+            <th>이용시작일</th>
             <th>만료일</th>
             <th>생성일</th>
             <th>메모</th>
@@ -181,6 +212,7 @@ export default function AdminAccountsPage() {
             <tr key={u.username}>
               <td>{u.username}</td>
               <td>{u.role}</td>
+              <td>{u.start_date || '-'}</td>
               <td>{u.expiry}</td>
               <td>{u.created_dt}</td>
               <td>{u.note}</td>
@@ -203,6 +235,11 @@ export default function AdminAccountsPage() {
           required
         />
         <input
+          placeholder="이용시작일 (비우면 오늘)"
+          value={newStartDate}
+          onChange={(e) => setNewStartDate(e.target.value)}
+        />
+        <input
           placeholder="만료일 (YYYY-MM-DD 또는 permanent)"
           value={newExpiry}
           onChange={(e) => setNewExpiry(e.target.value)}
@@ -217,6 +254,7 @@ export default function AdminAccountsPage() {
       </form>
       <p className="admin-caption">
         아이디는 개인 데이터 폴더명으로 쓰입니다. 영문/숫자/언더스코어/하이픈 3~32자만 가능합니다.
+        이용시작일을 비우면 오늘 날짜로 자동 설정됩니다.
       </p>
 
       <hr className="admin-divider" />
@@ -229,6 +267,14 @@ export default function AdminAccountsPage() {
             </option>
           ))}
         </select>
+        <input
+          placeholder="새 이용시작일"
+          value={targetStartDate}
+          onChange={(e) => setTargetStartDate(e.target.value)}
+        />
+        <button className="btn-primary" disabled={busyStartDate} onClick={handleStartDate}>
+          시작일 변경
+        </button>
         <input
           placeholder="새 만료일"
           value={targetExpiry}

@@ -1,0 +1,38 @@
+const RT_ORDER = ['핸승', '핸무', '무', '역']
+const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828' }
+
+// 핸승/핸무/무/역 결과분포를 보여준다. (통합DB탭=카드형 / 리그탭 대시보드=한 줄 색상 배지)
+export default function RtSummaryBar({ summary, inline = false }) {
+  if (!summary) return null
+
+  if (inline) {
+    return (
+      <span className="rt-summary-inline">
+        {RT_ORDER.map((name) => {
+          const bg = RT_COLOR[name]
+          const fg = name === '핸무' ? '#0D1B2A' : '#fff'
+          return (
+            <span className="rt-badge-item" key={name} style={{ background: bg, color: fg }}>
+              {name} {summary[name].toLocaleString()}
+              <span className="rt-badge-pct">
+                ({((summary[name] / summary.총) * 100).toFixed(1)}%)
+              </span>
+            </span>
+          )
+        })}
+      </span>
+    )
+  }
+
+  return (
+    <div className="rt-metrics">
+      {RT_ORDER.map((name) => (
+        <div className="rt-metric" key={name}>
+          <span className="rt-metric-name">{name}</span>
+          <span className="rt-metric-value">{summary[name].toLocaleString()}</span>
+          <span className="rt-metric-pct">{((summary[name] / summary.총) * 100).toFixed(1)}%</span>
+        </div>
+      ))}
+    </div>
+  )
+}

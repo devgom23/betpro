@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useFontSize } from '../context/FontSizeContext'
 import { api } from '../api/client'
 import LeaguePage from './LeaguePage'
 import TotalDbPage from './TotalDbPage'
@@ -9,9 +10,22 @@ import AdminMasterPage from './AdminMasterPage'
 import AdminAccountsPage from './AdminAccountsPage'
 import './MainPage.css'
 
+function formatDateTime(date) {
+  if (!date) return '-'
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function formatPeriod(startDate, expiry) {
+  const start = startDate || '-'
+  const end = !expiry || expiry === 'permanent' ? '무제한' : expiry
+  return `${start} ~ ${end}`
+}
+
 export default function MainPage() {
-  const { user, logout } = useAuth()
+  const { user, loginTime, logout } = useAuth()
   const { theme, setTheme } = useTheme()
+  const { fontSize, setFontSize } = useFontSize()
   const [scope, setScope] = useState('master')
   const [leagues, setLeagues] = useState([])
   const [activeTab, setActiveTab] = useState('EPL')
@@ -22,30 +36,29 @@ export default function MainPage() {
 
   return (
     <div className="main-page">
-      <header className="top-bar">
-        <div className="top-bar-left">
-          <span className="app-name">BETPRO</span>
-          <div className="scope-toggle">
+      <header className="info-bar">
+        <div className="info-bar-left">
+          <span className="info-item">
+            🛡️ {user.role === 'admin' ? '관리자' : '고객'} {user.username}
+          </span>
+          <span className="info-item">접속시간 {formatDateTime(loginTime)}</span>
+          <span className="info-item">이용가능기간 {formatPeriod(user.start_date, user.expiry)}</span>
+        </div>
+        <div className="info-bar-right">
+          <div className="font-size-toggle">
             <button
-              className={scope === 'master' ? 'active' : ''}
-              onClick={() => setScope('master')}
+              className={fontSize === 'small' ? 'active' : ''}
+              onClick={() => setFontSize('small')}
             >
-              📊 공식 데이터
+              작은글씨
             </button>
             <button
-              className={scope === 'user' ? 'active' : ''}
-              onClick={() => setScope('user')}
+              className={fontSize === 'large' ? 'active' : ''}
+              onClick={() => setFontSize('large')}
             >
-              👤 내 데이터
+              큰글씨
             </button>
           </div>
-        </div>
-        <div className="top-bar-right">
-          <span className="user-info">
-            {user.username}
-            {user.role === 'admin' ? ' (관리자)' : ''}
-            {user.days_left != null ? ` · D-${user.days_left}` : ' · 기간 무제한'}
-          </span>
           <div className="theme-toggle">
             <button className={theme === 'light' ? 'active' : ''} onClick={() => setTheme('light')}>
               ☀ Light
@@ -59,6 +72,22 @@ export default function MainPage() {
           </button>
         </div>
       </header>
+
+      <div className="brand-bar">
+        <span className="app-name">⚽ BET PRO W</span>
+        <span className="app-version">Version 1.0 Update 2026-06-01</span>
+      </div>
+
+      <nav className="scope-bar">
+        <div className="scope-toggle">
+          <button className={scope === 'master' ? 'active' : ''} onClick={() => setScope('master')}>
+            📊 공식 데이터
+          </button>
+          <button className={scope === 'user' ? 'active' : ''} onClick={() => setScope('user')}>
+            👤 내 데이터
+          </button>
+        </div>
+      </nav>
 
       <nav className="tab-bar">
         {leagues.map((lg) => (

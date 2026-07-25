@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
 import FilterForm from '../components/FilterForm/FilterForm'
+import HeadToHeadResult from '../components/HeadToHead/HeadToHeadResult'
+import RtSummaryBar from '../components/RtSummaryBar/RtSummaryBar'
 
 const ODDS_KEYS = ['kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl']
 
@@ -37,12 +39,15 @@ export default function LeaguePage({ code, scope }) {
   const [query, setQuery] = useState(null)
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  const [teams, setTeams] = useState([])
+  const [h2h, setH2h] = useState(null) // {home, away, cross} | null — 있으면 표 대신 상대전적 표시
 
   // 리그/스코프가 바뀌면 시즌·라운드 선택지부터 다시 불러온다
   useEffect(() => {
     let cancelled = false
     setFilters(null)
     setQuery(null)
+    setH2h(null)
     api
       .get(`/api/leagues/${code}/filters?scope=${scope}`)
       .then((res) => {
@@ -57,6 +62,15 @@ export default function LeaguePage({ code, scope }) {
       cancelled = true
     }
   }, [code, scope])
+
+  // 스코프/리그/현재 조회 시즌이 바뀌면 상대전적 조회용 팀 목록도 그 시즌 기준으로 다시 불러온다
+  useEffect(() => {
+    const season = query?.season ?? 'ALL'
+    api
+      .get(`/api/teams?scope=${scope}&code=${code}&season=${season}`)
+      .then((res) => setTeams(res.teams))
+      .catch(() => setTeams([]))
+  }, [scope, code, query?.season])
 
   // 조회 조건(query)이 확정되면 실제 표 데이터를 불러온다 (조건 입력 중엔 재조회 안 함)
   useEffect(() => {
@@ -76,19 +90,50 @@ export default function LeaguePage({ code, scope }) {
     }
   }, [code, scope, query])
 
+  function handleSearch(nextQuery) {
+    setH2h(null) // 조회 조건 필터는 상대전적 모드를 초기화하고 원래 표로 돌아간다
+    setQuery(nextQuery)
+  }
+
   if (error) return <p className="error-text">{error}</p>
   if (!filters || !data) return <p className="loading-text">불러오는 중...</p>
 
   return (
     <div>
-      <FilterForm filters={filters} onSearch={setQuery} />
-      <div className="league-summary">
-        <span>🔍 조회 조건: {describeQuery(query)}</span>
+      <div className="league-dashboard">
         <span>
-          <strong>{data.total.toLocaleString()}</strong>경기
+          📋 등록된 시즌 {filters.seasons.length} · 경기수 {filters.total_rows.toLocaleString()}
         </span>
+        <RtSummaryBar summary={filters.rt_summary} inline />
       </div>
-      <LeagueTable columns={data.columns} rows={data.rows} scope={scope} />
+
+      <FilterForm filters={filters} onSearch={handleSearch} teams={teams} onH2HSearch={setH2h} />
+
+      {h2h ? (
+        <>
+          <div className="league-summary">
+            <span>
+              🆚 상대전적 조회: {h2h.home} vs {h2h.away}
+              {h2h.cross ? ' (홈원 교차보기)' : ''}
+            </span>
+            <button className="btn-reset" onClick={() => setH2h(null)}>
+              ✕ 표로 돌아가기
+            </button>
+          </div>
+          <HeadToHeadResult scope={scope} home={h2h.home} away={h2h.away} cross={h2h.cross} limit={50} />
+        </>
+      ) : (
+        <>
+          <div className="league-summary">
+            <span>🔍 조회 조건: {describeQuery(query)}</span>
+            <span>
+              <strong>{data.total.toLocaleString()}</strong>경기
+            </span>
+            <RtSummaryBar summary={data.rt_summary} inline />
+          </div>
+          <LeagueTable columns={data.columns} rows={data.rows} scope={scope} />
+        </>
+      )}
     </div>
   )
 }

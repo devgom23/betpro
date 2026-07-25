@@ -31,7 +31,8 @@ BETPRO API 서버 (FastAPI) - 골격
   POST /api/admin/master/delete_league 리그 테이블 삭제(자동 백업 후)
   GET  /api/admin/users                계정 목록
   POST /api/admin/users                계정 추가
-  POST /api/admin/users/{u}/expiry     이용기간 변경
+  POST /api/admin/users/{u}/expiry     이용기간(종료일) 변경
+  POST /api/admin/users/{u}/start_date 이용시작일 변경
   POST /api/admin/users/{u}/password   비밀번호 변경
   DELETE /api/admin/users/{u}          계정 삭제(본인 불가)
   GET  /api/admin/customer_data        고객 업로드 현황
@@ -143,6 +144,7 @@ def login(body: LoginBody, response: Response):
             "username": body.username.strip(),
             "role": info.get("role"),
             "expiry": info.get("expiry"),
+            "start_date": info.get("start_date") or "",
             "days_left": days,
         },
     }
@@ -160,6 +162,7 @@ def me(user: dict = Depends(get_current_user)):
         "username": user["username"],
         "role": user.get("role"),
         "expiry": user.get("expiry"),
+        "start_date": user.get("start_date") or "",
         "days_left": AUTH.days_left(user.get("expiry")),
     }
 
@@ -188,6 +191,20 @@ def _check_league(code: str):
         raise HTTPException(status_code=404, detail=f"알 수 없는 리그: {code}")
 
 
+def _rt_summary(df: pd.DataFrame):
+    """RT 결과분포 {핸승,핸무,무,역,총} 계산. RT 컬럼이 없거나 값이 없으면 None."""
+    if "RT" not in df.columns:
+        return None
+    rt = pd.to_numeric(df["RT"], errors="coerce").dropna()
+    if not len(rt):
+        return None
+    return {
+        "핸승": int((rt == 1).sum()), "핸무": int((rt == 2).sum()),
+        "무": int((rt == 3).sum()), "역": int((rt == 4).sum()),
+        "총": int(len(rt)),
+    }
+
+
 def _round_sort_key(v):
     # "9R"/"38R"처럼 숫자+문자 혼합 라벨은 float() 변환이 항상 실패해
     # 문자열 정렬로 빠지면 "9R" > "38R"가 되는 버그가 생긴다.
@@ -199,12 +216,16 @@ def _round_sort_key(v):
 @app.get("/api/leagues/{code}/filters")
 def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
                    user: dict = Depends(get_current_user)):
-    """시즌·라운드 선택지. 라운드는 시즌별로 묶어 반환."""
+    """
+    시즌·라운드 선택지 + 리그 전체 현황(등록 시즌수/전체 경기수/RT분포).
+    라운드는 시즌별로 묶어 반환. 탭 바로 아래 "리그 전체 대시보드"에 쓰인다.
+    """
     _check_league(code)
     db = _resolve_scope_db(scope, user)
     df = DATA.load_league_df(db, code)
     if df.empty or "S" not in df.columns:
-        return {"seasons": [], "rounds_by_season": {}, "latest": None}
+        return {"seasons": [], "rounds_by_season": {}, "latest": None,
+                "total_rows": 0, "rt_summary": None}
 
     seasons = sorted([s for s in df["S"].dropna().unique().tolist()], reverse=True)
     rounds_by_season = {}
@@ -219,6 +240,8 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
         "seasons": [str(s) for s in seasons],
         "rounds_by_season": rounds_by_season,
         "latest": {"season": latest_season, "round": latest_round},
+        "total_rows": len(df),
+        "rt_summary": _rt_summary(df),
     }
 
 
@@ -294,6 +317,7 @@ def league_rows(code: str,
         "total": total,
         "season": season,
         "round": round,
+        "rt_summary": _rt_summary(sub),
         "can_write": PATHS.can_write(scope, user.get("role")),
     }
 
@@ -318,11 +342,14 @@ def head_to_head(scope: str = PATHS.SCOPE_MASTER,
                  home: str = "",
                  away: str = "",
                  limit: int = 15,
+                 cross: bool = True,
                  user: dict = Depends(get_current_user)):
     """
     두 팀의 과거 맞대결 기록(betpro_ui._head_to_head 이식).
     결과(RT)는 '각 경기의 홈팀 기준' — 지금 보고 있는 경기의 홈팀 관점으로
     재해석하지 않는다(원본과 동일한 주의사항).
+    cross=True(기본)면 홈/원정이 뒤바뀐 경기도 포함(양방향).
+    cross=False면 home=홈팀·away=원정팀으로 지정한 방향만 정확히 일치하는 경기만.
     """
     db = _resolve_scope_db(scope, user)
     total_df = DATA.load_total_df(db)
@@ -334,7 +361,11 @@ def head_to_head(scope: str = PATHS.SCOPE_MASTER,
 
     h = total_df["HT"].astype(str).str.strip()
     a = total_df["AT"].astype(str).str.strip()
-    m = total_df[((h == ht) & (a == at)) | ((h == at) & (a == ht))].copy()
+    if cross:
+        mask = ((h == ht) & (a == at)) | ((h == at) & (a == ht))
+    else:
+        mask = (h == ht) & (a == at)
+    m = total_df[mask].copy()
     if m.empty:
         return empty
 
@@ -415,15 +446,7 @@ def total_view(scope: str = PATHS.SCOPE_MASTER,
     if season != "ALL" and "S" in view.columns:
         view = view[view["S"].astype(str) == season]
 
-    rt_summary = None
-    if "RT" in view.columns:
-        rt = pd.to_numeric(view["RT"], errors="coerce").dropna()
-        if len(rt):
-            rt_summary = {
-                "핸승": int((rt == 1).sum()), "핸무": int((rt == 2).sum()),
-                "무": int((rt == 3).sum()), "역": int((rt == 4).sum()),
-                "총": int(len(rt)),
-            }
+    rt_summary = _rt_summary(view)
 
     return {
         "columns": list(total_df.columns),
@@ -465,14 +488,27 @@ def recompute_all(body: RecomputeBody, user: dict = Depends(get_current_user)):
 
 # ─────────────────────────── 상대전적 탭 ───────────────────────────
 @app.get("/api/teams")
-def teams(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_current_user)):
-    """통합DB에 등장하는 전체 팀명 목록(상대전적 탭의 팀 선택용)."""
+def teams(scope: str = PATHS.SCOPE_MASTER,
+         code: Optional[str] = None,
+         season: Optional[str] = None,
+         user: dict = Depends(get_current_user)):
+    """
+    팀명 목록(상대전적 탭/리그탭 필터의 팀 선택용).
+    code 지정 시 해당 리그로 한정(미지정 시 통합DB 전체 — 상대전적 탭에서 사용).
+    season 지정("ALL" 제외) 시 그 시즌에 등장한 팀만으로 추가 제한.
+    """
     db = _resolve_scope_db(scope, user)
-    total_df = DATA.load_total_df(db)
-    if total_df.empty or "HT" not in total_df.columns or "AT" not in total_df.columns:
+    if code:
+        _check_league(code)
+        df = DATA.load_league_df(db, code)
+    else:
+        df = DATA.load_total_df(db)
+    if df.empty or "HT" not in df.columns or "AT" not in df.columns:
         return {"teams": []}
-    names = set(total_df["HT"].dropna().astype(str).unique()) | \
-        set(total_df["AT"].dropna().astype(str).unique())
+    if season and season != "ALL" and "S" in df.columns:
+        df = df[df["S"].astype(str) == str(season)]
+    names = set(df["HT"].dropna().astype(str).unique()) | \
+        set(df["AT"].dropna().astype(str).unique())
     return {"teams": sorted(names)}
 
 
@@ -555,6 +591,7 @@ class AddUserBody(BaseModel):
     password: str
     expiry: str = "permanent"
     role: str = "user"
+    start_date: Optional[str] = None   # 비우면 오늘 날짜로 자동 설정
 
 
 @app.post("/api/admin/users")
@@ -563,7 +600,7 @@ def admin_add_user(body: AddUserBody, admin: dict = Depends(get_admin_user)):
         raise HTTPException(status_code=400,
                             detail="아이디 형식 오류: 영문/숫자/_/- 3~32자만 사용 가능합니다.")
     ok, msg = AUTH.add_user(PATHS.get_auth_db(), body.username, body.password,
-                            body.expiry, body.role)
+                            body.expiry, body.role, start_date=body.start_date)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     try:
@@ -580,6 +617,19 @@ class ExpiryBody(BaseModel):
 @app.post("/api/admin/users/{username}/expiry")
 def admin_update_expiry(username: str, body: ExpiryBody, admin: dict = Depends(get_admin_user)):
     ok, msg = AUTH.update_expiry(PATHS.get_auth_db(), username, body.expiry)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"ok": True, "msg": msg}
+
+
+class StartDateBody(BaseModel):
+    start_date: str
+
+
+@app.post("/api/admin/users/{username}/start_date")
+def admin_update_start_date(username: str, body: StartDateBody,
+                            admin: dict = Depends(get_admin_user)):
+    ok, msg = AUTH.update_start_date(PATHS.get_auth_db(), username, body.start_date)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     return {"ok": True, "msg": msg}

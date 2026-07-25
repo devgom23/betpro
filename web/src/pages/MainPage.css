@@ -4,25 +4,104 @@
   color: var(--text-primary);
 }
 
-.top-bar {
+/* ── 1행: 로그인 정보 + 글씨크기/테마 토글 + 로그아웃 ── */
+.info-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
+  padding: 8px 24px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.top-bar-left {
+.info-bar-left {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.info-item {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.info-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.font-size-toggle,
+.theme-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.font-size-toggle button,
+.theme-toggle button {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.font-size-toggle button.active,
+.theme-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.logout-button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  background: var(--border);
+}
+
+/* ── 2행: 로고 + 버전 ── */
+.brand-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 24px;
+  background: var(--bg-page);
 }
 
 .app-name {
-  font-weight: 700;
-  font-size: 18px;
+  font-weight: 800;
+  font-size: 20px;
   letter-spacing: 0.5px;
+  color: var(--text-primary);
+}
+
+.app-version {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── 3행: 스코프(공식/내 데이터) 선택 ── */
+.scope-bar {
+  padding: 8px 24px;
+  background: var(--bg-page);
 }
 
 .scope-toggle {
@@ -44,55 +123,6 @@
   background: var(--accent);
   border-color: var(--accent);
   color: white;
-}
-
-.top-bar-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.user-info {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.theme-toggle {
-  display: flex;
-  gap: 2px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 2px;
-}
-
-.theme-toggle button {
-  padding: 5px 10px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.theme-toggle button.active {
-  background: var(--accent);
-  color: #fff;
-}
-
-.logout-button {
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: transparent;
-  color: var(--text-primary);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.logout-button:hover {
-  background: var(--border);
 }
 
 .tab-bar {
@@ -131,6 +161,7 @@
 
 .league-summary {
   display: flex;
+  align-items: center;
   gap: 20px;
   margin-bottom: 12px;
   font-size: 13px;
@@ -139,6 +170,49 @@
 
 .league-summary strong {
   color: var(--text-primary);
+}
+
+/* ── 리그 전체 대시보드 (탭 바로 아래, 필터 위) ── */
+.league-dashboard {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.league-dashboard .rt-metrics {
+  margin-bottom: 0;
+}
+
+/* ── RT 결과분포 한 줄 색상 배지 (리그 대시보드/조회결과 요약에서 사용) ── */
+.rt-summary-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rt-badge-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rt-badge-pct {
+  font-weight: 500;
+  opacity: 0.85;
 }
 
 .section-title {

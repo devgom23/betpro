@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
+import { FontSizeProvider } from './context/FontSizeContext'
 import LoginPage from './pages/LoginPage'
 import MainPage from './pages/MainPage'
 
@@ -50,9 +51,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
+        <FontSizeProvider>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </FontSizeProvider>
       </ThemeProvider>
     </BrowserRouter>
   )

@@ -32,6 +32,12 @@ def _conn(db_path):
             note       TEXT DEFAULT ''
         )
     """)
+    # 💡 [업데이트 내용] 이용시작일 컬럼 추가 (상단바 "이용가능기간 시작일~종료일" 표시용).
+    #   기존 DB에는 없는 컬럼이라 ALTER TABLE로 보강. 이미 있으면 조용히 건너뛴다.
+    #   접근 제어에는 관여하지 않는 표시 전용 필드 — 로그인 차단 로직은 expiry만 사용한다.
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "start_date" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN start_date TEXT DEFAULT ''")
     conn.commit()
     return conn
 
@@ -48,11 +54,12 @@ def ensure_default_admin(db_path):
         n = conn.execute("SELECT COUNT(*) FROM users WHERE role='admin'").fetchone()[0]
         if n == 0:
             salt = secrets.token_hex(16)
+            today = datetime.date.today().isoformat()
             conn.execute(
-                "INSERT OR REPLACE INTO users VALUES (?,?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO users VALUES (?,?,?,?,?,?,?,?)",
                 (DEFAULT_ADMIN_ID, _hash_pw(DEFAULT_ADMIN_PW, salt), salt,
                  "admin", "permanent",
-                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "기본 관리자"))
+                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "기본 관리자", today))
             conn.commit()
             return True
         return False
@@ -62,17 +69,17 @@ def ensure_default_admin(db_path):
 
 def verify_login(db_path, username, password):
     """로그인 검증. 반환: (ok, info)
-    info={code, role, expiry, msg}  code: OK/NO_USER/BAD_PW/EXPIRED"""
+    info={code, role, expiry, start_date, msg}  code: OK/NO_USER/BAD_PW/EXPIRED"""
     conn = _conn(db_path)
     try:
         row = conn.execute(
-            "SELECT pw_hash, salt, role, expiry FROM users WHERE username=?",
+            "SELECT pw_hash, salt, role, expiry, start_date FROM users WHERE username=?",
             (username.strip(),)).fetchone()
     finally:
         conn.close()
     if not row:
         return False, {"code": "NO_USER", "msg": "존재하지 않는 아이디입니다."}
-    pw_hash, salt, role, expiry = row
+    pw_hash, salt, role, expiry, start_date = row
     if _hash_pw(password, salt) != pw_hash:
         return False, {"code": "BAD_PW", "msg": "비밀번호가 일치하지 않습니다."}
     if expiry and expiry.lower() != "permanent":
@@ -83,7 +90,8 @@ def verify_login(db_path, username, password):
                                "msg": f"이용 기간이 만료되었습니다. (만료일 {expiry})"}
         except Exception:
             return False, {"code": "BAD_EXPIRY", "msg": "만료일 형식 오류."}
-    return True, {"code": "OK", "role": role, "expiry": expiry, "msg": "로그인 성공"}
+    return True, {"code": "OK", "role": role, "expiry": expiry,
+                  "start_date": start_date or "", "msg": "로그인 성공"}
 
 
 # --- 관리자 CRUD ---
@@ -91,16 +99,17 @@ def list_users(db_path):
     conn = _conn(db_path)
     try:
         rows = conn.execute(
-            "SELECT username, role, expiry, created_dt, note FROM users ORDER BY role, username"
+            "SELECT username, role, expiry, created_dt, note, start_date "
+            "FROM users ORDER BY role, username"
         ).fetchall()
         return [{"username": r[0], "role": r[1], "expiry": r[2],
-                 "created_dt": r[3], "note": r[4]} for r in rows]
+                 "created_dt": r[3], "note": r[4], "start_date": r[5] or ""} for r in rows]
     finally:
         conn.close()
 
 
-def add_user(db_path, username, password, expiry="permanent", role="user", note=""):
-    """계정 추가. 반환 (ok, msg)."""
+def add_user(db_path, username, password, expiry="permanent", role="user", note="", start_date=None):
+    """계정 추가. 반환 (ok, msg). start_date 미지정 시 오늘 날짜로 채운다."""
     username = username.strip()
     if not username or not password:
         return False, "아이디와 비밀번호를 입력하세요."
@@ -111,15 +120,21 @@ def add_user(db_path, username, password, expiry="permanent", role="user", note=
             datetime.date.fromisoformat(expiry)
         except Exception:
             return False, "만료일 형식 오류 (예: 2026-12-31 또는 permanent)."
+    start_date = (start_date or "").strip() or datetime.date.today().isoformat()
+    if start_date.lower() != "permanent":
+        try:
+            datetime.date.fromisoformat(start_date)
+        except Exception:
+            return False, "이용시작일 형식 오류 (예: 2026-07-01)."
     conn = _conn(db_path)
     try:
         exists = conn.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone()
         if exists:
             return False, f"이미 존재하는 아이디입니다: {username}"
         salt = secrets.token_hex(16)
-        conn.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?)",
+        conn.execute("INSERT INTO users VALUES (?,?,?,?,?,?,?,?)",
                      (username, _hash_pw(password, salt), salt, role, expiry,
-                      datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), note))
+                      datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), note, start_date))
         conn.commit()
         return True, f"계정 생성 완료: {username}"
     finally:
@@ -159,6 +174,26 @@ def update_expiry(db_path, username, expiry):
         conn.execute("UPDATE users SET expiry=? WHERE username=?", (expiry, username))
         conn.commit()
         return True, f"기간 변경 완료: {username} -> {expiry}"
+    finally:
+        conn.close()
+
+
+def update_start_date(db_path, username, start_date):
+    """이용시작일 변경."""
+    start_date = (start_date or "").strip()
+    if start_date.lower() != "permanent":
+        try:
+            datetime.date.fromisoformat(start_date)
+        except Exception:
+            return False, "이용시작일 형식 오류 (예: 2026-07-01)."
+    conn = _conn(db_path)
+    try:
+        r = conn.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone()
+        if not r:
+            return False, "존재하지 않는 계정입니다."
+        conn.execute("UPDATE users SET start_date=? WHERE username=?", (start_date, username))
+        conn.commit()
+        return True, f"이용시작일 변경 완료: {username} -> {start_date}"
     finally:
         conn.close()
 
@@ -298,14 +333,14 @@ def verify_token(db_path, token):
         conn = _conn(db_path)
         try:
             row = conn.execute(
-                "SELECT salt, role, expiry FROM users WHERE username=?",
+                "SELECT salt, role, expiry, start_date FROM users WHERE username=?",
                 (username,)).fetchone()
         finally:
             conn.close()
 
         if not row:
             return False, {"code": "NO_USER", "msg": "계정이 존재하지 않습니다."}
-        salt, role, expiry = row
+        salt, role, expiry, start_date = row
 
         # 비밀번호가 바뀌었으면 salt 가 달라져 토큰 무효
         if salt[:8] != salt_head:
@@ -321,6 +356,6 @@ def verify_token(db_path, token):
                 return False, {"code": "BAD_EXPIRY", "msg": "만료일 형식 오류."}
 
         return True, {"code": "OK", "username": username, "role": role,
-                      "expiry": expiry, "msg": "자동 로그인"}
+                      "expiry": expiry, "start_date": start_date or "", "msg": "자동 로그인"}
     except Exception:
         return False, {"code": "ERROR", "msg": "토큰 검증 실패"}

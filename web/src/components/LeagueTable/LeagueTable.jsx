@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { buildColumnGroups, formatCell, cellStyle } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
+import { useFontSize } from '../../context/FontSizeContext'
 import './LeagueTable.css'
 
 function groupKey(g) {
@@ -12,7 +13,7 @@ export default function LeagueTable({ columns, rows, scope }) {
   const [selected, setSelected] = useState(() => new Set())
   const [detailRow, setDetailRow] = useState(null)
   const [collapsed, setCollapsed] = useState(() => new Set())
-  const [fontSize, setFontSize] = useState('small') // 'small' | 'large' — 표 전용, 페이지 전체엔 영향 없음
+  const { fontSize } = useFontSize() // 'small' | 'large' — 상단바 토글로 전역 제어, 표 데이터 셀에만 적용
 
   function toggleRow(idx) {
     setSelected((prev) => {
@@ -42,23 +43,6 @@ export default function LeagueTable({ columns, rows, scope }) {
 
   return (
     <div>
-      <div className="table-toolbar">
-        <div className="font-size-toggle">
-          <button
-            className={fontSize === 'small' ? 'active' : ''}
-            onClick={() => setFontSize('small')}
-          >
-            작은글씨
-          </button>
-          <button
-            className={fontSize === 'large' ? 'active' : ''}
-            onClick={() => setFontSize('large')}
-          >
-            큰글씨
-          </button>
-        </div>
-      </div>
-
       <div className="league-table-scroll">
         <table className={`league-table ${fontSize === 'large' ? 'font-large' : ''}`}>
           <thead>

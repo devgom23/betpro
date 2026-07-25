@@ -20,15 +20,26 @@ function makeDefaultDraft(latest) {
   }
 }
 
-export default function FilterForm({ filters, defaultQuery, onSearch }) {
+export default function FilterForm({ filters, defaultQuery, onSearch, teams = [], onH2HSearch }) {
   const [draft, setDraft] = useState(() => makeDefaultDraft(filters?.latest))
   const [warning, setWarning] = useState('')
+
+  const [h2hHome, setH2hHome] = useState('')
+  const [h2hAway, setH2hAway] = useState('')
+  const [h2hCross, setH2hCross] = useState(false)
 
   // 리그를 바꾸는 등 필터 선택지 자체가 바뀌면 폼도 그 리그의 기본값으로 리셋
   useEffect(() => {
     setDraft(makeDefaultDraft(filters?.latest))
     setWarning('')
   }, [filters])
+
+  // 팀 목록이 바뀌면(시즌 변경 등) 더는 목록에 없는 선택은 지운다.
+  // 자동으로 팀을 채우지 않고 "홈팀 선택/원정팀 선택" 플레이스홀더 상태로 둔다.
+  useEffect(() => {
+    setH2hHome((prev) => (teams.includes(prev) ? prev : ''))
+    setH2hAway((prev) => (teams.includes(prev) ? prev : ''))
+  }, [teams])
 
   const seasonOptions = [SEASON_ALL, ...(filters?.seasons ?? [])]
   const roundOptions =
@@ -77,6 +88,11 @@ export default function FilterForm({ filters, defaultQuery, onSearch }) {
     onSearch(buildQuery(next).q)
   }
 
+  function handleH2HSearch() {
+    if (!h2hHome || !h2hAway || h2hHome === h2hAway || !onH2HSearch) return
+    onH2HSearch({ home: h2hHome, away: h2hAway, cross: h2hCross })
+  }
+
   return (
     <form className="filter-form" onSubmit={handleSubmit}>
       <div className="filter-block">
@@ -117,6 +133,43 @@ export default function FilterForm({ filters, defaultQuery, onSearch }) {
         </div>
       ))}
 
+      {teams.length > 0 && (
+        <div className="filter-block">
+          <span className="filter-label">상대 전적 조회</span>
+          <div className="filter-row h2h-row">
+            <select value={h2hHome} onChange={(e) => setH2hHome(e.target.value)}>
+              <option value="" disabled>
+                홈팀 선택
+              </option>
+              {teams.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <span className="h2h-vs">vs</span>
+            <select value={h2hAway} onChange={(e) => setH2hAway(e.target.value)}>
+              <option value="" disabled>
+                원정팀 선택
+              </option>
+              {teams.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <label className="h2h-cross">
+              <input
+                type="checkbox"
+                checked={h2hCross}
+                onChange={(e) => setH2hCross(e.target.checked)}
+              />
+              홈원 교차보기
+            </label>
+          </div>
+        </div>
+      )}
+
       <div className="filter-actions">
         <button type="button" className="btn-reset" onClick={handleReset} title="조건 초기화">
           ↺
@@ -124,6 +177,17 @@ export default function FilterForm({ filters, defaultQuery, onSearch }) {
         <button type="submit" className="btn-search">
           🔍 조회
         </button>
+        {teams.length > 0 && (
+          <button
+            type="button"
+            className="btn-search btn-h2h"
+            disabled={!h2hHome || !h2hAway || h2hHome === h2hAway}
+            onClick={handleH2HSearch}
+            title="상대전적을 조회하면 현재 조회된 결과 대신 상대전적을 보여줍니다."
+          >
+            🆚 상대전적 조회
+          </button>
+        )}
       </div>
 
       {warning && <p className="filter-warning">{warning}</p>}

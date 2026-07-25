@@ -137,37 +137,6 @@ td.sticky-col-2 {
   padding: 24px 0;
 }
 
-/* ── 표 상단 툴바 (글씨 크기 토글) ── */
-.table-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.font-size-toggle {
-  display: flex;
-  gap: 4px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 3px;
-}
-
-.font-size-toggle button {
-  padding: 4px 10px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.font-size-toggle button.active {
-  background: var(--accent);
-  color: #fff;
-}
-
 /* ── 표 그룹 접기/펼치기 ──
    글자 길이·컬럼 폭과 무관하게 항상 눈에 띄도록, 접힘/펼침 버튼 모두
    같은 파란 배경 박스 스타일을 쓴다(방향만 반대: 펼침=◂ / 접힘=▸). */
