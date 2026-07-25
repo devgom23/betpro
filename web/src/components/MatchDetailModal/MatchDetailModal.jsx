@@ -28,13 +28,13 @@ function numOrDash(v, digits = 2) {
   return Number.isNaN(n) ? '-' : n.toFixed(digits)
 }
 
-// 26개 지표 중 표본 합이 0보다 큰 것만 보여준다 (원본 _sample_table과 동일 규칙)
 const SAMPLE_INDICATORS = [
-  ['F-W', '해) 승'], ['F-L', '해) 패'], ['F-WL', '해) 승+패'], ['F-WDL', '해) 승+무+패'],
-  ['F-W-HW', '해) 승+H핸'], ['F-W-HT', '해) 승=홈팀'], ['F-L-AT', '해) 패=원정팀'],
   ['K-W', '국) 승'], ['K-L', '국) 패'], ['K-WL', '국) 승+패'], ['K-WDL', '국) 승+무+패'],
-  ['TF-W', '통) 해외 승'], ['TF-L', '통) 해외 패'],
-  ['TK-W', '통) 국내 승'], ['TK-L', '통) 국내 패'],
+  ['K-W-HT', '국) 승=홈팀'], ['K-L-AT', '국) 패=원정팀'],
+  ['TK-W', '국/통) 승'], ['TK-L', '국/통) 패'], ['TK-WDL', '국/통) 승+무+패'],
+  ['F-W', '해) 승'], ['F-L', '해) 패'], ['F-WL', '해) 승+패'], ['F-WDL', '해) 승+무+패'],
+  ['F-W-HT', '해) 승=홈팀'], ['F-L-AT', '해) 패=원정팀'],
+  ['TF-W', '해/통) 승'], ['TF-L', '해/통) 패'], ['TF-WDL', '해/통) 승+무+패'],
 ]
 
 function OddsTable({ row }) {
@@ -106,6 +106,12 @@ function PhPredictionCard({ row }) {
   )
 }
 
+// 한 행의 4칸(핸승/핸무/무/역) 중 최댓값 칸에 표시할 클래스. 전부 0이면 강조 안 함.
+function maxCellClass(vals, i) {
+  const max = Math.max(...vals)
+  return max > 0 && vals[i] === max ? 'cell-max' : ''
+}
+
 function SampleTable({ row }) {
   const lines = SAMPLE_INDICATORS.map(([code, label]) => {
     const vals = [1, 2, 3, 4].map((i) => {
@@ -115,9 +121,10 @@ function SampleTable({ row }) {
     })
     const total = vals.reduce((a, b) => a + b, 0)
     return { code, label, vals, total }
-  }).filter((l) => l.total > 0)
+  })
 
-  if (!lines.length) return <p className="detail-empty">표본 데이터가 없습니다.</p>
+  const grandVals = [0, 1, 2, 3].map((i) => lines.reduce((sum, l) => sum + l.vals[i], 0))
+  const grandTotal = grandVals.reduce((a, b) => a + b, 0)
 
   return (
     <table className="detail-table">
@@ -136,11 +143,22 @@ function SampleTable({ row }) {
           <tr key={l.code}>
             <td className="row-label">{l.label}</td>
             {l.vals.map((v, i) => (
-              <td key={i}>{v}</td>
+              <td key={i} className={maxCellClass(l.vals, i)}>
+                {v}
+              </td>
             ))}
             <td className="col-total">{l.total}</td>
           </tr>
         ))}
+        <tr className="sample-grand-total">
+          <td className="row-label">토탈</td>
+          {grandVals.map((v, i) => (
+            <td key={i} className={maxCellClass(grandVals, i)}>
+              {v}
+            </td>
+          ))}
+          <td className="col-total">{grandTotal}</td>
+        </tr>
       </tbody>
     </table>
   )

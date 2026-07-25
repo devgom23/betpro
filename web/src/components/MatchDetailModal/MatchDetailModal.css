@@ -136,6 +136,18 @@
   font-weight: 700;
 }
 
+.sample-grand-total td {
+  font-weight: 700;
+  background: rgba(148, 163, 184, 0.12);
+  border-top: 2px solid #475569;
+}
+
+.cell-max {
+  background: rgba(250, 204, 21, 0.22);
+  color: #fde68a;
+  font-weight: 800;
+}
+
 .detail-table.match-list {
   margin-top: 10px;
 }

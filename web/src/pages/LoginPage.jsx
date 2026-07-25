@@ -48,13 +48,13 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-card">
-        <div className="login-brand">
+      <div className="login-content">
+        <div className="brand-block">
           <div className="brand-title">
             <span className="brand-logo">⚽</span> BET PRO W
           </div>
-          <p className="brand-version">Version 1.0 Update 2026-06-01</p>
-          <p className="brand-promo">흥보문구 입력 예정</p>
+          <p className="brand-version">VERSION 1.0 UPDATE 2026-06-01</p>
+          <p className="brand-promo">유럽 6대리그를 Data로 분석해보세요</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
@@ -99,7 +99,7 @@ export default function LoginPage() {
                 checked={keepLogin}
                 onChange={(e) => setKeepLogin(e.target.checked)}
               />
-              <span>로그인을 유지</span>
+              <span>로그인 유지</span>
             </label>
             <label className="checkbox">
               <input
@@ -111,6 +111,8 @@ export default function LoginPage() {
             </label>
           </div>
         </form>
+
+        <div className="login-placeholder">스샷 및 각종 내용 입력</div>
       </div>
     </div>
   )

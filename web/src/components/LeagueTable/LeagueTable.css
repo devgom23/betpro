@@ -42,6 +42,18 @@
   line-height: 1.4;
 }
 
+.group-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.group-text {
+  flex: 1;
+  min-width: 0;
+}
+
 .group-title {
   font-size: 12px;
   font-weight: 700;
@@ -123,4 +135,81 @@ td.sticky-col-2 {
   color: #94a3b8;
   font-size: 14px;
   padding: 24px 0;
+}
+
+/* ── 표 상단 툴바 (글씨 크기 토글) ── */
+.table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.font-size-toggle {
+  display: flex;
+  gap: 4px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.font-size-toggle button {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.font-size-toggle button.active {
+  background: #3b82f6;
+  color: #fff;
+}
+
+/* ── 표 그룹 접기/펼치기 ──
+   글자 길이·컬럼 폭과 무관하게 항상 눈에 띄도록, 접힘/펼침 버튼 모두
+   같은 파란 배경 박스 스타일을 쓴다(방향만 반대: 펼침=▾ / 접힘=▸). */
+.fold-btn {
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.15);
+  border-radius: 4px;
+}
+
+.fold-btn:hover {
+  background: rgba(59, 130, 246, 0.35);
+  color: #fff;
+}
+
+.fold-btn-expanded {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.group-collapsed {
+  white-space: nowrap;
+  text-align: center;
+}
+
+.fold-btn-collapsed {
+  display: block;
+  width: 100%;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.collapsed-cell {
+  color: #64748b;
+  background: rgba(148, 163, 184, 0.06);
+}
+
+/* ── 큰글씨 모드 (표 데이터 행에만 적용, 헤더는 그대로 유지) ── */
+.league-table.font-large tbody td {
+  font-size: 13px;
+  padding: 6px 9px;
 }
