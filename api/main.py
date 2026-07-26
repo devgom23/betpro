@@ -477,16 +477,33 @@ def _xlsx_response(buf, korean_name: str, ascii_name: str) -> StreamingResponse:
     return StreamingResponse(buf, media_type=XLSX_MEDIA, headers=headers)
 
 
+_TABLE_TO_L_CODE = {v: k for k, v in PATHS.L_CODE_TO_TABLE.items()}
+
+
 @app.get("/api/leagues/{code}/upload_template")
 def upload_template(code: str,
                     scope: str = PATHS.SCOPE_MASTER,
+                    season: str = "",
+                    round: str = "",   # noqa: A002 — 숫자만(예: "27") → 파일엔 "27R"로 채움
                     user: dict = Depends(get_current_user)):
-    """경기 업로드용 빈 표본 양식(.xlsx). 업로드 권한이 있는 사용자만."""
+    """경기 업로드용 빈 표본 양식(.xlsx). 업로드 권한이 있는 사용자만.
+    리그·시즌·라운드를 넘기면 경기번호 1~10행을 미리 채운 파일을 만든다."""
     _check_league(code)
     if not PATHS.can_write(scope, user.get("role")):
         raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
-    return _xlsx_response(XLS.build_upload_template(),
-                          f"{code}_경기업로드_양식.xlsx", "upload_template.xlsx")
+
+    round = round.strip()
+    if round and not round.isdigit():
+        raise HTTPException(status_code=400, detail="라운드는 숫자만 입력하세요.")
+    round_label = f"{round}R" if round else ""
+
+    buf = XLS.build_upload_template(
+        league_code=_TABLE_TO_L_CODE.get(code, code),
+        season=season.strip(),
+        round_label=round_label,
+    )
+    name_parts = [code] + [p for p in (season.strip(), round_label) if p]
+    return _xlsx_response(buf, f"{'_'.join(name_parts)}_경기업로드_양식.xlsx", "upload_template.xlsx")
 
 
 @app.get("/api/leagues/{code}/table_excel")

@@ -9,8 +9,18 @@
 import io
 
 from openpyxl import Workbook
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+
+# 실제로 다 채운 한 경기 예시 — 작성안내 시트에 '이렇게 채우면 됩니다'로 보여준다.
+# DT는 일부러 08/22 같은 실수하기 쉬운 형식이 아니라 정확한 형식(연도-월-일)으로 적어 둔다.
+UPLOAD_EXAMPLE_ROW = {
+    "L": "EP", "S": "25-26", "R": "1R", "No": 1, "DT": "2026-08-22", "TM": 1500,
+    "HT": "아스널", "HS": 2, "RT": "핸승", "AS": 0, "AT": "첼시",
+    "KW": 1.80, "KD": 3.50, "KL": 4.20, "KH": -1.0, "KHW": 2.10, "KHD": 3.60, "KHL": 1.80,
+    "FW": 1.90, "FD": 3.60, "FL": 4.00, "FH": -1.0, "FHW": 2.00, "FHD": 3.50, "FHL": 1.85,
+}
 
 # 업로드 양식의 컬럼 — engine.preprocess_data()의 target_cols와 반드시 같아야 한다.
 # (여기 순서대로 헤더를 만들어야 업로드 시 그대로 인식됨)
@@ -20,10 +30,23 @@ UPLOAD_TEMPLATE_COLS = [
     "FW", "FD", "FL", "FH", "FHW", "FHD", "FHL",
 ]
 
-# 업로드 양식 각 컬럼의 뜻 — 안내 행에 함께 넣어 비개발자도 채울 수 있게 한다.
+# 경기입력 시트 맨 위에 놓는 한글 라벨(짧게). 이 줄은 영문 코드 헤더보다 위에 있어야 안전하다 —
+# find_header_row()는 'DT'와 'HT'가 '같이 있는 줄'을 찾아 그걸 진짜 헤더로 삼으므로,
+# 한글 라벨 줄이 코드 헤더 '위'에 있으면 자동으로 무시되고, '아래'에 있으면 데이터로 잘못 읽힌다.
+UPLOAD_COL_KOREAN_LABEL = {
+    "L": "리그", "S": "시즌", "R": "라운드", "No": "경기순서", "DT": "경기일", "TM": "경기시간",
+    "HT": "홈팀", "HS": "홈팀점수", "RT": "결과", "AS": "원정팀 점수", "AT": "원정팀",
+    "KW": "국)승", "KD": "국)무", "KL": "국)패", "KH": "국핸디",
+    "KHW": "국)H-승", "KHD": "국)H-무", "KHL": "국)H-패",
+    "FW": "해)승", "FD": "해)무", "FL": "해)패", "FH": "해핸디",
+    "FHW": "해)H-승", "FHD": "해)H-무", "FHL": "해)H-패",
+}
+
+# 업로드 양식 각 컬럼의 뜻 — '작성안내' 시트 표에 함께 넣어 비개발자도 채울 수 있게 한다.
 UPLOAD_COL_HINTS = {
     "L": "리그", "S": "시즌(예: 25-26)", "R": "라운드(예: 38R)", "No": "경기번호",
-    "DT": "일자", "TM": "시각", "HT": "홈팀(필수)", "HS": "홈 득점",
+    "DT": "일자 (반드시 2026-08-22 처럼 '연도-월-일' 형식. 08/22처럼 연도 없이 적으면 인식 안 됨)",
+    "TM": "시각", "HT": "홈팀(필수)", "HS": "홈 득점",
     "RT": "결과(핸승/핸무/무/역·미정이면 공란)", "AS": "원정 득점", "AT": "원정팀(필수)",
     "KW": "국내 홈", "KD": "국내 무", "KL": "국내 원정", "KH": "국내 핸디",
     "KHW": "국내핸디 홈", "KHD": "국내핸디 무", "KHL": "국내핸디 원정",
@@ -236,27 +259,59 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
     return buf
 
 
-def build_upload_template() -> io.BytesIO:
+_KOREAN_LABEL_FONT = Font(bold=False, color="1A1A1A")
+
+
+def build_upload_template(league_code: str = "", season: str = "", round_label: str = "",
+                          match_count: int = 10) -> io.BytesIO:
     """
     경기 업로드용 빈 표본 양식.
 
-    첫 시트('경기입력')에는 헤더 한 줄만 두고 2행부터 바로 입력하게 한다.
-    컬럼 설명을 헤더 아래에 같이 넣으면 업로드할 때 그 설명 줄이 경기 한 건으로
-    읽혀 쓰레기 행이 들어가므로(HT/AT가 비어있지 않아 검증도 통과함), 설명은
-    반드시 별도 시트에 둔다. pandas는 첫 시트만 읽으므로 안전하다.
+    첫 시트('경기입력')는 2행 헤더 — 1행은 한글 라벨(리그/시즌/...), 2행은 실제
+    인식되는 영문 코드(L/S/...)이고, 데이터는 3행부터 시작한다.
+    한글 라벨을 영문 코드 '아래'에 넣으면(예전 방식) find_header_row()가 2행을
+    헤더로 잡은 뒤 그 아래 한글 라벨 줄이 HT/AT가 채워진 경기 한 건으로 오인식되어
+    쓰레기 데이터가 들어갔다. 한글 라벨을 코드 '위'에 두면 find_header_row()가
+    'DT'+'HT'가 있는 2행을 정확히 헤더로 찾아내고, 그 위 1행은 자동으로 무시되어 안전하다.
+
+    league_code(L)/season(S)/round_label(R)을 넘기면 경기번호(No) 1~match_count로
+    행을 미리 만들어 그 세 컬럼을 채워 둔다 — 나머지 칸(HT/AT/배당 등)만 채우면 되게.
     """
     wb = Workbook()
     ws = wb.active
     ws.title = "경기입력"
 
     for i, col in enumerate(UPLOAD_TEMPLATE_COLS, start=1):
-        cell = ws.cell(row=1, column=i, value=col)
-        cell.font = _HEADER_FONT
-        cell.fill = _HEADER_FILL
-        cell.alignment = _CENTER
-        cell.border = _BORDER
+        label_cell = ws.cell(row=1, column=i, value=UPLOAD_COL_KOREAN_LABEL.get(col, col))
+        label_cell.font = _KOREAN_LABEL_FONT
+        label_cell.alignment = _CENTER
+        label_cell.border = _BORDER
+        if col == "DT":
+            label_cell.comment = Comment(
+                "일자는 반드시 연도-월-일 형식으로 적으세요.\n"
+                "예: 2026-08-22\n"
+                "08/22 처럼 연도 없이 적으면 인식되지 않습니다.",
+                "BETPRO",
+            )
+
+        code_cell = ws.cell(row=2, column=i, value=col)
+        code_cell.font = _HEADER_FONT
+        code_cell.fill = _HEADER_FILL
+        code_cell.alignment = _CENTER
+        code_cell.border = _BORDER
+
         ws.column_dimensions[get_column_letter(i)].width = 14
-    ws.freeze_panes = "A2"
+
+    if league_code or season or round_label:
+        prefill = {"L": league_code, "S": season, "R": round_label}
+        for row_i in range(match_count):
+            for col_i, col in enumerate(UPLOAD_TEMPLATE_COLS, start=1):
+                if col == "No":
+                    ws.cell(row=3 + row_i, column=col_i, value=row_i + 1)
+                elif col in prefill and prefill[col]:
+                    ws.cell(row=3 + row_i, column=col_i, value=prefill[col])
+
+    ws.freeze_panes = "A3"
 
     guide = wb.create_sheet("작성안내")
     guide.cell(row=1, column=1, value="경기 데이터 작성 안내").font = _TITLE_FONT
@@ -266,12 +321,26 @@ def build_upload_template() -> io.BytesIO:
         "결과(RT)는 핸승 / 핸무 / 무 / 역 중 하나로 적고, 아직 안 끝난 경기는 비워 두세요.",
         "이미 등록된 경기와 시즌·라운드·경기번호·팀이 모두 같으면 새로 올린 값으로 대체됩니다.",
         "컬럼 순서를 바꾸거나 컬럼명을 고치지 마세요.",
+        "일자(DT)는 반드시 '연도-월-일' 형식으로 적으세요. 예: 2026-08-22"
+        " (08/22처럼 연도 없이 적으면 인식되지 않습니다.)",
     ]
     r = 3
     for n in notes:
         guide.cell(row=r, column=1, value=f"· {n}")
         r += 1
+    r += 2
+
+    guide.cell(row=r, column=1, value="입력 예시 (한 경기를 다 채우면 이런 모습)").font = _BOLD
     r += 1
+    for col_i, col in enumerate(UPLOAD_TEMPLATE_COLS, start=1):
+        c = guide.cell(row=r, column=col_i, value=col)
+        c.font = _HEADER_FONT
+        c.fill = _HEADER_FILL
+        c.alignment = _CENTER
+    r += 1
+    for col_i, col in enumerate(UPLOAD_TEMPLATE_COLS, start=1):
+        guide.cell(row=r, column=col_i, value=UPLOAD_EXAMPLE_ROW.get(col))
+    r += 2
 
     guide.cell(row=r, column=1, value="컬럼").font = _BOLD
     guide.cell(row=r, column=2, value="설명").font = _BOLD

@@ -5,6 +5,7 @@ import LeagueTable from '../components/LeagueTable/LeagueTable'
 import FilterForm from '../components/FilterForm/FilterForm'
 import HeadToHeadResult from '../components/HeadToHead/HeadToHeadResult'
 import RtSummaryBar from '../components/RtSummaryBar/RtSummaryBar'
+import UploadTemplateModal from '../components/UploadTemplateModal/UploadTemplateModal'
 
 const ODDS_KEYS = ['kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl']
 
@@ -53,8 +54,15 @@ export default function LeaguePage({ code, scope }) {
   const fileInputRef = useRef(null)
   const [pendingFile, setPendingFile] = useState(null)   // 업로드 대기 파일(확인 전)
   const [preview, setPreview] = useState(null)           // 저장 전 미리보기 결과
-  const [busyExcel, setBusyExcel] = useState('')         // '' | 'template' | 'table' | 'upload' | 'save'
+  const [busyExcel, setBusyExcel] = useState('')         // '' | 'table' | 'upload' | 'save'
   const [excelNotice, setExcelNotice] = useState('')
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [leagues, setLeagues] = useState([])
+
+  // 업로드 표본 생성 모달의 "리그 선택" 옵션용 (한 번만 불러오면 됨)
+  useEffect(() => {
+    api.get('/api/leagues').then(setLeagues).catch(() => setLeagues([]))
+  }, [])
 
   // 리그/스코프가 바뀌면 시즌·라운드 선택지부터 다시 불러온다
   useEffect(() => {
@@ -107,11 +115,6 @@ export default function LeaguePage({ code, scope }) {
     } finally {
       setBusyExcel('')
     }
-  }
-
-  // ① 업로드용 빈 표본 양식 받기
-  function handleTemplateDownload() {
-    runDownload('template', `/api/leagues/${code}/upload_template?scope=${scope}`)
   }
 
   // ③ 지금 화면에 조회된 분석표 그대로 받기 (표시 상한 없이 조건에 맞는 전부)
@@ -224,11 +227,10 @@ export default function LeaguePage({ code, scope }) {
             <>
               <button
                 className="btn-reset"
-                onClick={handleTemplateDownload}
-                disabled={busyExcel === 'template'}
-                title="경기 정보를 입력할 빈 표본 파일을 받습니다"
+                onClick={() => setShowTemplateModal(true)}
+                title="리그·시즌·라운드를 입력해 업로드용 표본 엑셀을 만듭니다"
               >
-                {busyExcel === 'template' ? '받는 중...' : '⬇ 경기 Data 업로드 엑셀 다운로드'}
+                ⬇ 경기 Data 업로드 엑셀 만들기
               </button>
               <button
                 className="btn-reset"
@@ -256,6 +258,15 @@ export default function LeaguePage({ code, scope }) {
             {busyExcel === 'table' ? '받는 중...' : '⬇ 엑셀 다운로드'}
           </button>
         </div>
+      )}
+
+      {showTemplateModal && (
+        <UploadTemplateModal
+          leagues={leagues.length ? leagues : [{ code, label: code }]}
+          defaultCode={code}
+          scope={scope}
+          onClose={() => setShowTemplateModal(false)}
+        />
       )}
 
       {excelNotice && <p className="recompute-notice">{excelNotice}</p>}
