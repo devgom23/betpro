@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { useEffect, useRef, useState } from 'react'
+import { api, saveBlob } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
 import FilterForm from '../components/FilterForm/FilterForm'
@@ -49,6 +49,13 @@ export default function LeaguePage({ code, scope }) {
   const [busyDelete, setBusyDelete] = useState(false)
   const [deleteNotice, setDeleteNotice] = useState('')
 
+  // 엑셀 다운로드 / 업로드
+  const fileInputRef = useRef(null)
+  const [pendingFile, setPendingFile] = useState(null)   // 업로드 대기 파일(확인 전)
+  const [preview, setPreview] = useState(null)           // 저장 전 미리보기 결과
+  const [busyExcel, setBusyExcel] = useState('')         // '' | 'template' | 'table' | 'upload' | 'save'
+  const [excelNotice, setExcelNotice] = useState('')
+
   // 리그/스코프가 바뀌면 시즌·라운드 선택지부터 다시 불러온다
   useEffect(() => {
     let cancelled = false
@@ -87,6 +94,82 @@ export default function LeaguePage({ code, scope }) {
     } finally {
       setBusyDelete(false)
     }
+  }
+
+  async function runDownload(kind, path) {
+    setBusyExcel(kind)
+    setExcelNotice('')
+    try {
+      const { blob, filename } = await api.download(path)
+      saveBlob(blob, filename)
+    } catch (err) {
+      setExcelNotice(`실패: ${err.message}`)
+    } finally {
+      setBusyExcel('')
+    }
+  }
+
+  // ① 업로드용 빈 표본 양식 받기
+  function handleTemplateDownload() {
+    runDownload('template', `/api/leagues/${code}/upload_template?scope=${scope}`)
+  }
+
+  // ③ 지금 화면에 조회된 분석표 그대로 받기 (표시 상한 없이 조건에 맞는 전부)
+  function handleTableDownload() {
+    runDownload('table', `/api/leagues/${code}/table_excel?${buildQueryString(scope, query)}`)
+  }
+
+  // ② 파일을 고르면 먼저 저장하지 않고 미리보기(건수·중복)만 받아 확인을 받는다
+  async function handleFilePicked(e) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // 같은 파일을 다시 골라도 change 이벤트가 뜨도록 초기화
+    if (!file) return
+    setBusyExcel('upload')
+    setExcelNotice('')
+    setPreview(null)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('scope', scope)
+      form.append('confirm', 'false')
+      const res = await api.upload(`/api/leagues/${code}/upload`, form)
+      setPendingFile(file)
+      setPreview(res)
+    } catch (err) {
+      setExcelNotice(`업로드 실패: ${err.message}`)
+    } finally {
+      setBusyExcel('')
+    }
+  }
+
+  async function handleUploadConfirm() {
+    if (!pendingFile) return
+    setBusyExcel('save')
+    setExcelNotice('')
+    try {
+      const form = new FormData()
+      form.append('file', pendingFile)
+      form.append('scope', scope)
+      form.append('confirm', 'true')
+      const res = await api.upload(`/api/leagues/${code}/upload`, form)
+      setExcelNotice(
+        `저장 완료: 총 ${res.rows.toLocaleString()}건` +
+          (res.duplicates_removed ? ` (중복 ${res.duplicates_removed.toLocaleString()}건 대체)` : '')
+      )
+      setPreview(null)
+      setPendingFile(null)
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setExcelNotice(`저장 실패: ${err.message}`)
+    } finally {
+      setBusyExcel('')
+    }
+  }
+
+  function cancelUpload() {
+    setPreview(null)
+    setPendingFile(null)
+    setExcelNotice('')
   }
 
   // 스코프/리그/현재 조회 시즌이 바뀌면 상대전적 조회용 팀 목록도 그 시즌 기준으로 다시 불러온다
@@ -135,6 +218,73 @@ export default function LeaguePage({ code, scope }) {
 
       <FilterForm filters={filters} onSearch={handleSearch} teams={teams} onH2HSearch={setH2h} />
 
+      {!h2h && (
+        <div className="excel-bar">
+          {data.can_write && (
+            <>
+              <button
+                className="btn-reset"
+                onClick={handleTemplateDownload}
+                disabled={busyExcel === 'template'}
+                title="경기 정보를 입력할 빈 표본 파일을 받습니다"
+              >
+                {busyExcel === 'template' ? '받는 중...' : '⬇ 경기 Data 업로드 엑셀 다운로드'}
+              </button>
+              <button
+                className="btn-reset"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={busyExcel === 'upload'}
+                title="표본 파일에 입력한 경기를 DB에 등록합니다"
+              >
+                {busyExcel === 'upload' ? '읽는 중...' : '⬆ 경기 Data 업로드'}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFilePicked}
+                style={{ display: 'none' }}
+              />
+            </>
+          )}
+          <button
+            className="btn-search"
+            onClick={handleTableDownload}
+            disabled={busyExcel === 'table'}
+            title="지금 조회된 표를 그대로 받습니다"
+          >
+            {busyExcel === 'table' ? '받는 중...' : '⬇ 엑셀 다운로드'}
+          </button>
+        </div>
+      )}
+
+      {excelNotice && <p className="recompute-notice">{excelNotice}</p>}
+
+      {preview && (
+        <div className="upload-preview">
+          <p className="upload-preview-title">📤 업로드 확인</p>
+          <p className="upload-preview-line">
+            읽어온 경기 <strong>{preview.new_rows.toLocaleString()}</strong>건 · 기존{' '}
+            {preview.existing_rows.toLocaleString()}건 → 저장 후{' '}
+            <strong>{preview.after_merge.toLocaleString()}</strong>건
+            {preview.duplicates_removed > 0 &&
+              ` (같은 경기 ${preview.duplicates_removed.toLocaleString()}건은 새 값으로 대체)`}
+          </p>
+          <p className="upload-preview-caption">
+            저장하면 이 리그의 26개 지표와 예측이 다시 계산됩니다. 경기 수가 많으면 수 분 걸릴 수
+            있습니다{scope === 'master' ? ' (저장 전 자동 백업)' : ''}.
+          </p>
+          <div className="upload-preview-actions">
+            <button className="btn-reset" onClick={cancelUpload} disabled={busyExcel === 'save'}>
+              취소
+            </button>
+            <button className="btn-primary" onClick={handleUploadConfirm} disabled={busyExcel === 'save'}>
+              {busyExcel === 'save' ? '저장 중... (기다려 주세요)' : '💾 저장'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {h2h ? (
         <>
           <div className="league-summary">
@@ -158,6 +308,7 @@ export default function LeaguePage({ code, scope }) {
             <RtSummaryBar summary={data.rt_summary} inline />
           </div>
           <LeagueTable
+            code={code}
             columns={data.columns}
             rows={data.rows}
             scope={scope}

@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import './MatchDetailModal.css'
 
@@ -164,11 +165,13 @@ function SampleTable({ row }) {
   )
 }
 
-export default function MatchDetailModal({ row, scope, onClose }) {
+export default function MatchDetailModal({ code, row, scope, onClose }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
   const rt = rtLabel(row.RT)
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState('')
 
   useEffect(() => {
     function onKey(e) {
@@ -177,6 +180,27 @@ export default function MatchDetailModal({ row, scope, onClose }) {
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  async function handleDownload() {
+    setDownloading(true)
+    setDownloadError('')
+    try {
+      const params = new URLSearchParams({
+        scope,
+        season: String(row.S ?? ''),
+        round: String(row.R ?? ''),
+        no: String(row.No ?? ''),
+      })
+      const { blob, filename } = await api.download(
+        `/api/leagues/${code}/match_excel?${params.toString()}`
+      )
+      saveBlob(blob, filename)
+    } catch (err) {
+      setDownloadError(err.message)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -213,6 +237,13 @@ export default function MatchDetailModal({ row, scope, onClose }) {
             <h3>🆚 상대전적</h3>
             <HeadToHeadResult scope={scope} home={ht} away={at} cross limit={15} />
           </div>
+        </div>
+
+        <div className="modal-footer">
+          {downloadError && <p className="error-text">{downloadError}</p>}
+          <button className="btn-primary" onClick={handleDownload} disabled={downloading}>
+            {downloading ? '다운로드 중...' : '⬇ 엑셀 다운로드'}
+          </button>
         </div>
       </div>
     </div>

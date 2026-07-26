@@ -191,8 +191,59 @@
   margin-bottom: 0;
 }
 
+/* ── 필터 아래 엑셀 다운로드/업로드 버튼 줄 ── */
+.excel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+/* ── 업로드 저장 전 확인 패널 ── */
+.upload-preview {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+
+.upload-preview-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.upload-preview-line {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.upload-preview-line strong {
+  color: var(--text-primary);
+}
+
+.upload-preview-caption {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.upload-preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* ── 리그 표 아래 위험 구역 (관리자·공식데이터 전용, 현재 리그 데이터 전체 삭제) ── */
 .danger-zone {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   margin-top: 14px;
   padding: 12px 14px;
   background: var(--bg-surface-2);
@@ -201,7 +252,17 @@
 }
 
 .danger-zone .confirm-check {
-  margin-bottom: 8px;
+  margin-bottom: 0;
+}
+
+.danger-zone .btn-danger {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.danger-zone .recompute-notice {
+  flex-basis: 100%;
+  margin: 4px 0 0;
 }
 
 /* ── RT 결과분포 한 줄 색상 배지 (리그 대시보드/조회결과 요약에서 사용) ── */

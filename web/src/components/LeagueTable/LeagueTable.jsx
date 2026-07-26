@@ -10,7 +10,7 @@ function groupKey(g) {
   return g.label1
 }
 
-export default function LeagueTable({ columns, rows, scope, highlightCols = [] }) {
+export default function LeagueTable({ code, columns, rows, scope, highlightCols = [] }) {
   const groups = useMemo(() => buildColumnGroups(columns || []), [columns])
   const [detailRow, setDetailRow] = useState(null)
   const [collapsed, setCollapsed] = useState(() => new Set())
@@ -140,7 +140,12 @@ export default function LeagueTable({ columns, rows, scope, highlightCols = [] }
         </table>
 
         {detailRow && (
-          <MatchDetailModal row={detailRow} scope={scope} onClose={() => setDetailRow(null)} />
+          <MatchDetailModal
+            code={code || detailRow.Source_League}
+            row={detailRow}
+            scope={scope}
+            onClose={() => setDetailRow(null)}
+          />
         )}
       </div>
     </div>

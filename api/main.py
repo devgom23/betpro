@@ -18,6 +18,10 @@ BETPRO API 서버 (FastAPI) - 골격
   GET  /api/leagues/{code}/filters     시즌·라운드 선택지
   GET  /api/leagues/{code}             대형 분석표 데이터(시즌/라운드/배당 필터)
   GET  /api/head_to_head               두 팀 상대전적 (상세 팝업/상대전적 탭 공용)
+  GET  /api/leagues/{code}/match_excel 상세보기 팝업 내용 엑셀(1시트) 다운로드
+  GET  /api/leagues/{code}/table_excel 현재 조회된 분석표 엑셀 다운로드
+  GET  /api/leagues/{code}/upload_template  경기 업로드용 빈 표본 양식 (쓰기 권한 필요)
+  POST /api/leagues/{code}/upload      경기 엑셀 업로드 (쓰기 권한 필요, confirm 2단계)
   GET  /api/teams                      전체 팀명 목록 (상대전적 탭)
   GET  /api/total                      통합DB(6대 리그 합산) 조회
   POST /api/recompute/pending          예정 경기만 최신 통합DB 기준 재계산
@@ -41,10 +45,12 @@ BETPRO API 서버 (FastAPI) - 골격
   GET  /api/admin/access_log           열람 기록
 ================================================================
 """
+import io
 import os
 import re
 import sqlite3
 import sys
+from urllib.parse import quote
 
 # 루트/‘api’ 를 import 경로에 등록 (betpro_paths, betpro_auth, engine)
 _API_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -55,14 +61,17 @@ for _p in (_ROOT, _API_DIR):
 
 from typing import Optional  # noqa: E402
 import pandas as pd  # noqa: E402
-from fastapi import FastAPI, HTTPException, Depends, Response, Request  # noqa: E402
+from fastapi import (FastAPI, HTTPException, Depends, Response, Request,  # noqa: E402
+                     UploadFile, File, Form)
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import StreamingResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 import betpro_paths as PATHS  # noqa: E402
 import betpro_auth as AUTH    # noqa: E402
 import engine                 # noqa: E402
 import data_access as DATA    # noqa: E402
+import match_excel as XLS     # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -249,6 +258,44 @@ ODDS_FILTER_COLS = ["KW", "KD", "KL", "KHW", "KHD", "KHL", "FW", "FD", "FL"]
 ODDS_TOLERANCE = 0.005   # 원본 조회 필터와 동일한 부동소수 오차 허용
 
 
+def _apply_league_filters(df, season, round, odds_query):
+    """
+    분석표 조회 필터(시즌·라운드·배당 9종)를 적용한다.
+    화면 표시와 엑셀 다운로드가 반드시 같은 결과를 내도록 두 곳이 공유한다.
+    반환: (걸러진 DataFrame, 실제 적용된 season, 실제 적용된 round)
+    """
+    # 기본값: 최근 시즌·최근 라운드. "ALL"이면 해당 축은 필터하지 않는다.
+    if season is None and "S" in df.columns and not df["S"].dropna().empty:
+        season = str(sorted(df["S"].dropna().unique().tolist())[-1])
+    elif season == "ALL":
+        season = None
+
+    sub = df
+    if season is not None and "S" in sub.columns:
+        sub = sub[sub["S"].astype(str) == str(season)]
+
+    if round is None and "R" in sub.columns and not sub["R"].dropna().empty:
+        try:
+            round = str(sorted(sub["R"].dropna().unique().tolist(),
+                               key=lambda x: float(x))[-1])
+        except (TypeError, ValueError):
+            round = str(sorted(sub["R"].dropna().astype(str).unique().tolist())[-1])
+    elif round == "ALL":
+        round = None
+
+    if round is not None and "R" in sub.columns:
+        sub = sub[sub["R"].astype(str) == str(round)]
+
+    for col in ODDS_FILTER_COLS:
+        target = odds_query.get(col)
+        if target is None or col not in sub.columns:
+            continue
+        series = pd.to_numeric(sub[col], errors="coerce")
+        sub = sub[(series - target).abs() < ODDS_TOLERANCE]
+
+    return sub, season, round
+
+
 @app.get("/api/leagues/{code}")
 def league_rows(code: str,
                 scope: str = PATHS.SCOPE_MASTER,
@@ -275,39 +322,16 @@ def league_rows(code: str,
     db = _resolve_scope_db(scope, user)
     df = DATA.load_league_df(db, code)
     if df.empty:
+        # 데이터가 아직 없어도 can_write는 반드시 내려줘야 한다.
+        # 이게 빠지면 "비어 있는 리그에 업로드" UI가 사라져 첫 등록 자체가 막힌다.
         return {"columns": [], "rows": [], "total": 0,
-                "season": None, "round": None}
+                "season": None, "round": None, "rt_summary": None,
+                "can_write": PATHS.can_write(scope, user.get("role"))}
 
-    # 기본값: 최근 시즌·최근 라운드. "ALL"이면 해당 축은 필터하지 않는다.
-    if season is None and "S" in df.columns and not df["S"].dropna().empty:
-        season = str(sorted(df["S"].dropna().unique().tolist())[-1])
-    elif season == "ALL":
-        season = None
-
-    sub = df
-    if season is not None and "S" in sub.columns:
-        sub = sub[sub["S"].astype(str) == str(season)]
-
-    if round is None and "R" in sub.columns and not sub["R"].dropna().empty:
-        try:
-            round = str(sorted(sub["R"].dropna().unique().tolist(),
-                               key=lambda x: float(x))[-1])
-        except (TypeError, ValueError):
-            round = str(sorted(sub["R"].dropna().astype(str).unique().tolist())[-1])
-    elif round == "ALL":
-        round = None
-
-    if round is not None and "R" in sub.columns:
-        sub = sub[sub["R"].astype(str) == str(round)]
-
-    odds_query = {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
-                  "KHL": khl, "FW": fw, "FD": fd, "FL": fl}
-    for col in ODDS_FILTER_COLS:
-        target = odds_query[col]
-        if target is None or col not in sub.columns:
-            continue
-        series = pd.to_numeric(sub[col], errors="coerce")
-        sub = sub[(series - target).abs() < ODDS_TOLERANCE]
+    sub, season, round = _apply_league_filters(
+        df, season, round,
+        {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
+         "KHL": khl, "FW": fw, "FD": fd, "FL": fl})
 
     total = len(sub)
     page = sub.iloc[offset: offset + limit]
@@ -337,13 +361,8 @@ def _rt_label(v):
         return None
 
 
-@app.get("/api/head_to_head")
-def head_to_head(scope: str = PATHS.SCOPE_MASTER,
-                 home: str = "",
-                 away: str = "",
-                 limit: int = 15,
-                 cross: bool = True,
-                 user: dict = Depends(get_current_user)):
+def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
+                       cross: bool = True, limit: int = 15) -> dict:
     """
     두 팀의 과거 맞대결 기록(betpro_ui._head_to_head 이식).
     결과(RT)는 '각 경기의 홈팀 기준' — 지금 보고 있는 경기의 홈팀 관점으로
@@ -351,9 +370,6 @@ def head_to_head(scope: str = PATHS.SCOPE_MASTER,
     cross=True(기본)면 홈/원정이 뒤바뀐 경기도 포함(양방향).
     cross=False면 home=홈팀·away=원정팀으로 지정한 방향만 정확히 일치하는 경기만.
     """
-    db = _resolve_scope_db(scope, user)
-    total_df = DATA.load_total_df(db)
-
     ht, at = str(home).strip(), str(away).strip()
     empty = {"summary": None, "matches": [], "total": 0}
     if total_df.empty or "HT" not in total_df.columns or "AT" not in total_df.columns:
@@ -390,6 +406,212 @@ def head_to_head(scope: str = PATHS.SCOPE_MASTER,
         "summary": summary,
         "matches": DATA.df_to_records(out),
         "total": len(m),
+    }
+
+
+@app.get("/api/head_to_head")
+def head_to_head(scope: str = PATHS.SCOPE_MASTER,
+                 home: str = "",
+                 away: str = "",
+                 limit: int = 15,
+                 cross: bool = True,
+                 user: dict = Depends(get_current_user)):
+    db = _resolve_scope_db(scope, user)
+    total_df = DATA.load_total_df(db)
+    return _head_to_head_calc(total_df, home, away, cross=cross, limit=limit)
+
+
+@app.get("/api/leagues/{code}/match_excel")
+def match_excel_download(code: str,
+                         scope: str = PATHS.SCOPE_MASTER,
+                         season: str = "",
+                         round: str = "",   # noqa: A002
+                         no: str = "",
+                         hlimit: int = 15,
+                         user: dict = Depends(get_current_user)):
+    """
+    상세보기 팝업(배당·플핸예측·상대전적·지표별 표본)을 엑셀 한 시트로 내려받는다.
+    화면에 이미 계산되어 저장된 값만 그대로 옮겨 담을 뿐, 새로 계산하지 않는다.
+    """
+    _check_league(code)
+    db = _resolve_scope_db(scope, user)
+    df = DATA.load_league_df(db, code)
+    if df.empty or "S" not in df.columns or "R" not in df.columns:
+        raise HTTPException(status_code=404, detail="데이터가 없습니다.")
+
+    mask = (df["S"].astype(str) == str(season)) & (df["R"].astype(str) == str(round))
+    if "No" in df.columns:
+        # No는 숫자 컬럼이라 float 저장(1.0)과 문자열 비교(1)가 어긋날 수 있어 숫자로 비교한다.
+        try:
+            target_no = float(no)
+            mask &= pd.to_numeric(df["No"], errors="coerce") == target_no
+        except (TypeError, ValueError):
+            mask &= df["No"].astype(str) == str(no)
+    sub = df[mask]
+    if sub.empty:
+        raise HTTPException(status_code=404, detail="해당 경기를 찾을 수 없습니다.")
+
+    row = DATA.df_to_records(sub.head(1))[0]
+    ht = str(row.get("HT") or "").strip()
+    at = str(row.get("AT") or "").strip()
+
+    total_df = DATA.load_total_df(db)
+    h2h = _head_to_head_calc(total_df, ht, at, cross=True, limit=hlimit)
+
+    buf = XLS.build_match_excel(row, h2h)
+    return _xlsx_response(
+        buf, f"{ht}_vs_{at}_{row.get('S', '')}_{row.get('R', '')}.xlsx", "match_detail.xlsx")
+
+
+# ─────────────────────────── 엑셀 다운로드 / 업로드 ───────────────────────────
+XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _xlsx_response(buf, korean_name: str, ascii_name: str) -> StreamingResponse:
+    """한글 파일명은 RFC 5987(filename*)로, 구형 클라이언트용 ASCII 이름도 함께 준다."""
+    safe = korean_name.replace("/", "-").replace("\\", "-")
+    headers = {
+        "Content-Disposition":
+            f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(safe)}"
+    }
+    return StreamingResponse(buf, media_type=XLSX_MEDIA, headers=headers)
+
+
+@app.get("/api/leagues/{code}/upload_template")
+def upload_template(code: str,
+                    scope: str = PATHS.SCOPE_MASTER,
+                    user: dict = Depends(get_current_user)):
+    """경기 업로드용 빈 표본 양식(.xlsx). 업로드 권한이 있는 사용자만."""
+    _check_league(code)
+    if not PATHS.can_write(scope, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+    return _xlsx_response(XLS.build_upload_template(),
+                          f"{code}_경기업로드_양식.xlsx", "upload_template.xlsx")
+
+
+@app.get("/api/leagues/{code}/table_excel")
+def table_excel_download(code: str,
+                         scope: str = PATHS.SCOPE_MASTER,
+                         season: Optional[str] = None,
+                         round: Optional[str] = None,   # noqa: A002
+                         kw: Optional[float] = None,
+                         kd: Optional[float] = None,
+                         kl: Optional[float] = None,
+                         khw: Optional[float] = None,
+                         khd: Optional[float] = None,
+                         khl: Optional[float] = None,
+                         fw: Optional[float] = None,
+                         fd: Optional[float] = None,
+                         fl: Optional[float] = None,
+                         user: dict = Depends(get_current_user)):
+    """
+    현재 조회 조건 그대로의 분석표를 엑셀로. 화면과 같은 필터 함수를 쓰므로
+    화면에 보이는 것과 정확히 같은 경기가 담긴다(행 수 상한 없이 전부).
+    """
+    _check_league(code)
+    db = _resolve_scope_db(scope, user)
+    df = DATA.load_league_df(db, code)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="데이터가 없습니다.")
+
+    sub, season, round = _apply_league_filters(
+        df, season, round,
+        {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
+         "KHL": khl, "FW": fw, "FD": fd, "FL": fl})
+
+    buf = XLS.build_table_excel(list(df.columns), DATA.df_to_records(sub), title=code)
+    parts = [code]
+    if season:
+        parts.append(str(season))
+    if round:
+        parts.append(str(round))
+    return _xlsx_response(buf, f"{'_'.join(parts)}_분석표.xlsx", "league_table.xlsx")
+
+
+UPLOAD_DEDUP_KEY = ["L", "S", "R", "No", "HT", "AT"]   # 원본과 동일(DT는 결측이 많아 제외)
+
+
+@app.post("/api/leagues/{code}/upload")
+def upload_matches(code: str,
+                   file: UploadFile = File(...),
+                   scope: str = Form(PATHS.SCOPE_MASTER),
+                   confirm: bool = Form(False),
+                   user: dict = Depends(get_current_user)):
+    """
+    경기 엑셀 업로드 (원본 WEB_BET_PRO.py 2105~2165줄 이식).
+    confirm=false면 저장하지 않고 미리보기(건수/중복)만 돌려준다 — 실수로 덮어쓰는 걸 막는 2단계.
+    confirm=true면 기존 데이터와 병합·중복제거 후 26개 지표+플핸예측을 산출해 리그 테이블에 저장한다.
+
+    [원본과 다른 점 — 의도적 수정]
+      원본은 기존 표(지표 컬럼 포함)에 새 분석결과를 옆으로 이어붙여서, 데이터가 이미
+      있는 리그에 추가 업로드하면 컬럼명이 208개 중복돼 저장이 실패했다(빈 리그 최초
+      업로드만 동작). 여기서는 이어붙이는 대신 같은 이름의 컬럼에 덮어써서, 기존 표의
+      구조를 유지한 채 전 행의 지표를 최신 기준으로 갱신한다.
+    """
+    _check_league(code)
+    db = _resolve_scope_db(scope, user)
+    if not PATHS.can_write(scope, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+
+    raw = file.file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+    try:
+        head = pd.read_excel(io.BytesIO(raw), header=None, nrows=10)
+        hr = engine.find_header_row(head)
+        new = engine.preprocess_data(pd.read_excel(io.BytesIO(raw), header=hr))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"엑셀을 읽지 못했습니다: {e}")
+
+    if new.empty:
+        raise HTTPException(
+            status_code=400,
+            detail="유효한 경기가 없습니다. 홈팀(HT)·원정팀(AT)이 채워져 있는지 확인하세요.")
+
+    old = DATA.load_league_df(db, code)
+    merged = pd.concat([old, new], ignore_index=True) if not old.empty else new.copy()
+
+    key = [c for c in UPLOAD_DEDUP_KEY if c in merged.columns]
+    duplicates = 0
+    if key:
+        before = len(merged)
+        merged = merged.drop_duplicates(subset=key, keep="last").reset_index(drop=True)
+        duplicates = before - len(merged)
+
+    if not confirm:
+        return {
+            "saved": False,
+            "new_rows": len(new),
+            "existing_rows": len(old),
+            "after_merge": len(merged),
+            "duplicates_removed": duplicates,
+            "sample": DATA.df_to_records(new.head(10)),
+        }
+
+    if scope == PATHS.SCOPE_MASTER:
+        PATHS.backup_master()      # 저장 전 자동 백업 (관리자 화면에서 롤백 가능)
+
+    total_new = DATA.load_total_df(db)
+    if total_new.empty:
+        total_new = merged
+    res = engine.analyze_dataframe(merged, total_new)
+
+    final = merged.copy()
+    for c in res.columns:          # 같은 이름이면 덮어쓰고, 없으면 새로 만든다
+        final[c] = res[c].values
+
+    con = sqlite3.connect(db)
+    try:
+        final.to_sql(code, con, if_exists="replace", index=False)
+    finally:
+        con.close()
+    PATHS.stamp_updated(db)
+
+    return {
+        "saved": True,
+        "rows": len(final),
+        "new_rows": len(new),
+        "duplicates_removed": duplicates,
     }
 
 
