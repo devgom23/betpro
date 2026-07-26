@@ -1,0 +1,7 @@
+cd /d "C:\Users\gomgu\Desktop\betpro\web"
+npm run dev
+몇 초 뒤 Local: http://localhost:5173 같은 주소가 뜹니다.
+
+3단계: 브라우저에서 접속
+http://localhost:5173
+로그인: 아이디 admin / 비밀번호 betpro-admin-2026
