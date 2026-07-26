@@ -142,6 +142,11 @@
   border-top: 2px solid var(--border-strong);
 }
 
+/* 지표별 표본: 국내(국) 지표 블록과 해외(해) 지표 블록 경계 구분선 */
+.sample-group-start td {
+  border-top: 2px solid var(--border-strong);
+}
+
 .cell-max {
   background: rgba(250, 204, 21, 0.22);
   color: var(--highlight-text);

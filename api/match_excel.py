@@ -71,9 +71,12 @@ _HEADER_FONT = Font(bold=True, color="FFFFFF")
 _MAX_FILL = PatternFill("solid", fgColor="D4C97A")  # 표의 노란(khaki) 최댓값 강조와 동일 톤
 _CENTER = Alignment(horizontal="center", vertical="center")
 _THIN = Side(style="thin", color="D1D5DB")
+_THICK = Side(style="medium", color="6B7280")
 _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+_DIVIDER_BORDER = Border(left=_THIN, right=_THIN, top=_THICK, bottom=_THIN)  # 화면의 굵은 구분선과 동일
 _TITLE_FONT = Font(bold=True, size=14)
 _BOLD = Font(bold=True)
+_WINNER_FONT = Font(color="C62828", bold=True)  # 화면의 이긴 팀 점수 빨간 강조와 동일
 
 
 def _rt_label(v):
@@ -112,6 +115,29 @@ def _int_or_blank(v):
         return v
 
 
+def _points_for(m, reference_team):
+    """HeadToHeadResult.jsx homePoints()와 동일 — 기준 팀이 홈/원정 상관없이 그 경기에서
+    딴 승점(승3/무1/패0). 점수가 없으면(예정 경기) 빈 칸."""
+    hs, as_ = m.get("HS"), m.get("AS")
+    if hs is None or as_ is None or hs == "" or as_ == "":
+        return ""
+    try:
+        hs, as_ = float(hs), float(as_)
+    except (TypeError, ValueError):
+        return ""
+    if m.get("HT") == reference_team:
+        mine, theirs = hs, as_
+    elif m.get("AT") == reference_team:
+        mine, theirs = as_, hs
+    else:
+        return ""
+    if mine > theirs:
+        return 3
+    if mine < theirs:
+        return 0
+    return 1
+
+
 _RIGHT_COL = 7  # 'G' — 팝업의 오른쪽 칼럼(상대전적)이 시작하는 위치
 
 
@@ -124,10 +150,10 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
     ws = wb.active
     ws.title = "상세보기"
 
-    def write_row(values, row_idx, start_col=1, font=None, fill=None, align=None):
+    def write_row(values, row_idx, start_col=1, font=None, fill=None, align=None, border=None):
         for i, v in enumerate(values):
             cell = ws.cell(row=row_idx, column=start_col + i, value=v)
-            cell.border = _BORDER
+            cell.border = border or _BORDER
             if font:
                 cell.font = font
             if fill:
@@ -193,6 +219,7 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
     r = write_row(["지표", "핸승", "핸무", "무", "역", "토탈"], r, font=_HEADER_FONT,
                   fill=_HEADER_FILL, align=_CENTER)
     grand = [0, 0, 0, 0]
+    prev_code = None
     for code, label in SAMPLE_INDICATORS:
         vals = []
         for i in (1, 2, 3, 4):
@@ -203,7 +230,12 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
         for i, v in enumerate(vals):
             grand[i] += v
         row_idx = r
-        r = write_row([label, *vals, sum(vals)], r)
+        # 국내(K-/TK-) 지표 블록 → 해외(F-/TF-) 지표 블록 경계에 화면과 같은 굵은 선
+        is_foreign = code.startswith("F-") or code.startswith("TF-")
+        was_foreign = prev_code is not None and (prev_code.startswith("F-") or prev_code.startswith("TF-"))
+        group_border = _DIVIDER_BORDER if (is_foreign and not was_foreign) else None
+        r = write_row([label, *vals, sum(vals)], r, border=group_border)
+        prev_code = code
         vmax = max(vals)
         if vmax > 0:
             for i, v in enumerate(vals):
@@ -231,25 +263,40 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
         rr = write_row([summary["핸승"], summary["핸무"], summary["무"], summary["역"],
                         summary["총"]], rr, start_col=_RIGHT_COL)
         rr += 1
-        rr = write_row(["시즌", "R", "HT", "HS", "AS", "AT", "결과"], rr, start_col=_RIGHT_COL,
+        rr = write_row(["시즌", "R", "HT", "HS", "AS", "AT", "결과", "승점"], rr, start_col=_RIGHT_COL,
                        font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
+        prev_season = None
         for m in h2h.get("matches", []):
+            season = m.get("S")
+            # 시즌이 바뀌는 경계마다 화면과 같은 굵은 구분선
+            divider = prev_season is not None and season != prev_season
+            hs_val = _int_or_blank(m.get("HS"))
+            as_val = _int_or_blank(m.get("AS"))
+            row_idx = rr
             rr = write_row([
-                m.get("S"), m.get("R"), m.get("HT"),
-                _int_or_blank(m.get("HS")), _int_or_blank(m.get("AS")), m.get("AT"),
-                m.get("RT_label") or "",
-            ], rr, start_col=_RIGHT_COL)
+                season, m.get("R"), m.get("HT"), hs_val, as_val, m.get("AT"),
+                m.get("RT_label") or "", _points_for(m, ht),
+            ], rr, start_col=_RIGHT_COL, border=_DIVIDER_BORDER if divider else None)
+            # 이긴 팀 점수만 빨간 강조 (화면의 winner-score와 동일)
+            if isinstance(hs_val, int) and isinstance(as_val, int):
+                if hs_val > as_val:
+                    ws.cell(row=row_idx, column=_RIGHT_COL + 3).font = _WINNER_FONT
+                elif as_val > hs_val:
+                    ws.cell(row=row_idx, column=_RIGHT_COL + 4).font = _WINNER_FONT
+            prev_season = season
         total = h2h.get("total", 0)
         shown = len(h2h.get("matches", []))
         if total > shown:
             ws.cell(row=rr, column=_RIGHT_COL, value=f"최근 {shown}경기만 표시 (총 {total}경기)")
             rr += 1
+        ws.cell(row=rr, column=_RIGHT_COL, value="승점은 홈팀 기준으로 작성되었습니다.")
+        rr += 1
     else:
         ws.cell(row=rr, column=_RIGHT_COL, value=f"{ht} vs {at} 맞대결 기록 없음")
         rr += 1
 
     widths = {1: 18, 2: 12, 3: 12, 4: 12, 5: 12, 6: 10,
-             7: 10, 8: 10, 9: 10, 10: 10, 11: 10, 12: 10, 13: 10}
+             7: 10, 8: 10, 9: 10, 10: 10, 11: 10, 12: 10, 13: 10, 14: 10}
     for col, width in widths.items():
         ws.column_dimensions[get_column_letter(col)].width = width
 

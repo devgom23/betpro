@@ -47,6 +47,15 @@
   margin-top: 10px;
 }
 
+.detail-table .winner-score {
+  color: #c62828;
+  font-weight: 700;
+}
+
+.detail-table.match-list .season-start td {
+  border-top: 2px solid var(--border-strong);
+}
+
 .detail-empty {
   color: var(--text-muted);
   font-size: 13px;

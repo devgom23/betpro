@@ -140,17 +140,21 @@ function SampleTable({ row }) {
         </tr>
       </thead>
       <tbody>
-        {lines.map((l) => (
-          <tr key={l.code}>
-            <td className="row-label">{l.label}</td>
-            {l.vals.map((v, i) => (
-              <td key={i} className={maxCellClass(l.vals, i)}>
-                {v}
-              </td>
-            ))}
-            <td className="col-total">{l.total}</td>
-          </tr>
-        ))}
+        {lines.map((l, li) => {
+          const isForeign = /^(F|TF)-/.test(l.code)
+          const groupStart = li > 0 && isForeign && !/^(F|TF)-/.test(lines[li - 1].code)
+          return (
+            <tr key={l.code} className={groupStart ? 'sample-group-start' : undefined}>
+              <td className="row-label">{l.label}</td>
+              {l.vals.map((v, i) => (
+                <td key={i} className={maxCellClass(l.vals, i)}>
+                  {v}
+                </td>
+              ))}
+              <td className="col-total">{l.total}</td>
+            </tr>
+          )
+        })}
         <tr className="sample-grand-total">
           <td className="row-label">토탈</td>
           {grandVals.map((v, i) => (
