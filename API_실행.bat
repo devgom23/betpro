@@ -1,16 +1,41 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
-if exist ".venv" (
-    call .venv\Scripts\activate.bat
-)
+
+REM Pick a python that actually has uvicorn.
+REM The .venv here may be half-built (no uvicorn), which used to make the
+REM server fail to start with "No module named uvicorn".
+set "PY="
+
+if not exist ".venv\Scripts\python.exe" goto trysystem
+".venv\Scripts\python.exe" -c "import uvicorn" >nul 2>&1
+if errorlevel 1 goto trysystem
+set "PY=.venv\Scripts\python.exe"
+goto run
+
+:trysystem
+python -c "import uvicorn" >nul 2>&1
+if errorlevel 1 goto nopython
+set "PY=python"
+
+:run
 echo.
 echo ============================================
-echo   BETPRO API ì„œë²„ (FastAPI) ì‹œì‘
-echo   API ì£¼ì†Œ   : http://localhost:8000
-echo   ë¬¸ì„œ í™”ë©´  : http://localhost:8000/docs
-echo   (ì¢…ë£Œ: ì´ ì°½ì—ì„œ Ctrl + C)
+echo   BETPRO API ¼­¹ö (FastAPI) ½ÃÀÛ
+echo   API ÁÖ¼Ò  : http://localhost:8000
+echo   ¹®¼­ È­¸é : http://localhost:8000/docs
+echo   (Á¾·á: ÀÌ Ã¢¿¡¼­ Ctrl + C)
 echo ============================================
 echo.
-python -m uvicorn api.main:app --reload --port 8000
+%PY% -m uvicorn api.main:app --reload --port 8000
 pause
+exit /b 0
+
+:nopython
+echo.
+echo [¿À·ù] uvicorn ÀÌ ¼³Ä¡µÈ ÆÄÀÌ½ãÀ» Ã£Áö ¸øÇß½À´Ï´Ù.
+echo        ¾Æ·¡ ¸í·ÉÀ¸·Î ¼³Ä¡ÇÑ µÚ ´Ù½Ã ½ÇÇàÇØ ÁÖ¼¼¿ä.
+echo.
+echo        pip install -r requirements.txt
+echo.
+pause
+exit /b 1

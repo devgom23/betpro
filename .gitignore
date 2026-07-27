@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 api_autostart.log
 .venv/
+
+# SQLite가 실행 중에 만드는 임시 파일 (DB 본체가 아니므로 추적하지 않는다)
+*.db-shm
+*.db-wal
