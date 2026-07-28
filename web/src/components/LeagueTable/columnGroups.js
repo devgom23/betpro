@@ -3,7 +3,12 @@
 // 산출 로직은 건드리지 않고, "표시 순서·라벨·색상"만 그대로 재현한다.
 
 const GEN_COLS = ['L', 'S', 'R', 'No', 'DT', 'TM']
-const MATCH_COLS = ['HT', 'HS', 'RT', 'AS', 'AT']
+// 그 경기 '직전까지'의 시즌 성적. 백엔드가 조회 시 계산해 붙여준다.
+//   HP/AP  = 홈팀/원정팀 순위
+//   HTF/ATF = 홈팀/원정팀의 전체경기 PPG,  HF/AF = 홈팀 홈경기·원정팀 원정경기 PPG
+const MATCH_COLS = [
+  'HTF', 'HF', 'HP', 'HT', 'HS', 'RT', 'AS', 'AT', 'AP', 'AF', 'ATF',
+]
 const K_ODDS_COLS = ['KW', 'KD', 'KL', 'KH', 'KHW', 'KHD', 'KHL']
 const F_ODDS_COLS = ['FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL']
 

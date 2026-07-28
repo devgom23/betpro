@@ -84,7 +84,7 @@ export default function HeadToHeadResult({ scope, home, away, cross = true, limi
   return (
     <>
       <p className="h2h-caption">결과는 각 경기의 홈팀 기준입니다.</p>
-      <table className="detail-table">
+      <table className="detail-table h2h-summary-table">
         <thead>
           <tr>
             <th className="col-hs">핸승</th>

@@ -60,10 +60,10 @@ RT_LABELS = {1: "핸승", 2: "핸무", 3: "무", 4: "역"}
 SAMPLE_INDICATORS = [
     ("K-W", "국) 승"), ("K-L", "국) 패"), ("K-WL", "국) 승+패"), ("K-WDL", "국) 승+무+패"),
     ("K-W-HT", "국) 승=홈팀"), ("K-L-AT", "국) 패=원정팀"),
-    ("TK-W", "국/통) 승"), ("TK-L", "국/통) 패"), ("TK-WDL", "국/통) 승+무+패"),
+    ("TK-W", "국/통) 승"), ("TK-L", "국/통) 패"), ("TK-WL", "국/통) 승+패"), ("TK-WDL", "국/통) 승+무+패"),
     ("F-W", "해) 승"), ("F-L", "해) 패"), ("F-WL", "해) 승+패"), ("F-WDL", "해) 승+무+패"),
     ("F-W-HT", "해) 승=홈팀"), ("F-L-AT", "해) 패=원정팀"),
-    ("TF-W", "해/통) 승"), ("TF-L", "해/통) 패"), ("TF-WDL", "해/통) 승+무+패"),
+    ("TF-W", "해/통) 승"), ("TF-L", "해/통) 패"), ("TF-WL", "해/통) 승+패"), ("TF-WDL", "해/통) 승+무+패"),
 ]
 
 _HEADER_FILL = PatternFill("solid", fgColor="1F2937")
@@ -76,6 +76,12 @@ _BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 _DIVIDER_BORDER = Border(left=_THIN, right=_THIN, top=_THICK, bottom=_THIN)  # 화면의 굵은 구분선과 동일
 _TITLE_FONT = Font(bold=True, size=14)
 _BOLD = Font(bold=True)
+
+
+def _with_right_divider(border):
+    """기존 테두리는 유지한 채 오른쪽만 굵게 — 역/토탈 사이 세로 구분선용."""
+    b = border or _BORDER
+    return Border(left=b.left, right=_THICK, top=b.top, bottom=b.bottom)
 _WINNER_FONT = Font(color="C62828", bold=True)  # 화면의 이긴 팀 점수 빨간 강조와 동일
 
 
@@ -216,8 +222,10 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
 
     ws.cell(row=r, column=1, value="지표별 표본").font = _BOLD
     r += 1
+    _SAMPLE_YK_COL = 5  # 지표(1) 핸승(2) 핸무(3) 무(4) 역(5) 토탈(6)
     r = write_row(["지표", "핸승", "핸무", "무", "역", "토탈"], r, font=_HEADER_FONT,
                   fill=_HEADER_FILL, align=_CENTER)
+    ws.cell(row=r - 1, column=_SAMPLE_YK_COL).border = _with_right_divider(_BORDER)
     grand = [0, 0, 0, 0]
     prev_code = None
     for code, label in SAMPLE_INDICATORS:
@@ -235,6 +243,7 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
         was_foreign = prev_code is not None and (prev_code.startswith("F-") or prev_code.startswith("TF-"))
         group_border = _DIVIDER_BORDER if (is_foreign and not was_foreign) else None
         r = write_row([label, *vals, sum(vals)], r, border=group_border)
+        ws.cell(row=row_idx, column=_SAMPLE_YK_COL).border = _with_right_divider(group_border)
         prev_code = code
         vmax = max(vals)
         if vmax > 0:
@@ -244,6 +253,7 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
 
     row_idx = r
     r = write_row(["토탈", *grand, sum(grand)], r, font=_BOLD)
+    ws.cell(row=row_idx, column=_SAMPLE_YK_COL).border = _with_right_divider(_BORDER)
     vmax = max(grand)
     if vmax > 0:
         for i, v in enumerate(grand):
@@ -258,10 +268,14 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
     rr += 1
     summary = h2h.get("summary")
     if summary:
+        _H2H_YK_COL = _RIGHT_COL + 3  # 핸승(+0) 핸무(+1) 무(+2) 역(+3) 토탈(+4)
         rr = write_row(["핸승", "핸무", "무", "역", "토탈"], rr, start_col=_RIGHT_COL,
                        font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
+        ws.cell(row=rr - 1, column=_H2H_YK_COL).border = _with_right_divider(_BORDER)
+        summary_row = rr
         rr = write_row([summary["핸승"], summary["핸무"], summary["무"], summary["역"],
                         summary["총"]], rr, start_col=_RIGHT_COL)
+        ws.cell(row=summary_row, column=_H2H_YK_COL).border = _with_right_divider(_BORDER)
         rr += 1
         rr = write_row(["시즌", "R", "HT", "HS", "AS", "AT", "결과", "승점"], rr, start_col=_RIGHT_COL,
                        font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
@@ -410,7 +424,8 @@ def build_upload_template(league_code: str = "", season: str = "", round_label: 
 # 그대로 옮긴 것. 그룹 구성·라벨·색상 규칙이 어긋나면 안 되므로 순서·값 모두 동일하게 유지.
 # ════════════════════════════════════════════════════════════
 _GEN_COLS = ["L", "S", "R", "No", "DT", "TM"]
-_MATCH_COLS = ["HT", "HS", "RT", "AS", "AT"]
+# 경기 직전 시즌 성적: HP/AP=순위, HTF/ATF=전체경기 PPG, HF/AF=홈·원정경기 PPG
+_MATCH_COLS = ["HTF", "HF", "HP", "HT", "HS", "RT", "AS", "AT", "AP", "AF", "ATF"]
 _K_ODDS_COLS = ["KW", "KD", "KL", "KH", "KHW", "KHD", "KHL"]
 _F_ODDS_COLS = ["FW", "FD", "FL", "FH", "FHW", "FHD", "FHL"]
 _PH_COLS = [

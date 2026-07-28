@@ -47,6 +47,12 @@
   margin-top: 10px;
 }
 
+/* 상대전적 요약: 역/토탈 사이 구분선 (역이 5칸 중 4번째 컬럼) */
+.h2h-summary-table th:nth-child(4),
+.h2h-summary-table td:nth-child(4) {
+  border-right: 2px solid var(--border-strong);
+}
+
 .detail-table .winner-score {
   color: #c62828;
   font-weight: 700;

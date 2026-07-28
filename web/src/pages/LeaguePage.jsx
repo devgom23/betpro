@@ -6,6 +6,7 @@ import FilterForm from '../components/FilterForm/FilterForm'
 import HeadToHeadResult from '../components/HeadToHead/HeadToHeadResult'
 import RtSummaryBar from '../components/RtSummaryBar/RtSummaryBar'
 import UploadTemplateModal from '../components/UploadTemplateModal/UploadTemplateModal'
+import DeleteMatchesModal from '../components/DeleteMatchesModal/DeleteMatchesModal'
 
 const ODDS_KEYS = ['kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl']
 
@@ -46,10 +47,6 @@ export default function LeaguePage({ code, scope }) {
   const [h2h, setH2h] = useState(null) // {home, away, cross} | null — 있으면 표 대신 상대전적 표시
   const [reloadKey, setReloadKey] = useState(0)
 
-  const [delConfirm, setDelConfirm] = useState(false)
-  const [busyDelete, setBusyDelete] = useState(false)
-  const [deleteNotice, setDeleteNotice] = useState('')
-
   // 엑셀 다운로드 / 업로드
   const fileInputRef = useRef(null)
   const [pendingFile, setPendingFile] = useState(null)   // 업로드 대기 파일(확인 전)
@@ -57,6 +54,7 @@ export default function LeaguePage({ code, scope }) {
   const [busyExcel, setBusyExcel] = useState('')         // '' | 'table' | 'upload' | 'save'
   const [excelNotice, setExcelNotice] = useState('')
   const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [leagues, setLeagues] = useState([])
 
   // 업로드 표본 생성 모달의 "리그 선택" 옵션용 (한 번만 불러오면 됨)
@@ -84,25 +82,6 @@ export default function LeaguePage({ code, scope }) {
       cancelled = true
     }
   }, [code, scope, reloadKey])
-
-  async function handleDeleteLeagueData() {
-    if (!delConfirm) {
-      setDeleteNotice('동의 체크박스를 선택하세요.')
-      return
-    }
-    setBusyDelete(true)
-    setDeleteNotice('')
-    try {
-      await api.post('/api/admin/master/delete_league', { league: code, confirm: true })
-      setDeleteNotice(`'${code}' 데이터를 모두 삭제했습니다.`)
-      setDelConfirm(false)
-      setReloadKey((k) => k + 1)
-    } catch (err) {
-      setDeleteNotice(`실패: ${err.message}`)
-    } finally {
-      setBusyDelete(false)
-    }
-  }
 
   async function runDownload(kind, path) {
     setBusyExcel(kind)
@@ -329,20 +308,24 @@ export default function LeaguePage({ code, scope }) {
       )}
 
       {user.role === 'admin' && scope === 'master' && (
-        <div className="danger-zone">
-          <label className="confirm-check">
-            <input
-              type="checkbox"
-              checked={delConfirm}
-              onChange={(e) => setDelConfirm(e.target.checked)}
-            />
-            Data를 삭제하시면 현재 등록된 모든 Data가 삭제가 됩니다. 동의하십니까?
-          </label>
-          <button className="btn-danger" disabled={busyDelete} onClick={handleDeleteLeagueData}>
-            {busyDelete ? '삭제 중...' : '경기 Data 모두삭제'}
+        <div className="delete-select-bar">
+          <button className="btn-reset" onClick={() => setShowDeleteModal(true)}>
+            🗑 경기 Data 삭제 선택
           </button>
-          {deleteNotice && <p className="recompute-notice">{deleteNotice}</p>}
+          <span className="delete-select-caption">
+            '경기 Data 삭제 선택'을 클릭하시면 삭제할 리그 및 경기를 선택한 후 삭제를 하시면 됩니다.
+          </span>
         </div>
+      )}
+
+      {showDeleteModal && (
+        <DeleteMatchesModal
+          leagues={leagues.length ? leagues : [{ code, label: code }]}
+          defaultCode={code}
+          scope={scope}
+          onClose={() => setShowDeleteModal(false)}
+          onDeleted={() => setReloadKey((k) => k + 1)}
+        />
       )}
     </div>
   )

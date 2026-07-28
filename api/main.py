@@ -22,6 +22,7 @@ BETPRO API 서버 (FastAPI) - 골격
   GET  /api/leagues/{code}/table_excel 현재 조회된 분석표 엑셀 다운로드
   GET  /api/leagues/{code}/upload_template  경기 업로드용 빈 표본 양식 (쓰기 권한 필요)
   POST /api/leagues/{code}/upload      경기 엑셀 업로드 (쓰기 권한 필요, confirm 2단계)
+  POST /api/leagues/{code}/delete_matches  선택한 시즌/라운드 경기만 삭제 (쓰기 권한 필요)
   GET  /api/teams                      전체 팀명 목록 (상대전적 탭)
   GET  /api/total                      통합DB(6대 리그 합산) 조회
   POST /api/recompute/pending          예정 경기만 최신 통합DB 기준 재계산
@@ -320,7 +321,7 @@ def league_rows(code: str,
     """
     _check_league(code)
     db = _resolve_scope_db(scope, user)
-    df = DATA.load_league_df(db, code)
+    df = DATA.load_league_df_ranked(db, code)   # 표시용 순위(HP/AP) 포함
     if df.empty:
         # 데이터가 아직 없어도 can_write는 반드시 내려줘야 한다.
         # 이게 빠지면 "비어 있는 리그에 업로드" UI가 사라져 첫 등록 자체가 막힌다.
@@ -527,7 +528,7 @@ def table_excel_download(code: str,
     """
     _check_league(code)
     db = _resolve_scope_db(scope, user)
-    df = DATA.load_league_df(db, code)
+    df = DATA.load_league_df_ranked(db, code)   # 화면과 같은 순위(HP/AP)가 담기도록
     if df.empty:
         raise HTTPException(status_code=404, detail="데이터가 없습니다.")
 
@@ -630,6 +631,51 @@ def upload_matches(code: str,
         "new_rows": len(new),
         "duplicates_removed": duplicates,
     }
+
+
+class DeleteMatchesBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    season: str = "ALL"
+    round: str = "ALL"   # noqa: A003
+    confirm: bool = False
+
+
+@app.post("/api/leagues/{code}/delete_matches")
+def delete_matches(code: str, body: DeleteMatchesBody, user: dict = Depends(get_current_user)):
+    """
+    선택한 시즌/라운드에 해당하는 경기만 지운다 — 리그 테이블 자체나 다른 시즌
+    데이터는 그대로 둔다("경기 Data 모두삭제"처럼 테이블 전체를 지우는 게 아님).
+    화면 조회와 같은 필터 함수를 써서 "보이는 조건 = 지워지는 대상"이 항상 일치하게 한다.
+    시즌/라운드 둘 다 "ALL"이면 사실상 리그 전체 삭제와 같다.
+    """
+    _check_league(code)
+    if not PATHS.can_write(body.scope, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
+
+    db = _resolve_scope_db(body.scope, user)
+    df = DATA.load_league_df(db, code)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="데이터가 없습니다.")
+
+    to_delete, _, _ = _apply_league_filters(df, body.season, body.round, {})
+    if to_delete.empty:
+        raise HTTPException(status_code=404, detail="해당 조건에 맞는 경기가 없습니다.")
+
+    remaining = df.drop(index=to_delete.index)
+
+    if body.scope == PATHS.SCOPE_MASTER:
+        PATHS.backup_master()   # 삭제 전 자동 백업
+
+    con = sqlite3.connect(db)
+    try:
+        remaining.to_sql(code, con, if_exists="replace", index=False)
+    finally:
+        con.close()
+    PATHS.stamp_updated(db)
+
+    return {"deleted": len(to_delete), "remaining": len(remaining)}
 
 
 # ─────────────────────────── 엔진 실시간 분석 ───────────────────────────

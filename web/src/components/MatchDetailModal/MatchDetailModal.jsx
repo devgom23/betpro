@@ -32,10 +32,10 @@ function numOrDash(v, digits = 2) {
 const SAMPLE_INDICATORS = [
   ['K-W', '국) 승'], ['K-L', '국) 패'], ['K-WL', '국) 승+패'], ['K-WDL', '국) 승+무+패'],
   ['K-W-HT', '국) 승=홈팀'], ['K-L-AT', '국) 패=원정팀'],
-  ['TK-W', '국/통) 승'], ['TK-L', '국/통) 패'], ['TK-WDL', '국/통) 승+무+패'],
+  ['TK-W', '국/통) 승'], ['TK-L', '국/통) 패'], ['TK-WL', '국/통) 승+패'], ['TK-WDL', '국/통) 승+무+패'],
   ['F-W', '해) 승'], ['F-L', '해) 패'], ['F-WL', '해) 승+패'], ['F-WDL', '해) 승+무+패'],
   ['F-W-HT', '해) 승=홈팀'], ['F-L-AT', '해) 패=원정팀'],
-  ['TF-W', '해/통) 승'], ['TF-L', '해/통) 패'], ['TF-WDL', '해/통) 승+무+패'],
+  ['TF-W', '해/통) 승'], ['TF-L', '해/통) 패'], ['TF-WL', '해/통) 승+패'], ['TF-WDL', '해/통) 승+무+패'],
 ]
 
 function OddsTable({ row }) {
@@ -128,7 +128,7 @@ function SampleTable({ row }) {
   const grandTotal = grandVals.reduce((a, b) => a + b, 0)
 
   return (
-    <table className="detail-table">
+    <table className="detail-table sample-table">
       <thead>
         <tr>
           <th>지표</th>

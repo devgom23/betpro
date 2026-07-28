@@ -10,6 +10,7 @@ import pandas as pd
 
 from deps import PATHS
 import engine
+import standings
 
 LEAGUES = PATHS.LEAGUES
 
@@ -39,6 +40,24 @@ def load_league_df(db_path: str, league: str) -> pd.DataFrame:
     if hit and hit[0] == mt:
         return hit[1]
     df = _read_table(db_path, league)
+    _CACHE[key] = (mt, df)
+    return df
+
+
+def load_league_df_ranked(db_path: str, league: str) -> pd.DataFrame:
+    """
+    단일 리그 + 시즌별 순위(HP/AP)·폼(HTF/HF/AF/ATF) 컬럼. 화면 표시·엑셀 다운로드 전용이다.
+
+    ⚠ DB에 다시 쓰는 경로(업로드/삭제)에서는 절대 쓰지 말 것 — 표시용으로만 덧붙인
+       컬럼들이 테이블에 저장되어 버린다. 그쪽은 load_league_df(원본)를 그대로 쓴다.
+    계산이 리그당 0.4초쯤 걸리므로 원본과 같은 mtime 캐시에 담아 DB가 바뀔 때만 계산한다.
+    """
+    key = ("league_ranked:" + league, db_path)
+    mt = PATHS.db_mtime(db_path)
+    hit = _CACHE.get(key)
+    if hit and hit[0] == mt:
+        return hit[1]
+    df = standings.attach_rank_and_form(load_league_df(db_path, league))
     _CACHE[key] = (mt, df)
     return df
 

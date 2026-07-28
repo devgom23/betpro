@@ -239,30 +239,21 @@
   gap: 8px;
 }
 
-/* ── 리그 표 아래 위험 구역 (관리자·공식데이터 전용, 현재 리그 데이터 전체 삭제) ── */
-.danger-zone {
+/* ── 리그 표 아래: 선택한 경기만 삭제하는 버튼(관리자·공식데이터 전용) ── */
+.delete-select-bar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   margin-top: 14px;
-  padding: 12px 14px;
+  padding: 10px 14px;
   background: var(--bg-surface-2);
-  border: 1px solid var(--danger);
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 
-.danger-zone .confirm-check {
-  margin-bottom: 0;
-}
-
-.danger-zone .btn-danger {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.danger-zone .recompute-notice {
-  flex-basis: 100%;
-  margin: 4px 0 0;
+.delete-select-caption {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* ── RT 결과분포 한 줄 색상 배지 (리그 대시보드/조회결과 요약에서 사용) ── */

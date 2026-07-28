@@ -1,0 +1,242 @@
+"""
+시즌별 누적 순위(리그 테이블) + 폼(PPG) 계산.
+
+각 경기 행에 그 경기를 치르기 '직전까지'의 성적을 붙인다.
+그래서 1라운드는 아직 치른 경기가 없어 전부 비어 있고, 2라운드부터 값이 생긴다.
+
+붙는 컬럼:
+  HP  홈팀 순위          AP   원정팀 순위
+  HTF 홈팀 전체경기 PPG   ATF  원정팀 전체경기 PPG
+  HF  홈팀 홈경기 PPG     AF   원정팀 원정경기 PPG
+
+순위 규칙(사용자 지정 = EPL/FIFA 표준):
+  1. 승점            승3 / 무1 / 패0
+  2. 골득실차        득점 - 실점
+  3. 다득점          총 득점
+  4. 승자승          동률 팀들끼리의 맞대결만 모아 승점 → 골득실차 → 다득점
+  5. 승자승 원정득점  그 맞대결에서 원정으로 넣은 골
+  (여기까지 모두 같으면 팀명 순으로 고정 — 매번 같은 결과가 나오게 하기 위함)
+
+폼(PPG) 규칙: 승점 ÷ 경기수를 소수 둘째 자리로 반올림.
+  파이썬 기본 round()는 은행가 반올림이라 2.125 같은 경계값에서 어긋나므로
+  Decimal.quantize(ROUND_HALF_UP)을 쓴다(사용자 지정 방식).
+
+⚠ 이 파일은 26개 지표 엔진(engine.py)과 무관하다. DB에 저장된 분석값은 전혀 건드리지 않고,
+   경기 결과(HS/AS)만 읽어서 표시용 컬럼을 새로 만들어 붙일 뿐이다.
+"""
+import itertools
+import re
+from decimal import Decimal, ROUND_HALF_UP
+
+import pandas as pd
+
+HOME_RANK_COL = "HP"
+AWAY_RANK_COL = "AP"
+HOME_ALL_FORM_COL = "HTF"   # 홈팀이 치른 전체 경기 PPG
+HOME_FORM_COL = "HF"        # 홈팀이 홈에서 치른 경기만의 PPG
+AWAY_FORM_COL = "AF"        # 원정팀이 원정에서 치른 경기만의 PPG
+AWAY_ALL_FORM_COL = "ATF"   # 원정팀이 치른 전체 경기 PPG
+
+RANK_COLS = (HOME_RANK_COL, AWAY_RANK_COL)
+FORM_COLS = (HOME_ALL_FORM_COL, HOME_FORM_COL, AWAY_FORM_COL, AWAY_ALL_FORM_COL)
+
+_REQUIRED = ("S", "R", "HT", "AT", "HS", "AS")
+
+
+def _ppg(pts, played):
+    """승점 ÷ 경기수 → '2.24' 같은 소수 둘째 자리 문자열.
+    아직 해당 경기를 안 치렀으면(경기수 0) 사용자 지정대로 '0.00'."""
+    if not played:
+        return "0.00"
+    value = (Decimal(pts) / Decimal(played)).quantize(Decimal("0.01"),
+                                                      rounding=ROUND_HALF_UP)
+    return str(value)
+
+
+def _round_num(v):
+    """'9R'/'38R'/'12' 어느 표기든 숫자만 뽑아 라운드 순서를 정한다."""
+    m = re.search(r"\d+", str(v))
+    return int(m.group()) if m else 0
+
+
+def _score(v):
+    """득점 → int. 아직 안 치른 경기(빈 값)는 None."""
+    if v is None:
+        return None
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return None
+
+
+class _Table:
+    """한 시즌의 누적 성적표."""
+
+    def __init__(self):
+        self.pts = {}
+        self.gf = {}
+        self.ga = {}
+        self.played = {}         # 팀 -> 치른 전체 경기수
+        self.home_pts = {}       # 홈경기에서만 딴 승점
+        self.home_played = {}
+        self.away_pts = {}       # 원정경기에서만 딴 승점
+        self.away_played = {}
+        self.counted = 0     # 지금까지 순위에 반영된 경기 수
+        self.pair = {}       # frozenset({A,B}) -> [(홈, 원정, 홈득점, 원정득점), ...]
+
+    def add(self, home, away, hs, as_):
+        self.gf[home] = self.gf.get(home, 0) + hs
+        self.ga[home] = self.ga.get(home, 0) + as_
+        self.gf[away] = self.gf.get(away, 0) + as_
+        self.ga[away] = self.ga.get(away, 0) + hs
+        self.played[home] = self.played.get(home, 0) + 1
+        self.played[away] = self.played.get(away, 0) + 1
+        self.home_played[home] = self.home_played.get(home, 0) + 1
+        self.away_played[away] = self.away_played.get(away, 0) + 1
+        if hs > as_:
+            self.pts[home] = self.pts.get(home, 0) + 3
+            self.home_pts[home] = self.home_pts.get(home, 0) + 3
+        elif hs < as_:
+            self.pts[away] = self.pts.get(away, 0) + 3
+            self.away_pts[away] = self.away_pts.get(away, 0) + 3
+        else:
+            self.pts[home] = self.pts.get(home, 0) + 1
+            self.pts[away] = self.pts.get(away, 0) + 1
+            self.home_pts[home] = self.home_pts.get(home, 0) + 1
+            self.away_pts[away] = self.away_pts.get(away, 0) + 1
+        self.pair.setdefault(frozenset((home, away)), []).append((home, away, hs, as_))
+        self.counted += 1
+
+    def all_form(self, team):
+        """전체 경기 PPG."""
+        return _ppg(self.pts.get(team, 0), self.played.get(team, 0))
+
+    def home_form(self, team):
+        """홈경기만의 PPG."""
+        return _ppg(self.home_pts.get(team, 0), self.home_played.get(team, 0))
+
+    def away_form(self, team):
+        """원정경기만의 PPG."""
+        return _ppg(self.away_pts.get(team, 0), self.away_played.get(team, 0))
+
+    def base_key(self, team):
+        """1~3순위 기준: 승점, 골득실차, 다득점."""
+        gf = self.gf.get(team, 0)
+        ga = self.ga.get(team, 0)
+        return (self.pts.get(team, 0), gf - ga, gf)
+
+
+def _h2h_key(table, group, team):
+    """동률 팀들끼리의 맞대결만 모아 승점/골득실/다득점/원정득점을 계산한다."""
+    pts = gf = ga = away_gf = 0
+    for a, b in itertools.combinations(sorted(group), 2):
+        if team not in (a, b):
+            continue
+        for home, away, hs, as_ in table.pair.get(frozenset((a, b)), ()):
+            if team == home:
+                mine, theirs = hs, as_
+            elif team == away:
+                mine, theirs = as_, hs
+                away_gf += as_
+            else:
+                continue
+            gf += mine
+            ga += theirs
+            if mine > theirs:
+                pts += 3
+            elif mine == theirs:
+                pts += 1
+    return (pts, gf - ga, gf, away_gf)
+
+
+def _ranks(table, teams):
+    """현재 성적표로 팀별 순위(1등부터)를 매긴다."""
+    base = {t: table.base_key(t) for t in teams}
+    # 승점 → 골득실 → 다득점 내림차순, 마지막은 팀명 오름차순(결과 고정용)
+    order = sorted(teams, key=lambda t: (-base[t][0], -base[t][1], -base[t][2], t))
+
+    final = []
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and base[order[j + 1]] == base[order[i]]:
+            j += 1
+        group = order[i: j + 1]
+        if len(group) > 1:
+            # 1~3순위가 완전히 같은 팀들만 승자승으로 다시 가린다
+            group = sorted(
+                group,
+                key=lambda t: tuple(-x for x in _h2h_key(table, group, t)) + (t,),
+            )
+        final.extend(group)
+        i = j + 1
+
+    return {t: n for n, t in enumerate(final, start=1)}
+
+
+def _attach_one_season(sdf, out):
+    """한 시즌 분량(sdf)을 라운드 순서대로 훑으며 각 경기 '직전'의 순위·폼을 기록한다."""
+    ht = sdf["HT"].astype(str).str.strip()
+    at = sdf["AT"].astype(str).str.strip()
+    teams = sorted(set(ht) | set(at))
+    if not teams:
+        return
+
+    table = _Table()
+    rounds = sorted(sdf["R"].dropna().unique(), key=_round_num)
+
+    for rnd in rounds:
+        mask = sdf["R"] == rnd
+        rdf = sdf[mask]
+
+        # ① 이 라운드 경기들에는 '직전까지'의 순위·폼을 붙인다
+        #    (아직 반영된 경기가 없으면 = 시즌 첫 라운드이므로 값 없음)
+        if table.counted > 0:
+            ranks = _ranks(table, teams)
+            for idx, h, a in zip(rdf.index, ht[mask], at[mask]):
+                out[HOME_RANK_COL][idx] = ranks.get(h)
+                out[AWAY_RANK_COL][idx] = ranks.get(a)
+                out[HOME_ALL_FORM_COL][idx] = table.all_form(h)
+                out[HOME_FORM_COL][idx] = table.home_form(h)
+                out[AWAY_FORM_COL][idx] = table.away_form(a)
+                out[AWAY_ALL_FORM_COL][idx] = table.all_form(a)
+
+        # ② 그 다음에 이 라운드 결과를 성적표에 반영한다
+        for h, a, hs, as_ in zip(ht[mask], at[mask], rdf["HS"], rdf["AS"]):
+            hs_i, as_i = _score(hs), _score(as_)
+            if hs_i is None or as_i is None:
+                continue          # 아직 안 끝난 경기는 순위에 반영하지 않는다
+            table.add(h, a, hs_i, as_i)
+
+
+ADDED_COLS = RANK_COLS + FORM_COLS
+
+
+def attach_rank_and_form(df, group_cols=("S",)):
+    """
+    경기 데이터에 순위(HP/AP)와 폼(HTF/HF/AF/ATF) 컬럼을 붙여 새 DataFrame을 돌려준다.
+    group_cols 로 따로 집계할 단위를 정한다 — 리그 하나면 ("S",),
+    여러 리그가 섞인 통합DB면 ("Source_League", "S").
+    """
+    if df is None or df.empty:
+        return df
+    if not all(c in df.columns for c in _REQUIRED):
+        return df
+
+    keys = [c for c in group_cols if c in df.columns]
+    if not keys:
+        return df
+
+    buckets = {c: {} for c in ADDED_COLS}
+    for _, sdf in df.groupby(keys, sort=False, dropna=False):
+        _attach_one_season(sdf, buckets)
+
+    out = df.copy()
+    for col in ADDED_COLS:
+        out[col] = pd.Series(buckets[col], dtype=object).reindex(df.index)
+    return out
