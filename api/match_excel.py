@@ -112,6 +112,24 @@ def _pct_or_dash(v):
         return "-"
 
 
+def _form_or_dash(v):
+    """폼(PPG) 값은 백엔드가 '2.13' 같은 문자열로 이미 반올림해 보내준다 — 그대로 쓴다."""
+    return "-" if v is None or v == "" else str(v)
+
+
+def _spaced_with_home_dot(results, venues):
+    """results('WWDDL')와 venues('HAHAA', 같은 자리수의 H/A)를 같이 훑어서
+    화면의 '점 = 홈경기' 표시를 엑셀에서는 그 글자 위에 결합 문자(U+0307, dot above)로 얹는다."""
+    if not results:
+        return "-"
+    venues = venues or ""
+    dot = "̇"   # COMBINING DOT ABOVE
+    chars = []
+    for i, ch in enumerate(results):
+        chars.append(ch + dot if i < len(venues) and venues[i] == "H" else ch)
+    return " ".join(chars)
+
+
 def _int_or_blank(v):
     if v is None or v == "":
         return ""
@@ -260,8 +278,63 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
             if v == vmax:
                 ws.cell(row=row_idx, column=2 + i).fill = _MAX_FILL
 
-    # ── 오른쪽(G열): 상대전적 — 배당과 같은 행(section_start)에서 시작 ──
+    # 토탈 바로 아래 줄에 각 결과의 비율 — 화면 팝업의 (18.3%) 표기와 같은 자리
+    gsum = sum(grand)
+    pct_idx = r
+    r = write_row(["", *[f"({v / gsum * 100:.1f}%)" if gsum else "" for v in grand], ""], r)
+    ws.cell(row=pct_idx, column=_SAMPLE_YK_COL).border = _with_right_divider(_BORDER)
+
+    # ── 오른쪽(G열): 폼 지표 → 최근10경기 전적 → 상대전적 (화면 팝업과 같은 순서) ──
     rr = section_start
+    ws.cell(row=rr, column=_RIGHT_COL, value="폼 지표").font = _BOLD
+    rr += 1
+    _FORM_DIV_COL = _RIGHT_COL + 2   # 홈 3칸 / 원정 3칸 경계
+    form_head = rr
+    rr = write_row(["홈", "", "", "원정", "", ""], rr, start_col=_RIGHT_COL,
+                   font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
+    ws.merge_cells(start_row=form_head, start_column=_RIGHT_COL,
+                   end_row=form_head, end_column=_RIGHT_COL + 2)
+    ws.merge_cells(start_row=form_head, start_column=_RIGHT_COL + 3,
+                   end_row=form_head, end_column=_RIGHT_COL + 5)
+    ws.cell(row=form_head, column=_FORM_DIV_COL).border = _with_right_divider(_BORDER)
+    for values in (
+        ["전체폼", "최근5폼", "홈경기", "원정경기", "최근5폼", "전체폼"],
+        [_form_or_dash(row.get(k)) for k in ("HTF", "HRF", "HF", "AF", "ARF", "ATF")],
+    ):
+        is_head = values[0] == "전체폼"
+        line = rr
+        rr = write_row(values, rr, start_col=_RIGHT_COL,
+                       font=_HEADER_FONT if is_head else _BOLD,
+                       fill=_HEADER_FILL if is_head else None, align=_CENTER)
+        ws.cell(row=line, column=_FORM_DIV_COL).border = _with_right_divider(_BORDER)
+    rr += 1
+
+    ws.cell(row=rr, column=_RIGHT_COL, value="최근10경기 전적").font = _BOLD
+    rr += 1
+    head = rr
+    rr = write_row(["홈팀최근 →", "", "", "← 원정팀 최근", "", ""], rr, start_col=_RIGHT_COL,
+                   font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
+    ws.merge_cells(start_row=head, start_column=_RIGHT_COL,
+                   end_row=head, end_column=_RIGHT_COL + 2)
+    ws.merge_cells(start_row=head, start_column=_RIGHT_COL + 3,
+                   end_row=head, end_column=_RIGHT_COL + 5)
+    ws.cell(row=head, column=_FORM_DIV_COL).border = _with_right_divider(_BORDER)
+    line = rr
+    # 홈팀은 왼쪽이 과거·오른쪽이 최신, 원정팀은 그 반대 (백엔드가 이미 그 순서로 만들어 둔다).
+    # 글자 위 결합점(dot above)은 화면의 '그 경기가 홈경기였다' 표시와 동일하다.
+    rr = write_row([
+        _spaced_with_home_dot(row.get("HR10"), row.get("HR10H")), "", "",
+        _spaced_with_home_dot(row.get("AR10"), row.get("AR10H")), "", "",
+    ], rr, start_col=_RIGHT_COL, font=_BOLD, align=_CENTER)
+    ws.merge_cells(start_row=line, start_column=_RIGHT_COL,
+                   end_row=line, end_column=_RIGHT_COL + 2)
+    ws.merge_cells(start_row=line, start_column=_RIGHT_COL + 3,
+                   end_row=line, end_column=_RIGHT_COL + 5)
+    ws.cell(row=line, column=_FORM_DIV_COL).border = _with_right_divider(_BORDER)
+    rr += 1
+    ws.cell(row=rr, column=_RIGHT_COL, value="글자 위 점 = 그 팀 기준 홈경기")
+    rr += 1
+
     ws.cell(row=rr, column=_RIGHT_COL, value="상대전적").font = _BOLD
     rr += 1
     ws.cell(row=rr, column=_RIGHT_COL, value="결과는 각 경기의 홈팀 기준입니다.")
@@ -429,6 +502,7 @@ _MATCH_COLS = ["HTF", "HF", "HP", "HT", "HS", "RT", "AS", "AT", "AP", "AF", "ATF
 _K_ODDS_COLS = ["KW", "KD", "KL", "KH", "KHW", "KHD", "KHL"]
 _F_ODDS_COLS = ["FW", "FD", "FL", "FH", "FHW", "FHD", "FHL"]
 _PH_COLS = [
+    ("PH_STATUS", "적중"),
     ("PH_F", "해)플핸"), ("PH_K", "국)플핸"), ("PH_PICK", "PICK"),
     ("PH_HIT", "실측"), ("PH_DOM", "비중"),
 ]
@@ -536,7 +610,7 @@ def _format_cell(group, col, value):
             return f"{'+' if n >= 0 else ''}{n:.1f}"
         return f"{n:.2f}"
     if group["kind"] == "ph":
-        if sub == "PICK":
+        if sub in ("PICK", "적중"):
             return "" if _blank(value) else str(value)
         n = _num(value)
         return "" if n is None else f"{n:.0f}%"
@@ -568,6 +642,14 @@ def _cell_style(group, col, value):
         if n > 0:
             return {"fg": "C62828", "bold": True}
         return None
+
+    if group["kind"] == "ph" and sub == "적중":
+        s = "" if _blank(value) else str(value).strip()
+        return {
+            "적중": {"bg": "FDD835", "fg": "0D1B2A", "bold": True},
+            "미적": {"bg": "C62828", "fg": "FFFFFF", "bold": True},
+            "관망": {"bg": "757575", "fg": "FFFFFF", "bold": True},
+        }.get(s)
 
     if group["kind"] == "ph" and sub == "PICK":
         s = "" if _blank(value) else str(value).strip()

@@ -13,6 +13,7 @@ const K_ODDS_COLS = ['KW', 'KD', 'KL', 'KH', 'KHW', 'KHD', 'KHL']
 const F_ODDS_COLS = ['FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL']
 
 const PH_COLS = [
+  ['PH_STATUS', '적중'],
   ['PH_F', '해)플핸'],
   ['PH_K', '국)플핸'],
   ['PH_PICK', 'PICK'],
@@ -130,7 +131,7 @@ export function formatCell(group, col, value) {
     return n.toFixed(2)
   }
   if (group.kind === 'ph') {
-    if (sub === 'PICK') return isBlank(value) ? '' : String(value)
+    if (sub === 'PICK' || sub === '적중') return isBlank(value) ? '' : String(value)
     const n = toNum(value)
     return n === null ? '' : `${n.toFixed(0)}%`
   }
@@ -160,6 +161,13 @@ export function cellStyle(group, col, value) {
     if (n === null) return null
     if (n < 0) return { color: '#1565C0', fontWeight: 700 }
     if (n > 0) return { color: '#C62828', fontWeight: 700 }
+    return null
+  }
+
+  if (group.kind === 'ph' && sub === '적중') {
+    if (value === '적중') return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
+    if (value === '미적') return { background: '#C62828', color: '#fff', fontWeight: 700 }
+    if (value === '관망') return { background: '#757575', color: '#fff', fontWeight: 700 }
     return null
   }
 

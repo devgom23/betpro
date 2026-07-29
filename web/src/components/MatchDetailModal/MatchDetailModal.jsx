@@ -107,6 +107,90 @@ function PhPredictionCard({ row }) {
   )
 }
 
+function formOrDash(v) {
+  return v === null || v === undefined || v === '' ? '-' : String(v)
+}
+
+// 백엔드(standings.py)가 그 경기 '직전까지'의 시즌 성적으로 계산해 붙여준 값들.
+// 홈/원정 각각 전체폼·최근5폼과, 홈팀은 홈경기만·원정팀은 원정경기만의 폼을 나란히 본다.
+function FormTable({ row }) {
+  return (
+    <table className="detail-table form-table">
+      <thead>
+        <tr>
+          <th colSpan={3}>홈</th>
+          <th colSpan={3}>원정</th>
+        </tr>
+        <tr>
+          <th>전체폼</th>
+          <th>최근5폼</th>
+          <th>홈경기</th>
+          <th>원정경기</th>
+          <th>최근5폼</th>
+          <th>전체폼</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{formOrDash(row.HTF)}</td>
+          <td>{formOrDash(row.HRF)}</td>
+          <td>{formOrDash(row.HF)}</td>
+          <td>{formOrDash(row.AF)}</td>
+          <td>{formOrDash(row.ARF)}</td>
+          <td>{formOrDash(row.ATF)}</td>
+        </tr>
+      </tbody>
+    </table>
+  )
+}
+
+// 최근 10경기 승패. 홈팀은 왼쪽이 과거→오른쪽이 최신, 원정팀은 왼쪽이 최신→오른쪽이 과거라
+// 두 팀의 '가장 최근 경기'가 가운데에서 마주보게 된다 (백엔드가 이미 그 순서로 만들어 보낸다).
+// HR10/AR10 문자열과 HR10H/AR10H(같은 자리수의 'H'/'A')를 나란히 훑으며
+// 그 경기가 홈경기였던 자리 위에만 점을 찍는다.
+function RecentMarks({ results, venues }) {
+  if (!results) return '-'
+  return [...results].map((ch, i) => (
+    <span key={i} className={`recent-mark recent-${ch}`}>
+      {venues[i] === 'H' && <span className="recent-home-dot" />}
+      {ch}
+    </span>
+  ))
+}
+
+function RecentTable({ row }) {
+  // 시즌 첫 라운드면 아직 치른 경기가 없어 양쪽 다 비어 있다 — 폼 지표와 같이 '-'로 둔다.
+  const home = String(row.HR10 || '')
+  const away = String(row.AR10 || '')
+  const homeVenues = String(row.HR10H || '')
+  const awayVenues = String(row.AR10H || '')
+  return (
+    <>
+      <table className="detail-table recent-table">
+        <thead>
+          <tr>
+            <th>홈팀최근 →</th>
+            <th>← 원정팀 최근</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className="recent-cell">
+              <RecentMarks results={home} venues={homeVenues} />
+            </td>
+            <td className="recent-cell">
+              <RecentMarks results={away} venues={awayVenues} />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="h2h-caption">
+        <span className="recent-home-dot" /> 점 = 그 팀 기준 홈경기
+      </p>
+    </>
+  )
+}
+
 // 한 행의 4칸(핸승/핸무/무/역) 중 최댓값 칸에 표시할 클래스. 전부 0이면 강조 안 함.
 function maxCellClass(vals, i) {
   const max = Math.max(...vals)
@@ -160,6 +244,10 @@ function SampleTable({ row }) {
           {grandVals.map((v, i) => (
             <td key={i} className={maxCellClass(grandVals, i)}>
               {v}
+              {/* 네 결과가 전체 표본에서 각각 몇 %인지 — 어느 쪽으로 쏠렸는지 한눈에 보이게 */}
+              {grandTotal > 0 && (
+                <span className="grand-pct">({((v / grandTotal) * 100).toFixed(1)}%)</span>
+              )}
             </td>
           ))}
           <td className="col-total">{grandTotal}</td>
@@ -238,6 +326,10 @@ export default function MatchDetailModal({ code, row, scope, onClose }) {
             <SampleTable row={row} />
           </div>
           <div className="modal-col">
+            <h3>📈 폼 지표</h3>
+            <FormTable row={row} />
+            <h3>🔟 최근10경기 전적</h3>
+            <RecentTable row={row} />
             <h3>🆚 상대전적</h3>
             <HeadToHeadResult scope={scope} home={ht} away={at} cross limit={15} />
           </div>

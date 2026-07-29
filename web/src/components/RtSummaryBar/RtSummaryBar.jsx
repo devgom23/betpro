@@ -36,3 +36,24 @@ export default function RtSummaryBar({ summary, inline = false }) {
     </div>
   )
 }
+
+const PICK_ORDER = ['적중', '미적', '관망']
+const PICK_COLOR = { 적중: '#FDD835', 미적: '#C62828', 관망: '#757575' }
+
+// PICK 결과(적중/미적/관망) 분포 배지. 플핸예측 컬럼의 배경색과 동일한 색상을 쓴다.
+export function PickSummaryBar({ summary }) {
+  if (!summary) return null
+  return (
+    <span className="rt-summary-inline">
+      {PICK_ORDER.map((name) => {
+        const bg = PICK_COLOR[name]
+        const fg = name === '적중' ? '#0D1B2A' : '#fff'
+        return (
+          <span className="rt-badge-item" key={name} style={{ background: bg, color: fg }}>
+            {name} {summary[name].toLocaleString()}
+          </span>
+        )
+      })}
+    </span>
+  )
+}

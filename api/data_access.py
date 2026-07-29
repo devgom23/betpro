@@ -17,6 +17,34 @@ LEAGUES = PATHS.LEAGUES
 # {(kind, db_path): (mtime, DataFrame)} 형태의 초경량 캐시
 _CACHE = {}
 
+PH_STATUS_COL = "PH_STATUS"
+_RT_TEXT = {1: "핸승", 2: "핸무", 3: "무", 4: "역"}
+
+
+def _pick_status(df: pd.DataFrame) -> pd.Series:
+    """PICK(PH_PICK)과 실제 결과(RT)를 비교해 적중/미적/관망 표시용 컬럼을 만든다.
+    PICK은 핸승 vs 비핸승(플핸)의 2분류 예측이다 — '플핸(무)'처럼 괄호 안은 비핸승
+    표본 중 참고용 최다결과일 뿐, 그 세부 결과까지 맞혀야 적중인 게 아니라 실제
+    결과가 핸승이 아니기만 하면 적중이다(engine.py compute_plushandi() 주석 참고).
+    PICK이 '—'(관망)면 관망, 아직 결과가 없거나(RT 공란) PICK이 없으면 공란."""
+    if "PH_PICK" not in df.columns or "RT" not in df.columns:
+        return pd.Series([""] * len(df), index=df.index, dtype=object)
+    rt_num = pd.to_numeric(df["RT"], errors="coerce")
+    out = []
+    for pick, rt in zip(df["PH_PICK"], rt_num):
+        pick = "" if pd.isna(pick) else str(pick).strip()
+        if not pick:
+            out.append("")
+        elif pick == "—":
+            out.append("관망")
+        elif pd.isna(rt) or int(rt) not in _RT_TEXT:
+            out.append("")
+        else:
+            actual = _RT_TEXT[int(rt)]
+            hit = (actual == "핸승") if pick == "핸승" else (actual != "핸승")
+            out.append("적중" if hit else "미적")
+    return pd.Series(out, index=df.index, dtype=object)
+
 
 def _read_table(db_path: str, table: str) -> pd.DataFrame:
     if not os.path.exists(db_path):
@@ -57,7 +85,11 @@ def load_league_df_ranked(db_path: str, league: str) -> pd.DataFrame:
     hit = _CACHE.get(key)
     if hit and hit[0] == mt:
         return hit[1]
-    df = standings.attach_rank_and_form(load_league_df(db_path, league))
+    # attach_rank_and_form()은 원본 df를 그대로 돌려줄 때가 있다(빈 데이터 등) —
+    # 아래서 컬럼을 더 붙이기 전에 반드시 .copy()로 떼어내야 원본(raw) 캐시가
+    # 오염되어 표시용 컬럼이 업로드/삭제 쪽으로 새어 들어가는 사고를 막는다.
+    df = standings.attach_rank_and_form(load_league_df(db_path, league)).copy()
+    df[PH_STATUS_COL] = _pick_status(df)
     _CACHE[key] = (mt, df)
     return df
 

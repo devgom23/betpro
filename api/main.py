@@ -215,6 +215,20 @@ def _rt_summary(df: pd.DataFrame):
     }
 
 
+def _hit_summary(df: pd.DataFrame):
+    """PICK 적중/미적/관망 카운트 {적중,미적,관망,총}. PH_STATUS 컬럼 없거나 값이 하나도 없으면 None."""
+    if "PH_STATUS" not in df.columns:
+        return None
+    s = df["PH_STATUS"].fillna("")
+    counts = {"적중": int((s == "적중").sum()), "미적": int((s == "미적").sum()),
+              "관망": int((s == "관망").sum())}
+    total = counts["적중"] + counts["미적"] + counts["관망"]
+    if total == 0:
+        return None
+    counts["총"] = total
+    return counts
+
+
 def _round_sort_key(v):
     # "9R"/"38R"처럼 숫자+문자 혼합 라벨은 float() 변환이 항상 실패해
     # 문자열 정렬로 빠지면 "9R" > "38R"가 되는 버그가 생긴다.
@@ -232,10 +246,10 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
     """
     _check_league(code)
     db = _resolve_scope_db(scope, user)
-    df = DATA.load_league_df(db, code)
+    df = DATA.load_league_df_ranked(db, code)   # 적중/미적 집계에 PH_STATUS 필요
     if df.empty or "S" not in df.columns:
         return {"seasons": [], "rounds_by_season": {}, "latest": None,
-                "total_rows": 0, "rt_summary": None}
+                "total_rows": 0, "rt_summary": None, "hit_summary": None}
 
     seasons = sorted([s for s in df["S"].dropna().unique().tolist()], reverse=True)
     rounds_by_season = {}
@@ -252,6 +266,7 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
         "latest": {"season": latest_season, "round": latest_round},
         "total_rows": len(df),
         "rt_summary": _rt_summary(df),
+        "hit_summary": _hit_summary(df),
     }
 
 
@@ -326,7 +341,7 @@ def league_rows(code: str,
         # 데이터가 아직 없어도 can_write는 반드시 내려줘야 한다.
         # 이게 빠지면 "비어 있는 리그에 업로드" UI가 사라져 첫 등록 자체가 막힌다.
         return {"columns": [], "rows": [], "total": 0,
-                "season": None, "round": None, "rt_summary": None,
+                "season": None, "round": None, "rt_summary": None, "hit_summary": None,
                 "can_write": PATHS.can_write(scope, user.get("role"))}
 
     sub, season, round = _apply_league_filters(
@@ -343,6 +358,7 @@ def league_rows(code: str,
         "season": season,
         "round": round,
         "rt_summary": _rt_summary(sub),
+        "hit_summary": _hit_summary(sub),
         "can_write": PATHS.can_write(scope, user.get("role")),
     }
 
@@ -436,7 +452,7 @@ def match_excel_download(code: str,
     """
     _check_league(code)
     db = _resolve_scope_db(scope, user)
-    df = DATA.load_league_df(db, code)
+    df = DATA.load_league_df_ranked(db, code)   # 화면 팝업과 같은 폼/최근전적이 담기도록
     if df.empty or "S" not in df.columns or "R" not in df.columns:
         raise HTTPException(status_code=404, detail="데이터가 없습니다.")
 

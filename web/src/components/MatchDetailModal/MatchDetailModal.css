@@ -153,6 +153,77 @@
   border-top: 2px solid var(--border-strong);
 }
 
+/* 지표별 표본 토탈행: 숫자 아래 줄에 그 결과가 전체에서 차지하는 비율 */
+.grand-pct {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+/* 폼 지표: 홈 3칸 / 원정 3칸 사이 구분선.
+   1행은 홈/원정 두 칸(각 colspan 3)이고 2행·본문은 6칸이라 대상 칸 번호가 다르다. */
+.form-table thead tr:first-child th:nth-child(1),
+.form-table thead tr:nth-child(2) th:nth-child(3),
+.form-table tbody td:nth-child(3) {
+  border-right: 2px solid var(--border-strong);
+}
+
+.form-table tbody td {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* 최근10경기 전적: 홈팀칸 / 원정팀칸 사이 구분선 */
+.recent-table th:nth-child(1),
+.recent-table td:nth-child(1) {
+  border-right: 2px solid var(--border-strong);
+}
+
+.recent-cell {
+  letter-spacing: 2px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.recent-mark {
+  position: relative;
+  display: inline-block;
+  min-width: 12px;
+  padding-top: 8px;
+}
+
+.recent-home-dot {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-primary);
+}
+
+.h2h-caption .recent-home-dot {
+  position: static;
+  transform: none;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 2px;
+}
+
+.recent-W {
+  color: #4CAF50;
+}
+
+.recent-D {
+  color: var(--text-muted);
+}
+
+.recent-L {
+  color: #EF5350;
+}
+
 .cell-max {
   background: rgba(250, 204, 21, 0.22);
   color: var(--highlight-text);

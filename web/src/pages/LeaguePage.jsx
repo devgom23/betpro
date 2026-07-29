@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
 import FilterForm from '../components/FilterForm/FilterForm'
 import HeadToHeadResult from '../components/HeadToHead/HeadToHeadResult'
-import RtSummaryBar from '../components/RtSummaryBar/RtSummaryBar'
+import RtSummaryBar, { PickSummaryBar } from '../components/RtSummaryBar/RtSummaryBar'
 import UploadTemplateModal from '../components/UploadTemplateModal/UploadTemplateModal'
 import DeleteMatchesModal from '../components/DeleteMatchesModal/DeleteMatchesModal'
 
@@ -196,6 +196,7 @@ export default function LeaguePage({ code, scope }) {
           📋 등록된 시즌 {filters.seasons.length} · 경기수 {filters.total_rows.toLocaleString()}
         </span>
         <RtSummaryBar summary={filters.rt_summary} inline />
+        <PickSummaryBar summary={filters.hit_summary} />
       </div>
 
       <FilterForm filters={filters} onSearch={handleSearch} teams={teams} onH2HSearch={setH2h} />
@@ -296,6 +297,7 @@ export default function LeaguePage({ code, scope }) {
               <strong>{data.total.toLocaleString()}</strong>경기
             </span>
             <RtSummaryBar summary={data.rt_summary} inline />
+            <PickSummaryBar summary={data.hit_summary} />
           </div>
           <LeagueTable
             code={code}

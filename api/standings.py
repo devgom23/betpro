@@ -8,6 +8,13 @@
   HP  홈팀 순위          AP   원정팀 순위
   HTF 홈팀 전체경기 PPG   ATF  원정팀 전체경기 PPG
   HF  홈팀 홈경기 PPG     AF   원정팀 원정경기 PPG
+  HRF 홈팀 최근5경기 PPG  ARF  원정팀 최근5경기 PPG   (상세보기 팝업 전용)
+  HR10 홈팀 최근10경기 승패  AR10 원정팀 최근10경기 승패 (상세보기 팝업 전용)
+  HR10H/AR10H  HR10/AR10과 한 글자씩 대응하는 홈("H")/원정("A") 표시 — 그 팀 기준으로
+               그 경기가 홈경기였는지(화면에서 점으로 표시). (상세보기 팝업 전용)
+
+최근5·최근10도 순위/폼과 마찬가지로 '그 시즌 안에서만' 센다 — 시즌이 바뀌면 리셋되고,
+아직 그만큼 안 치렀으면 있는 경기까지만 쓴다.
 
 순위 규칙(사용자 지정 = EPL/FIFA 표준):
   1. 승점            승3 / 무1 / 패0
@@ -37,8 +44,22 @@ HOME_FORM_COL = "HF"        # 홈팀이 홈에서 치른 경기만의 PPG
 AWAY_FORM_COL = "AF"        # 원정팀이 원정에서 치른 경기만의 PPG
 AWAY_ALL_FORM_COL = "ATF"   # 원정팀이 치른 전체 경기 PPG
 
+# 아래 6개는 상세보기 팝업 전용(분석표 본표에는 안 나온다)
+HOME_RECENT5_COL = "HRF"    # 홈팀 최근 5경기 PPG
+AWAY_RECENT5_COL = "ARF"    # 원정팀 최근 5경기 PPG
+HOME_RECENT10_COL = "HR10"  # 홈팀 최근 10경기 승패 — 왼쪽이 과거, 오른쪽이 최신
+AWAY_RECENT10_COL = "AR10"  # 원정팀 최근 10경기 승패 — 왼쪽이 최신, 오른쪽이 과거
+HOME_RECENT10_HOME_COL = "HR10H"  # HR10과 같은 순서로, 그 경기가 홈경기였으면 'H' 아니면 ''
+AWAY_RECENT10_HOME_COL = "AR10H"  # AR10과 같은 순서
+
+RECENT_N = 5     # '최근5폼' 창 크기
+RECENT10_N = 10  # '최근10경기 전적' 창 크기
+
 RANK_COLS = (HOME_RANK_COL, AWAY_RANK_COL)
 FORM_COLS = (HOME_ALL_FORM_COL, HOME_FORM_COL, AWAY_FORM_COL, AWAY_ALL_FORM_COL)
+RECENT_COLS = (HOME_RECENT5_COL, AWAY_RECENT5_COL,
+               HOME_RECENT10_COL, AWAY_RECENT10_COL,
+               HOME_RECENT10_HOME_COL, AWAY_RECENT10_HOME_COL)
 
 _REQUIRED = ("S", "R", "HT", "AT", "HS", "AS")
 
@@ -88,6 +109,10 @@ class _Table:
         self.away_played = {}
         self.counted = 0     # 지금까지 순위에 반영된 경기 수
         self.pair = {}       # frozenset({A,B}) -> [(홈, 원정, 홈득점, 원정득점), ...]
+        self.recent = {}     # 팀 -> [(딴 승점, 'W'/'D'/'L', 홈여부), ...] 치른 순서(과거→최신)
+
+    def _mark(self, team, pts, letter, is_home):
+        self.recent.setdefault(team, []).append((pts, letter, is_home))
 
     def add(self, home, away, hs, as_):
         self.gf[home] = self.gf.get(home, 0) + hs
@@ -101,14 +126,20 @@ class _Table:
         if hs > as_:
             self.pts[home] = self.pts.get(home, 0) + 3
             self.home_pts[home] = self.home_pts.get(home, 0) + 3
+            self._mark(home, 3, "W", True)
+            self._mark(away, 0, "L", False)
         elif hs < as_:
             self.pts[away] = self.pts.get(away, 0) + 3
             self.away_pts[away] = self.away_pts.get(away, 0) + 3
+            self._mark(home, 0, "L", True)
+            self._mark(away, 3, "W", False)
         else:
             self.pts[home] = self.pts.get(home, 0) + 1
             self.pts[away] = self.pts.get(away, 0) + 1
             self.home_pts[home] = self.home_pts.get(home, 0) + 1
             self.away_pts[away] = self.away_pts.get(away, 0) + 1
+            self._mark(home, 1, "D", True)
+            self._mark(away, 1, "D", False)
         self.pair.setdefault(frozenset((home, away)), []).append((home, away, hs, as_))
         self.counted += 1
 
@@ -123,6 +154,22 @@ class _Table:
     def away_form(self, team):
         """원정경기만의 PPG."""
         return _ppg(self.away_pts.get(team, 0), self.away_played.get(team, 0))
+
+    def recent_form(self, team, n=RECENT_N):
+        """최근 n경기 PPG. 아직 n경기를 안 치렀으면 치른 만큼만으로 계산한다."""
+        last = self.recent.get(team, [])[-n:]
+        return _ppg(sum(p for p, _, _ in last), len(last))
+
+    def recent_results(self, team, n=RECENT10_N, newest_first=False):
+        """최근 n경기 승패를 ['W','D','L',...]로. 기본은 과거→최신 순."""
+        last = [ch for _, ch, _ in self.recent.get(team, [])[-n:]]
+        return list(reversed(last)) if newest_first else last
+
+    def recent_venues(self, team, n=RECENT10_N, newest_first=False):
+        """최근 n경기가 그 팀 기준 홈경기였는지 [True/False,...]로.
+        recent_results()와 항상 같은 순서·같은 길이가 되도록 만든다."""
+        last = [is_home for _, _, is_home in self.recent.get(team, [])[-n:]]
+        return list(reversed(last)) if newest_first else last
 
     def base_key(self, team):
         """1~3순위 기준: 승점, 골득실차, 다득점."""
@@ -205,6 +252,18 @@ def _attach_one_season(sdf, out):
                 out[HOME_FORM_COL][idx] = table.home_form(h)
                 out[AWAY_FORM_COL][idx] = table.away_form(a)
                 out[AWAY_ALL_FORM_COL][idx] = table.all_form(a)
+                out[HOME_RECENT5_COL][idx] = table.recent_form(h)
+                out[AWAY_RECENT5_COL][idx] = table.recent_form(a)
+                # 홈팀은 왼쪽이 과거·오른쪽이 최신, 원정팀은 왼쪽이 최신·오른쪽이 과거로
+                # 두 팀의 최신 경기가 가운데(맞대결 쪽)에서 만나게 배치한다.
+                out[HOME_RECENT10_COL][idx] = "".join(table.recent_results(h))
+                out[AWAY_RECENT10_COL][idx] = "".join(
+                    table.recent_results(a, newest_first=True))
+                # HR10/AR10과 한 글자씩(같은 자리수로) 대응하는 홈/원정 표시 — "H"/"A"
+                out[HOME_RECENT10_HOME_COL][idx] = "".join(
+                    "H" if v else "A" for v in table.recent_venues(h))
+                out[AWAY_RECENT10_HOME_COL][idx] = "".join(
+                    "H" if v else "A" for v in table.recent_venues(a, newest_first=True))
 
         # ② 그 다음에 이 라운드 결과를 성적표에 반영한다
         for h, a, hs, as_ in zip(ht[mask], at[mask], rdf["HS"], rdf["AS"]):
@@ -214,12 +273,13 @@ def _attach_one_season(sdf, out):
             table.add(h, a, hs_i, as_i)
 
 
-ADDED_COLS = RANK_COLS + FORM_COLS
+ADDED_COLS = RANK_COLS + FORM_COLS + RECENT_COLS
 
 
 def attach_rank_and_form(df, group_cols=("S",)):
     """
-    경기 데이터에 순위(HP/AP)와 폼(HTF/HF/AF/ATF) 컬럼을 붙여 새 DataFrame을 돌려준다.
+    경기 데이터에 순위(HP/AP)·폼(HTF/HF/AF/ATF)·최근전적(HRF/ARF/HR10/AR10)
+    컬럼을 붙여 새 DataFrame을 돌려준다.
     group_cols 로 따로 집계할 단위를 정한다 — 리그 하나면 ("S",),
     여러 리그가 섞인 통합DB면 ("Source_League", "S").
     """
