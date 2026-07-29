@@ -262,8 +262,9 @@ export default function LeaguePage({ code, scope }) {
               ` (같은 경기 ${preview.duplicates_removed.toLocaleString()}건은 새 값으로 대체)`}
           </p>
           <p className="upload-preview-caption">
-            저장하면 이 리그의 26개 지표와 예측이 다시 계산됩니다. 경기 수가 많으면 수 분 걸릴 수
-            있습니다{scope === 'master' ? ' (저장 전 자동 백업)' : ''}.
+            새로 추가되는 경기만 26개 지표와 예측이 계산됩니다. 이미 있던 경기의 예측은 그대로
+            유지되고, 스코어 등 원본 값만 이번 업로드로 갱신됩니다
+            {scope === 'master' ? ' (저장 전 자동 백업)' : ''}.
           </p>
           <div className="upload-preview-actions">
             <button className="btn-reset" onClick={cancelUpload} disabled={busyExcel === 'save'}>

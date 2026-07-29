@@ -61,6 +61,7 @@ for _p in (_ROOT, _API_DIR):
         sys.path.insert(0, _p)
 
 from typing import Optional  # noqa: E402
+import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from fastapi import (FastAPI, HTTPException, Depends, Response, Request,  # noqa: E402
                      UploadFile, File, Form)
@@ -574,13 +575,26 @@ def upload_matches(code: str,
     """
     경기 엑셀 업로드 (원본 WEB_BET_PRO.py 2105~2165줄 이식).
     confirm=false면 저장하지 않고 미리보기(건수/중복)만 돌려준다 — 실수로 덮어쓰는 걸 막는 2단계.
-    confirm=true면 기존 데이터와 병합·중복제거 후 26개 지표+플핸예측을 산출해 리그 테이블에 저장한다.
+    confirm=true면 기존 데이터와 병합·중복제거 후 "새로 추가되는 경기만" 26개 지표+플핸예측을
+    계산해 리그 테이블에 저장한다.
 
     [원본과 다른 점 — 의도적 수정]
       원본은 기존 표(지표 컬럼 포함)에 새 분석결과를 옆으로 이어붙여서, 데이터가 이미
       있는 리그에 추가 업로드하면 컬럼명이 208개 중복돼 저장이 실패했다(빈 리그 최초
       업로드만 동작). 여기서는 이어붙이는 대신 같은 이름의 컬럼에 덮어써서, 기존 표의
-      구조를 유지한 채 전 행의 지표를 최신 기준으로 갱신한다.
+      구조를 유지한다.
+
+    [예측 고정 원칙 — 사용자 지정]
+      이미 DB에 있던 경기(시즌·라운드·경기번호·팀이 같음)의 26개 지표·플핸예측은
+      새 경기가 추가돼도 절대 다시 계산하지 않는다 — 한 번 나온 예측이 이후 데이터로
+      계속 바뀌면 "과거 예측의 적중률"이라는 의미 자체가 없어지기 때문. 스코어(HS/AS/RT)
+      등 원본 값은 이번 업로드로 갱신되지만(예정 경기에 나중에 결과만 채우는 흐름을
+      그대로 지원), 분석 컬럼은 그 경기가 처음 저장됐을 때 값을 그대로 유지한다.
+      새로 추가되는 경기만 engine._recompute_indicators_for_subset()으로 계산한다
+      (예정 경기 재계산 버튼이 쓰는 것과 같은 함수) — 그래서 기존 경기가 아주 많아도
+      이번에 추가된 경기 수만큼만 계산해 훨씬 빠르다.
+      전체삭제 후 재업로드처럼 old가 비어 있으면(=완전히 새 리그) 모든 행이 "새 경기"로
+      취급되어 정상적으로 전부 계산된다.
     """
     _check_league(code)
     db = _resolve_scope_db(scope, user)
@@ -603,7 +617,12 @@ def upload_matches(code: str,
             detail="유효한 경기가 없습니다. 홈팀(HT)·원정팀(AT)이 채워져 있는지 확인하세요.")
 
     old = DATA.load_league_df(db, code)
-    merged = pd.concat([old, new], ignore_index=True) if not old.empty else new.copy()
+    old_count = len(old)
+    # concat 직후(중복제거 전) 프레임 — old/new의 dedup key 컬럼 dtype이 여기서 하나로
+    # 통일된다(예: No가 old=int64, new=float64였어도 같은 dtype이 됨). 아래서 old 쪽 행을
+    # 다시 골라 쓸 때 이 dtype 통일된 버전을 써야 문자열 캐스팅 없이 정확히 매칭된다.
+    pre_dedup = pd.concat([old, new], ignore_index=True) if not old.empty else new.copy()
+    merged = pre_dedup
 
     key = [c for c in UPLOAD_DEDUP_KEY if c in merged.columns]
     duplicates = 0
@@ -628,11 +647,37 @@ def upload_matches(code: str,
     total_new = DATA.load_total_df(db)
     if total_new.empty:
         total_new = merged
-    res = engine.analyze_dataframe(merged, total_new)
 
     final = merged.copy()
-    for c in res.columns:          # 같은 이름이면 덮어쓰고, 없으면 새로 만든다
-        final[c] = res[c].values
+
+    # ① 이미 있던 경기(dedup key가 old에도 있던 행)는 분석 컬럼을 최초 계산값 그대로 되살린다.
+    raw_cols = set(XLS.UPLOAD_TEMPLATE_COLS)
+    analysis_cols = [c for c in old.columns if c not in raw_cols] if not old.empty else []
+
+    if key and old_count and analysis_cols:
+        old_harmonized = pre_dedup.iloc[:old_count]   # dtype이 final과 통일된 old 행들
+        frozen = old_harmonized[key + analysis_cols].drop_duplicates(subset=key, keep="last")
+
+        match = final[key].merge(frozen, on=key, how="left", indicator=True)
+        is_known = (match["_merge"] == "both").to_numpy()
+
+        for c in analysis_cols:
+            if c not in final.columns:
+                final[c] = pd.NA
+            final.loc[is_known, c] = match.loc[is_known, c].values
+    else:
+        is_known = np.zeros(len(final), dtype=bool)
+
+    # ② 새로 들어온(=old에 없던) 경기만 지표·플핸예측을 계산한다.
+    #    전체 리그 표(final)를 표본 모집단으로 써서 개별지표를 계산하고,
+    #    새 경기끼리도 서로의 표본에 포함된다(engine의 자기 자신 1건 제외 로직이 처리).
+    new_rows = final[~is_known]
+    if not new_rows.empty:
+        res_new = engine._recompute_indicators_for_subset(new_rows, final, total_new)
+        for c in res_new.columns:
+            if c not in final.columns:
+                final[c] = pd.NA
+            final.loc[res_new.index, c] = res_new[c].values
 
     con = sqlite3.connect(db)
     try:
