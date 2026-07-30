@@ -457,6 +457,19 @@ def list_tables(db_path: str) -> List[str]:
         con.close()
 
 
+def table_row_count(db_path: str, table: str) -> int:
+    """특정 테이블의 행 수. 테이블이 없거나 읽기 실패면 0."""
+    if not os.path.exists(db_path) or table not in set(list_tables(db_path)):
+        return 0
+    con = sqlite3.connect(db_path)
+    try:
+        return con.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+    except sqlite3.Error:
+        return 0
+    finally:
+        con.close()
+
+
 def league_dashboard(db_path: str) -> List[dict]:
     """
     💡 [업데이트 내용] 리그별 업로드 현황 대시보드.

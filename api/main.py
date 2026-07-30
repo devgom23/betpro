@@ -74,6 +74,7 @@ import betpro_auth as AUTH    # noqa: E402
 import engine                 # noqa: E402
 import data_access as DATA    # noqa: E402
 import match_excel as XLS     # noqa: E402
+import user_leagues as USERLG  # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -180,7 +181,15 @@ def me(user: dict = Depends(get_current_user)):
 
 # ─────────────────────────── 리그 목록/현황 ───────────────────────────
 @app.get("/api/leagues")
-def leagues():
+def leagues(scope: str = PATHS.SCOPE_MASTER,
+            user: dict = Depends(get_current_user)):
+    """
+    탭에 띄울 리그 목록.
+      master → 고정 6대리그
+      user   → 그 계정이 직접 만든 리그(없으면 빈 목록 → 화면에서 '리그 생성' 안내)
+    """
+    if scope == PATHS.SCOPE_USER:
+        return USERLG.list_leagues(_resolve_scope_db(scope, user))
     return [{"code": lg, "label": PATHS.LEAGUE_LABEL[lg]} for lg in PATHS.LEAGUES]
 
 
@@ -198,8 +207,76 @@ def dashboard(scope: str = PATHS.SCOPE_MASTER,
 
 
 def _check_league(code: str):
+    """공식 데이터(master) 전용 검증 — 고정 6대리그만 통과."""
     if code not in PATHS.VALID_LEAGUES:
         raise HTTPException(status_code=404, detail=f"알 수 없는 리그: {code}")
+
+
+def _check_league_for(code: str, scope: str, user: dict):
+    """
+    스코프에 맞는 리그인지 검증한다.
+      master → 고정 6대리그
+      user   → 로그인 계정이 만든 리그만 (남의 계정 코드를 넣어도 통과 못 함 —
+               검증 대상 DB 자체가 _resolve_scope_db()로 본인 것으로 고정되기 때문)
+    """
+    if scope == PATHS.SCOPE_USER:
+        if code not in USERLG.valid_codes(_resolve_scope_db(scope, user)):
+            raise HTTPException(status_code=404, detail=f"알 수 없는 리그: {code}")
+        return
+    _check_league(code)
+
+
+def _is_user_scope(scope: str) -> bool:
+    return scope == PATHS.SCOPE_USER
+
+
+# ─────────────────────────── 내 데이터: 사용자 정의 리그 ───────────────────────────
+class UserLeagueBody(BaseModel):
+    label: str
+
+
+class UserLeagueDeleteBody(BaseModel):
+    confirm: bool = False
+
+
+def _user_db_of(user: dict) -> str:
+    return _resolve_scope_db(PATHS.SCOPE_USER, user)
+
+
+@app.get("/api/user_leagues")
+def user_leagues_list(user: dict = Depends(get_current_user)):
+    return {"leagues": USERLG.list_leagues(_user_db_of(user))}
+
+
+@app.post("/api/user_leagues")
+def user_leagues_create(body: UserLeagueBody, user: dict = Depends(get_current_user)):
+    """리그를 만든다. 이 시점엔 등록부에만 올라가고, 경기 테이블은 첫 업로드 때 생긴다."""
+    try:
+        return USERLG.create_league(_user_db_of(user), body.label)
+    except USERLG.UserLeagueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/user_leagues/{code}/rename")
+def user_leagues_rename(code: str, body: UserLeagueBody,
+                        user: dict = Depends(get_current_user)):
+    """이름만 바꾼다 — 경기 데이터·지표·예측은 전혀 건드리지 않는다."""
+    try:
+        return USERLG.rename_league(_user_db_of(user), code, body.label)
+    except USERLG.UserLeagueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/user_leagues/{code}/delete")
+def user_leagues_delete(code: str, body: UserLeagueDeleteBody,
+                        user: dict = Depends(get_current_user)):
+    """리그와 그 안의 경기 데이터를 모두 지운다(되돌릴 수 없음)."""
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
+    try:
+        return USERLG.delete_league(_user_db_of(user), code)
+    except USERLG.UserLeagueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 def _rt_summary(df: pd.DataFrame):
@@ -245,7 +322,7 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
     시즌·라운드 선택지 + 리그 전체 현황(등록 시즌수/전체 경기수/RT분포).
     라운드는 시즌별로 묶어 반환. 탭 바로 아래 "리그 전체 대시보드"에 쓰인다.
     """
-    _check_league(code)
+    _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
     df = DATA.load_league_df_ranked(db, code)   # 적중/미적 집계에 PH_STATUS 필요
     if df.empty or "S" not in df.columns:
@@ -335,7 +412,7 @@ def league_rows(code: str,
     season/round 미지정 시 최근 시즌·최근 라운드를 기본 선택. "ALL"이면 그 축은 필터 없음.
     배당 9종(kw~fl)을 넘기면 ±0.005 오차로 근사 일치하는 경기만 추린다(원본 조회 필터와 동일 규칙).
     """
-    _check_league(code)
+    _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
     df = DATA.load_league_df_ranked(db, code)   # 표시용 순위(HP/AP) 포함
     if df.empty:
@@ -451,7 +528,7 @@ def match_excel_download(code: str,
     상세보기 팝업(배당·플핸예측·상대전적·지표별 표본)을 엑셀 한 시트로 내려받는다.
     화면에 이미 계산되어 저장된 값만 그대로 옮겨 담을 뿐, 새로 계산하지 않는다.
     """
-    _check_league(code)
+    _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
     df = DATA.load_league_df_ranked(db, code)   # 화면 팝업과 같은 폼/최근전적이 담기도록
     if df.empty or "S" not in df.columns or "R" not in df.columns:
@@ -506,7 +583,7 @@ def upload_template(code: str,
                     user: dict = Depends(get_current_user)):
     """경기 업로드용 빈 표본 양식(.xlsx). 업로드 권한이 있는 사용자만.
     리그·시즌·라운드를 넘기면 경기번호 1~10행을 미리 채운 파일을 만든다."""
-    _check_league(code)
+    _check_league_for(code, scope, user)
     if not PATHS.can_write(scope, user.get("role")):
         raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
 
@@ -515,12 +592,16 @@ def upload_template(code: str,
         raise HTTPException(status_code=400, detail="라운드는 숫자만 입력하세요.")
     round_label = f"{round}R" if round else ""
 
+    # 리그(L) 칸에는 내 데이터도 '코드'를 넣는다 — L은 중복판정 키라서, 이름을 바꿔도
+    # 흔들리지 않는 값이어야 한다. 파일명에는 사람이 알아보는 리그 이름을 쓴다.
     buf = XLS.build_upload_template(
         league_code=_TABLE_TO_L_CODE.get(code, code),
         season=season.strip(),
         round_label=round_label,
     )
-    name_parts = [code] + [p for p in (season.strip(), round_label) if p]
+    shown = USERLG.label_of(_resolve_scope_db(scope, user), code) \
+        if _is_user_scope(scope) else code
+    name_parts = [shown] + [p for p in (season.strip(), round_label) if p]
     return _xlsx_response(buf, f"{'_'.join(name_parts)}_경기업로드_양식.xlsx", "upload_template.xlsx")
 
 
@@ -543,7 +624,7 @@ def table_excel_download(code: str,
     현재 조회 조건 그대로의 분석표를 엑셀로. 화면과 같은 필터 함수를 쓰므로
     화면에 보이는 것과 정확히 같은 경기가 담긴다(행 수 상한 없이 전부).
     """
-    _check_league(code)
+    _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
     df = DATA.load_league_df_ranked(db, code)   # 화면과 같은 순위(HP/AP)가 담기도록
     if df.empty:
@@ -554,8 +635,9 @@ def table_excel_download(code: str,
         {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
          "KHL": khl, "FW": fw, "FD": fd, "FL": fl})
 
-    buf = XLS.build_table_excel(list(df.columns), DATA.df_to_records(sub), title=code)
-    parts = [code]
+    shown = USERLG.label_of(db, code) if _is_user_scope(scope) else code
+    buf = XLS.build_table_excel(list(df.columns), DATA.df_to_records(sub), title=shown)
+    parts = [shown]
     if season:
         parts.append(str(season))
     if round:
@@ -596,7 +678,7 @@ def upload_matches(code: str,
       전체삭제 후 재업로드처럼 old가 비어 있으면(=완전히 새 리그) 모든 행이 "새 경기"로
       취급되어 정상적으로 전부 계산된다.
     """
-    _check_league(code)
+    _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
     if not PATHS.can_write(scope, user.get("role")):
         raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
@@ -644,9 +726,15 @@ def upload_matches(code: str,
     if scope == PATHS.SCOPE_MASTER:
         PATHS.backup_master()      # 저장 전 자동 백업 (관리자 화면에서 롤백 가능)
 
-    total_new = DATA.load_total_df(db)
-    if total_new.empty:
+    # 통합(TF-/TK-)지표의 표본 기준.
+    #   master → 6대리그를 합친 통합DB
+    #   user   → 그 리그 하나만 (사용자 지정: 내 데이터는 탭별로 완전히 독립)
+    if _is_user_scope(scope):
         total_new = merged
+    else:
+        total_new = DATA.load_total_df(db)
+        if total_new.empty:
+            total_new = merged
 
     final = merged.copy()
 
@@ -709,7 +797,7 @@ def delete_matches(code: str, body: DeleteMatchesBody, user: dict = Depends(get_
     화면 조회와 같은 필터 함수를 써서 "보이는 조건 = 지워지는 대상"이 항상 일치하게 한다.
     시즌/라운드 둘 다 "ALL"이면 사실상 리그 전체 삭제와 같다.
     """
-    _check_league(code)
+    _check_league_for(code, body.scope, user)
     if not PATHS.can_write(body.scope, user.get("role")):
         raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
     if not body.confirm:
@@ -750,12 +838,13 @@ class AnalyzeBody(BaseModel):
 def analyze(body: AnalyzeBody, user: dict = Depends(get_current_user)):
     """
     임의 배당 1경기를 엔진으로 즉시 분석 → 26개 지표 + 플핸 예측 반환.
-    개별지표는 해당 리그 DB, 통합(TF-/TK-)지표는 스코프 통합DB 기준.
+    개별지표는 해당 리그 DB 기준. 통합(TF-/TK-)지표는 master면 통합DB,
+    내 데이터면 그 리그 하나 기준(업로드 때와 같은 규칙).
     """
-    _check_league(body.league)
+    _check_league_for(body.league, body.scope, user)
     db = _resolve_scope_db(body.scope, user)
     league_df = DATA.load_league_df(db, body.league)
-    total_df = DATA.load_total_df(db)
+    total_df = league_df if _is_user_scope(body.scope) else DATA.load_total_df(db)
     if league_df.empty:
         raise HTTPException(status_code=400,
                             detail=f"{body.league} 데이터가 비어 있습니다.")
@@ -845,7 +934,7 @@ def teams(scope: str = PATHS.SCOPE_MASTER,
     """
     db = _resolve_scope_db(scope, user)
     if code:
-        _check_league(code)
+        _check_league_for(code, scope, user)
         df = DATA.load_league_df(db, code)
     else:
         df = DATA.load_total_df(db)
@@ -1018,9 +1107,15 @@ def admin_customer_data(admin: dict = Depends(get_admin_user)):
 
 @app.get("/api/admin/customer_data/{username}/leagues")
 def admin_customer_leagues(username: str, admin: dict = Depends(get_admin_user)):
+    """고객이 데이터를 올려둔 리그 목록. 고객이 직접 만든 리그도 함께 보여준다."""
     udb = PATHS.get_user_db(username)
-    rows = [d for d in PATHS.league_dashboard(udb) if d["경기수"] > 0]
-    return {"leagues": [{"code": d["코드"], "label": d["리그"], "rows": d["경기수"]} for d in rows]}
+    out = [{"code": d["코드"], "label": d["리그"], "rows": d["경기수"]}
+           for d in PATHS.league_dashboard(udb) if d["경기수"] > 0]
+    for lg in USERLG.list_leagues(udb):
+        n = PATHS.table_row_count(udb, lg["code"])
+        if n > 0:
+            out.append({"code": lg["code"], "label": lg["label"], "rows": n})
+    return {"leagues": out}
 
 
 _CUSTOMER_VIEW_COLS = ["L", "S", "R", "No", "DT", "TM", "HT", "HS", "RT", "AS", "AT",
@@ -1034,8 +1129,10 @@ def admin_view_customer_data(username: str, league: str, admin: dict = Depends(g
     고객 업로드 원본을 읽기전용으로 열람. 관리자는 물리적으로 수정할 수 없다
     (읽기전용 접속). 열람 시 access_log 에 기록되어 분쟁 시 근거가 된다.
     """
-    _check_league(league)
     udb = PATHS.get_user_db(username)
+    # 고객 DB는 6대리그(옛 데이터)와 고객이 직접 만든 리그가 섞여 있을 수 있다.
+    if league not in PATHS.VALID_LEAGUES and league not in USERLG.valid_codes(udb):
+        raise HTTPException(status_code=404, detail=f"알 수 없는 리그: {league}")
     try:
         con = sqlite3.connect(f"file:{udb}?mode=ro", uri=True)
         try:

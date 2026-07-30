@@ -155,8 +155,44 @@
   font-weight: 600;
 }
 
+/* 내 데이터 탭줄 맨 끝의 '리그 생성' — 리그 탭이 아니므로 선택 표시(밑줄)를 쓰지 않는다 */
+.tab-bar button.tab-manage {
+  margin-left: 8px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tab-bar button.tab-manage:hover {
+  color: var(--text-primary);
+}
+
 .content {
   padding: 24px;
+}
+
+/* 내 데이터에 아직 만든 리그가 하나도 없을 때의 안내 */
+.no-league-guide {
+  max-width: 520px;
+  margin: 48px auto;
+  padding: 28px 24px;
+  text-align: center;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+}
+
+.no-league-title {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.no-league-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
 }
 
 .league-summary {

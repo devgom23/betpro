@@ -57,10 +57,14 @@ export default function LeaguePage({ code, scope }) {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [leagues, setLeagues] = useState([])
 
-  // 업로드 표본 생성 모달의 "리그 선택" 옵션용 (한 번만 불러오면 됨)
+  // 업로드 표본 생성 / 삭제 선택 모달의 "리그 선택" 옵션용.
+  // 스코프마다 리그가 다르므로(공식=6대리그 / 내 데이터=내가 만든 리그) 스코프별로 불러온다.
   useEffect(() => {
-    api.get('/api/leagues').then(setLeagues).catch(() => setLeagues([]))
-  }, [])
+    api
+      .get(`/api/leagues?scope=${scope}`)
+      .then((res) => setLeagues(Array.isArray(res) ? res : res.leagues || []))
+      .catch(() => setLeagues([]))
+  }, [scope])
 
   // 리그/스코프가 바뀌면 시즌·라운드 선택지부터 다시 불러온다
   useEffect(() => {
