@@ -51,6 +51,9 @@ export function PickSummaryBar({ summary }) {
         return (
           <span className="rt-badge-item" key={name} style={{ background: bg, color: fg }}>
             {name} {summary[name].toLocaleString()}
+            <span className="rt-badge-pct">
+              ({((summary[name] / summary.총) * 100).toFixed(1)}%)
+            </span>
           </span>
         )
       })}
