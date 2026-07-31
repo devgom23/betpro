@@ -615,7 +615,7 @@ def _format_cell(group, col, value):
         if n is None:
             return ""
         if sub in ("KH", "FH"):
-            return f"{'+' if n >= 0 else ''}{n:.1f}"
+            return f"{'+' if n >= 0 else ''}{n:.0f}"
         return f"{n:.2f}"
     if group["kind"] == "ph":
         if sub in ("PICK", "적중"):

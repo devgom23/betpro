@@ -127,7 +127,7 @@ export function formatCell(group, col, value) {
   if (g1 === '국내배당' || g1 === '해외배당') {
     const n = toNum(value)
     if (n === null) return ''
-    if (sub === 'KH' || sub === 'FH') return (n >= 0 ? '+' : '') + n.toFixed(1)
+    if (sub === 'KH' || sub === 'FH') return (n >= 0 ? '+' : '') + n.toFixed(0)
     return n.toFixed(2)
   }
   if (group.kind === 'ph') {

@@ -10,6 +10,13 @@ function numOrDash(v) {
   return v === null || v === undefined || v === '' ? '-' : v
 }
 
+// 배당은 항상 소수 둘째 자리까지(3 → 3.00) — 참고용 국내/해외 승무패 칸에 쓴다
+function oddsOrDash(v) {
+  if (v === null || v === undefined || v === '') return '-'
+  const n = Number(v)
+  return Number.isNaN(n) ? '-' : n.toFixed(2)
+}
+
 // 점수가 둘 다 있고 서로 다를 때만 이긴 쪽 점수를 강조한다(무승부·예정 경기는 강조 없음)
 function scoreClass(hs, as_, side) {
   if (hs === null || hs === undefined || as_ === null || as_ === undefined) return undefined
@@ -198,10 +205,10 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
                     </td>
                     <td>{r.AT}</td>
                     <td>
-                      {numOrDash(r.KW)} / {numOrDash(r.KD)} / {numOrDash(r.KL)}
+                      {oddsOrDash(r.KW)} / {oddsOrDash(r.KD)} / {oddsOrDash(r.KL)}
                     </td>
                     <td>
-                      {numOrDash(r.FW)} / {numOrDash(r.FD)} / {numOrDash(r.FL)}
+                      {oddsOrDash(r.FW)} / {oddsOrDash(r.FD)} / {oddsOrDash(r.FL)}
                     </td>
                     <td>
                       <select value={r._RT} onChange={(e) => updateRow(i, '_RT', e.target.value)}>
