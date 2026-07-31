@@ -18,7 +18,9 @@
   FH는 국내배당 기준으로 정해지는데 이 사이트엔 국내배당이 없고,
   RT는 사용자가 직접 넣는 값이기 때문(추후 표에서 직접 수정 예정).
 """
+import os
 import re
+import sqlite3
 import threading
 import time
 
@@ -96,6 +98,25 @@ def close_page():
 
 def is_open() -> bool:
     return _driver is not None and _alive(_driver)
+
+
+def select_round(n) -> str:
+    """열려 있는 화면에서 라운드를 바꾼다. 성공하면 바뀐 라운드('17R')를 돌려준다."""
+    if not is_open():
+        raise CrawlError("먼저 'Data 가져오기'로 화면을 열어 주세요.")
+    try:
+        num = int(str(n).strip().upper().replace("R", ""))
+    except (TypeError, ValueError):
+        raise CrawlError("라운드는 숫자로 입력해 주세요.")
+    with _lock:
+        ok = _driver.execute_script(
+            "var e=document.querySelector('div.round span[round=\"%d\"]');"
+            "if(!e){return false;} e.click(); return true;" % num)
+        if not ok:
+            raise CrawlError(f"{num}라운드를 찾지 못했습니다. 그 시즌에 있는 라운드인지 확인해 주세요.")
+        time.sleep(1.5)          # 목록이 다시 그려질 때까지 대기
+        got = _round_of(BeautifulSoup(_driver.page_source, "html.parser"))
+    return got or f"{num}R"
 
 
 def _switch_odds(kind: str) -> bool:
@@ -207,10 +228,30 @@ def _score(row):
     return (m.group(1), m.group(2)) if m else ("", "")
 
 
+def _round_of(soup) -> str:
+    """
+    화면에서 선택된 라운드. 라운드 막대(div.round)의 <span round="N" class="current on">.
+
+    ⚠ div.schedulis 의 page 속성은 라운드가 아니라 목록 페이지 번호다(항상 1).
+       그걸 라운드로 쓰면 어느 라운드를 봐도 전부 '1R'로 저장되므로 쓰면 안 된다.
+    """
+    strip = soup.find("div", class_="round")
+    if not strip:
+        return ""
+    for sp in strip.find_all("span"):
+        cls = sp.get("class") or []
+        if "current" in cls or "on" in cls:
+            n = (sp.get("round") or sp.get_text(strip=True) or "").strip()
+            if n.isdigit():
+                return f"{n}R"
+    return ""
+
+
 def _parse(html):
     """현재 화면의 경기들을 {matchid: {...}} 로. 배당은 모드에 따라 뜻이 달라 o1~o3 원본 유지."""
     soup = BeautifulSoup(html, "html.parser")
     season = _season_of(soup)
+    rnd = _round_of(soup)
     out = {}
     for row in soup.find_all("div", class_="schedulis"):
         mid = (row.get("matchid") or "").strip()
@@ -224,7 +265,7 @@ def _parse(html):
         out[mid] = {
             "matchid": mid,
             "S": season,
-            "R": f"{(row.get('page') or '').strip()}R" if row.get("page") else "",
+            "R": rnd,
             "DT": dt,
             "TM": tm,
             "HT": _clean_team(home.get_text(strip=True)),
@@ -289,3 +330,129 @@ def crawl_current(league_code: str, wait: float = 2.0) -> dict:
         "matched_handicap": sum(1 for r in rows if r["FHW"]),
         "rows": rows,
     }
+
+
+# ══════════════════════════ 설정 저장 ══════════════════════════
+# 크롤 주소와 팀명 매핑은 '로그인 계정의 DB'에만 저장한다.
+# 공식 데이터(master.db)는 분석 원본이라 설정 테이블을 만들지 않는다 —
+# master 리그 설정도 계정 DB에 "master:EPL" 같은 키로 넣어 두면 되기 때문.
+SOURCE_TABLE = "_crawl_sources"
+ALIAS_TABLE = "_team_aliases"
+
+
+def _ensure_tables(con):
+    con.execute(f'CREATE TABLE IF NOT EXISTS "{SOURCE_TABLE}" ('
+                " key TEXT PRIMARY KEY, url TEXT NOT NULL)")
+    con.execute(f'CREATE TABLE IF NOT EXISTS "{ALIAS_TABLE}" ('
+                " key TEXT NOT NULL, raw TEXT NOT NULL, mapped TEXT NOT NULL,"
+                " PRIMARY KEY (key, raw))")
+
+
+def _key(scope: str, code: str) -> str:
+    return f"{scope}:{code}"
+
+
+def default_source(code: str) -> str:
+    """공식 6대리그는 스코어맨 리그 ID를 미리 알고 있으므로 기본 주소를 만들어 준다."""
+    lid = DEFAULT_LEAGUE_IDS.get(code)
+    return LEAGUE_URL.format(id=lid) if lid else ""
+
+
+def get_source(db_path: str, scope: str, code: str) -> str:
+    """저장해 둔 크롤 주소. 없으면 기본값(공식 리그) 또는 빈 문자열."""
+    if db_path and os.path.exists(db_path):
+        con = sqlite3.connect(db_path)
+        try:
+            _ensure_tables(con)
+            hit = con.execute(f'SELECT url FROM "{SOURCE_TABLE}" WHERE key = ?',
+                              (_key(scope, code),)).fetchone()
+            if hit and hit[0]:
+                return hit[0]
+        finally:
+            con.close()
+    return default_source(code)
+
+
+def set_source(db_path: str, scope: str, code: str, url: str) -> str:
+    """리그별 크롤 주소를 한 번 등록해 두면 다음부터 그대로 열린다."""
+    url = (url or "").strip()
+    if not re.match(r"^https?://[^\s]+$", url):
+        raise CrawlError("주소는 http:// 또는 https:// 로 시작해야 합니다.")
+    con = sqlite3.connect(db_path)
+    try:
+        _ensure_tables(con)
+        con.execute(
+            f'INSERT INTO "{SOURCE_TABLE}" (key, url) VALUES (?, ?) '
+            "ON CONFLICT(key) DO UPDATE SET url = excluded.url",
+            (_key(scope, code), url))
+        con.commit()
+    finally:
+        con.close()
+    return url
+
+
+def list_aliases(db_path: str, scope: str, code: str) -> dict:
+    """{크롤링팀명: 등록팀명}. 한 번 치환해 두면 다음 크롤링부터 자동 적용된다."""
+    if not db_path or not os.path.exists(db_path):
+        return {}
+    con = sqlite3.connect(db_path)
+    try:
+        _ensure_tables(con)
+        rows = con.execute(f'SELECT raw, mapped FROM "{ALIAS_TABLE}" WHERE key = ?',
+                           (_key(scope, code),)).fetchall()
+    finally:
+        con.close()
+    return {r: m for r, m in rows}
+
+
+def save_aliases(db_path: str, scope: str, code: str, mapping: dict) -> int:
+    """치환 규칙 저장. 값이 비면 그 규칙은 지운다."""
+    con = sqlite3.connect(db_path)
+    n = 0
+    try:
+        _ensure_tables(con)
+        for raw, mapped in (mapping or {}).items():
+            raw = (raw or "").strip()
+            mapped = (mapped or "").strip()
+            if not raw:
+                continue
+            if not mapped or mapped == raw:
+                con.execute(f'DELETE FROM "{ALIAS_TABLE}" WHERE key = ? AND raw = ?',
+                            (_key(scope, code), raw))
+                continue
+            con.execute(
+                f'INSERT INTO "{ALIAS_TABLE}" (key, raw, mapped) VALUES (?, ?, ?) '
+                "ON CONFLICT(key, raw) DO UPDATE SET mapped = excluded.mapped",
+                (_key(scope, code), raw, mapped))
+            n += 1
+        con.commit()
+    finally:
+        con.close()
+    return n
+
+
+def apply_aliases(rows, aliases: dict):
+    """크롤링해 온 팀명을 등록된 팀명으로 치환한다(원본은 _HT_raw/_AT_raw로 남겨 둔다)."""
+    if not aliases:
+        return rows
+    for r in rows:
+        for col in ("HT", "AT"):
+            raw = r.get(col, "")
+            if raw in aliases:
+                r[f"_{col}_raw"] = raw
+                r[col] = aliases[raw]
+    return rows
+
+
+def unknown_teams(rows, known_teams):
+    """치환 후에도 DB에 없는 팀명 목록. 리그에 팀이 하나도 없으면(첫 등록) 검사하지 않는다."""
+    known = {str(t).strip() for t in (known_teams or []) if str(t).strip()}
+    if not known:
+        return []
+    seen = []
+    for r in rows:
+        for col in ("HT", "AT"):
+            name = str(r.get(col, "")).strip()
+            if name and name not in known and name not in seen:
+                seen.append(name)
+    return sorted(seen)

@@ -7,6 +7,7 @@ import HeadToHeadResult from '../components/HeadToHead/HeadToHeadResult'
 import RtSummaryBar, { PickSummaryBar } from '../components/RtSummaryBar/RtSummaryBar'
 import UploadTemplateModal from '../components/UploadTemplateModal/UploadTemplateModal'
 import DeleteMatchesModal from '../components/DeleteMatchesModal/DeleteMatchesModal'
+import CrawlModal from '../components/CrawlModal/CrawlModal'
 
 const ODDS_KEYS = ['kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl']
 
@@ -55,6 +56,7 @@ export default function LeaguePage({ code, scope }) {
   const [excelNotice, setExcelNotice] = useState('')
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showCrawlModal, setShowCrawlModal] = useState(false)
   const [leagues, setLeagues] = useState([])
 
   // 업로드 표본 생성 / 삭제 선택 모달의 "리그 선택" 옵션용.
@@ -211,6 +213,13 @@ export default function LeaguePage({ code, scope }) {
             <>
               <button
                 className="btn-reset"
+                onClick={() => setShowCrawlModal(true)}
+                title="스코어맨 화면에서 경기·배당을 그대로 가져옵니다"
+              >
+                🛰 Data 가져오기
+              </button>
+              <button
+                className="btn-reset"
                 onClick={() => setShowTemplateModal(true)}
                 title="리그·시즌·라운드를 입력해 업로드용 표본 엑셀을 만듭니다"
               >
@@ -323,6 +332,16 @@ export default function LeaguePage({ code, scope }) {
             '경기 Data 삭제 선택'을 클릭하시면 삭제할 리그 및 경기를 선택한 후 삭제를 하시면 됩니다.
           </span>
         </div>
+      )}
+
+      {showCrawlModal && (
+        <CrawlModal
+          code={code}
+          scope={scope}
+          label={leagues.find((l) => l.code === code)?.label}
+          onClose={() => setShowCrawlModal(false)}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
       )}
 
       {showDeleteModal && (

@@ -1,0 +1,158 @@
+/* Data 가져오기 창. 배경/카드/닫기는 상세보기 팝업(MatchDetailModal.css)의
+   .modal-backdrop / .modal-card / .modal-close 를 그대로 재사용한다. */
+.crawl-card {
+  max-width: 880px;
+}
+
+.crawl-step {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.crawl-step-no {
+  flex: 0 0 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.crawl-step-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.crawl-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.crawl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.crawl-row input[type='text'] {
+  flex: 1;
+  min-width: 220px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.crawl-round-input {
+  width: 120px;
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.crawl-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.crawl-result {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.crawl-summary {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.crawl-summary strong {
+  color: var(--text-primary);
+}
+
+/* 미등록 팀명 치환 영역 */
+.crawl-unknown {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #EF5350;
+  border-radius: 8px;
+  background: rgba(239, 83, 80, 0.08);
+}
+
+.crawl-unknown-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #EF5350;
+}
+
+.crawl-map-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.crawl-map-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.crawl-raw {
+  flex: 0 0 40%;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crawl-arrow {
+  color: var(--text-muted);
+}
+
+.crawl-map-list select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.crawl-preview {
+  margin-top: 6px;
+}
+
+.crawl-preview th,
+.crawl-preview td {
+  white-space: nowrap;
+}
+
+.crawl-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}

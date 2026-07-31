@@ -75,6 +75,7 @@ import engine                 # noqa: E402
 import data_access as DATA    # noqa: E402
 import match_excel as XLS     # noqa: E402
 import user_leagues as USERLG  # noqa: E402
+import crawler as CRAWL        # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -595,7 +596,7 @@ def upload_template(code: str,
     # 리그(L) 칸에는 내 데이터도 '코드'를 넣는다 — L은 중복판정 키라서, 이름을 바꿔도
     # 흔들리지 않는 값이어야 한다. 파일명에는 사람이 알아보는 리그 이름을 쓴다.
     buf = XLS.build_upload_template(
-        league_code=_TABLE_TO_L_CODE.get(code, code),
+        league_code=_l_value(_resolve_scope_db(scope, user), scope, code),
         season=season.strip(),
         round_label=round_label,
     )
@@ -648,57 +649,47 @@ def table_excel_download(code: str,
 UPLOAD_DEDUP_KEY = ["L", "S", "R", "No", "HT", "AT"]   # 원본과 동일(DT는 결측이 많아 제외)
 
 
-@app.post("/api/leagues/{code}/upload")
-def upload_matches(code: str,
-                   file: UploadFile = File(...),
-                   scope: str = Form(PATHS.SCOPE_MASTER),
-                   confirm: bool = Form(False),
-                   user: dict = Depends(get_current_user)):
+def _keep_existing_where_blank(new: pd.DataFrame, old: pd.DataFrame) -> pd.DataFrame:
     """
-    경기 엑셀 업로드 (원본 WEB_BET_PRO.py 2105~2165줄 이식).
-    confirm=false면 저장하지 않고 미리보기(건수/중복)만 돌려준다 — 실수로 덮어쓰는 걸 막는 2단계.
-    confirm=true면 기존 데이터와 병합·중복제거 후 "새로 추가되는 경기만" 26개 지표+플핸예측을
-    계산해 리그 테이블에 저장한다.
+    이미 있는 경기를 다시 올릴 때, 새 데이터의 '빈 칸'이 기존 값을 지우지 않게 한다.
 
-    [원본과 다른 점 — 의도적 수정]
-      원본은 기존 표(지표 컬럼 포함)에 새 분석결과를 옆으로 이어붙여서, 데이터가 이미
-      있는 리그에 추가 업로드하면 컬럼명이 208개 중복돼 저장이 실패했다(빈 리그 최초
-      업로드만 동작). 여기서는 이어붙이는 대신 같은 이름의 컬럼에 덮어써서, 기존 표의
-      구조를 유지한다.
-
-    [예측 고정 원칙 — 사용자 지정]
-      이미 DB에 있던 경기(시즌·라운드·경기번호·팀이 같음)의 26개 지표·플핸예측은
-      새 경기가 추가돼도 절대 다시 계산하지 않는다 — 한 번 나온 예측이 이후 데이터로
-      계속 바뀌면 "과거 예측의 적중률"이라는 의미 자체가 없어지기 때문. 스코어(HS/AS/RT)
-      등 원본 값은 이번 업로드로 갱신되지만(예정 경기에 나중에 결과만 채우는 흐름을
-      그대로 지원), 분석 컬럼은 그 경기가 처음 저장됐을 때 값을 그대로 유지한다.
-      새로 추가되는 경기만 engine._recompute_indicators_for_subset()으로 계산한다
-      (예정 경기 재계산 버튼이 쓰는 것과 같은 함수) — 그래서 기존 경기가 아주 많아도
-      이번에 추가된 경기 수만큼만 계산해 훨씬 빠르다.
-      전체삭제 후 재업로드처럼 old가 비어 있으면(=완전히 새 리그) 모든 행이 "새 경기"로
-      취급되어 정상적으로 전부 계산된다.
+    같은 경기(L/S/R/No/HT/AT)에 대해 값이 들어온 칸만 새 값으로 바꾸고,
+    비어 있는 칸은 기존 값을 그대로 둔다 — 스코어맨 크롤링은 경기결과(RT)·핸디(FH)·
+    국내배당을 가져오지 못하므로, 이 처리가 없으면 직접 입력해 둔 값이 통째로 지워진다.
+    (덮어쓰기를 원하면 그 칸에 값을 채워서 올리면 된다)
     """
-    _check_league_for(code, scope, user)
-    db = _resolve_scope_db(scope, user)
-    if not PATHS.can_write(scope, user.get("role")):
-        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+    if old is None or old.empty or new is None or new.empty:
+        return new
+    key = [c for c in UPLOAD_DEDUP_KEY if c in new.columns and c in old.columns]
+    if not key:
+        return new
 
-    raw = file.file.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="빈 파일입니다.")
-    try:
-        head = pd.read_excel(io.BytesIO(raw), header=None, nrows=10)
-        hr = engine.find_header_row(head)
-        new = engine.preprocess_data(pd.read_excel(io.BytesIO(raw), header=hr))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"엑셀을 읽지 못했습니다: {e}")
+    o = old.drop_duplicates(subset=key, keep="last")
+    cols = [c for c in new.columns if c in old.columns and c not in key]
+    if not cols:
+        return new
 
-    if new.empty:
-        raise HTTPException(
-            status_code=400,
-            detail="유효한 경기가 없습니다. 홈팀(HT)·원정팀(AT)이 채워져 있는지 확인하세요.")
+    joined = new.merge(o[key + cols], on=key, how="left", suffixes=("", "__old"))
+    for c in cols:
+        oc = f"{c}__old"
+        if oc not in joined.columns:
+            continue
+        blank = joined[c].isna() | (joined[c].astype(str).str.strip() == "")
+        joined.loc[blank, c] = joined.loc[blank, oc]
+    return joined[new.columns]
 
+
+def _merge_and_save(db: str, code: str, scope: str, new: pd.DataFrame, confirm: bool):
+    """
+    새 경기(new)를 기존 리그 데이터와 병합해 저장한다.
+    엑셀 업로드와 '스코어맨 Data 가져오기'가 똑같은 규칙을 쓰도록 한 곳에 모아 둔 함수다.
+
+    confirm=False면 저장하지 않고 미리보기(건수/중복)만 돌려준다.
+    이미 있던 경기의 26개 지표·플핸예측은 최초 계산값을 그대로 유지하고(예측 고정),
+    새로 들어온 경기만 계산한다.
+    """
     old = DATA.load_league_df(db, code)
+    new = _keep_existing_where_blank(new, old)
     old_count = len(old)
     # concat 직후(중복제거 전) 프레임 — old/new의 dedup key 컬럼 dtype이 여기서 하나로
     # 통일된다(예: No가 old=int64, new=float64였어도 같은 dtype이 됨). 아래서 old 쪽 행을
@@ -780,6 +771,216 @@ def upload_matches(code: str,
         "new_rows": len(new),
         "duplicates_removed": duplicates,
     }
+
+
+@app.post("/api/leagues/{code}/upload")
+def upload_matches(code: str,
+                   file: UploadFile = File(...),
+                   scope: str = Form(PATHS.SCOPE_MASTER),
+                   confirm: bool = Form(False),
+                   user: dict = Depends(get_current_user)):
+    """
+    경기 엑셀 업로드 (원본 WEB_BET_PRO.py 2105~2165줄 이식).
+    confirm=false면 저장하지 않고 미리보기(건수/중복)만 돌려준다 — 실수로 덮어쓰는 걸 막는 2단계.
+    confirm=true면 기존 데이터와 병합·중복제거 후 "새로 추가되는 경기만" 26개 지표+플핸예측을
+    계산해 리그 테이블에 저장한다.
+
+    [원본과 다른 점 — 의도적 수정]
+      원본은 기존 표(지표 컬럼 포함)에 새 분석결과를 옆으로 이어붙여서, 데이터가 이미
+      있는 리그에 추가 업로드하면 컬럼명이 208개 중복돼 저장이 실패했다(빈 리그 최초
+      업로드만 동작). 여기서는 이어붙이는 대신 같은 이름의 컬럼에 덮어써서, 기존 표의
+      구조를 유지한다.
+
+    [예측 고정 원칙 — 사용자 지정]
+      이미 DB에 있던 경기(시즌·라운드·경기번호·팀이 같음)의 26개 지표·플핸예측은
+      새 경기가 추가돼도 절대 다시 계산하지 않는다 — 한 번 나온 예측이 이후 데이터로
+      계속 바뀌면 "과거 예측의 적중률"이라는 의미 자체가 없어지기 때문. 스코어(HS/AS/RT)
+      등 원본 값은 이번 업로드로 갱신되지만(예정 경기에 나중에 결과만 채우는 흐름을
+      그대로 지원), 분석 컬럼은 그 경기가 처음 저장됐을 때 값을 그대로 유지한다.
+      새로 추가되는 경기만 engine._recompute_indicators_for_subset()으로 계산한다
+      (예정 경기 재계산 버튼이 쓰는 것과 같은 함수) — 그래서 기존 경기가 아주 많아도
+      이번에 추가된 경기 수만큼만 계산해 훨씬 빠르다.
+      전체삭제 후 재업로드처럼 old가 비어 있으면(=완전히 새 리그) 모든 행이 "새 경기"로
+      취급되어 정상적으로 전부 계산된다.
+    """
+    _check_league_for(code, scope, user)
+    db = _resolve_scope_db(scope, user)
+    if not PATHS.can_write(scope, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+
+    raw = file.file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+    try:
+        head = pd.read_excel(io.BytesIO(raw), header=None, nrows=10)
+        hr = engine.find_header_row(head)
+        new = engine.preprocess_data(pd.read_excel(io.BytesIO(raw), header=hr))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"엑셀을 읽지 못했습니다: {e}")
+
+    if new.empty:
+        raise HTTPException(
+            status_code=400,
+            detail="유효한 경기가 없습니다. 홈팀(HT)·원정팀(AT)이 채워져 있는지 확인하세요.")
+
+    return _merge_and_save(db, code, scope, new, confirm)
+
+
+# ─────────────────────────── 스코어맨 Data 가져오기 ───────────────────────────
+class CrawlBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    code: str
+    url: Optional[str] = None
+
+
+class CrawlAliasBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    code: str
+    mapping: dict = {}
+
+
+class CrawlSaveBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    code: str
+    rows: list = []
+    confirm: bool = False
+
+
+def _l_value(db: str, scope: str, code: str) -> str:
+    """
+    엑셀/DB의 'L'(리그) 칸에 넣을 값.
+      master → 원본 관례대로 2글자 코드(EPL→'EP')
+      user   → 사용자가 붙인 리그 이름(예: 'K1')
+    ⚠ 내부 코드(ul_1)를 넣으면 안 된다 — L은 중복판정 키라서, 기존 데이터와 값이 다르면
+       같은 경기가 중복 저장되고 표에서도 다른 리그처럼 보인다.
+    """
+    if _is_user_scope(scope):
+        return USERLG.label_of(db, code)
+    return _TABLE_TO_L_CODE.get(code, code)
+
+
+def _league_teams(db: str, code: str):
+    """그 리그에 이미 등록되어 있는 팀명 목록(팀명 셀렉트박스 옵션)."""
+    df = DATA.load_league_df(db, code)
+    if df.empty or "HT" not in df.columns:
+        return []
+    names = set(df["HT"].dropna().astype(str)) | set(df["AT"].dropna().astype(str))
+    return sorted(n.strip() for n in names if n.strip())
+
+
+@app.get("/api/crawl/config")
+def crawl_config(scope: str = PATHS.SCOPE_MASTER, code: str = "",
+                 user: dict = Depends(get_current_user)):
+    """리그별 크롤 주소 + 저장된 팀명 치환 규칙 + 브라우저 상태."""
+    _check_league_for(code, scope, user)
+    db = _resolve_scope_db(scope, user)
+    udb = _user_db_of(user)      # 설정은 항상 계정 DB에 저장(master.db는 건드리지 않음)
+    return {
+        "url": CRAWL.get_source(udb, scope, code),
+        "default_url": CRAWL.default_source(code),
+        "aliases": CRAWL.list_aliases(udb, scope, code),
+        "teams": _league_teams(db, code),
+        "is_open": CRAWL.is_open(),
+        "known_ids": CRAWL.KNOWN_LEAGUE_IDS,
+    }
+
+
+@app.post("/api/crawl/open")
+def crawl_open(body: CrawlBody, user: dict = Depends(get_current_user)):
+    """크롬 창을 그 리그의 스코어맨 화면으로 연다. url을 주면 그 주소를 저장하고 사용한다."""
+    _check_league_for(body.code, body.scope, user)
+    udb = _user_db_of(user)
+    try:
+        url = (body.url or "").strip()
+        if url:
+            url = CRAWL.set_source(udb, body.scope, body.code, url)
+        else:
+            url = CRAWL.get_source(udb, body.scope, body.code)
+        if not url:
+            raise HTTPException(status_code=400,
+                                detail="이 리그의 스코어맨 주소를 먼저 입력해 주세요.")
+        CRAWL.open_page(url)
+    except CRAWL.CrawlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "url": url}
+
+
+class CrawlRoundBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    code: str
+    round: str   # noqa: A003 — "17" 또는 "17R"
+
+
+@app.post("/api/crawl/round")
+def crawl_round(body: CrawlRoundBody, user: dict = Depends(get_current_user)):
+    """열린 화면의 라운드를 바꾼다(시즌은 화면에서 직접 고른다)."""
+    _check_league_for(body.code, body.scope, user)
+    try:
+        return {"ok": True, "round": CRAWL.select_round(body.round)}
+    except CRAWL.CrawlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/crawl/fetch")
+def crawl_fetch(body: CrawlBody, user: dict = Depends(get_current_user)):
+    """
+    지금 크롬 화면에 떠 있는 경기들을 가져온다.
+    저장해 둔 치환 규칙을 적용한 뒤, 그래도 DB에 없는 팀명은 따로 알려준다.
+    """
+    _check_league_for(body.code, body.scope, user)
+    db = _resolve_scope_db(body.scope, user)
+    udb = _user_db_of(user)
+    try:
+        res = CRAWL.crawl_current(_l_value(db, body.scope, body.code))
+    except CRAWL.CrawlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    aliases = CRAWL.list_aliases(udb, body.scope, body.code)
+    rows = CRAWL.apply_aliases(res["rows"], aliases)
+    teams = _league_teams(db, body.code)
+    res["rows"] = rows
+    res["teams"] = teams
+    res["unknown_teams"] = CRAWL.unknown_teams(rows, teams)
+    res["applied_aliases"] = len(aliases)
+    return res
+
+
+@app.post("/api/crawl/aliases")
+def crawl_save_aliases(body: CrawlAliasBody, user: dict = Depends(get_current_user)):
+    """팀명 치환 규칙 저장 — 다음 가져오기부터 자동으로 적용된다."""
+    _check_league_for(body.code, body.scope, user)
+    udb = _user_db_of(user)
+    n = CRAWL.save_aliases(udb, body.scope, body.code, body.mapping)
+    return {"ok": True, "saved": n,
+            "aliases": CRAWL.list_aliases(udb, body.scope, body.code)}
+
+
+@app.post("/api/crawl/save")
+def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
+    """가져온 경기들을 리그에 등록한다. 엑셀 업로드와 완전히 같은 병합 규칙을 쓴다."""
+    _check_league_for(body.code, body.scope, user)
+    db = _resolve_scope_db(body.scope, user)
+    if not PATHS.can_write(body.scope, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+    if not body.rows:
+        raise HTTPException(status_code=400, detail="가져온 경기가 없습니다.")
+
+    # 업로드 양식과 같은 컬럼만 남긴다(_핸디기준 같은 참고용 필드는 저장하지 않는다)
+    raw = pd.DataFrame(body.rows)
+    for c in XLS.UPLOAD_TEMPLATE_COLS:
+        if c not in raw.columns:
+            raw[c] = None
+    new = engine.preprocess_data(raw[XLS.UPLOAD_TEMPLATE_COLS])
+    if new.empty:
+        raise HTTPException(status_code=400,
+                            detail="유효한 경기가 없습니다. 홈팀·원정팀이 채워져 있는지 확인하세요.")
+    return _merge_and_save(db, body.code, body.scope, new, body.confirm)
+
+
+@app.post("/api/crawl/close")
+def crawl_close(user: dict = Depends(get_current_user)):
+    CRAWL.close_page()
+    return {"ok": True}
 
 
 class DeleteMatchesBody(BaseModel):
