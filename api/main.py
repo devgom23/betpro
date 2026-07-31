@@ -505,16 +505,33 @@ def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
     }
 
 
+def _h2h_source_df(db: str, scope: str, code: str) -> pd.DataFrame:
+    """
+    상대전적 검색 대상.
+      master → 6대리그를 합친 통합DB(팀이 어느 리그 소속이든 다 뒤진다)
+      user   → 내 데이터는 '통합DB' 자체가 없으므로(리그별 완전 독립), 그 리그
+               하나만 본다. code 없이 호출되면(있을 수 없는 경우) 빈 결과를 낸다.
+    """
+    if scope != PATHS.SCOPE_USER:
+        return DATA.load_total_df(db)
+    if not code:
+        return pd.DataFrame()
+    return DATA.load_league_df(db, code)
+
+
 @app.get("/api/head_to_head")
 def head_to_head(scope: str = PATHS.SCOPE_MASTER,
+                 code: str = "",
                  home: str = "",
                  away: str = "",
                  limit: int = 15,
                  cross: bool = True,
                  user: dict = Depends(get_current_user)):
+    if code and scope == PATHS.SCOPE_USER:
+        _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
-    total_df = DATA.load_total_df(db)
-    return _head_to_head_calc(total_df, home, away, cross=cross, limit=limit)
+    df = _h2h_source_df(db, scope, code)
+    return _head_to_head_calc(df, home, away, cross=cross, limit=limit)
 
 
 @app.get("/api/leagues/{code}/match_excel")
@@ -551,8 +568,8 @@ def match_excel_download(code: str,
     ht = str(row.get("HT") or "").strip()
     at = str(row.get("AT") or "").strip()
 
-    total_df = DATA.load_total_df(db)
-    h2h = _head_to_head_calc(total_df, ht, at, cross=True, limit=hlimit)
+    h2h_df = _h2h_source_df(db, scope, code)
+    h2h = _head_to_head_calc(h2h_df, ht, at, cross=True, limit=hlimit)
 
     buf = XLS.build_match_excel(row, h2h)
     return _xlsx_response(

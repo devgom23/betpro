@@ -344,7 +344,7 @@ export default function MatchDetailModal({ code, row, scope, onClose }) {
             <h3>🔟 최근10경기 전적</h3>
             <RecentTable row={row} />
             <h3>🆚 상대전적</h3>
-            <HeadToHeadResult scope={scope} home={ht} away={at} cross limit={15} />
+            <HeadToHeadResult scope={scope} code={code} home={ht} away={at} cross limit={15} />
           </div>
         </div>
 

@@ -45,7 +45,9 @@ function RtBadge({ label }) {
 
 // 두 팀의 상대전적(핸승/핸무/무/역 기준). 상세보기 팝업과 리그탭 필터의
 // "상대전적 조회"가 공유하는 컴포넌트. 결과는 각 경기의 홈팀 기준으로 집계된다.
-export default function HeadToHeadResult({ scope, home, away, cross = true, limit = 15 }) {
+// code: 내 데이터(scope=user)에서는 필수 — 통합DB가 없어 그 리그 하나만 찾으므로,
+// 어느 리그에서 조회하는 건지 알아야 한다. 공식 데이터는 6대리그를 합쳐서 찾으므로 안 써도 된다.
+export default function HeadToHeadResult({ scope, code, home, away, cross = true, limit = 15 }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
 
@@ -56,8 +58,9 @@ export default function HeadToHeadResult({ scope, home, away, cross = true, limi
     setError('')
     api
       .get(
-        `/api/head_to_head?scope=${scope}&home=${encodeURIComponent(home)}` +
-          `&away=${encodeURIComponent(away)}&cross=${cross}&limit=${limit}`
+        `/api/head_to_head?scope=${scope}&code=${encodeURIComponent(code || '')}` +
+          `&home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}` +
+          `&cross=${cross}&limit=${limit}`
       )
       .then((res) => {
         if (!cancelled) setData(res)
@@ -68,7 +71,7 @@ export default function HeadToHeadResult({ scope, home, away, cross = true, limi
     return () => {
       cancelled = true
     }
-  }, [scope, home, away, cross, limit])
+  }, [scope, code, home, away, cross, limit])
 
   if (!home || !away) return null
   if (error) return <p className="error-text">{error}</p>

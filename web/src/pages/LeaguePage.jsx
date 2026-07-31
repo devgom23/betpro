@@ -324,7 +324,14 @@ export default function LeaguePage({ code, scope }) {
               ✕ 표로 돌아가기
             </button>
           </div>
-          <HeadToHeadResult scope={scope} home={h2h.home} away={h2h.away} cross={h2h.cross} limit={50} />
+          <HeadToHeadResult
+            scope={scope}
+            code={code}
+            home={h2h.home}
+            away={h2h.away}
+            cross={h2h.cross}
+            limit={50}
+          />
         </>
       ) : (
         <>
