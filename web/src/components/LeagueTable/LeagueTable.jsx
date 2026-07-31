@@ -171,7 +171,7 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
                     }
                     return g.cols.map((c, ci) => {
                       const value = row[c.key]
-                      const style = cellStyle(g, c, value)
+                      const style = cellStyle(g, c, value, row)
                       const isHighlighted = highlightCols.includes(c.key)
                       return (
                         <td

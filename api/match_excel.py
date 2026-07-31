@@ -204,9 +204,15 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
     r += 1
 
     if has_score:
-        ws.cell(row=r, column=1,
-                value=f"{ht} {_int_or_blank(hs)} : {_int_or_blank(as_)} {at}").font = _BOLD
-        r += 1
+        hs_val, as_val = _int_or_blank(hs), _int_or_blank(as_)
+        # 이긴 팀 점수만 빨간 강조(무승부는 그대로) — 화면의 winner-score와 동일 규칙.
+        # 셀 하나에 다 넣으면 부분 강조가 안 되어 홈/원정/점수/구분자를 각 칸에 나눠 적는다.
+        r = write_row([ht, hs_val, ":", as_val, at], r, font=_BOLD)
+        if isinstance(hs_val, int) and isinstance(as_val, int):
+            if hs_val > as_val:
+                ws.cell(row=r - 1, column=2).font = _WINNER_FONT
+            elif as_val > hs_val:
+                ws.cell(row=r - 1, column=4).font = _WINNER_FONT
     r += 1
     section_start = r  # 배당/상대전적이 나란히 시작하는 행
 
@@ -622,9 +628,18 @@ def _format_cell(group, col, value):
     return "" if _blank(value) else str(value)
 
 
-def _cell_style(group, col, value):
-    """columnGroups.js cellStyle()과 동일한 배경/글자색 규칙. {bg, fg, bold} 또는 None."""
+def _cell_style(group, col, value, row=None):
+    """columnGroups.js cellStyle()과 동일한 배경/글자색 규칙. {bg, fg, bold} 또는 None.
+    row는 HS/AS처럼 '이 행의 다른 컬럼 값'을 봐야 할 때만 쓴다(이긴 팀 점수 강조)."""
     g1, sub = group["label1"], col["sub"]
+
+    if g1 == "경기정보" and sub in ("HS", "AS") and row is not None:
+        hs, as_ = _num(row.get("HS")), _num(row.get("AS"))
+        if hs is not None and as_ is not None and hs != as_:
+            winner = "HS" if hs > as_ else "AS"
+            if sub == winner:
+                return {"fg": "C62828", "bold": True}
+        return None
 
     if g1 == "경기정보" and sub == "RT":
         code = _rt_code(value)
@@ -736,7 +751,7 @@ def build_table_excel(columns, rows, title: str = "분석표") -> io.BytesIO:
         for c_i, (g, col) in enumerate(leaf_meta, start=1):
             value = row.get(col["key"])
             cell = ws.cell(row=r_i, column=c_i, value=_format_cell(g, col, value))
-            style = _cell_style(g, col, value)
+            style = _cell_style(g, col, value, row)
             if style:
                 if "bg" in style:
                     cell.fill = PatternFill("solid", fgColor=style["bg"])

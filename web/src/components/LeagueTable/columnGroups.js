@@ -143,9 +143,20 @@ export function formatCell(group, col, value) {
 }
 
 // ── 셀 배경/글자색 (인라인 style 객체로 반환) ──
-export function cellStyle(group, col, value) {
+// row는 HS/AS처럼 '이 행의 다른 컬럼 값'을 봐야 할 때만 쓴다(예: 이긴 팀 점수 강조).
+export function cellStyle(group, col, value, row) {
   const g1 = group.label1
   const sub = col.sub
+
+  if (g1 === '경기정보' && (sub === 'HS' || sub === 'AS') && row) {
+    const hs = toNum(row.HS)
+    const as_ = toNum(row.AS)
+    if (hs !== null && as_ !== null && hs !== as_) {
+      const winner = hs > as_ ? 'HS' : 'AS'
+      if (sub === winner) return { color: '#C62828', fontWeight: 700 }
+    }
+    return null
+  }
 
   if (g1 === '경기정보' && sub === 'RT') {
     const code = rtCodeOf(value)

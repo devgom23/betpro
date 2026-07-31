@@ -69,6 +69,10 @@
   margin: 0 10px;
 }
 
+.modal-score .winner-score {
+  color: #c62828;
+}
+
 .modal-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;

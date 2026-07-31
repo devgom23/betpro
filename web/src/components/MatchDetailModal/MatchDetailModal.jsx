@@ -23,6 +23,13 @@ function RtBadge({ label }) {
   )
 }
 
+// 점수가 서로 다를 때만 이긴 쪽 점수를 강조한다(무승부는 강조 없음) — 상대전적 화면과 동일 규칙
+function scoreClass(hs, as_, side) {
+  if (hs === null || hs === undefined || as_ === null || as_ === undefined) return undefined
+  const winner = hs > as_ ? 'home' : as_ > hs ? 'away' : null
+  return winner === side ? 'winner-score' : undefined
+}
+
 function numOrDash(v, digits = 2) {
   if (v === null || v === undefined || v === '') return '-'
   const n = Number(v)
@@ -312,7 +319,13 @@ export default function MatchDetailModal({ code, row, scope, onClose }) {
         </p>
         {hasScore && (
           <p className="modal-score">
-            {ht} <strong>{Math.trunc(row.HS)} : {Math.trunc(row.AS)}</strong> {at}
+            {ht}{' '}
+            <strong>
+              <span className={scoreClass(row.HS, row.AS, 'home')}>{Math.trunc(row.HS)}</span>
+              {' : '}
+              <span className={scoreClass(row.HS, row.AS, 'away')}>{Math.trunc(row.AS)}</span>
+            </strong>{' '}
+            {at}
           </p>
         )}
 
