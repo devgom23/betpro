@@ -1028,6 +1028,140 @@ def delete_matches(code: str, body: DeleteMatchesBody, user: dict = Depends(get_
     return {"deleted": len(to_delete), "remaining": len(remaining)}
 
 
+# ─────────────────────────── 결과·핸디 직접 입력 ───────────────────────────
+# RT(경기결과 구분)·KH(국내핸디)·FH(해외핸디)를 화면에서 바로 채워 넣는 기능.
+# 크롤링은 이 세 값을 못 채우므로(RT는 판정 기준이 사용자 재량, KH·FH도 방향을 사람이
+# 정해야 함) 여기서 직접 입력한다. 26개 지표·플핸예측 등 분석 컬럼은 절대 건드리지
+# 않는다 — 그 세 칸만 바뀌고, 표본 재계산은 기존 업로드/재계산 경로에서만 일어난다.
+RT_LABEL_TO_NUM = {"핸승": 1, "핸무": 2, "무": 3, "역": 4}
+HANDICAP_CHOICES = {-1.0, 1.0}
+
+
+@app.get("/api/leagues/{code}/edit_rows")
+def edit_rows_list(code: str, scope: str = PATHS.SCOPE_MASTER,
+                   season: Optional[str] = None, round: Optional[str] = None,   # noqa: A002
+                   only_blank: bool = False,
+                   user: dict = Depends(get_current_user)):
+    """
+    결과·핸디 입력 화면용 목록. 저장된 값을 불러오기만 한다(재계산 없음).
+    only_blank=true면 RT·KH·FH 중 하나라도 비어 있는 경기만 돌려준다.
+    """
+    _check_league_for(code, scope, user)
+    db = _resolve_scope_db(scope, user)
+    df = DATA.load_league_df(db, code)   # 원본(분석 컬럼 없이) — 재계산 대상 아님
+    if df.empty:
+        return {"rows": [], "season": None, "round": None}
+
+    sub, season, round = _apply_league_filters(df, season, round, {})
+
+    cols = ["S", "R", "No", "DT", "HT", "AT", "HS", "AS", "RT",
+            "KW", "KD", "KL", "KH", "FW", "FD", "FL", "FH"]
+    cols = [c for c in cols if c in sub.columns]
+    view = sub[cols].copy()
+    view["RT_label"] = pd.to_numeric(view.get("RT"), errors="coerce").map(
+        {v: k for k, v in RT_LABEL_TO_NUM.items()})
+
+    if only_blank:
+        blank = pd.Series(False, index=view.index)
+        for c in ("RT", "KH", "FH"):
+            if c in sub.columns:
+                blank = blank | pd.to_numeric(sub[c], errors="coerce").isna()
+        view = view[blank]
+
+    if "S" in view.columns and "R" in view.columns and "No" in view.columns:
+        sort_key = pd.DataFrame({
+            "S": view["S"].astype(str),
+            "R": view["R"].map(_round_sort_key),
+            "No": pd.to_numeric(view["No"], errors="coerce"),
+        }, index=view.index)
+        view = view.loc[sort_key.sort_values(["S", "R", "No"]).index]
+    return {"rows": DATA.df_to_records(view), "season": season, "round": round,
+            "total": len(sub)}
+
+
+class EditRowItem(BaseModel):
+    S: str
+    R: str
+    No: float
+    HT: str
+    AT: str
+    RT: Optional[str] = None    # '핸승'/'핸무'/'무'/'역' 또는 None(지우기)
+    KH: Optional[float] = None
+    FH: Optional[float] = None
+
+
+class EditRowsBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    rows: list[EditRowItem]
+
+
+@app.post("/api/leagues/{code}/edit_rows")
+def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_current_user)):
+    """
+    RT/KH/FH만 갱신한다. 그 외 컬럼(26개 지표·플핸예측 포함)은 전혀 건드리지 않는다.
+    화면이 항상 그 경기의 '현재 선택 상태'를 통째로 보내므로, None은 그대로 '값 없음(공란)'
+    으로 저장한다 — 부분 수정이 아니라 세 칸의 전체 상태를 매번 확정 짓는 방식이다.
+    """
+    _check_league_for(code, body.scope, user)
+    if not PATHS.can_write(body.scope, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+    if not body.rows:
+        raise HTTPException(status_code=400, detail="수정할 경기가 없습니다.")
+
+    for item in body.rows:
+        if item.RT is not None and item.RT not in RT_LABEL_TO_NUM:
+            raise HTTPException(status_code=400,
+                                detail=f"RT는 핸승/핸무/무/역 중 하나여야 합니다: {item.RT!r}")
+        for label, val in (("KH", item.KH), ("FH", item.FH)):
+            if val is not None and val not in HANDICAP_CHOICES:
+                raise HTTPException(status_code=400,
+                                    detail=f"{label}는 -1 또는 +1이어야 합니다: {val!r}")
+
+    db = _resolve_scope_db(body.scope, user)
+    df = DATA.load_league_df(db, code)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="데이터가 없습니다.")
+    # 세 칸 다 숫자 컬럼으로 강제한다 — 한 번도 값이 안 들어간 컬럼은 전부 NULL이라
+    # object dtype으로 남아 있을 수 있고, 그 상태로 저장하면 SQLite가 TEXT 타입을
+    # 잡아 -1.0 같은 값이 문자열 "-1.0"으로 들어가 버린다(엑셀에서 숫자로 안 읽힘).
+    for c in ("RT", "KH", "FH"):
+        df[c] = pd.to_numeric(df[c], errors="coerce") if c in df.columns else np.nan
+
+    # No는 DB에 float으로 저장돼 있어 문자열 비교('1' vs '1.0')가 어긋날 수 있으므로
+    # 숫자로 비교한다. S/R/HT/AT는 문자열로 비교한다.
+    no_num = pd.to_numeric(df["No"], errors="coerce")
+    str_cols = {c: df[c].astype(str) for c in ("S", "R", "HT", "AT")}
+
+    updated = 0
+    not_found = []
+    for item in body.rows:
+        mask = (
+            (str_cols["S"] == str(item.S)) & (str_cols["R"] == str(item.R)) &
+            (str_cols["HT"] == item.HT) & (str_cols["AT"] == item.AT) &
+            (no_num == float(item.No))
+        )
+        idx = df.index[mask]
+        if idx.empty:
+            not_found.append(f"{item.S} {item.R} No.{item.No} {item.HT} vs {item.AT}")
+            continue
+        df.loc[idx, "RT"] = RT_LABEL_TO_NUM.get(item.RT) if item.RT is not None else np.nan
+        df.loc[idx, "KH"] = item.KH if item.KH is not None else np.nan
+        df.loc[idx, "FH"] = item.FH if item.FH is not None else np.nan
+        updated += len(idx)
+
+    if body.scope == PATHS.SCOPE_MASTER:
+        PATHS.backup_master()
+
+    con = sqlite3.connect(db)
+    try:
+        df.to_sql(code, con, if_exists="replace", index=False)
+    finally:
+        con.close()
+    PATHS.stamp_updated(db)
+
+    return {"ok": True, "updated": updated, "not_found": not_found}
+
+
 # ─────────────────────────── 엔진 실시간 분석 ───────────────────────────
 class AnalyzeBody(BaseModel):
     scope: str = PATHS.SCOPE_MASTER

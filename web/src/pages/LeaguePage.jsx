@@ -8,6 +8,7 @@ import RtSummaryBar, { PickSummaryBar } from '../components/RtSummaryBar/RtSumma
 import UploadTemplateModal from '../components/UploadTemplateModal/UploadTemplateModal'
 import DeleteMatchesModal from '../components/DeleteMatchesModal/DeleteMatchesModal'
 import CrawlModal from '../components/CrawlModal/CrawlModal'
+import ResultEditModal from '../components/ResultEditModal/ResultEditModal'
 
 const ODDS_KEYS = ['kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl']
 
@@ -57,6 +58,7 @@ export default function LeaguePage({ code, scope }) {
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showCrawlModal, setShowCrawlModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [leagues, setLeagues] = useState([])
 
   // 업로드 표본 생성 / 삭제 선택 모달의 "리그 선택" 옵션용.
@@ -68,18 +70,32 @@ export default function LeaguePage({ code, scope }) {
       .catch(() => setLeagues([]))
   }, [scope])
 
-  // 리그/스코프가 바뀌면 시즌·라운드 선택지부터 다시 불러온다
+  // 리그/스코프가 바뀌면 시즌·라운드 선택지부터 다시 불러온다.
+  // reloadKey만 바뀐 경우(저장/삭제 후 새로고침)는 진짜로 리그를 바꾼 게 아니므로
+  // filters/query/h2h를 비우지 않는다 — 그걸 비우면 아래 렌더의 "불러오는 중..." 가드에
+  // 걸려 화면 전체(열려 있는 입력 모달 포함)가 통째로 언마운트됐다가 다시 마운트되면서
+  // 모달 안의 상태(저장 완료 안내, 진행 중이던 입력 등)가 날아가 버린다.
+  const prevLeagueKeyRef = useRef(`${code}:${scope}`)
   useEffect(() => {
     let cancelled = false
-    setFilters(null)
-    setQuery(null)
-    setH2h(null)
+    const leagueKey = `${code}:${scope}`
+    const isNewLeague = prevLeagueKeyRef.current !== leagueKey
+    prevLeagueKeyRef.current = leagueKey
+    if (isNewLeague) {
+      setFilters(null)
+      setQuery(null)
+      setH2h(null)
+    }
     api
       .get(`/api/leagues/${code}/filters?scope=${scope}`)
       .then((res) => {
         if (cancelled) return
         setFilters(res)
-        setQuery({ season: res.latest?.season ?? 'ALL', round: res.latest?.round ?? 'ALL' })
+        setQuery((prev) =>
+          isNewLeague || !prev
+            ? { season: res.latest?.season ?? 'ALL', round: res.latest?.round ?? 'ALL' }
+            : prev
+        )
       })
       .catch((err) => {
         if (!cancelled) setError(err.message)
@@ -220,6 +236,13 @@ export default function LeaguePage({ code, scope }) {
               </button>
               <button
                 className="btn-reset"
+                onClick={() => setShowEditModal(true)}
+                title="경기결과(RT)·국내핸디(KH)·해외핸디(FH)를 직접 입력합니다"
+              >
+                📝 결과·핸디 입력
+              </button>
+              <button
+                className="btn-reset"
                 onClick={() => setShowTemplateModal(true)}
                 title="리그·시즌·라운드를 입력해 업로드용 표본 엑셀을 만듭니다"
               >
@@ -332,6 +355,16 @@ export default function LeaguePage({ code, scope }) {
             '경기 Data 삭제 선택'을 클릭하시면 삭제할 리그 및 경기를 선택한 후 삭제를 하시면 됩니다.
           </span>
         </div>
+      )}
+
+      {showEditModal && (
+        <ResultEditModal
+          code={code}
+          scope={scope}
+          label={leagues.find((l) => l.code === code)?.label}
+          onClose={() => setShowEditModal(false)}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
       )}
 
       {showCrawlModal && (

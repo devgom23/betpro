@@ -1,0 +1,71 @@
+/* 결과·핸디 입력 창. 배경/카드/닫기는 상세보기 팝업(MatchDetailModal.css)의
+   .modal-backdrop / .modal-card / .modal-close 를 그대로 재사용한다. */
+.edit-card {
+  max-width: 920px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.edit-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.edit-filter-row select {
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.edit-blank-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.edit-empty {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.edit-table td,
+.edit-table th {
+  white-space: nowrap;
+}
+
+.edit-table .winner-score {
+  color: #c62828;
+  font-weight: 700;
+}
+
+.edit-table select {
+  padding: 3px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.edit-count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
