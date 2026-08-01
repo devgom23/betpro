@@ -120,9 +120,13 @@ export function formatCell(group, col, value) {
     const n = toNum(value)
     return n === null ? '' : String(Math.trunc(n))
   }
-  if (g1 === '일반정보' && (sub === 'No' || sub === 'TM')) {
+  if (g1 === '일반정보' && sub === 'No') {
     const n = toNum(value)
     return n === null ? '' : String(Math.trunc(n))
+  }
+  if (g1 === '일반정보' && sub === 'TM') {
+    const n = toNum(value)
+    return n === null ? '' : String(Math.trunc(n)).padStart(4, '0')
   }
   if (g1 === '국내배당' || g1 === '해외배당') {
     const n = toNum(value)

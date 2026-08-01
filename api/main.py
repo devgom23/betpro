@@ -1052,6 +1052,10 @@ def delete_matches(code: str, body: DeleteMatchesBody, user: dict = Depends(get_
 # 않는다 — 그 세 칸만 바뀌고, 표본 재계산은 기존 업로드/재계산 경로에서만 일어난다.
 RT_LABEL_TO_NUM = {"핸승": 1, "핸무": 2, "무": 3, "역": 4}
 HANDICAP_CHOICES = {-1.0, 1.0}
+# RT/KH/FH를 뺀 나머지 직접입력 대상 — 전부 순수 숫자(스코어·배당)라 규칙이 동일하다.
+SCORE_FIELDS = ("HS", "AS")
+ODDS_FIELDS_EDIT = ("KW", "KD", "KL", "KHW", "KHD", "KHL", "FW", "FD", "FL", "FHW", "FHD", "FHL")
+NUMERIC_EDIT_FIELDS = SCORE_FIELDS + ("KH", "FH") + ODDS_FIELDS_EDIT
 
 
 @app.get("/api/leagues/{code}/edit_rows")
@@ -1072,7 +1076,8 @@ def edit_rows_list(code: str, scope: str = PATHS.SCOPE_MASTER,
     sub, season, round = _apply_league_filters(df, season, round, {})
 
     cols = ["S", "R", "No", "DT", "HT", "AT", "HS", "AS", "RT",
-            "KW", "KD", "KL", "KH", "FW", "FD", "FL", "FH"]
+            "KW", "KD", "KL", "KH", "KHW", "KHD", "KHL",
+            "FW", "FD", "FL", "FH", "FHW", "FHD", "FHL"]
     cols = [c for c in cols if c in sub.columns]
     view = sub[cols].copy()
     view["RT_label"] = pd.to_numeric(view.get("RT"), errors="coerce").map(
@@ -1103,8 +1108,22 @@ class EditRowItem(BaseModel):
     HT: str
     AT: str
     RT: Optional[str] = None    # '핸승'/'핸무'/'무'/'역' 또는 None(지우기)
+    HS: Optional[float] = None
+    AS: Optional[float] = None
+    KW: Optional[float] = None
+    KD: Optional[float] = None
+    KL: Optional[float] = None
     KH: Optional[float] = None
+    KHW: Optional[float] = None
+    KHD: Optional[float] = None
+    KHL: Optional[float] = None
+    FW: Optional[float] = None
+    FD: Optional[float] = None
+    FL: Optional[float] = None
     FH: Optional[float] = None
+    FHW: Optional[float] = None
+    FHD: Optional[float] = None
+    FHL: Optional[float] = None
 
 
 class EditRowsBody(BaseModel):
@@ -1115,9 +1134,10 @@ class EditRowsBody(BaseModel):
 @app.post("/api/leagues/{code}/edit_rows")
 def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_current_user)):
     """
-    RT/KH/FH만 갱신한다. 그 외 컬럼(26개 지표·플핸예측 포함)은 전혀 건드리지 않는다.
-    화면이 항상 그 경기의 '현재 선택 상태'를 통째로 보내므로, None은 그대로 '값 없음(공란)'
-    으로 저장한다 — 부분 수정이 아니라 세 칸의 전체 상태를 매번 확정 짓는 방식이다.
+    RT와 스코어(HS/AS)·국내/해외 배당·국내/해외 핸디배당만 갱신한다.
+    26개 지표·플핸예측 등 분석 컬럼은 전혀 건드리지 않는다.
+    화면이 항상 그 경기의 '현재 입력 상태'를 통째로 보내므로, None은 그대로 '값 없음(공란)'
+    으로 저장한다 — 부분 수정이 아니라 칸의 전체 상태를 매번 확정 짓는 방식이다.
     """
     _check_league_for(code, body.scope, user)
     if not PATHS.can_write(body.scope, user.get("role")):
@@ -1133,15 +1153,20 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
             if val is not None and val not in HANDICAP_CHOICES:
                 raise HTTPException(status_code=400,
                                     detail=f"{label}는 -1 또는 +1이어야 합니다: {val!r}")
+        for field in SCORE_FIELDS + ODDS_FIELDS_EDIT:
+            val = getattr(item, field)
+            if val is not None and val < 0:
+                raise HTTPException(status_code=400,
+                                    detail=f"{field}는 0 이상이어야 합니다: {val!r}")
 
     db = _resolve_scope_db(body.scope, user)
     df = DATA.load_league_df(db, code)
     if df.empty:
         raise HTTPException(status_code=404, detail="데이터가 없습니다.")
-    # 세 칸 다 숫자 컬럼으로 강제한다 — 한 번도 값이 안 들어간 컬럼은 전부 NULL이라
+    # 입력 대상 칸을 전부 숫자 컬럼으로 강제한다 — 한 번도 값이 안 들어간 컬럼은 전부 NULL이라
     # object dtype으로 남아 있을 수 있고, 그 상태로 저장하면 SQLite가 TEXT 타입을
     # 잡아 -1.0 같은 값이 문자열 "-1.0"으로 들어가 버린다(엑셀에서 숫자로 안 읽힘).
-    for c in ("RT", "KH", "FH"):
+    for c in ("RT",) + NUMERIC_EDIT_FIELDS:
         df[c] = pd.to_numeric(df[c], errors="coerce") if c in df.columns else np.nan
 
     # No는 DB에 float으로 저장돼 있어 문자열 비교('1' vs '1.0')가 어긋날 수 있으므로
@@ -1162,8 +1187,9 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
             not_found.append(f"{item.S} {item.R} No.{item.No} {item.HT} vs {item.AT}")
             continue
         df.loc[idx, "RT"] = RT_LABEL_TO_NUM.get(item.RT) if item.RT is not None else np.nan
-        df.loc[idx, "KH"] = item.KH if item.KH is not None else np.nan
-        df.loc[idx, "FH"] = item.FH if item.FH is not None else np.nan
+        for field in NUMERIC_EDIT_FIELDS:
+            val = getattr(item, field)
+            df.loc[idx, field] = val if val is not None else np.nan
         updated += len(idx)
 
     if body.scope == PATHS.SCOPE_MASTER:

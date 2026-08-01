@@ -5,27 +5,105 @@ import './ResultEditModal.css'
 const ALL = 'ALL'
 const RT_OPTIONS = ['', '핸승', '핸무', '무', '역']
 const HANDICAP_OPTIONS = ['', '-1', '+1']
+// 국내(K)/해외(F) 배당 그룹 — 메인 분석표(경기정보 옆 국내배당/해외배당)와 같은 순서·코드.
+const ODDS_GROUPS = [
+  { prefix: 'K', title: '국내배당' },
+  { prefix: 'F', title: '해외배당' },
+]
 
-function numOrDash(v) {
-  return v === null || v === undefined || v === '' ? '-' : v
+function scoreInit(v) {
+  return v === null || v === undefined || v === '' ? '' : String(Math.trunc(Number(v)))
 }
 
-// 배당은 항상 소수 둘째 자리까지(3 → 3.00) — 참고용 국내/해외 승무패 칸에 쓴다
-function oddsOrDash(v) {
-  if (v === null || v === undefined || v === '') return '-'
+// 배당은 항상 소수 둘째 자리로 맞춰 보여준다(3 → 3.00). 입력 중엔 사용자가 친 그대로 둔다.
+function oddsInit(v) {
+  if (v === null || v === undefined || v === '') return ''
   const n = Number(v)
-  return Number.isNaN(n) ? '-' : n.toFixed(2)
+  return Number.isNaN(n) ? '' : n.toFixed(2)
 }
 
-// 점수가 둘 다 있고 서로 다를 때만 이긴 쪽 점수를 강조한다(무승부·예정 경기는 강조 없음)
+function handicapInit(v) {
+  return v === null || v === undefined || v === '' ? '' : String(v > 0 ? '+1' : '-1')
+}
+
+function numOrNull(s) {
+  return s === '' || s === null || s === undefined ? null : parseFloat(s)
+}
+
+// 점수가 둘 다 있고 서로 다를 때만 이긴 쪽을 강조한다(무승부·예정 경기는 강조 없음).
+// 지금 입력 중인 값(문자열) 기준으로 판단 — 저장 전에도 바로 반영되게.
 function scoreClass(hs, as_, side) {
-  if (hs === null || hs === undefined || as_ === null || as_ === undefined) return undefined
-  const winner = hs > as_ ? 'home' : as_ > hs ? 'away' : null
-  return winner === side ? 'winner-score' : undefined
+  if (hs === '' || as_ === '') return undefined
+  const h = Number(hs)
+  const a = Number(as_)
+  if (Number.isNaN(h) || Number.isNaN(a) || h === a) return undefined
+  return (h > a ? 'home' : 'away') === side ? 'winner-score' : undefined
 }
 
-// 경기결과(RT)·국내핸디(KH)·해외핸디(FH)를 화면에서 직접 입력한다.
-// 크롤링이 못 채우는 세 값만 갱신하고, 26개 지표·플핸예측은 전혀 건드리지 않는다.
+function OddsCell({ value, onChange }) {
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      className="odds-input"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="-"
+    />
+  )
+}
+
+function HandicapCell({ value, onChange }) {
+  return (
+    <select className="handicap-select" value={value} onChange={(e) => onChange(e.target.value)}>
+      {HANDICAP_OPTIONS.map((o) => (
+        <option key={o || 'blank'} value={o}>
+          {o || '미정'}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+// 국내/해외 한 그룹(승·무·패·핸디·H승·H무·H패 7칸)을 그린다. prefix='K'|'F'.
+function OddsGroupCells({ prefix, r, i, updateRow, dividerAfter }) {
+  const w = `${prefix}W`
+  const d = `${prefix}D`
+  const l = `${prefix}L`
+  const h = `${prefix}H`
+  const hw = `${prefix}HW`
+  const hd = `${prefix}HD`
+  const hl = `${prefix}HL`
+  return (
+    <>
+      <td>
+        <OddsCell value={r[`_${w}`]} onChange={(v) => updateRow(i, `_${w}`, v)} />
+      </td>
+      <td>
+        <OddsCell value={r[`_${d}`]} onChange={(v) => updateRow(i, `_${d}`, v)} />
+      </td>
+      <td>
+        <OddsCell value={r[`_${l}`]} onChange={(v) => updateRow(i, `_${l}`, v)} />
+      </td>
+      <td>
+        <HandicapCell value={r[`_${h}`]} onChange={(v) => updateRow(i, `_${h}`, v)} />
+      </td>
+      <td>
+        <OddsCell value={r[`_${hw}`]} onChange={(v) => updateRow(i, `_${hw}`, v)} />
+      </td>
+      <td>
+        <OddsCell value={r[`_${hd}`]} onChange={(v) => updateRow(i, `_${hd}`, v)} />
+      </td>
+      <td className={dividerAfter ? 'group-divider' : undefined}>
+        <OddsCell value={r[`_${hl}`]} onChange={(v) => updateRow(i, `_${hl}`, v)} />
+      </td>
+    </>
+  )
+}
+
+// 경기결과(RT)·스코어(HS/AS)·국내/해외 배당·국내/해외 핸디배당을 화면에서 직접 입력한다.
+// 이미 값이 있으면 그 값을 그대로 채워서 보여주고, 저장하면 이 칸들만 갱신된다 —
+// 26개 지표·플핸예측 등 분석 컬럼은 전혀 건드리지 않는다.
 export default function ResultEditModal({ code, scope, label, onClose, onSaved }) {
   const [filters, setFilters] = useState(null)
   const [season, setSeason] = useState(ALL)
@@ -72,8 +150,22 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
           (res.rows || []).map((r) => ({
             ...r,
             _RT: r.RT_label || '',
-            _KH: r.KH === null || r.KH === undefined ? '' : String(r.KH > 0 ? '+1' : '-1'),
-            _FH: r.FH === null || r.FH === undefined ? '' : String(r.FH > 0 ? '+1' : '-1'),
+            _HS: scoreInit(r.HS),
+            _AS: scoreInit(r.AS),
+            _KW: oddsInit(r.KW),
+            _KD: oddsInit(r.KD),
+            _KL: oddsInit(r.KL),
+            _KH: handicapInit(r.KH),
+            _KHW: oddsInit(r.KHW),
+            _KHD: oddsInit(r.KHD),
+            _KHL: oddsInit(r.KHL),
+            _FW: oddsInit(r.FW),
+            _FD: oddsInit(r.FD),
+            _FL: oddsInit(r.FL),
+            _FH: handicapInit(r.FH),
+            _FHW: oddsInit(r.FHW),
+            _FHD: oddsInit(r.FHD),
+            _FHL: oddsInit(r.FHL),
           }))
         )
       })
@@ -109,16 +201,21 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
     setError('')
     setNotice('')
     try {
-      const payload = rows.map((r) => ({
-        S: r.S,
-        R: r.R,
-        No: r.No,
-        HT: r.HT,
-        AT: r.AT,
-        RT: r._RT || null,
-        KH: r._KH === '' ? null : parseFloat(r._KH),
-        FH: r._FH === '' ? null : parseFloat(r._FH),
-      }))
+      const oddsKeys = ['KW', 'KD', 'KL', 'KH', 'KHW', 'KHD', 'KHL', 'FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL']
+      const payload = rows.map((r) => {
+        const item = {
+          S: r.S,
+          R: r.R,
+          No: r.No,
+          HT: r.HT,
+          AT: r.AT,
+          RT: r._RT || null,
+          HS: numOrNull(r._HS),
+          AS: numOrNull(r._AS),
+        }
+        for (const k of oddsKeys) item[k] = numOrNull(r[`_${k}`])
+        return item
+      })
       const res = await api.post(`/api/leagues/${code}/edit_rows`, { scope, rows: payload })
       setNotice(`저장 완료: ${res.updated}건`)
       onSaved?.()
@@ -139,8 +236,8 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
 
         <h2 className="modal-title">📝 결과·핸디 입력</h2>
         <p className="modal-meta">
-          {label || code} · 경기결과(RT)·국내핸디(KH)·해외핸디(FH)만 갱신합니다. 26개 지표·
-          플핸예측은 바뀌지 않습니다.
+          {label || code} · 경기결과(RT)·스코어·국내/해외 배당·국내/해외 핸디배당을 입력·수정합니다.
+          이미 있는 값은 그대로 보여줍니다. 26개 지표·플핸예측은 바뀌지 않습니다.
         </p>
 
         <div className="edit-filter-row">
@@ -177,70 +274,73 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
           <p className="edit-empty">해당 조건에 맞는 경기가 없습니다.</p>
         ) : (
           <>
-            <table className="detail-table edit-table">
-              <thead>
-                <tr>
-                  <th>R</th>
-                  <th>No</th>
-                  <th>홈</th>
-                  <th>스코어</th>
-                  <th>원정</th>
-                  <th>국내(승/무/패)</th>
-                  <th>해외(승/무/패)</th>
-                  <th>RT</th>
-                  <th>KH</th>
-                  <th>FH</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={`${r.S}-${r.R}-${r.No}`}>
-                    <td>{r.R}</td>
-                    <td>{r.No}</td>
-                    <td>{r.HT}</td>
-                    <td>
-                      <span className={scoreClass(r.HS, r.AS, 'home')}>{numOrDash(r.HS)}</span>
-                      {' : '}
-                      <span className={scoreClass(r.HS, r.AS, 'away')}>{numOrDash(r.AS)}</span>
-                    </td>
-                    <td>{r.AT}</td>
-                    <td>
-                      {oddsOrDash(r.KW)} / {oddsOrDash(r.KD)} / {oddsOrDash(r.KL)}
-                    </td>
-                    <td>
-                      {oddsOrDash(r.FW)} / {oddsOrDash(r.FD)} / {oddsOrDash(r.FL)}
-                    </td>
-                    <td>
-                      <select value={r._RT} onChange={(e) => updateRow(i, '_RT', e.target.value)}>
-                        {RT_OPTIONS.map((o) => (
-                          <option key={o || 'blank'} value={o}>
-                            {o || '미정'}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <select value={r._KH} onChange={(e) => updateRow(i, '_KH', e.target.value)}>
-                        {HANDICAP_OPTIONS.map((o) => (
-                          <option key={o || 'blank'} value={o}>
-                            {o || '미정'}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <select value={r._FH} onChange={(e) => updateRow(i, '_FH', e.target.value)}>
-                        {HANDICAP_OPTIONS.map((o) => (
-                          <option key={o || 'blank'} value={o}>
-                            {o || '미정'}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
+            <div className="edit-table-scroll">
+              <table className="detail-table edit-table">
+                <thead>
+                  <tr>
+                    <th rowSpan={2}>R</th>
+                    <th rowSpan={2}>No</th>
+                    <th rowSpan={2}>홈</th>
+                    <th rowSpan={2}>스코어</th>
+                    <th rowSpan={2}>원정</th>
+                    <th rowSpan={2}>RT</th>
+                    {ODDS_GROUPS.map((g) => (
+                      <th key={g.prefix} colSpan={7} className="group-title">
+                        {g.title}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                  <tr>
+                    {ODDS_GROUPS.flatMap((g) =>
+                      [`${g.prefix}W`, `${g.prefix}D`, `${g.prefix}L`, `${g.prefix}H`,
+                       `${g.prefix}HW`, `${g.prefix}HD`, `${g.prefix}HL`].map((code) => (
+                        <th key={code}>{code}</th>
+                      ))
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={`${r.S}-${r.R}-${r.No}`}>
+                      <td>{r.R}</td>
+                      <td>{r.No}</td>
+                      <td>{r.HT}</td>
+                      <td className="score-cell">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={`score-input ${scoreClass(r._HS, r._AS, 'home') || ''}`}
+                          value={r._HS}
+                          onChange={(e) => updateRow(i, '_HS', e.target.value)}
+                          placeholder="-"
+                        />
+                        <span className="score-sep">:</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={`score-input ${scoreClass(r._HS, r._AS, 'away') || ''}`}
+                          value={r._AS}
+                          onChange={(e) => updateRow(i, '_AS', e.target.value)}
+                          placeholder="-"
+                        />
+                      </td>
+                      <td>{r.AT}</td>
+                      <td>
+                        <select value={r._RT} onChange={(e) => updateRow(i, '_RT', e.target.value)}>
+                          {RT_OPTIONS.map((o) => (
+                            <option key={o || 'blank'} value={o}>
+                              {o || '미정'}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <OddsGroupCells prefix="K" r={r} i={i} updateRow={updateRow} dividerAfter />
+                      <OddsGroupCells prefix="F" r={r} i={i} updateRow={updateRow} />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             <div className="edit-actions">
               <span className="edit-count">{rows.length}경기</span>

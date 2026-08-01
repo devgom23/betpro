@@ -607,9 +607,12 @@ def _format_cell(group, col, value):
     if g1 == "경기정보" and sub in ("HS", "AS"):
         n = _num(value)
         return "" if n is None else str(int(n))
-    if g1 == "일반정보" and sub in ("No", "TM"):
+    if g1 == "일반정보" and sub == "No":
         n = _num(value)
         return "" if n is None else str(int(n))
+    if g1 == "일반정보" and sub == "TM":
+        n = _num(value)
+        return "" if n is None else str(int(n)).zfill(4)
     if g1 in ("국내배당", "해외배당"):
         n = _num(value)
         if n is None:

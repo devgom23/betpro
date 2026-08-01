@@ -1,7 +1,7 @@
 /* 결과·핸디 입력 창. 배경/카드/닫기는 상세보기 팝업(MatchDetailModal.css)의
    .modal-backdrop / .modal-card / .modal-close 를 그대로 재사용한다. */
 .edit-card {
-  max-width: 920px;
+  max-width: 1160px;
   max-height: 85vh;
   overflow-y: auto;
 }
@@ -38,14 +38,29 @@
   font-size: 13px;
 }
 
+/* 배당 그룹까지 합치면 표가 카드 너비보다 넓어질 수 있어 표 안에서만 가로 스크롤한다 */
+.edit-table-scroll {
+  overflow-x: auto;
+}
+
+.edit-table {
+  width: max-content;
+  min-width: 100%;
+}
+
 .edit-table td,
 .edit-table th {
   white-space: nowrap;
 }
 
-.edit-table .winner-score {
-  color: #c62828;
-  font-weight: 700;
+.edit-table thead .group-title {
+  text-align: center;
+  background: var(--bg-surface-2);
+}
+
+/* 국내배당/해외배당 그룹 경계 — 다른 표의 굵은 구분선과 동일 규칙 */
+.edit-table .group-divider {
+  border-right: 2px solid var(--border-strong);
 }
 
 .edit-table select {
@@ -55,6 +70,45 @@
   background: var(--bg-input);
   color: var(--text-primary);
   font-size: 12px;
+}
+
+.odds-input {
+  width: 56px;
+  padding: 3px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.score-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.score-input {
+  width: 34px;
+  padding: 3px 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.score-sep {
+  color: var(--text-muted);
+}
+
+.score-input.winner-score {
+  border-color: #c62828;
+  color: #c62828;
+  font-weight: 700;
 }
 
 .edit-actions {
