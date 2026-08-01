@@ -36,6 +36,32 @@ function numOrDash(v, digits = 2) {
   return Number.isNaN(n) ? '-' : n.toFixed(digits)
 }
 
+// 팀이름 옆 (순위) — 그 라운드 직전까지의 순위(HP/AP). 시즌 초반 등 아직 순위가 없으면 생략.
+function rankSuffix(v) {
+  if (v === null || v === undefined || v === '') return ''
+  const n = Number(v)
+  return Number.isNaN(n) ? '' : `(${Math.trunc(n)}위)`
+}
+
+// TM은 'HHMM' 숫자(예: 1930)로 저장되어 있다 — "19:30"으로 보여준다.
+function formatTime(v) {
+  if (v === null || v === undefined || v === '') return ''
+  const n = Number(v)
+  if (Number.isNaN(n)) return ''
+  const s = String(Math.trunc(n)).padStart(4, '0')
+  return `${s.slice(0, 2)}:${s.slice(2)}`
+}
+
+// 폼(PPG) 값 구간별 색상 — 3.00~2.00 녹색 / 1.99~1.00 노란색 / 0.99~0.00 갈색
+function formStyle(v) {
+  if (v === null || v === undefined || v === '' || v === '-') return undefined
+  const n = Number(v)
+  if (Number.isNaN(n)) return undefined
+  if (n >= 2) return { background: '#2E7D32', color: '#fff', fontWeight: 700 }
+  if (n >= 1) return { background: '#FBC02D', color: '#1A1A1A', fontWeight: 700 }
+  return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
+}
+
 const SAMPLE_INDICATORS = [
   ['K-W', '국) 승'], ['K-L', '국) 패'], ['K-WL', '국) 승+패'], ['K-WDL', '국) 승+무+패'],
   ['K-W-HT', '국) 승=홈팀'], ['K-L-AT', '국) 패=원정팀'],
@@ -139,12 +165,12 @@ function FormTable({ row }) {
       </thead>
       <tbody>
         <tr>
-          <td>{formOrDash(row.HTF)}</td>
-          <td>{formOrDash(row.HRF)}</td>
-          <td>{formOrDash(row.HF)}</td>
-          <td>{formOrDash(row.AF)}</td>
-          <td>{formOrDash(row.ARF)}</td>
-          <td>{formOrDash(row.ATF)}</td>
+          <td style={formStyle(row.HTF)}>{formOrDash(row.HTF)}</td>
+          <td style={formStyle(row.HRF)}>{formOrDash(row.HRF)}</td>
+          <td style={formStyle(row.HF)}>{formOrDash(row.HF)}</td>
+          <td style={formStyle(row.AF)}>{formOrDash(row.AF)}</td>
+          <td style={formStyle(row.ARF)}>{formOrDash(row.ARF)}</td>
+          <td style={formStyle(row.ATF)}>{formOrDash(row.ATF)}</td>
         </tr>
       </tbody>
     </table>
@@ -309,11 +335,14 @@ export default function MatchDetailModal({ code, row, scope, onClose }) {
         </button>
 
         <h2 className="modal-title">
-          {ht} vs {at}
+          {ht}
+          {rankSuffix(row.HP)} vs {at}
+          {rankSuffix(row.AP)}
         </h2>
         <p className="modal-meta">
           {row.S} · {row.R}
           {row.DT ? ` · ${row.DT}` : ''}
+          {formatTime(row.TM) ? ` ${formatTime(row.TM)}` : ''}
           &nbsp;&nbsp;
           {rt ? <RtBadge label={rt} /> : <span className="modal-scheduled">예정 경기</span>}
         </p>
@@ -344,7 +373,7 @@ export default function MatchDetailModal({ code, row, scope, onClose }) {
             <h3>🔟 최근10경기 전적</h3>
             <RecentTable row={row} />
             <h3>🆚 상대전적</h3>
-            <HeadToHeadResult scope={scope} code={code} home={ht} away={at} cross limit={15} />
+            <HeadToHeadResult scope={scope} code={code} home={ht} away={at} cross />
           </div>
         </div>
 

@@ -9,6 +9,8 @@
 import io
 
 from openpyxl import Workbook
+from openpyxl.cell.rich_text import CellRichText, TextBlock
+from openpyxl.cell.text import InlineFont
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -117,17 +119,28 @@ def _form_or_dash(v):
     return "-" if v is None or v == "" else str(v)
 
 
-def _spaced_with_home_dot(results, venues):
+_HOME_LETTER_FONT = InlineFont(b=True, u="single")
+
+
+def _spaced_with_home_underline(results, venues):
     """results('WWDDL')와 venues('HAHAA', 같은 자리수의 H/A)를 같이 훑어서
-    화면의 '점 = 홈경기' 표시를 엑셀에서는 그 글자 위에 결합 문자(U+0307, dot above)로 얹는다."""
+    화면의 '점 = 홈경기' 표시를 엑셀에서는 그 글자에 밑줄로 표시한다.
+    (결합 문자(dot above) 방식은 엑셀/폰트에 따라 점이 잘 안 보여서 밑줄로 바꿨다)
+
+    글자 사이는 칸 2개로 띄우되, 그 공백을 별도 런(run)으로 두지 않고 글자 뒤에
+    붙여 한 런으로 만든다 — openpyxl의 xml:space="preserve" 처리(whitespace())가
+    "공백만 있는 런"은 못 알아채고 건너뛰어서, 공백만 담은 런을 따로 두면 진짜
+    엑셀에서 열었을 때 그 공백이 통째로 사라져 글자가 다 붙어 보인다."""
     if not results:
         return "-"
     venues = venues or ""
-    dot = "̇"   # COMBINING DOT ABOVE
-    chars = []
+    n = len(results)
+    parts = []
     for i, ch in enumerate(results):
-        chars.append(ch + dot if i < len(venues) and venues[i] == "H" else ch)
-    return " ".join(chars)
+        is_home = i < len(venues) and venues[i] == "H"
+        text = ch if i == n - 1 else ch + "  "
+        parts.append(TextBlock(_HOME_LETTER_FONT, text) if is_home else text)
+    return CellRichText(*parts)
 
 
 def _int_or_blank(v):
@@ -162,7 +175,8 @@ def _points_for(m, reference_team):
     return 1
 
 
-_RIGHT_COL = 7  # 'G' — 팝업의 오른쪽 칼럼(상대전적)이 시작하는 위치
+_RIGHT_COL = 8  # 'H' — 팝업의 오른쪽 칼럼(상대전적)이 시작하는 위치.
+# 왼쪽(지표별 표본 등)이 F열까지 쓰므로, G열은 비워 두 블록 사이에 한 칸 여백을 둔다.
 
 
 def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
@@ -174,7 +188,8 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
     ws = wb.active
     ws.title = "상세보기"
 
-    def write_row(values, row_idx, start_col=1, font=None, fill=None, align=None, border=None):
+    def write_row(values, row_idx, start_col=1, font=None, fill=None, align=None, border=None,
+                 number_format=None):
         for i, v in enumerate(values):
             cell = ws.cell(row=row_idx, column=start_col + i, value=v)
             cell.border = border or _BORDER
@@ -184,6 +199,8 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
                 cell.fill = fill
             if align:
                 cell.alignment = align
+            if number_format:
+                cell.number_format = number_format
         return row_idx + 1
 
     ht = str(row.get("HT") or "").strip()
@@ -227,8 +244,10 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
         ("해외 배당", "FW", "FD", "FL"),
         ("해외 핸디", "FHW", "FHD", "FHL"),
     ):
+        # 숫자를 그대로 넣으면 4.80처럼 끝의 0이 엑셀 기본서식(General)에서 사라져 4.8로
+        # 보인다 — 화면 팝업(toFixed(2))과 같은 자리수로 보이게 셀 서식을 소수 둘째자리로 고정.
         r = write_row([label, _num_or_dash(row.get(w)), _num_or_dash(row.get(d)),
-                       _num_or_dash(row.get(l))], r)
+                       _num_or_dash(row.get(l))], r, number_format="0.00")
     r += 1
 
     ws.cell(row=r, column=1, value="플핸 예측").font = _BOLD
@@ -327,10 +346,10 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
     ws.cell(row=head, column=_FORM_DIV_COL).border = _with_right_divider(_BORDER)
     line = rr
     # 홈팀은 왼쪽이 과거·오른쪽이 최신, 원정팀은 그 반대 (백엔드가 이미 그 순서로 만들어 둔다).
-    # 글자 위 결합점(dot above)은 화면의 '그 경기가 홈경기였다' 표시와 동일하다.
+    # 밑줄 친 글자는 화면의 '그 경기가 홈경기였다' 표시와 동일하다.
     rr = write_row([
-        _spaced_with_home_dot(row.get("HR10"), row.get("HR10H")), "", "",
-        _spaced_with_home_dot(row.get("AR10"), row.get("AR10H")), "", "",
+        _spaced_with_home_underline(row.get("HR10"), row.get("HR10H")), "", "",
+        _spaced_with_home_underline(row.get("AR10"), row.get("AR10H")), "", "",
     ], rr, start_col=_RIGHT_COL, font=_BOLD, align=_CENTER)
     ws.merge_cells(start_row=line, start_column=_RIGHT_COL,
                    end_row=line, end_column=_RIGHT_COL + 2)
@@ -338,7 +357,7 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
                    end_row=line, end_column=_RIGHT_COL + 5)
     ws.cell(row=line, column=_FORM_DIV_COL).border = _with_right_divider(_BORDER)
     rr += 1
-    ws.cell(row=rr, column=_RIGHT_COL, value="글자 위 점 = 그 팀 기준 홈경기")
+    ws.cell(row=rr, column=_RIGHT_COL, value="밑줄 친 글자 = 그 팀 기준 홈경기")
     rr += 1
 
     ws.cell(row=rr, column=_RIGHT_COL, value="상대전적").font = _BOLD
@@ -389,7 +408,7 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
         rr += 1
 
     widths = {1: 18, 2: 12, 3: 12, 4: 12, 5: 12, 6: 10,
-             7: 10, 8: 10, 9: 10, 10: 10, 11: 10, 12: 10, 13: 10, 14: 10}
+             7: 4, 8: 10, 9: 10, 10: 10, 11: 10, 12: 10, 13: 10, 14: 10, 15: 10}
     for col, width in widths.items():
         ws.column_dimensions[get_column_letter(col)].width = width
 

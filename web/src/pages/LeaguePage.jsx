@@ -8,6 +8,7 @@ import RtSummaryBar, { PickSummaryBar } from '../components/RtSummaryBar/RtSumma
 import UploadTemplateModal from '../components/UploadTemplateModal/UploadTemplateModal'
 import DeleteMatchesModal from '../components/DeleteMatchesModal/DeleteMatchesModal'
 import CrawlModal from '../components/CrawlModal/CrawlModal'
+import KrCrawlModal from '../components/KrCrawlModal/KrCrawlModal'
 import ResultEditModal from '../components/ResultEditModal/ResultEditModal'
 
 const ODDS_KEYS = ['kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl']
@@ -58,8 +59,13 @@ export default function LeaguePage({ code, scope }) {
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showCrawlModal, setShowCrawlModal] = useState(false)
+  const [showKrCrawlModal, setShowKrCrawlModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [leagues, setLeagues] = useState([])
+
+  // 재계산('내 데이터' 리그 1개 전용 — RT 없는 예정 경기만, 이 리그 하나만 대상)
+  const [busyRecomputePending, setBusyRecomputePending] = useState(false)
+  const [recomputeNotice, setRecomputeNotice] = useState('')
 
   // 업로드 표본 생성 / 삭제 선택 모달의 "리그 선택" 옵션용.
   // 스코프마다 리그가 다르므로(공식=6대리그 / 내 데이터=내가 만든 리그) 스코프별로 불러온다.
@@ -176,6 +182,23 @@ export default function LeaguePage({ code, scope }) {
     setExcelNotice('')
   }
 
+  async function runRecomputePending() {
+    setBusyRecomputePending(true)
+    setRecomputeNotice('')
+    try {
+      const res = await api.post(`/api/leagues/${code}/recompute`, {
+        scope, include_historical: false,
+      })
+      const n = res.summary[code] ?? 0
+      setRecomputeNotice(n > 0 ? `재분석 완료 → ${n}건` : '재분석 대상(예정 경기)이 없습니다.')
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setRecomputeNotice(`실패: ${err.message}`)
+    } finally {
+      setBusyRecomputePending(false)
+    }
+  }
+
   // 스코프/리그/현재 조회 시즌이 바뀌면 상대전적 조회용 팀 목록도 그 시즌 기준으로 다시 불러온다
   useEffect(() => {
     const season = query?.season ?? 'ALL'
@@ -221,7 +244,13 @@ export default function LeaguePage({ code, scope }) {
         <PickSummaryBar summary={filters.hit_summary} />
       </div>
 
-      <FilterForm filters={filters} onSearch={handleSearch} teams={teams} onH2HSearch={setH2h} />
+      <FilterForm
+        filters={filters}
+        leagueKey={`${code}:${scope}`}
+        onSearch={handleSearch}
+        teams={teams}
+        onH2HSearch={setH2h}
+      />
 
       {!h2h && (
         <div className="excel-bar">
@@ -233,6 +262,13 @@ export default function LeaguePage({ code, scope }) {
                 title="스코어맨 화면에서 경기·배당을 그대로 가져옵니다"
               >
                 🛰 Data 가져오기
+              </button>
+              <button
+                className="btn-reset"
+                onClick={() => setShowKrCrawlModal(true)}
+                title="젠토토 화면에서 국내배당(초기배당)을 가져와 기존 경기에 채웁니다"
+              >
+                🇰🇷 국내배당 가져오기
               </button>
               <button
                 className="btn-reset"
@@ -353,6 +389,15 @@ export default function LeaguePage({ code, scope }) {
         </>
       )}
 
+      {scope === 'user' && data.can_write && (
+        <div style={{ marginTop: 10 }}>
+          <button className="btn-primary" disabled={busyRecomputePending} onClick={runRecomputePending}>
+            {busyRecomputePending ? '재분석 중...' : '🔄 통합 및 예측 분석 실행'}
+          </button>
+          {recomputeNotice && <p className="recompute-notice">{recomputeNotice}</p>}
+        </div>
+      )}
+
       {user.role === 'admin' && scope === 'master' && (
         <div className="delete-select-bar">
           <button className="btn-reset" onClick={() => setShowDeleteModal(true)}>
@@ -380,6 +425,16 @@ export default function LeaguePage({ code, scope }) {
           scope={scope}
           label={leagues.find((l) => l.code === code)?.label}
           onClose={() => setShowCrawlModal(false)}
+          onSaved={() => setReloadKey((k) => k + 1)}
+        />
+      )}
+
+      {showKrCrawlModal && (
+        <KrCrawlModal
+          code={code}
+          scope={scope}
+          label={leagues.find((l) => l.code === code)?.label}
+          onClose={() => setShowKrCrawlModal(false)}
           onSaved={() => setReloadKey((k) => k + 1)}
         />
       )}

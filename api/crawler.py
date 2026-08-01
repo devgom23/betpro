@@ -348,8 +348,8 @@ def _ensure_tables(con):
                 " PRIMARY KEY (key, raw))")
 
 
-def _key(scope: str, code: str) -> str:
-    return f"{scope}:{code}"
+def _key(scope: str, code: str, source: str = "") -> str:
+    return f"{scope}:{code}:{source}" if source else f"{scope}:{code}"
 
 
 def default_source(code: str) -> str:
@@ -391,21 +391,22 @@ def set_source(db_path: str, scope: str, code: str, url: str) -> str:
     return url
 
 
-def list_aliases(db_path: str, scope: str, code: str) -> dict:
-    """{크롤링팀명: 등록팀명}. 한 번 치환해 두면 다음 크롤링부터 자동 적용된다."""
+def list_aliases(db_path: str, scope: str, code: str, source: str = "") -> dict:
+    """{크롤링팀명: 등록팀명}. 한 번 치환해 두면 다음 크롤링부터 자동 적용된다.
+    source를 다르게 주면(예: "kr") 같은 리그라도 다른 치환 규칙을 따로 저장한다."""
     if not db_path or not os.path.exists(db_path):
         return {}
     con = sqlite3.connect(db_path)
     try:
         _ensure_tables(con)
         rows = con.execute(f'SELECT raw, mapped FROM "{ALIAS_TABLE}" WHERE key = ?',
-                           (_key(scope, code),)).fetchall()
+                           (_key(scope, code, source),)).fetchall()
     finally:
         con.close()
     return {r: m for r, m in rows}
 
 
-def save_aliases(db_path: str, scope: str, code: str, mapping: dict) -> int:
+def save_aliases(db_path: str, scope: str, code: str, mapping: dict, source: str = "") -> int:
     """치환 규칙 저장. 값이 비면 그 규칙은 지운다."""
     con = sqlite3.connect(db_path)
     n = 0
@@ -418,12 +419,12 @@ def save_aliases(db_path: str, scope: str, code: str, mapping: dict) -> int:
                 continue
             if not mapped or mapped == raw:
                 con.execute(f'DELETE FROM "{ALIAS_TABLE}" WHERE key = ? AND raw = ?',
-                            (_key(scope, code), raw))
+                            (_key(scope, code, source), raw))
                 continue
             con.execute(
                 f'INSERT INTO "{ALIAS_TABLE}" (key, raw, mapped) VALUES (?, ?, ?) '
                 "ON CONFLICT(key, raw) DO UPDATE SET mapped = excluded.mapped",
-                (_key(scope, code), raw, mapped))
+                (_key(scope, code, source), raw, mapped))
             n += 1
         con.commit()
     finally:

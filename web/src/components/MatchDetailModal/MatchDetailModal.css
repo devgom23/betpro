@@ -85,6 +85,15 @@
   }
 }
 
+/* 그리드가 두 칸을 같은 높이로 늘려 주므로(기본 align-items:stretch), 오른쪽 칸을
+   세로 flex로 만들어 상대전적 스크롤 영역이 왼쪽 칸(지표별 표본)과 같은 높이가 되도록
+   남는 공간을 전부 채우게 한다 — .match-list-scroll이 이 칸의 직속 자식이라 가능하다
+   (HeadToHeadResult가 Fragment로 렌더링돼 따로 감싸는 div가 없기 때문). */
+.modal-col {
+  display: flex;
+  flex-direction: column;
+}
+
 .modal-col h3 {
   font-size: 13px;
   color: var(--text-secondary);

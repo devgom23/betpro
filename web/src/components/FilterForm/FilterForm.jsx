@@ -21,7 +21,7 @@ function makeDefaultDraft(latest) {
   }
 }
 
-export default function FilterForm({ filters, defaultQuery, onSearch, teams = [], onH2HSearch }) {
+export default function FilterForm({ filters, leagueKey, onSearch, teams = [], onH2HSearch }) {
   const [draft, setDraft] = useState(() => makeDefaultDraft(filters?.latest))
   const [warning, setWarning] = useState('')
 
@@ -29,11 +29,15 @@ export default function FilterForm({ filters, defaultQuery, onSearch, teams = []
   const [h2hAway, setH2hAway] = useState('')
   const [h2hCross, setH2hCross] = useState(false)
 
-  // 리그를 바꾸는 등 필터 선택지 자체가 바뀌면 폼도 그 리그의 기본값으로 리셋
+  // 리그(또는 스코프)가 실제로 바뀔 때만 폼을 그 리그의 기본값으로 리셋한다.
+  // [filters]에 걸면 저장·크롤링 후 새로고침으로 filters 객체가 새로 만들어질 때마다
+  // (같은 리그인데도) 선택해 둔 시즌/라운드가 최신값으로 되돌아가 버린다 — 초기화
+  // 버튼을 눌렀을 때만 리셋되길 원하므로 leagueKey(리그가 진짜 바뀔 때만 값이 바뀜)로 건다.
   useEffect(() => {
     setDraft(makeDefaultDraft(filters?.latest))
     setWarning('')
-  }, [filters])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leagueKey])
 
   // 팀 목록이 바뀌면(시즌 변경 등) 더는 목록에 없는 선택은 지운다.
   // 자동으로 팀을 채우지 않고 "홈팀 선택/원정팀 선택" 플레이스홀더 상태로 둔다.

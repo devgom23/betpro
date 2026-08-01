@@ -96,9 +96,11 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
               {groups.map((g, gi) => {
                 const key = groupKey(g)
                 const isCollapsed = collapsed.has(key)
+                const isLastGroup = gi === groups.length - 1
+                const dividerClass = isLastGroup ? '' : ' group-divider'
                 if (isCollapsed) {
                   return (
-                    <th key={gi} colSpan={1} className="group-header group-collapsed">
+                    <th key={gi} colSpan={1} className={`group-header group-collapsed${dividerClass}`}>
                       <button
                         className="fold-btn fold-btn-collapsed"
                         onClick={() => toggleGroup(key)}
@@ -110,7 +112,7 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
                   )
                 }
                 return (
-                  <th key={gi} colSpan={g.cols.length} className="group-header">
+                  <th key={gi} colSpan={g.cols.length} className={`group-header${dividerClass}`}>
                     <div className="group-header-row">
                       <div className="group-text">
                         <div className="group-title">{g.label1}</div>
@@ -131,17 +133,27 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
             <tr>
               {groups.flatMap((g, gi) => {
                 const key = groupKey(g)
+                const isLastGroup = gi === groups.length - 1
                 if (collapsed.has(key)) {
-                  return [<th key={`${gi}-c`} className="sub-header collapsed-cell">···</th>]
+                  return [
+                    <th key={`${gi}-c`} className={`sub-header collapsed-cell${isLastGroup ? '' : ' group-divider'}`}>
+                      ···
+                    </th>,
+                  ]
                 }
-                return g.cols.map((c, ci) => (
-                  <th
-                    key={`${gi}-${ci}`}
-                    className={`sub-header ${highlightCols.includes(c.key) ? 'col-highlight' : ''}`}
-                  >
-                    {c.sub}
-                  </th>
-                ))
+                return g.cols.map((c, ci) => {
+                  const isLastCol = !isLastGroup && ci === g.cols.length - 1
+                  return (
+                    <th
+                      key={`${gi}-${ci}`}
+                      className={`sub-header ${highlightCols.includes(c.key) ? 'col-highlight' : ''}${
+                        isLastCol ? ' group-divider' : ''
+                      }`}
+                    >
+                      {c.sub}
+                    </th>
+                  )
+                })
               })}
             </tr>
           </thead>
@@ -166,17 +178,27 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
                   </td>
                   {groups.flatMap((g, gi) => {
                     const key = groupKey(g)
+                    const isLastGroup = gi === groups.length - 1
                     if (collapsed.has(key)) {
-                      return [<td key={`${gi}-c`} className="collapsed-cell">·</td>]
+                      return [
+                        <td key={`${gi}-c`} className={`collapsed-cell${isLastGroup ? '' : ' group-divider'}`}>
+                          ·
+                        </td>,
+                      ]
                     }
                     return g.cols.map((c, ci) => {
                       const value = row[c.key]
                       const style = cellStyle(g, c, value, row)
                       const isHighlighted = highlightCols.includes(c.key)
+                      const isLastCol = !isLastGroup && ci === g.cols.length - 1
+                      const classNames = [
+                        isHighlighted ? 'cell-highlight' : '',
+                        isLastCol ? 'group-divider' : '',
+                      ].filter(Boolean).join(' ')
                       return (
                         <td
                           key={`${gi}-${ci}`}
-                          className={isHighlighted ? 'cell-highlight' : undefined}
+                          className={classNames || undefined}
                           style={style || undefined}
                         >
                           {formatCell(g, c, value)}

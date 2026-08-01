@@ -152,6 +152,16 @@ export function cellStyle(group, col, value, row) {
   const g1 = group.label1
   const sub = col.sub
 
+  // 폼(PPG) 칸 — 상세보기 팝업의 폼 지표와 같은 구간 색상(3.00~2.00 녹색 /
+  // 1.99~1.00 노란색 / 0.99~0.00 갈색). HP/AP는 순위라 대상에서 뺀다.
+  if (g1 === '경기정보' && ['HTF', 'HF', 'AF', 'ATF'].includes(sub)) {
+    const n = toNum(value)
+    if (n === null) return null
+    if (n >= 2) return { background: '#2E7D32', color: '#fff', fontWeight: 700 }
+    if (n >= 1) return { background: '#FBC02D', color: '#1A1A1A', fontWeight: 700 }
+    return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
+  }
+
   if (g1 === '경기정보' && (sub === 'HS' || sub === 'AS') && row) {
     const hs = toNum(row.HS)
     const as_ = toNum(row.AS)

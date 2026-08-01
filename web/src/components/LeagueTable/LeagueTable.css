@@ -72,6 +72,12 @@
   color: var(--text-muted);
 }
 
+/* 그룹(일반정보/경기정보/국내배당/해외배당/...) 경계 — 그 그룹의 마지막 칸에 굵은 구분선 */
+.league-table th.group-divider,
+.league-table td.group-divider {
+  border-right: 2px solid var(--border-strong);
+}
+
 .detail-col {
   width: 34px;
 }

@@ -47,6 +47,26 @@
   margin-top: 10px;
 }
 
+/* 상대전적 경기 목록 — 전체를 다 보여주되(백엔드 limit 상향) 팝업이 무한정 늘어나지
+   않도록 이 표만 안에서 스크롤한다. 헤더는 스크롤 중에도 보이게 고정한다.
+   상세보기 팝업(MatchDetailModal)에서는 .modal-col이 세로 flex라, 왼쪽 '지표별 표본'
+   칸이 이 칸보다 짧을 때는 남는 공간만큼 늘어나 높이를 맞춘다 — 다만 지표별 표본이
+   지표 26개로 원래 아주 길어질 수 있어(상한이 없으면 팝업 전체가 그만큼 늘어나
+   화면 밖으로 밀려난다), 실제로 편하게 보이는 높이(520px)를 넘지 않도록 상한을 둔다.
+   min-height는 상대전적 조회 탭처럼 flex 부모가 아닌 곳에 쓰일 때의 바닥값이다. */
+.match-list-scroll {
+  flex: 1 1 auto;
+  min-height: 180px;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.match-list-scroll .detail-table.match-list thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 /* 상대전적 요약: 역/토탈 사이 구분선 (역이 5칸 중 4번째 컬럼) */
 .h2h-summary-table th:nth-child(4),
 .h2h-summary-table td:nth-child(4) {

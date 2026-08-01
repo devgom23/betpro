@@ -76,6 +76,7 @@ import data_access as DATA    # noqa: E402
 import match_excel as XLS     # noqa: E402
 import user_leagues as USERLG  # noqa: E402
 import crawler as CRAWL        # noqa: E402
+import kr_crawler as KRCRAWL   # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -540,7 +541,7 @@ def match_excel_download(code: str,
                          season: str = "",
                          round: str = "",   # noqa: A002
                          no: str = "",
-                         hlimit: int = 15,
+                         hlimit: int = 100000,   # 엑셀은 화면과 달리 자리 제약이 없어 사실상 전부 담는다
                          user: dict = Depends(get_current_user)):
     """
     상세보기 팝업(배당·플핸예측·상대전적·지표별 표본)을 엑셀 한 시트로 내려받는다.
@@ -764,6 +765,12 @@ def _merge_and_save(db: str, code: str, scope: str, new: pd.DataFrame, confirm: 
     else:
         is_known = np.zeros(len(final), dtype=bool)
 
+    # ①-보강: 이미 있던 경기라도 이번에 처음 국내/해외 배당이 채워졌으면
+    #         그 쪽 지표·플핸예측만 최초 계산한다(다른 쪽·다른 행은 안 건드림).
+    #         업로드 재등록·스코어맨 크롤·젠토토 국내배당 크롤 모두 이 경로를 탄다.
+    if key and old_count and analysis_cols:
+        _fill_missing_ph_side(final, db, scope, final.index[is_known].tolist())
+
     # ② 새로 들어온(=old에 없던) 경기만 지표·플핸예측을 계산한다.
     #    전체 리그 표(final)를 표본 모집단으로 써서 개별지표를 계산하고,
     #    새 경기끼리도 서로의 표본에 포함된다(engine의 자기 자신 1건 제외 로직이 처리).
@@ -774,6 +781,18 @@ def _merge_and_save(db: str, code: str, scope: str, new: pd.DataFrame, confirm: 
             if c not in final.columns:
                 final[c] = pd.NA
             final.loc[res_new.index, c] = res_new[c].values
+
+    # 병합(concat+dedup) 과정에서 이미 있던 경기가 뒤로 밀려 저장되면, 화면은 raw 저장
+    # 순서를 그대로 보여주므로 같은 라운드 안에서 No가 뒤죽박죽으로 보인다(예: 1,3,2,4..).
+    # 값 자체는 그대로이니 저장 직전에 시즌·라운드·No 순으로 다시 정렬해 둔다.
+    if {"S", "R", "No"}.issubset(final.columns):
+        sort_key = pd.DataFrame({
+            "S": final["S"].astype(str),
+            "_r": final["R"].map(_round_sort_key),
+            "_no": pd.to_numeric(final["No"], errors="coerce"),
+        }, index=final.index)
+        final = final.loc[sort_key.sort_values(["S", "_r", "_no"], kind="stable").index]
+        final = final.reset_index(drop=True)
 
     con = sqlite3.connect(db)
     try:
@@ -1000,6 +1019,147 @@ def crawl_close(user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+# ═══════════════════════ 국내배당(젠토토) 가져오기 ═══════════════════════
+# 스코어맨(해외배당) 크롤과 흐름은 같지만 목적이 다르다 — 이미 있는 경기의
+# 국내배당 칸(KW~KHL)만 채우는 '백필 전용' 기능이라 새 경기를 만들지 않는다.
+# 저장은 새 엔드포인트 없이 기존 /api/crawl/save(= _merge_and_save)를 그대로 쓴다.
+KR_LEAGUE_NAME_GUESS = {"K1": "K리그1", "K2": "K리그2"}
+
+
+class CrawlKrOpenBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    code: str
+    year: str
+    round: str   # noqa: A003 — 젠토토 자체 회차번호(예: 260036). 앱의 R과 무관.
+
+
+class CrawlKrFetchBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    code: str
+    season: str            # 이 리그의 시즌(S) — 매칭용
+    round: str              # noqa: A003 — 이 리그의 라운드(R, 예: '21R') — 매칭용
+    league_name: Optional[str] = None   # 비우면 K1/K2 기본 추정값 사용
+
+
+@app.get("/api/crawl/kr/config")
+def crawl_kr_config(scope: str = PATHS.SCOPE_MASTER, code: str = "",
+                    user: dict = Depends(get_current_user)):
+    """국내배당 가져오기 설정 — 팀명 치환 규칙(스코어맨과 별도 저장)·리그명 추정."""
+    _check_league_for(code, scope, user)
+    db = _resolve_scope_db(scope, user)
+    udb = _user_db_of(user)
+    label = _l_value(db, scope, code)
+    return {
+        "aliases": CRAWL.list_aliases(udb, scope, code, source="kr"),
+        "teams": _league_teams(db, code),
+        "is_open": KRCRAWL.is_open(),
+        "default_league_name": KR_LEAGUE_NAME_GUESS.get(label, label),
+    }
+
+
+@app.post("/api/crawl/kr/open")
+def crawl_kr_open(body: CrawlKrOpenBody, user: dict = Depends(get_current_user)):
+    """크롬 창을 젠토토의 해당 연도·회차 화면으로 연다(로그인 필요 — 최초 1회 직접 로그인)."""
+    _check_league_for(body.code, body.scope, user)
+    try:
+        url = KRCRAWL.open_round(body.year, body.round)
+    except KRCRAWL.CrawlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "url": url}
+
+
+@app.post("/api/crawl/kr/fetch")
+def crawl_kr_fetch(body: CrawlKrFetchBody, user: dict = Depends(get_current_user)):
+    """
+    지금 화면에 떠 있는 국내배당(초기배당)을 가져와, 이 리그의 season/round에 이미
+    있는 경기와 (홈팀,원정팀)으로 매칭한다. No는 화면 순번이 아니라 매칭된 기존 행의
+    실제 No를 그대로 붙인다 — 그래야 저장 시 새 경기로 중복 생성되지 않는다.
+    매칭 안 되는 경기는 새로 만들지 않고 목록으로만 알려준다.
+    """
+    _check_league_for(body.code, body.scope, user)
+    db = _resolve_scope_db(body.scope, user)
+    udb = _user_db_of(user)
+    label = _l_value(db, body.scope, body.code)
+    league_name = (body.league_name or KR_LEAGUE_NAME_GUESS.get(label, "")).strip()
+    if not league_name:
+        raise HTTPException(status_code=400,
+                            detail="젠토토 리그명을 확인할 수 없습니다. 직접 입력해 주세요.")
+    try:
+        raw = KRCRAWL.fetch_domestic(league_name)
+    except KRCRAWL.CrawlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    aliases = CRAWL.list_aliases(udb, body.scope, body.code, source="kr")
+    rows = CRAWL.apply_aliases(raw["rows"], aliases)
+    teams = _league_teams(db, body.code)
+    # unknown_teams는 안내용일 뿐 막지 않는다 — 스코어맨과 달리 여긴 "이 리그 DB에 이미
+    # 있는 경기만 채우는" 백필이라, 이 라운드에 없는 경기(다른 리그로 잘못 걸렸거나
+    # 아직 이 앱에 없는 경기)가 섞여 나오는 게 정상이다. 팀명 오타처럼 보이면 치환
+    # UI로 고쳐 다시 가져오면 되지만, 그러지 않아도 매칭된 나머지는 그대로 저장할 수 있다.
+    unknown = CRAWL.unknown_teams(rows, teams)
+
+    df = DATA.load_league_df(db, body.code)
+    matched_rows, unmatched = [], []
+
+    def _round_norm(v):
+        # "20"과 "20R"을 같은 라운드로 본다 — 사용자가 R을 안 붙여도 매칭되게.
+        return re.sub(r"[Rr]$", "", str(v).strip())
+
+    if df.empty or not {"S", "R", "HT", "AT", "No"}.issubset(df.columns):
+        unmatched = [f"{r['HT']} vs {r['AT']}" for r in rows]
+    else:
+        season_q = str(body.season).strip()
+        round_q = _round_norm(body.round)
+        season_round = df[(df["S"].astype(str).str.strip() == season_q) &
+                          (df["R"].astype(str).apply(_round_norm) == round_q)]
+        # No뿐 아니라 S/R도 반드시 "매칭된 그 행"의 실제 값을 그대로 써야 한다 —
+        # 사용자가 입력한 라운드 표기("20")가 DB 값("20R")과 다르면, 저장 시 dedup key가
+        # 어긋나 새 경기로 중복 생성된다.
+        row_map = {}
+        for _, r in season_round.iterrows():
+            key = (str(r["HT"]).strip(), str(r["AT"]).strip())
+            row_map[key] = (r["S"], r["R"], float(r["No"]))
+
+        L = _l_value(db, body.scope, body.code)
+        for r in rows:
+            pair = (str(r["HT"]).strip(), str(r["AT"]).strip())
+            hit = row_map.get(pair)
+            if hit is None:
+                note = f" ({r['_note']})" if r.get("_note") else ""
+                unmatched.append(f"{r['HT']} vs {r['AT']}{note}")
+                continue
+            s_val, r_val, no_val = hit
+            matched_rows.append({
+                "L": L, "S": s_val, "R": r_val, "No": no_val,
+                "HT": r["HT"], "AT": r["AT"],
+                "KW": r["KW"], "KD": r["KD"], "KL": r["KL"], "KH": r["KH"],
+                "KHW": r["KHW"], "KHD": r["KHD"], "KHL": r["KHL"],
+                "_note": r.get("_note", ""),
+            })
+
+    return {
+        "count": raw["count"], "fail_cnt": raw["fail_cnt"],
+        "matched": len(matched_rows), "rows": matched_rows, "unmatched": unmatched,
+        "teams": teams, "unknown_teams": unknown,
+    }
+
+
+@app.post("/api/crawl/kr/aliases")
+def crawl_kr_save_aliases(body: CrawlAliasBody, user: dict = Depends(get_current_user)):
+    """국내배당(젠토토) 팀명 치환 규칙 저장 — 스코어맨 치환 규칙과는 별도로 저장된다."""
+    _check_league_for(body.code, body.scope, user)
+    udb = _user_db_of(user)
+    n = CRAWL.save_aliases(udb, body.scope, body.code, body.mapping, source="kr")
+    return {"ok": True, "saved": n,
+            "aliases": CRAWL.list_aliases(udb, body.scope, body.code, source="kr")}
+
+
+@app.post("/api/crawl/kr/close")
+def crawl_kr_close(user: dict = Depends(get_current_user)):
+    KRCRAWL.close_page()
+    return {"ok": True}
+
+
 class DeleteMatchesBody(BaseModel):
     scope: str = PATHS.SCOPE_MASTER
     season: str = "ALL"
@@ -1131,6 +1291,52 @@ class EditRowsBody(BaseModel):
     rows: list[EditRowItem]
 
 
+# PH_PICK/실측/비중은 해외(F) 표본만으로 정해지고 PH_K는 완전히 독립된 값이다
+# (engine.compute_plushandi 참고) — 그래서 한쪽만 다시 계산해도 이미 확정된 다른 쪽
+# 예측은 절대 안 바뀐다. "26개 지표·플핸예측은 안 바뀐다" 원칙은 이미 예측이 나와 있는
+# 쪽에 대해서만 지키고, 애초에 배당이 없어서 한 번도 계산된 적 없는 쪽은 이번에 배당을
+# 채웠으면 그때 처음으로 계산해 준다.
+_PH_SIDES = (
+    ("K", "PH_K", "KW", "KL"),
+    ("F", "PH_F", "FW", "FL"),
+)
+
+
+def _fill_missing_ph_side(df: pd.DataFrame, db: str, scope: str, touched_idx: list) -> dict:
+    """
+    방금 edit_rows로 값이 바뀐 행 중, 그 리그(K)/해외(F) 예측이 여태 비어 있었는데
+    이번에 그 쪽 배당(승/패)이 채워진 행만 그 쪽 지표·PH_*를 새로 계산해 df에 채운다.
+    다른 쪽, 그리고 이미 예측이 있던 행은 전혀 건드리지 않는다.
+    """
+    if not touched_idx:
+        return {}
+    idx = pd.Index(touched_idx).unique()
+    total_df = df if _is_user_scope(scope) else DATA.load_total_df(db)
+    if total_df is None or total_df.empty:
+        total_df = df
+
+    filled = {}
+    for side, ph_col, w_col, l_col in _PH_SIDES:
+        codes = engine.PH_K_CODES if side == "K" else engine.PH_F_CODES
+        side_cols = [f"{c} {i}" for c in codes for i in (1, 2, 3, 4)] + [ph_col]
+        for c in side_cols:
+            if c not in df.columns:
+                df[c] = np.nan
+
+        ph_blank = df.loc[idx, ph_col].isna()
+        has_odds = df.loc[idx, w_col].notna() & df.loc[idx, l_col].notna()
+        target = idx[(ph_blank & has_odds).to_numpy()]
+        if len(target) == 0:
+            continue
+
+        res = engine._recompute_indicators_for_subset(df.loc[target], df, total_df)
+        for c in side_cols:
+            if c in res.columns:
+                df.loc[res.index, c] = res[c].values
+        filled[side] = len(target)
+    return filled
+
+
 @app.post("/api/leagues/{code}/edit_rows")
 def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_current_user)):
     """
@@ -1176,6 +1382,7 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
 
     updated = 0
     not_found = []
+    touched_idx = []
     for item in body.rows:
         mask = (
             (str_cols["S"] == str(item.S)) & (str_cols["R"] == str(item.R)) &
@@ -1191,6 +1398,9 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
             val = getattr(item, field)
             df.loc[idx, field] = val if val is not None else np.nan
         updated += len(idx)
+        touched_idx.extend(idx)
+
+    filled_sides = _fill_missing_ph_side(df, db, body.scope, touched_idx)
 
     if body.scope == PATHS.SCOPE_MASTER:
         PATHS.backup_master()
@@ -1202,7 +1412,7 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
         con.close()
     PATHS.stamp_updated(db)
 
-    return {"ok": True, "updated": updated, "not_found": not_found}
+    return {"ok": True, "updated": updated, "not_found": not_found, "filled_prediction": filled_sides}
 
 
 # ─────────────────────────── 엔진 실시간 분석 ───────────────────────────
@@ -1296,6 +1506,65 @@ def recompute_all(body: RecomputeBody, user: dict = Depends(get_current_user)):
     if not body.confirm:
         raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
     summary = engine.recompute_all_matches(db)
+    return {"summary": summary}
+
+
+# ─────────────────────────── 재계산 ('내 데이터' 리그 1개 전용) ───────────────────────────
+# engine.recompute_pending_matches/all(위)은 PATHS.LEAGUES(공식 6대리그) 테이블명을
+# 그대로 훑기 때문에 'ul_1' 같은 내 데이터 테이블에는 아예 적용되지 않는다 — 그래서
+# 국내배당을 새로 올려도 26개 지표·플핸예측이 저절로 다시 계산되지 않았다.
+# engine.py는 계산 로직 수정 금지 대상이라, 그 함수는 그대로 두고 '내 데이터는 리그별로
+# 완전 독립'이라는 원칙(다른 곳과 동일)에 따라 그 리그 하나만 재계산하는 버전을 여기 둔다.
+class LeagueRecomputeBody(BaseModel):
+    scope: str = PATHS.SCOPE_USER
+    include_historical: bool = False
+    confirm: bool = False
+
+
+def _recompute_user_league(db: str, code: str, include_historical: bool) -> dict:
+    league_df = DATA.load_league_df(db, code)
+    if league_df.empty or "RT" not in league_df.columns:
+        return {code: 0}
+
+    rt_num = pd.to_numeric(league_df["RT"], errors="coerce")
+    mask = pd.Series(True, index=league_df.index) if include_historical else rt_num.isna()
+    n_target = int(mask.sum())
+    if n_target == 0:
+        return {code: 0}
+
+    sub = league_df[mask]
+    # 내 데이터는 통합(TF-/TK-) 지표도 그 리그 하나만으로 계산한다 — league_full_df와
+    # total_df에 같은 league_df를 준다(_merge_and_save가 이미 쓰는 것과 같은 규칙).
+    new_ind = engine._recompute_indicators_for_subset(sub, league_df, league_df)
+    for c in new_ind.columns:
+        if c not in league_df.columns:
+            league_df[c] = np.nan
+        league_df.loc[new_ind.index, c] = new_ind[c].values
+
+    con = sqlite3.connect(db)
+    try:
+        league_df.to_sql(code, con, if_exists="replace", index=False)
+    finally:
+        con.close()
+    PATHS.stamp_updated(db)
+    return {code: n_target}
+
+
+@app.post("/api/leagues/{code}/recompute")
+def league_recompute(code: str, body: LeagueRecomputeBody, user: dict = Depends(get_current_user)):
+    """
+    '내 데이터' 리그 하나만 26개 지표·플핸예측을 다시 계산한다(그 리그 자신만 표본으로 씀).
+    공식 데이터(6대리그)는 통합DB 탭의 /api/recompute/pending·all을 그대로 쓴다.
+    """
+    if not _is_user_scope(body.scope):
+        raise HTTPException(status_code=400, detail="이 기능은 내 데이터 리그에서만 씁니다.")
+    _check_league_for(code, body.scope, user)
+    if not PATHS.can_write(body.scope, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+    if body.include_historical and not body.confirm:
+        raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
+    db = _resolve_scope_db(body.scope, user)
+    summary = _recompute_user_league(db, code, body.include_historical)
     return {"summary": summary}
 
 

@@ -47,7 +47,7 @@ function RtBadge({ label }) {
 // "상대전적 조회"가 공유하는 컴포넌트. 결과는 각 경기의 홈팀 기준으로 집계된다.
 // code: 내 데이터(scope=user)에서는 필수 — 통합DB가 없어 그 리그 하나만 찾으므로,
 // 어느 리그에서 조회하는 건지 알아야 한다. 공식 데이터는 6대리그를 합쳐서 찾으므로 안 써도 된다.
-export default function HeadToHeadResult({ scope, code, home, away, cross = true, limit = 15 }) {
+export default function HeadToHeadResult({ scope, code, home, away, cross = true, limit = 200 }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
 
@@ -108,39 +108,41 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
         </tbody>
       </table>
 
-      <table className="detail-table match-list">
-        <thead>
-          <tr>
-            <th>시즌</th>
-            <th>R</th>
-            <th>HT</th>
-            <th>HS</th>
-            <th>AS</th>
-            <th>AT</th>
-            <th>결과</th>
-            <th>승점</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.matches.map((m, i) => {
-            const seasonStart = i > 0 && m.S !== data.matches[i - 1].S
-            return (
-              <tr key={i} className={seasonStart ? 'season-start' : undefined}>
-                <td>{m.S}</td>
-                <td>{m.R}</td>
-                <td className="row-label">{m.HT}</td>
-                <td className={scoreClass(m.HS, m.AS, 'home')}>{m.HS ?? ''}</td>
-                <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
-                <td className="row-label">{m.AT}</td>
-                <td>
-                  <RtBadge label={m.RT_label} />
-                </td>
-                <td className="col-total">{homePoints(m, home)}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      <div className="match-list-scroll">
+        <table className="detail-table match-list">
+          <thead>
+            <tr>
+              <th>시즌</th>
+              <th>R</th>
+              <th>HT</th>
+              <th>HS</th>
+              <th>AS</th>
+              <th>AT</th>
+              <th>결과</th>
+              <th>승점</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.matches.map((m, i) => {
+              const seasonStart = i > 0 && m.S !== data.matches[i - 1].S
+              return (
+                <tr key={i} className={seasonStart ? 'season-start' : undefined}>
+                  <td>{m.S}</td>
+                  <td>{m.R}</td>
+                  <td className="row-label">{m.HT}</td>
+                  <td className={scoreClass(m.HS, m.AS, 'home')}>{m.HS ?? ''}</td>
+                  <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
+                  <td className="row-label">{m.AT}</td>
+                  <td>
+                    <RtBadge label={m.RT_label} />
+                  </td>
+                  <td className="col-total">{homePoints(m, home)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
       {data.total > data.matches.length && (
         <p className="h2h-more">
           최근 {data.matches.length}경기만 표시 (총 {data.total}경기)

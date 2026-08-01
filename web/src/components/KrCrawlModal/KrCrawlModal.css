@@ -1,0 +1,175 @@
+/* 국내배당(젠토토) 가져오기 창. 배경/카드/닫기는 상세보기 팝업(MatchDetailModal.css)의
+   .modal-backdrop / .modal-card / .modal-close 를 그대로 재사용한다.
+   구조는 CrawlModal.css(스코어맨)와 동일하되 클래스명만 분리했다. */
+.kr-crawl-card {
+  max-width: 920px;
+}
+
+.kr-crawl-step {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.kr-crawl-step-no {
+  flex: 0 0 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kr-crawl-step-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.kr-crawl-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.kr-crawl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kr-crawl-row input[type='text'] {
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.kr-crawl-year-input {
+  width: 110px;
+}
+
+.kr-crawl-small-input {
+  width: 110px;
+}
+
+.kr-crawl-league-input {
+  width: 160px;
+}
+
+.kr-crawl-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.kr-crawl-result {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.kr-crawl-summary {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.kr-crawl-summary strong {
+  color: var(--text-primary);
+}
+
+/* 미등록 팀명 치환 영역 */
+.kr-crawl-unknown {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #EF5350;
+  border-radius: 8px;
+  background: rgba(239, 83, 80, 0.08);
+}
+
+.kr-crawl-unknown-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #EF5350;
+}
+
+.kr-crawl-map-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.kr-crawl-map-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.kr-crawl-raw {
+  flex: 0 0 40%;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kr-crawl-arrow {
+  color: var(--text-muted);
+}
+
+.kr-crawl-map-list select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.kr-crawl-preview {
+  margin-top: 6px;
+}
+
+.kr-crawl-preview th,
+.kr-crawl-preview td {
+  white-space: nowrap;
+}
+
+/* 매칭 안 된 경기 목록 — 오류가 아니라 안내이므로 은은한 톤 */
+.kr-crawl-unmatched {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface-2);
+}
+
+.kr-crawl-unmatched-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.kr-crawl-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
