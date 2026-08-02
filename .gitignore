@@ -1,4 +1,5 @@
 data/master/backup/
+data/users/*/backup/
 __pycache__/
 *.pyc
 api_autostart.log
