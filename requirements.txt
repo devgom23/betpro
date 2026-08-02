@@ -9,3 +9,7 @@ streamlit-cookies-manager>=0.2.0
 fastapi>=0.110
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
+
+# --- 스코어맨/젠토토 데이터 가져오기(크롤러) ---
+requests>=2.31
+beautifulsoup4>=4.12
