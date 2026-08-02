@@ -1,0 +1,49 @@
+/* .modal-backdrop / .modal-card / .modal-close / .modal-title / .modal-meta 는
+   MatchDetailModal.css에 정의된 걸 그대로 재사용한다. */
+
+.mypick-card {
+  max-width: 420px;
+}
+
+.mypick-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.mypick-label {
+  display: inline-block;
+  width: 70px;
+  color: var(--text-muted);
+}
+
+.mypick-select-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+}
+
+.mypick-select-row select {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-page);
+  color: var(--text-primary);
+}
+
+.mypick-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

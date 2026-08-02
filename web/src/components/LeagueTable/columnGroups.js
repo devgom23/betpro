@@ -12,6 +12,13 @@ const MATCH_COLS = [
 const K_ODDS_COLS = ['KW', 'KD', 'KL', 'KH', 'KHW', 'KHD', 'KHL']
 const F_ODDS_COLS = ['FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL']
 
+// 내 예측(별표/실제 벳팅 픽) — 화면에서 직접 클릭·팝업으로 입력하는 칸이라
+// formatCell/cellStyle이 아니라 LeagueTable.jsx가 직접 렌더링한다.
+const MYPICK_COLS = [
+  ['IMPORTANT', '중요'],
+  ['MY_PICK', '내픽'],
+]
+
 const PH_COLS = [
   ['PH_STATUS', '적중'],
   ['PH_F', '해)플핸'],
@@ -95,6 +102,11 @@ export function buildColumnGroups(availableCols) {
   addFlatGroup('국내배당', '승(W) / 무(D) / 패(L)', K_ODDS_COLS)
   addFlatGroup('해외배당', '승(W) / 무(D) / 패(L)', F_ODDS_COLS)
 
+  const myPickLeaves = MYPICK_COLS.filter(([k]) => available.has(k)).map(([k, sub]) => ({ key: k, sub }))
+  if (myPickLeaves.length) {
+    groups.push({ label1: '내 예측', label2: '', kind: 'mypick', cols: myPickLeaves })
+  }
+
   const phLeaves = PH_COLS.filter(([k]) => available.has(k)).map(([k, sub]) => ({ key: k, sub }))
   if (phLeaves.length) {
     groups.push({ label1: '플핸 예측', label2: '26개 지표 기반 · 실측 적중률', kind: 'ph', cols: phLeaves })
@@ -146,11 +158,60 @@ export function formatCell(group, col, value) {
   return isBlank(value) ? '' : String(value)
 }
 
+// ── 경기 시간대별 베팅 그룹 색상 ──
+// 새벽 6시 이전 경기는 '전날 그룹'으로 취급한다 (예: 토요일 04:00 경기는 금요일 그룹).
+const WEEKDAY_PREV = { Sun: 'Sat', Mon: 'Sun', Tue: 'Mon', Wed: 'Tue', Thu: 'Wed', Fri: 'Thu', Sat: 'Fri' }
+
+function bettingDayStyle(row) {
+  if (!row || !row.DT) return null
+  const m = /\(([A-Za-z]{3})\)/.exec(String(row.DT))
+  if (!m) return null
+  let weekday = m[1]
+  const tm = toNum(row.TM)
+  const hour = tm === null ? null : Math.floor(tm / 100)
+  if (hour !== null && hour < 6) weekday = WEEKDAY_PREV[weekday] || weekday
+
+  if (weekday === 'Fri') return { background: '#F5B7B1', color: '#6E2C1E', fontWeight: 700 }
+  if (weekday === 'Sat') return { background: '#A9DFBF', color: '#1B4D3E', fontWeight: 700 }
+  if (weekday === 'Sun') return { background: '#A2D9E8', color: '#0B4F6C', fontWeight: 700 }
+  if (weekday === 'Mon') return { background: '#D2B4DE', color: '#4A235A', fontWeight: 700 }
+  return { background: '#F9E79F', color: '#7D6608', fontWeight: 700 } // 화/수/목: 그 외
+}
+
+// ── 배당 적중 표시 ──
+// 순수 배당(KW/KD/KL, FW/FD/FL)은 실제 스코어(HS/AS) 그대로 승/무/패를 판정한다.
+// 국내 핸디배당(KHW/KHD/KHL)은 핸디캡 부호(KH)를 홈 스코어에 반영한 "핸디 적용 후 스코어"로
+// 판정해야 한다 — 예: HS=0,AS=0,KH=-1 이면 핸디 적용 후 홈은 -1이 되어 KHL(원정 승)이 적중.
+// 해외 핸디배당(FHW/FHD/FHL)은 표시 대상에서 제외.
+const ODDS_HIT_PLAIN_COLS = ['KW', 'KD', 'KL', 'FW', 'FD', 'FL']
+const ODDS_HIT_KH_COLS = ['KHW', 'KHD', 'KHL']
+
+function sideOf(home, away) {
+  if (home === null || away === null) return null
+  if (home > away) return 'W'
+  if (home < away) return 'L'
+  return 'D'
+}
+
+function oddsHitSide(row) {
+  return sideOf(toNum(row?.HS), toNum(row?.AS))
+}
+
+function khHitSide(row) {
+  const hs = toNum(row?.HS)
+  const as_ = toNum(row?.AS)
+  const kh = toNum(row?.KH)
+  if (hs === null || as_ === null || kh === null) return null
+  return sideOf(hs + kh, as_)
+}
+
 // ── 셀 배경/글자색 (인라인 style 객체로 반환) ──
 // row는 HS/AS처럼 '이 행의 다른 컬럼 값'을 봐야 할 때만 쓴다(예: 이긴 팀 점수 강조).
 export function cellStyle(group, col, value, row) {
   const g1 = group.label1
   const sub = col.sub
+
+  if (g1 === '일반정보' && (sub === 'DT' || sub === 'TM')) return bettingDayStyle(row)
 
   // 폼(PPG) 칸 — 상세보기 팝업의 폼 지표와 같은 구간 색상(3.00~2.00 녹색 /
   // 1.99~1.00 노란색 / 0.99~0.00 갈색). HP/AP는 순위라 대상에서 뺀다.
@@ -158,8 +219,16 @@ export function cellStyle(group, col, value, row) {
     const n = toNum(value)
     if (n === null) return null
     if (n >= 2) return { background: '#2E7D32', color: '#fff', fontWeight: 700 }
-    if (n >= 1) return { background: '#FBC02D', color: '#1A1A1A', fontWeight: 700 }
+    if (n >= 1) return { background: '#FBC02D', color: '#fff', fontWeight: 700 }
     return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
+  }
+
+  // 배당 적중 표시 — '적중'(PH_STATUS) 칸과 같은 노란 배경으로 표시한다.
+  // 예정 경기(스코어 없음)는 표시 없음.
+  if ((g1 === '국내배당' || g1 === '해외배당') && (ODDS_HIT_PLAIN_COLS.includes(sub) || ODDS_HIT_KH_COLS.includes(sub))) {
+    const side = ODDS_HIT_KH_COLS.includes(sub) ? khHitSide(row) : oddsHitSide(row)
+    if (side && sub.endsWith(side)) return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
+    return null
   }
 
   if (g1 === '경기정보' && (sub === 'HS' || sub === 'AS') && row) {

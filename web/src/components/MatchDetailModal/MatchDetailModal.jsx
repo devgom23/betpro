@@ -4,6 +4,11 @@ import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import './MatchDetailModal.css'
 
 const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828' }
+const PICK_OPTIONS = ['축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
+
+function isStarred(v) {
+  return v === true || v === 1 || v === '1'
+}
 
 function rtLabel(v) {
   if (v === null || v === undefined || v === '') return ''
@@ -58,7 +63,7 @@ function formStyle(v) {
   const n = Number(v)
   if (Number.isNaN(n)) return undefined
   if (n >= 2) return { background: '#2E7D32', color: '#fff', fontWeight: 700 }
-  if (n >= 1) return { background: '#FBC02D', color: '#1A1A1A', fontWeight: 700 }
+  if (n >= 1) return { background: '#FBC02D', color: '#fff', fontWeight: 700 }
   return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
 }
 
@@ -290,7 +295,55 @@ function SampleTable({ row }) {
   )
 }
 
-export default function MatchDetailModal({ code, row, scope, onClose }) {
+// 내픽 선택 + 한줄 메모 — 별표(중요)는 제목 옆 버튼으로 따로 처리한다.
+// onSavePick(patch)가 실제 저장을 담당하고, 여기선 즉시(낙관적) 반영만 한다.
+function MyPickBar({ row, onSavePick }) {
+  const [pick, setPick] = useState(row.MY_PICK || '')
+  const [memo, setMemo] = useState(row.MEMO || '')
+  const [savedMemo, setSavedMemo] = useState(row.MEMO || '')
+
+  function handlePickChange(e) {
+    const next = e.target.value
+    setPick(next)
+    onSavePick({ pick: next || null })
+  }
+
+  function saveMemoIfChanged() {
+    if (memo === savedMemo) return
+    setSavedMemo(memo)
+    onSavePick({ memo: memo || null })
+  }
+
+  return (
+    <div className="mypick-bar">
+      <label className="mypick-bar-field">
+        내픽
+        <select value={pick} onChange={handlePickChange}>
+          <option value="">선택 안함</option>
+          {PICK_OPTIONS.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mypick-bar-field mypick-bar-memo">
+        <input
+          type="text"
+          value={memo}
+          placeholder="경기에 대한 메모를 입력해주세요"
+          onChange={(e) => setMemo(e.target.value)}
+          onBlur={saveMemoIfChanged}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur()
+          }}
+        />
+      </label>
+    </div>
+  )
+}
+
+export default function MatchDetailModal({ code, row, scope, onClose, onSavePick }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
   const rt = rtLabel(row.RT)
@@ -335,9 +388,18 @@ export default function MatchDetailModal({ code, row, scope, onClose }) {
         </button>
 
         <h2 className="modal-title">
-          {ht}
-          {rankSuffix(row.HP)} vs {at}
-          {rankSuffix(row.AP)}
+          <span>
+            {ht}
+            {rankSuffix(row.HP)} vs {at}
+            {rankSuffix(row.AP)}
+          </span>
+          <button
+            className={`star-btn ${isStarred(row.IMPORTANT) ? 'star-on' : ''}`}
+            title={isStarred(row.IMPORTANT) ? '중요 표시 해제' : '중요 표시'}
+            onClick={() => onSavePick({ important: !isStarred(row.IMPORTANT) })}
+          >
+            {isStarred(row.IMPORTANT) ? '★' : '☆'}
+          </button>
         </h2>
         <p className="modal-meta">
           {row.S} · {row.R}
@@ -357,6 +419,8 @@ export default function MatchDetailModal({ code, row, scope, onClose }) {
             {at}
           </p>
         )}
+
+        <MyPickBar row={row} onSavePick={onSavePick} />
 
         <div className="modal-columns">
           <div className="modal-col">

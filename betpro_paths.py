@@ -259,6 +259,27 @@ CREATE TABLE IF NOT EXISTS meta (
 )
 """
 
+# "내 예측" — 화면에서 직접 표시한 중요 별표 / 실제 벳팅 픽. 리그 표(to_sql replace)와
+# 완전히 분리된 predlog.db에 둬서, 엑셀 재업로드·재계산으로 리그 테이블이 통째로
+# 교체되어도 이 기록은 그대로 남는다.
+_SCHEMA_MY_PICKS = """
+CREATE TABLE IF NOT EXISTS my_picks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    S TEXT NOT NULL,
+    R TEXT NOT NULL,
+    No TEXT NOT NULL,
+    HT TEXT NOT NULL,
+    AT TEXT NOT NULL,
+    starred INTEGER NOT NULL DEFAULT 0,
+    pick TEXT,
+    memo TEXT,
+    updated_dt TEXT,
+    UNIQUE(code, scope, S, R, No, HT, AT)
+)
+"""
+
 _SCHEMA_ACCESS_LOG = """
 CREATE TABLE IF NOT EXISTS access_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -301,6 +322,11 @@ def ensure_predlog_db(username: str) -> str:
     try:
         con.execute("PRAGMA journal_mode=WAL;")
         con.execute(_SCHEMA_PREDICTION_LOG)
+        con.execute(_SCHEMA_MY_PICKS)
+        # 기존에 만들어진 my_picks 테이블엔 memo 컬럼이 없을 수 있어 안전하게 보강한다.
+        cols = {r[1] for r in con.execute("PRAGMA table_info(my_picks)").fetchall()}
+        if "memo" not in cols:
+            con.execute("ALTER TABLE my_picks ADD COLUMN memo TEXT")
         con.commit()
     finally:
         con.close()

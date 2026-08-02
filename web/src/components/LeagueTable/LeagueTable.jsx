@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildColumnGroups, formatCell, cellStyle } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
+import MyPickModal from '../MyPickModal/MyPickModal'
+import { api } from '../../api/client'
 import { useFontSize } from '../../context/FontSizeContext'
 import './LeagueTable.css'
 
@@ -14,9 +16,25 @@ function groupKey(g) {
   return g.label1
 }
 
+function matchKey(row) {
+  return `${row.S}|${row.R}|${row.No}|${row.HT}|${row.AT}`
+}
+
+function isStarred(v) {
+  return v === true || v === 1 || v === '1'
+}
+
 export default function LeagueTable({ code, columns, rows, scope, highlightCols = [] }) {
   const groups = useMemo(() => buildColumnGroups(columns || []), [columns])
   const [detailRow, setDetailRow] = useState(null)
+  const [pickRow, setPickRow] = useState(null) // 내픽 팝업 대상 행
+  // 별표/내픽/메모 클릭 즉시 반영용 오버레이. 새로 조회하면(rows가 바뀌면) 서버가 다시
+  // 내려준 최신값으로 자연히 대체되므로 초기화한다.
+  // ref로도 같은 값을 들고 있는 이유: React state 갱신은 비동기라 "별표 클릭 직후 곧바로
+  // 픽 선택"처럼 리렌더가 끼기 전에 연달아 저장하면 이전 변경을 못 보고 덮어쓸 수 있다.
+  // ref는 즉시(동기) 최신값을 읽고 쓸 수 있어 이 경쟁 상태를 막아준다.
+  const pickOverridesRef = useRef({})
+  const [pickOverrides, setPickOverrides] = useState({})
   const [collapsed, setCollapsed] = useState(() => new Set())
   const { fontSize } = useFontSize() // 'small' | 'large' — 상단바 토글로 전역 제어, 표 데이터 셀에만 적용
   const scrollRef = useRef(null)
@@ -56,7 +74,49 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
     const el = scrollRef.current
     if (el) el.scrollTop = 0
     setScrollTop(0)
+    pickOverridesRef.current = {}
+    setPickOverrides({})
   }, [rows])
+
+  function effectivePick(row) {
+    const o = pickOverrides[matchKey(row)]
+    return {
+      important: o?.important ?? isStarred(row.IMPORTANT),
+      pick: o?.pick !== undefined ? o.pick : row.MY_PICK || '',
+      memo: o?.memo !== undefined ? o.memo : row.MEMO || '',
+    }
+  }
+
+  // 별표/내픽/메모 공용 저장 — patch에 준 필드만 바꾸고 나머지는 현재 값을 유지한 채
+  // 전체 상태를 다시 올린다(서버는 매번 3개 값을 다 받아 upsert).
+  async function savePick(row, patch) {
+    const key = matchKey(row)
+    const prevValue = pickOverridesRef.current[key] ?? {
+      important: isStarred(row.IMPORTANT),
+      pick: row.MY_PICK || '',
+      memo: row.MEMO || '',
+    }
+    const next = { ...prevValue, ...patch }
+    pickOverridesRef.current = { ...pickOverridesRef.current, [key]: next }
+    setPickOverrides(pickOverridesRef.current)
+    try {
+      await api.post(`/api/leagues/${code}/my_picks`, {
+        scope,
+        S: row.S,
+        R: row.R,
+        No: row.No,
+        HT: row.HT,
+        AT: row.AT,
+        starred: next.important,
+        pick: next.pick || null,
+        memo: next.memo || null,
+      })
+    } catch {
+      // 저장 실패 시 원래 상태로 되돌린다
+      pickOverridesRef.current = { ...pickOverridesRef.current, [key]: prevValue }
+      setPickOverrides(pickOverridesRef.current)
+    }
+  }
 
   // 화면에는 항상 딱 20행만 보이게 높이를 고정하고, 그 이상은 표 내부 스크롤로 본다.
   // 헤더 2줄 + 실제 데이터 행 높이(글씨 크기에 따라 달라짐)를 직접 측정해서 계산한다.
@@ -165,8 +225,9 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
             )}
             {windowRows.map((row, i) => {
               const ri = startIndex + i
+              const pickState = effectivePick(row)
               return (
-                <tr key={ri} data-row="">
+                <tr key={ri} data-row="" className={pickState.important ? 'row-starred' : undefined}>
                   <td className="detail-col sticky-col">
                     <button
                       className="detail-btn"
@@ -185,6 +246,33 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
                           ·
                         </td>,
                       ]
+                    }
+                    if (g.kind === 'mypick') {
+                      return g.cols.map((c, ci) => {
+                        const isLastCol = !isLastGroup && ci === g.cols.length - 1
+                        const className = isLastCol ? 'group-divider' : undefined
+                        if (c.key === 'IMPORTANT') {
+                          return (
+                            <td key={`${gi}-${ci}`} className={className}>
+                              <button
+                                className={`star-btn ${pickState.important ? 'star-on' : ''}`}
+                                title={pickState.important ? '중요 표시 해제' : '중요 표시'}
+                                onClick={() => savePick(row, { important: !pickState.important })}
+                              >
+                                {pickState.important ? '★' : '☆'}
+                              </button>
+                            </td>
+                          )
+                        }
+                        // MY_PICK
+                        return (
+                          <td key={`${gi}-${ci}`} className={className}>
+                            <button className="mypick-btn" onClick={() => setPickRow(row)}>
+                              {pickState.pick || <span className="mypick-blank">－</span>}
+                            </button>
+                          </td>
+                        )
+                      })
                     }
                     return g.cols.map((c, ci) => {
                       const value = row[c.key]
@@ -220,9 +308,29 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
         {detailRow && (
           <MatchDetailModal
             code={code || detailRow.Source_League}
-            row={detailRow}
+            row={{
+              ...detailRow,
+              IMPORTANT: effectivePick(detailRow).important,
+              MY_PICK: effectivePick(detailRow).pick,
+              MEMO: effectivePick(detailRow).memo,
+            }}
             scope={scope}
             onClose={() => setDetailRow(null)}
+            onSavePick={(patch) => savePick(detailRow, patch)}
+          />
+        )}
+
+        {pickRow && (
+          <MyPickModal
+            code={code || pickRow.Source_League}
+            scope={scope}
+            row={{
+              ...pickRow,
+              MY_PICK: effectivePick(pickRow).pick,
+              IMPORTANT: effectivePick(pickRow).important,
+            }}
+            onClose={() => setPickRow(null)}
+            onSaved={(newPick) => savePick(pickRow, { pick: newPick || '' })}
           />
         )}
       </div>

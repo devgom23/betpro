@@ -23,6 +23,7 @@ BETPRO API 서버 (FastAPI) - 골격
   GET  /api/leagues/{code}/upload_template  경기 업로드용 빈 표본 양식 (쓰기 권한 필요)
   POST /api/leagues/{code}/upload      경기 엑셀 업로드 (쓰기 권한 필요, confirm 2단계)
   POST /api/leagues/{code}/delete_matches  선택한 시즌/라운드 경기만 삭제 (쓰기 권한 필요)
+  POST /api/leagues/{code}/my_picks    내 예측(중요 별표/내픽) 저장 — 계정 개인 기록
   GET  /api/teams                      전체 팀명 목록 (상대전적 탭)
   GET  /api/total                      통합DB(6대 리그 합산) 조회
   POST /api/recompute/pending          예정 경기만 최신 통합DB 기준 재계산
@@ -60,7 +61,7 @@ for _p in (_ROOT, _API_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from typing import Optional  # noqa: E402
+from typing import Optional, Union  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from fastapi import (FastAPI, HTTPException, Depends, Response, Request,  # noqa: E402
@@ -77,6 +78,7 @@ import match_excel as XLS     # noqa: E402
 import user_leagues as USERLG  # noqa: E402
 import crawler as CRAWL        # noqa: E402
 import kr_crawler as KRCRAWL   # noqa: E402
+import my_picks as MYPICKS     # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -438,9 +440,11 @@ def league_rows(code: str,
 
     total = len(sub)
     page = sub.iloc[offset: offset + limit]
+    records = DATA.df_to_records(page)
+    _attach_my_picks(records, user["username"], code, scope)
     return {
-        "columns": list(df.columns),
-        "rows": DATA.df_to_records(page),
+        "columns": list(df.columns) + ["IMPORTANT", "MY_PICK"],
+        "rows": records,
         "total": total,
         "season": season,
         "round": round,
@@ -448,6 +452,46 @@ def league_rows(code: str,
         "hit_summary": _hit_summary(sub),
         "can_write": PATHS.can_write(scope, user.get("role")),
     }
+
+
+def _my_pick_key(s, r, no, ht, at) -> tuple:
+    return tuple(MYPICKS.normalize(v) for v in (s, r, no, ht, at))
+
+
+def _attach_my_picks(records: list, username: str, code: str, scope: str) -> None:
+    """조회된 행마다 이 계정이 표시한 중요 별표(IMPORTANT)/내픽(MY_PICK)/메모(MEMO)를 붙인다."""
+    picks = MYPICKS.list_my_picks(username, code, scope)
+    by_key = {_my_pick_key(p["S"], p["R"], p["No"], p["HT"], p["AT"]): p for p in picks}
+    for row in records:
+        p = by_key.get(_my_pick_key(row.get("S"), row.get("R"), row.get("No"), row.get("HT"), row.get("AT")))
+        row["IMPORTANT"] = bool(p["starred"]) if p else False
+        row["MY_PICK"] = p["pick"] if p else None
+        row["MEMO"] = p["memo"] if p else None
+
+
+class MyPickBody(BaseModel):
+    scope: str
+    # 프론트가 표 행 값을 그대로 보내다 보니 No처럼 숫자로 오는 필드도 있다 —
+    # 매칭 키는 문자열로 통일해서 저장하므로(upsert_my_pick), 여기선 원시 타입만 받아둔다.
+    S: Union[str, int, float]
+    R: Union[str, int, float]
+    No: Union[str, int, float]
+    HT: Union[str, int, float]
+    AT: Union[str, int, float]
+    starred: bool = False
+    pick: Optional[str] = None
+    memo: Optional[str] = None
+
+
+@app.post("/api/leagues/{code}/my_picks")
+def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_user)):
+    """중요 별표/내픽/메모 저장 — 계정 개인 기록이라 scope(공식/내 데이터)와 무관하게 본인만 본다."""
+    MYPICKS.upsert_my_pick(
+        user["username"], code, body.scope,
+        body.S, body.R, body.No, body.HT, body.AT,
+        body.starred, body.pick, body.memo,
+    )
+    return {"ok": True}
 
 
 # ─────────────────────────── 상대전적 (상세 팝업용) ───────────────────────────
