@@ -8,3 +8,10 @@ api_autostart.log
 # SQLite가 실행 중에 만드는 임시 파일 (DB 본체가 아니므로 추적하지 않는다)
 *.db-shm
 *.db-wal
+
+# 비밀번호 해시·실제 고객 데이터가 들어있는 DB — git에 올리면 안 된다
+auth.db
+data/access_log.db
+data/master/master.db
+data/master/master.tmp.db
+data/users/
