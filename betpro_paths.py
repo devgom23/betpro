@@ -60,10 +60,10 @@ LEAGUE_ORDER = LEAGUES
 #    (라리가 파일에 'ㄴ' 오타 1건 존재 -> 매핑 실패로 자동 드롭)
 L_CODE_TO_TABLE: Dict[str, str] = {
     "EP": "EPL",
-    "LA": "LALIGA",
+    "La": "LALIGA",
     "SA": "SERIEA",
     "BD": "BUNDES",
-    "ER": "EREDIVISIE",
+    "Er": "EREDIVISIE",
     "L1": "LIGUE1",
 }
 

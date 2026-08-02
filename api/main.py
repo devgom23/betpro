@@ -1074,7 +1074,10 @@ def crawl_close(user: dict = Depends(get_current_user)):
 # 스코어맨(해외배당) 크롤과 흐름은 같지만 목적이 다르다 — 이미 있는 경기의
 # 국내배당 칸(KW~KHL)만 채우는 '백필 전용' 기능이라 새 경기를 만들지 않는다.
 # 저장은 새 엔드포인트 없이 기존 /api/crawl/save(= _merge_and_save)를 그대로 쓴다.
-KR_LEAGUE_NAME_GUESS = {"K1": "K리그1", "K2": "K리그2", "EP": "EPL"}
+KR_LEAGUE_NAME_GUESS = {
+    "K1": "K리그1", "K2": "K리그2", "EP": "EPL",
+    "La": "라리가", "BD": "분데스리", "SA": "세리에A", "Er": "에레디비", "L1": "프리그1",
+}
 
 
 class CrawlKrOpenBody(BaseModel):
