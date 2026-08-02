@@ -37,10 +37,11 @@ export default function RtSummaryBar({ summary, inline = false }) {
   )
 }
 
-const PICK_ORDER = ['적중', '미적', '관망']
-const PICK_COLOR = { 적중: '#FDD835', 미적: '#C62828', 관망: '#757575' }
+const PICK_ORDER = ['적중', '보험', '미적', '관망']
+const PICK_COLOR = { 적중: '#FDD835', 보험: '#00897B', 미적: '#C62828', 관망: '#757575' }
 
-// PICK 결과(적중/미적/관망) 분포 배지. 플핸예측 컬럼의 배경색과 동일한 색상을 쓴다.
+// PICK 결과(적중/보험/미적/관망) 분포 배지. 플핸예측 컬럼의 배경색과 동일한 색상을 쓴다.
+// 보험 = 핸승 여부(큰 분류)는 맞혔지만 괄호 안 세부결과(핸무/무/역)는 다르게 나온 경우.
 export function PickSummaryBar({ summary }) {
   if (!summary) return null
   return (

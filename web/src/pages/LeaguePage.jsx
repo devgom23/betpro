@@ -391,9 +391,31 @@ export default function LeaguePage({ code, scope }) {
 
       {scope === 'user' && data.can_write && (
         <div style={{ marginTop: 10 }}>
-          <button className="btn-primary" disabled={busyRecomputePending} onClick={runRecomputePending}>
-            {busyRecomputePending ? '재분석 중...' : '🔄 통합 및 예측 분석 실행'}
-          </button>
+          <div className="league-recompute-row">
+            <button className="btn-primary" disabled={busyRecomputePending} onClick={runRecomputePending}>
+              {busyRecomputePending ? '재분석 중...' : '🔄 통합 및 예측 분석 실행'}
+            </button>
+            <div className="league-stat">
+              <span className="league-stat-label">경기수</span>
+              <span className="league-stat-value">{filters.total_rows.toLocaleString()}</span>
+            </div>
+            <div className="league-stat">
+              <span className="league-stat-label">시즌</span>
+              <span className="league-stat-value">{filters.season_range}</span>
+            </div>
+            <div className="league-stat">
+              <span className="league-stat-label">결과보유</span>
+              <span className="league-stat-value">{(filters.rt_summary?.총 ?? 0).toLocaleString()}</span>
+            </div>
+            <div className="league-stat">
+              <span className="league-stat-label">예정</span>
+              <span className="league-stat-value">{filters.pending_count.toLocaleString()}</span>
+            </div>
+            <div className="league-stat">
+              <span className="league-stat-label">국내배당</span>
+              <span className="league-stat-value">{filters.kw_count.toLocaleString()}</span>
+            </div>
+          </div>
           {recomputeNotice && <p className="recompute-notice">{recomputeNotice}</p>}
         </div>
       )}

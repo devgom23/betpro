@@ -191,6 +191,8 @@ export function cellStyle(group, col, value, row) {
 
   if (group.kind === 'ph' && sub === '적중') {
     if (value === '적중') return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
+    // 보험: 핸승 여부(큰 분류)는 맞혔지만 괄호 안 세부결과(핸무/무/역)는 다르게 나온 경우.
+    if (value === '보험') return { background: '#00897B', color: '#fff', fontWeight: 700 }
     if (value === '미적') return { background: '#C62828', color: '#fff', fontWeight: 700 }
     if (value === '관망') return { background: '#757575', color: '#fff', fontWeight: 700 }
     return null

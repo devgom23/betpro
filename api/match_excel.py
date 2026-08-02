@@ -686,6 +686,8 @@ def _cell_style(group, col, value, row=None):
         s = "" if _blank(value) else str(value).strip()
         return {
             "적중": {"bg": "FDD835", "fg": "0D1B2A", "bold": True},
+            # 보험: 핸승 여부(큰 분류)는 맞혔지만 괄호 안 세부결과(핸무/무/역)는 다르게 나온 경우.
+            "보험": {"bg": "00897B", "fg": "FFFFFF", "bold": True},
             "미적": {"bg": "C62828", "fg": "FFFFFF", "bold": True},
             "관망": {"bg": "757575", "fg": "FFFFFF", "bold": True},
         }.get(s)

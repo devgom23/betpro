@@ -296,13 +296,14 @@ def _rt_summary(df: pd.DataFrame):
 
 
 def _hit_summary(df: pd.DataFrame):
-    """PICK 적중/미적/관망 카운트 {적중,미적,관망,총}. PH_STATUS 컬럼 없거나 값이 하나도 없으면 None."""
+    """PICK 적중/보험/미적/관망 카운트 {적중,보험,미적,관망,총}.
+    PH_STATUS 컬럼 없거나 값이 하나도 없으면 None."""
     if "PH_STATUS" not in df.columns:
         return None
     s = df["PH_STATUS"].fillna("")
-    counts = {"적중": int((s == "적중").sum()), "미적": int((s == "미적").sum()),
-              "관망": int((s == "관망").sum())}
-    total = counts["적중"] + counts["미적"] + counts["관망"]
+    counts = {"적중": int((s == "적중").sum()), "보험": int((s == "보험").sum()),
+              "미적": int((s == "미적").sum()), "관망": int((s == "관망").sum())}
+    total = counts["적중"] + counts["보험"] + counts["미적"] + counts["관망"]
     if total == 0:
         return None
     counts["총"] = total
@@ -340,13 +341,19 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
 
     latest_season = str(seasons[0]) if seasons else None
     latest_round = (rounds_by_season.get(latest_season) or [None])[0]
+    rt_summary = _rt_summary(df)
+    rt_total = rt_summary["총"] if rt_summary else 0
     return {
         "seasons": [str(s) for s in seasons],
         "rounds_by_season": rounds_by_season,
         "latest": {"season": latest_season, "round": latest_round},
         "total_rows": len(df),
-        "rt_summary": _rt_summary(df),
+        "rt_summary": rt_summary,
         "hit_summary": _hit_summary(df),
+        # 리그 관리 박스(내 데이터 재계산 버튼 옆)에 쓰는 요약 — 통합DB 탭 대시보드 표와 같은 항목.
+        "season_range": f"{seasons[-1]} ~ {seasons[0]}" if seasons else "-",
+        "pending_count": len(df) - rt_total,
+        "kw_count": int(df["KW"].notna().sum()) if "KW" in df.columns else 0,
     }
 
 
@@ -1023,7 +1030,7 @@ def crawl_close(user: dict = Depends(get_current_user)):
 # 스코어맨(해외배당) 크롤과 흐름은 같지만 목적이 다르다 — 이미 있는 경기의
 # 국내배당 칸(KW~KHL)만 채우는 '백필 전용' 기능이라 새 경기를 만들지 않는다.
 # 저장은 새 엔드포인트 없이 기존 /api/crawl/save(= _merge_and_save)를 그대로 쓴다.
-KR_LEAGUE_NAME_GUESS = {"K1": "K리그1", "K2": "K리그2"}
+KR_LEAGUE_NAME_GUESS = {"K1": "K리그1", "K2": "K리그2", "EP": "EPL"}
 
 
 class CrawlKrOpenBody(BaseModel):
@@ -1044,16 +1051,30 @@ class CrawlKrFetchBody(BaseModel):
 @app.get("/api/crawl/kr/config")
 def crawl_kr_config(scope: str = PATHS.SCOPE_MASTER, code: str = "",
                     user: dict = Depends(get_current_user)):
-    """국내배당 가져오기 설정 — 팀명 치환 규칙(스코어맨과 별도 저장)·리그명 추정."""
+    """국내배당 가져오기 설정 — 팀명 치환 규칙(스코어맨과 별도 저장)·리그명 추정.
+    매칭용 시즌/라운드는 리그마다 표기가 달라(K리그 '2026' vs 유럽리그 '20-21') 사용자가
+    직접 타이핑하면 자주 어긋난다 — 이 리그에 실제 저장된 최신 시즌/라운드 표기를 그대로
+    내려줘서 화면에서 기본값으로 채워 두면 표기 실수를 원천적으로 막을 수 있다."""
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
     udb = _user_db_of(user)
     label = _l_value(db, scope, code)
+    df = DATA.load_league_df(db, code)
+    latest_season = latest_round = None
+    if not df.empty and "S" in df.columns:
+        seasons = sorted([s for s in df["S"].dropna().unique().tolist()])
+        if seasons:
+            latest_season = str(seasons[-1])
+            rounds = df.loc[df["S"] == seasons[-1], "R"].dropna().unique().tolist()
+            if rounds:
+                latest_round = str(sorted(rounds, key=_round_sort_key)[-1])
     return {
         "aliases": CRAWL.list_aliases(udb, scope, code, source="kr"),
         "teams": _league_teams(db, code),
         "is_open": KRCRAWL.is_open(),
         "default_league_name": KR_LEAGUE_NAME_GUESS.get(label, label),
+        "latest_season": latest_season,
+        "latest_round": latest_round,
     }
 
 

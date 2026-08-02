@@ -227,6 +227,31 @@
   margin-bottom: 0;
 }
 
+/* ── 내 데이터 리그의 재계산 버튼 옆 요약(경기수/시즌/결과보유/예정/국내배당) ── */
+.league-recompute-row {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+
+.league-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.league-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.league-stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 /* ── 필터 아래 엑셀 다운로드/업로드 버튼 줄 ── */
 .excel-bar {
   display: flex;

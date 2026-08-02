@@ -26,6 +26,8 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
       const res = await api.get(`/api/crawl/kr/config?scope=${scope}&code=${encodeURIComponent(code)}`)
       setConfig(res)
       setLeagueName((prev) => prev || res.default_league_name || '')
+      // 시즌/라운드는 자동 채움 없이 빈 값으로 둔다 — 최신값이 미리 채워져 있으면
+      // 실제로 가져오려는 회차와 다를 때 안 바꾸고 그냥 눌러버리는 실수가 생긴다.
     } catch (err) {
       setError(err.message)
     }
@@ -161,13 +163,15 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
           <span className="kr-crawl-step-no">2</span>
           <div className="kr-crawl-step-body">
             <label className="kr-crawl-label">
-              이 리그의 <strong>시즌/라운드</strong>(매칭용, 예: 2026 / 21R)와 젠토토 리그명을 확인하세요
+              이 리그의 <strong>시즌/라운드</strong>(매칭용 — 최신값이 자동 입력됩니다. 다른
+              라운드를 가져올 땐 이 리그 표에 저장된 표기 그대로 바꿔주세요: K리그는 '2026'
+              처럼 연도만, 유럽리그는 '20-21'처럼 연도-연도)와 젠토토 리그명을 확인하세요
             </label>
             <div className="kr-crawl-row">
               <input
                 type="text" className="kr-crawl-small-input"
                 value={matchSeason} onChange={(e) => setMatchSeason(e.target.value)}
-                placeholder="시즌(예: 2026)"
+                placeholder="시즌(예: 2026 또는 20-21)"
               />
               <input
                 type="text" className="kr-crawl-small-input"
