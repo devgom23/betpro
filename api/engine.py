@@ -37,11 +37,13 @@ def normalize_team_names(series):
 # 💡 [업데이트 내용] V1.0: 원본 한글 RT 매핑 테이블
 #   실측(v18.0 6개 파일): '핸승' / '핸무' / '무(플)' / '역(플)' 4종만 존재.
 #   '(플)' 은 접미사일 뿐 의미 분기 없음.
-RT_TEXT_MAP = {'핸승': 1, '핸무': 2, '무(플)': 3, '역(플)': 4, '무': 3, '역': 4}
+# 💡 5='취소'(실제로 열리지 않은 경기)는 표시 전용 확장 — get_samples_fast(아래)가
+#   RT==1~4로만 표본을 세므로 5는 26개 지표 계산에서 자동으로 제외된다(계산 로직 불변).
+RT_TEXT_MAP = {'핸승': 1, '핸무': 2, '무(플)': 3, '역(플)': 4, '무': 3, '역': 4, '취소': 5}
 
 
 def _map_rt_value(v):
-    """원본 RT(한글/숫자) → 1~4 코드. 판정 불가 시 NaN."""
+    """원본 RT(한글/숫자) → 1~5 코드. 판정 불가 시 NaN."""
     if v is None:
         return np.nan
     try:
@@ -54,7 +56,7 @@ def _map_rt_value(v):
         return float(RT_TEXT_MAP[s])
     try:
         f = float(s)
-        return f if f in (1.0, 2.0, 3.0, 4.0) else np.nan
+        return f if f in (1.0, 2.0, 3.0, 4.0, 5.0) else np.nan
     except (TypeError, ValueError):
         return np.nan
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import './HeadToHeadResult.css'
 
-const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828' }
+const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828', 취소: '#546E7A' }
 
 // 점수가 둘 다 있고 서로 다를 때만 이긴 쪽 점수를 강조한다(무승부·예정 경기는 강조 없음)
 function scoreClass(hs, as_, side) {

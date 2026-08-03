@@ -284,10 +284,12 @@ def user_leagues_delete(code: str, body: UserLeagueDeleteBody,
 
 
 def _rt_summary(df: pd.DataFrame):
-    """RT 결과분포 {핸승,핸무,무,역,총} 계산. RT 컬럼이 없거나 값이 없으면 None."""
+    """RT 결과분포 {핸승,핸무,무,역,총} 계산. RT 컬럼이 없거나 값이 없으면 None.
+    5(취소)는 실제 결과가 아니라서 제외 — 안 그러면 "총"이 4개 항목 합계보다 커진다."""
     if "RT" not in df.columns:
         return None
-    rt = pd.to_numeric(df["RT"], errors="coerce").dropna()
+    rt = pd.to_numeric(df["RT"], errors="coerce")
+    rt = rt[rt.isin([1, 2, 3, 4])]
     if not len(rt):
         return None
     return {
@@ -497,7 +499,10 @@ def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_u
 
 
 # ─────────────────────────── 상대전적 (상세 팝업용) ───────────────────────────
-RT_LABELS = {1: "핸승", 2: "핸무", 3: "무", 4: "역"}
+# 5="취소"는 실제로 열리지 않은 경기(우천취소·리그 자체 취소 등) 표시용 — engine.py의
+# 26개 지표 표본 카운트는 RT==1~4로만 매칭해서(get_samples_fast) 5는 자동으로 제외되므로
+# 계산 로직에는 영향이 없다.
+RT_LABELS = {1: "핸승", 2: "핸무", 3: "무", 4: "역", 5: "취소"}
 
 
 def _rt_label(v):
@@ -1307,7 +1312,7 @@ def delete_matches(code: str, body: DeleteMatchesBody, user: dict = Depends(get_
 # 크롤링은 이 세 값을 못 채우므로(RT는 판정 기준이 사용자 재량, KH·FH도 방향을 사람이
 # 정해야 함) 여기서 직접 입력한다. 26개 지표·플핸예측 등 분석 컬럼은 절대 건드리지
 # 않는다 — 그 세 칸만 바뀌고, 표본 재계산은 기존 업로드/재계산 경로에서만 일어난다.
-RT_LABEL_TO_NUM = {"핸승": 1, "핸무": 2, "무": 3, "역": 4}
+RT_LABEL_TO_NUM = {"핸승": 1, "핸무": 2, "무": 3, "역": 4, "취소": 5}
 HANDICAP_CHOICES = {-1.0, 1.0}
 # RT/KH/FH를 뺀 나머지 직접입력 대상 — 전부 순수 숫자(스코어·배당)라 규칙이 동일하다.
 SCORE_FIELDS = ("HS", "AS")

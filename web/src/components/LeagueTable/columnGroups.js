@@ -61,8 +61,8 @@ const GROUP_DEFS = [
 
 const SUB4 = ['핸승', '핸무', '무', '역']
 
-const RT_DISPLAY = { 1: '핸승', 2: '핸무', 3: '무', 4: '역' }
-const RT_CODE_FROM_TEXT = { 핸승: 1, 핸무: 2, 무: 3, 역: 4 }
+const RT_DISPLAY = { 1: '핸승', 2: '핸무', 3: '무', 4: '역', 5: '취소' }
+const RT_CODE_FROM_TEXT = { 핸승: 1, 핸무: 2, 무: 3, 역: 4, 취소: 5 }
 
 function isBlank(v) {
   return v === null || v === undefined || v === ''
@@ -256,6 +256,7 @@ export function cellStyle(group, col, value, row) {
     if (code === 2) return { background: '#64B5F6', color: '#0D1B2A', fontWeight: 700 }
     if (code === 3) return { background: '#757575', color: '#fff', fontWeight: 700 }
     if (code === 4) return { background: '#C62828', color: '#fff', fontWeight: 700 }
+    if (code === 5) return { background: '#546E7A', color: '#fff', fontWeight: 700 }
     return null
   }
 

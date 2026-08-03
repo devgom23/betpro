@@ -3,7 +3,7 @@ import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import './MatchDetailModal.css'
 
-const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828' }
+const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828', 취소: '#546E7A' }
 const PICK_OPTIONS = ['축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
 const HIT_OPTIONS = ['적중', '미적', '패스']
 
@@ -15,7 +15,7 @@ function rtLabel(v) {
   if (v === null || v === undefined || v === '') return ''
   const n = Number(v)
   if (Number.isNaN(n)) return ''
-  return { 1: '핸승', 2: '핸무', 3: '무', 4: '역' }[Math.trunc(n)] || ''
+  return { 1: '핸승', 2: '핸무', 3: '무', 4: '역', 5: '취소' }[Math.trunc(n)] || ''
 }
 
 function RtBadge({ label }) {
