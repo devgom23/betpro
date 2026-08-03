@@ -2,14 +2,33 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
 import RtSummaryBar from '../components/RtSummaryBar/RtSummaryBar'
+import FilterForm from '../components/FilterForm/FilterForm'
+
+const ODDS_KEYS = ['kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl']
+
+function buildQueryString(scope, league, query) {
+  const params = new URLSearchParams({ scope, league })
+  if (query) {
+    if (query.season) params.set('season', query.season)
+    if (query.round) params.set('round', query.round)
+    for (const key of ODDS_KEYS) {
+      if (query[key] !== undefined && query[key] !== null) {
+        params.set(key, String(query[key]))
+      }
+    }
+  }
+  return params.toString()
+}
 
 export default function TotalDbPage({ scope }) {
   const [dashboard, setDashboard] = useState(null)
   const [leagues, setLeagues] = useState([])
   const [league, setLeague] = useState('ALL')
-  const [season, setSeason] = useState('ALL')
+  const [filters, setFilters] = useState(null)
+  const [query, setQuery] = useState(null)
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   const [busyPending, setBusyPending] = useState(false)
   const [busyAll, setBusyAll] = useState(false)
   const [confirmAll, setConfirmAll] = useState(false)
@@ -35,11 +54,31 @@ export default function TotalDbPage({ scope }) {
     }
   }, [scope])
 
+  // 리그 선택이 바뀌면 그 리그 기준 시즌·라운드 선택지를 다시 불러오고,
+  // 조회 조건도 기본값(전체/전체)으로 되돌린다.
   useEffect(() => {
+    let cancelled = false
+    api
+      .get(`/api/total/filters?scope=${scope}&league=${league}`)
+      .then((res) => {
+        if (cancelled) return
+        setFilters(res)
+        setQuery({ season: res.latest?.season ?? 'ALL', round: res.latest?.round ?? 'ALL' })
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [scope, league])
+
+  useEffect(() => {
+    if (!query) return
     let cancelled = false
     setError('')
     api
-      .get(`/api/total?scope=${scope}&league=${league}&season=${season}`)
+      .get(`/api/total?${buildQueryString(scope, league, query)}`)
       .then((res) => {
         if (!cancelled) setData(res)
       })
@@ -49,16 +88,17 @@ export default function TotalDbPage({ scope }) {
     return () => {
       cancelled = true
     }
-  }, [scope, league, season])
+  }, [scope, league, query, reloadKey])
+
+  function handleSearch(nextQuery) {
+    setQuery(nextQuery)
+  }
 
   function refreshAll() {
     setLeague('ALL')
-    setSeason('ALL')
+    setQuery({ season: 'ALL', round: 'ALL' })
+    setReloadKey((k) => k + 1)
     api.get(`/api/dashboard?scope=${scope}`).then(setDashboard).catch(() => {})
-    api
-      .get(`/api/total?scope=${scope}&league=ALL&season=ALL`)
-      .then(setData)
-      .catch(() => {})
   }
 
   async function runRecomputePending() {
@@ -186,22 +226,23 @@ export default function TotalDbPage({ scope }) {
                 </option>
               ))}
             </select>
-            <select value={season} onChange={(e) => setSeason(e.target.value)}>
-              <option value="ALL">전체</option>
-              {data.seasons.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
             <span className="total-count">
               {data.total.toLocaleString()} / {data.grand_total.toLocaleString()} 경기
             </span>
           </div>
 
+          {filters && (
+            <FilterForm filters={filters} leagueKey={`total:${league}`} onSearch={handleSearch} />
+          )}
+
           <RtSummaryBar summary={data.rt_summary} />
 
-          <LeagueTable columns={data.columns} rows={data.rows} scope={scope} />
+          <LeagueTable
+            columns={data.columns}
+            rows={data.rows}
+            scope={scope}
+            highlightCols={ODDS_KEYS.filter((k) => query?.[k] !== undefined).map((k) => k.toUpperCase())}
+          />
         </>
       )}
     </div>

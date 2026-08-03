@@ -1513,31 +1513,76 @@ def analyze(body: AnalyzeBody, user: dict = Depends(get_current_user)):
 
 
 # ─────────────────────────── 통합DB 탭 ───────────────────────────
+def _total_league_view(db: str, league: str) -> pd.DataFrame:
+    """통합DB에서 리그 선택(ALL 또는 특정 리그)만 적용한 뷰."""
+    total_df = DATA.load_total_df(db)
+    if total_df.empty or league == "ALL" or "Source_League" not in total_df.columns:
+        return total_df
+    _check_league(league)
+    return total_df[total_df["Source_League"] == league]
+
+
+@app.get("/api/total/filters")
+def total_filters(scope: str = PATHS.SCOPE_MASTER,
+                  league: str = "ALL",
+                  user: dict = Depends(get_current_user)):
+    """통합DB용 시즌·라운드 선택지 — 리그 필터 반영 후 계산(리그 탭의 /filters와 동일 규칙)."""
+    db = _resolve_scope_db(scope, user)
+    view = _total_league_view(db, league)
+    if view.empty or "S" not in view.columns:
+        return {"seasons": [], "rounds_by_season": {}, "latest": {"season": "ALL", "round": "ALL"}}
+
+    seasons = sorted([s for s in view["S"].dropna().unique().tolist()], reverse=True)
+    rounds_by_season = {}
+    for s in seasons:
+        rs = view.loc[view["S"] == s, "R"].dropna().unique().tolist()
+        rs = sorted(rs, key=_round_sort_key, reverse=True)
+        rounds_by_season[str(s)] = [str(x) for x in rs]
+
+    return {
+        "seasons": [str(s) for s in seasons],
+        "rounds_by_season": rounds_by_season,
+        # 통합DB는 "전체 현황"이 기본 화면이라, 리그 탭과 달리 최근 시즌/라운드로
+        # 좁히지 않고 전체를 기본값으로 보여준다.
+        "latest": {"season": "ALL", "round": "ALL"},
+    }
+
+
 @app.get("/api/total")
 def total_view(scope: str = PATHS.SCOPE_MASTER,
               league: str = "ALL",
               season: str = "ALL",
+              round: str = "ALL",   # noqa: A002
+              kw: Optional[float] = None,
+              kd: Optional[float] = None,
+              kl: Optional[float] = None,
+              khw: Optional[float] = None,
+              khd: Optional[float] = None,
+              khl: Optional[float] = None,
+              fw: Optional[float] = None,
+              fd: Optional[float] = None,
+              fl: Optional[float] = None,
               limit: int = 2000,
               user: dict = Depends(get_current_user)):
     """
-    통합DB(6대 리그 합산) 조회. 리그/시즌 필터 + RT 결과분포 요약.
+    통합DB(6대 리그 합산) 조회. 리그·시즌·라운드·배당 9종 필터 + RT 결과분포 요약.
     저장된 값을 불러오기만 한다 (재계산은 /api/recompute/* 별도 호출).
     """
     db = _resolve_scope_db(scope, user)
     total_df = DATA.load_total_df(db)
     if total_df.empty:
         return {"columns": [], "rows": [], "total": 0, "grand_total": 0,
-                "seasons": [], "rt_summary": None}
+                "seasons": [], "season": None, "round": None, "rt_summary": None}
 
-    view = total_df
-    if league != "ALL" and "Source_League" in view.columns:
-        _check_league(league)
-        view = view[view["Source_League"] == league]
+    view = _total_league_view(db, league)
 
     seasons = sorted(view["S"].dropna().astype(str).unique().tolist(), reverse=True) \
         if "S" in view.columns else []
-    if season != "ALL" and "S" in view.columns:
-        view = view[view["S"].astype(str) == season]
+
+    view, season, round = _apply_league_filters(
+        view, season, round,
+        {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
+         "KHL": khl, "FW": fw, "FD": fd, "FL": fl})
 
     rt_summary = _rt_summary(view)
 
@@ -1547,6 +1592,8 @@ def total_view(scope: str = PATHS.SCOPE_MASTER,
         "total": len(view),
         "grand_total": len(total_df),
         "seasons": seasons,
+        "season": season,
+        "round": round,
         "rt_summary": rt_summary,
     }
 
