@@ -274,6 +274,7 @@ CREATE TABLE IF NOT EXISTS my_picks (
     AT TEXT NOT NULL,
     starred INTEGER NOT NULL DEFAULT 0,
     pick TEXT,
+    hit TEXT,
     memo TEXT,
     updated_dt TEXT,
     UNIQUE(code, scope, S, R, No, HT, AT)
@@ -323,10 +324,12 @@ def ensure_predlog_db(username: str) -> str:
         con.execute("PRAGMA journal_mode=WAL;")
         con.execute(_SCHEMA_PREDICTION_LOG)
         con.execute(_SCHEMA_MY_PICKS)
-        # 기존에 만들어진 my_picks 테이블엔 memo 컬럼이 없을 수 있어 안전하게 보강한다.
+        # 기존에 만들어진 my_picks 테이블엔 memo/hit 컬럼이 없을 수 있어 안전하게 보강한다.
         cols = {r[1] for r in con.execute("PRAGMA table_info(my_picks)").fetchall()}
         if "memo" not in cols:
             con.execute("ALTER TABLE my_picks ADD COLUMN memo TEXT")
+        if "hit" not in cols:
+            con.execute("ALTER TABLE my_picks ADD COLUMN hit TEXT")
         con.commit()
     finally:
         con.close()

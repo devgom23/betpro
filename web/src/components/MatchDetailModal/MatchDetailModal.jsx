@@ -5,6 +5,7 @@ import './MatchDetailModal.css'
 
 const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828' }
 const PICK_OPTIONS = ['축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
+const HIT_OPTIONS = ['적중', '미적', '패스']
 
 function isStarred(v) {
   return v === true || v === 1 || v === '1'
@@ -299,6 +300,7 @@ function SampleTable({ row }) {
 // onSavePick(patch)가 실제 저장을 담당하고, 여기선 즉시(낙관적) 반영만 한다.
 function MyPickBar({ row, onSavePick }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
+  const [hit, setHit] = useState(row.MY_HIT || '')
   const [memo, setMemo] = useState(row.MEMO || '')
   const [savedMemo, setSavedMemo] = useState(row.MEMO || '')
 
@@ -306,6 +308,12 @@ function MyPickBar({ row, onSavePick }) {
     const next = e.target.value
     setPick(next)
     onSavePick({ pick: next || null })
+  }
+
+  function handleHitChange(e) {
+    const next = e.target.value
+    setHit(next)
+    onSavePick({ hit: next || null })
   }
 
   function saveMemoIfChanged() {
@@ -321,6 +329,17 @@ function MyPickBar({ row, onSavePick }) {
         <select value={pick} onChange={handlePickChange}>
           <option value="">선택 안함</option>
           {PICK_OPTIONS.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mypick-bar-field">
+        적중
+        <select value={hit} onChange={handleHitChange}>
+          <option value="">선택 안함</option>
+          {HIT_OPTIONS.map((o) => (
             <option key={o} value={o}>
               {o}
             </option>

@@ -4,6 +4,7 @@ import { api } from '../../api/client'
 import './MyPickModal.css'
 
 const PICK_OPTIONS = ['축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
+const HIT_OPTIONS = ['적중', '미적', '패스']
 
 function isStarred(v) {
   return v === true || v === 1 || v === '1'
@@ -22,6 +23,7 @@ function formatTime(v) {
 // (RT·핸디 등 분석 컬럼과 달리 이 값은 화면에서 직접 입력하는 순수 개인 기록).
 export default function MyPickModal({ code, scope, row, onClose, onSaved }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
+  const [hit, setHit] = useState(row.MY_HIT || '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -38,9 +40,10 @@ export default function MyPickModal({ code, scope, row, onClose, onSaved }) {
         AT: row.AT,
         starred: isStarred(row.IMPORTANT),
         pick: pick || null,
+        hit: hit || null,
         memo: row.MEMO || null,
       })
-      onSaved(pick || null)
+      onSaved({ pick: pick || '', hit: hit || '' })
       onClose()
     } catch (err) {
       setError(err.message)
@@ -85,6 +88,18 @@ export default function MyPickModal({ code, scope, row, onClose, onSaved }) {
           <select value={pick} onChange={(e) => setPick(e.target.value)}>
             <option value="">선택 안함</option>
             {PICK_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="mypick-select-row">
+          적중
+          <select value={hit} onChange={(e) => setHit(e.target.value)}>
+            <option value="">선택 안함</option>
+            {HIT_OPTIONS.map((o) => (
               <option key={o} value={o}>
                 {o}
               </option>

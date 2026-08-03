@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildColumnGroups, formatCell, cellStyle } from './columnGroups'
+import { buildColumnGroups, formatCell, cellStyle, myHitStyle } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
 import { api } from '../../api/client'
@@ -83,17 +83,19 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
     return {
       important: o?.important ?? isStarred(row.IMPORTANT),
       pick: o?.pick !== undefined ? o.pick : row.MY_PICK || '',
+      hit: o?.hit !== undefined ? o.hit : row.MY_HIT || '',
       memo: o?.memo !== undefined ? o.memo : row.MEMO || '',
     }
   }
 
-  // 별표/내픽/메모 공용 저장 — patch에 준 필드만 바꾸고 나머지는 현재 값을 유지한 채
-  // 전체 상태를 다시 올린다(서버는 매번 3개 값을 다 받아 upsert).
+  // 별표/내픽/적중여부/메모 공용 저장 — patch에 준 필드만 바꾸고 나머지는 현재 값을 유지한 채
+  // 전체 상태를 다시 올린다(서버는 매번 값을 다 받아 upsert).
   async function savePick(row, patch) {
     const key = matchKey(row)
     const prevValue = pickOverridesRef.current[key] ?? {
       important: isStarred(row.IMPORTANT),
       pick: row.MY_PICK || '',
+      hit: row.MY_HIT || '',
       memo: row.MEMO || '',
     }
     const next = { ...prevValue, ...patch }
@@ -109,6 +111,7 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
         AT: row.AT,
         starred: next.important,
         pick: next.pick || null,
+        hit: next.hit || null,
         memo: next.memo || null,
       })
     } catch {
@@ -264,6 +267,19 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
                             </td>
                           )
                         }
+                        if (c.key === 'MY_HIT') {
+                          return (
+                            <td key={`${gi}-${ci}`} className={className}>
+                              <button
+                                className="mypick-btn"
+                                style={myHitStyle(pickState.hit) || undefined}
+                                onClick={() => setPickRow(row)}
+                              >
+                                {pickState.hit || <span className="mypick-blank">－</span>}
+                              </button>
+                            </td>
+                          )
+                        }
                         // MY_PICK
                         return (
                           <td key={`${gi}-${ci}`} className={className}>
@@ -312,6 +328,7 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
               ...detailRow,
               IMPORTANT: effectivePick(detailRow).important,
               MY_PICK: effectivePick(detailRow).pick,
+              MY_HIT: effectivePick(detailRow).hit,
               MEMO: effectivePick(detailRow).memo,
             }}
             scope={scope}
@@ -327,10 +344,11 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
             row={{
               ...pickRow,
               MY_PICK: effectivePick(pickRow).pick,
+              MY_HIT: effectivePick(pickRow).hit,
               IMPORTANT: effectivePick(pickRow).important,
             }}
             onClose={() => setPickRow(null)}
-            onSaved={(newPick) => savePick(pickRow, { pick: newPick || '' })}
+            onSaved={(patch) => savePick(pickRow, patch)}
           />
         )}
       </div>

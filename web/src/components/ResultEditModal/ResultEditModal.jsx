@@ -30,6 +30,15 @@ function numOrNull(s) {
   return s === '' || s === null || s === undefined ? null : parseFloat(s)
 }
 
+// 승(W)/패(L) 배당 기준 핸디 부호 — 배당이 낮은(유리한) 쪽이 핸디를 준다.
+// 홈이 유리하면 -1, 원정이 유리하면 +1, 배당이 같으면(동배) -1.
+function computeHandicap(wRaw, lRaw) {
+  const w = parseFloat(wRaw)
+  const l = parseFloat(lRaw)
+  if (Number.isNaN(w) || Number.isNaN(l)) return null
+  return w > l ? '+1' : '-1'
+}
+
 // 점수가 둘 다 있고 서로 다를 때만 이긴 쪽을 강조한다(무승부·예정 경기는 강조 없음).
 // 지금 입력 중인 값(문자열) 기준으로 판단 — 저장 전에도 바로 반영되게.
 function scoreClass(hs, as_, side) {
@@ -155,14 +164,14 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
             _KW: oddsInit(r.KW),
             _KD: oddsInit(r.KD),
             _KL: oddsInit(r.KL),
-            _KH: handicapInit(r.KH),
+            _KH: handicapInit(r.KH) || computeHandicap(r.KW, r.KL) || '',
             _KHW: oddsInit(r.KHW),
             _KHD: oddsInit(r.KHD),
             _KHL: oddsInit(r.KHL),
             _FW: oddsInit(r.FW),
             _FD: oddsInit(r.FD),
             _FL: oddsInit(r.FL),
-            _FH: handicapInit(r.FH),
+            _FH: handicapInit(r.FH) || computeHandicap(r.FW, r.FL) || '',
             _FHW: oddsInit(r.FHW),
             _FHD: oddsInit(r.FHD),
             _FHL: oddsInit(r.FHL),
@@ -192,8 +201,22 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
       ? [ALL, ...new Set(Object.values(filters?.rounds_by_season ?? {}).flat())]
       : [ALL, ...(filters?.rounds_by_season?.[season] ?? [])]
 
+  // 승/패 배당(KW·KL 또는 FW·FL) 칸을 고치면 그 자리에서 핸디 부호도 같이 다시 계산한다.
   function updateRow(i, field, value) {
-    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)))
+    setRows((prev) =>
+      prev.map((r, idx) => {
+        if (idx !== i) return r
+        const next = { ...r, [field]: value }
+        if (field === '_KW' || field === '_KL') {
+          const h = computeHandicap(next._KW, next._KL)
+          if (h) next._KH = h
+        } else if (field === '_FW' || field === '_FL') {
+          const h = computeHandicap(next._FW, next._FL)
+          if (h) next._FH = h
+        }
+        return next
+      })
+    )
   }
 
   async function handleSave() {

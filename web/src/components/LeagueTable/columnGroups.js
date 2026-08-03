@@ -17,6 +17,7 @@ const F_ODDS_COLS = ['FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL']
 const MYPICK_COLS = [
   ['IMPORTANT', '중요'],
   ['MY_PICK', '내픽'],
+  ['MY_HIT', '적중'],
 ]
 
 const PH_COLS = [
@@ -203,6 +204,14 @@ function khHitSide(row) {
   const kh = toNum(row?.KH)
   if (hs === null || as_ === null || kh === null) return null
   return sideOf(hs + kh, as_)
+}
+
+// 내 예측의 "적중" 배지 색상 — 플핸예측 쪽 적중(PH_STATUS)과 같은 배색을 그대로 쓴다.
+export function myHitStyle(value) {
+  if (value === '적중') return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
+  if (value === '미적') return { background: '#C62828', color: '#fff', fontWeight: 700 }
+  if (value === '패스') return { background: '#757575', color: '#fff', fontWeight: 700 }
+  return null
 }
 
 // ── 셀 배경/글자색 (인라인 style 객체로 반환) ──

@@ -28,11 +28,11 @@ def _connect(username: str) -> sqlite3.Connection:
 
 
 def list_my_picks(username: str, code: str, scope: str) -> list[dict]:
-    """해당 리그(code)+스코프에서 이 계정이 표시한 별표/내픽/메모 전부."""
+    """해당 리그(code)+스코프에서 이 계정이 표시한 별표/내픽/적중여부/메모 전부."""
     con = _connect(username)
     try:
         rows = con.execute(
-            "SELECT S, R, No, HT, AT, starred, pick, memo FROM my_picks WHERE code=? AND scope=?",
+            "SELECT S, R, No, HT, AT, starred, pick, hit, memo FROM my_picks WHERE code=? AND scope=?",
             (code, scope),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -42,19 +42,19 @@ def list_my_picks(username: str, code: str, scope: str) -> list[dict]:
 
 def upsert_my_pick(username: str, code: str, scope: str,
                     s: str, r: str, no: str, ht: str, at: str,
-                    starred: bool, pick: str | None, memo: str | None) -> None:
+                    starred: bool, pick: str | None, hit: str | None, memo: str | None) -> None:
     con = _connect(username)
     try:
         con.execute(
             """
-            INSERT INTO my_picks (code, scope, S, R, No, HT, AT, starred, pick, memo, updated_dt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            INSERT INTO my_picks (code, scope, S, R, No, HT, AT, starred, pick, hit, memo, updated_dt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             ON CONFLICT(code, scope, S, R, No, HT, AT)
-            DO UPDATE SET starred = excluded.starred, pick = excluded.pick, memo = excluded.memo,
-                          updated_dt = excluded.updated_dt
+            DO UPDATE SET starred = excluded.starred, pick = excluded.pick, hit = excluded.hit,
+                          memo = excluded.memo, updated_dt = excluded.updated_dt
             """,
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),
-             1 if starred else 0, pick or None, memo or None),
+             1 if starred else 0, pick or None, hit or None, memo or None),
         )
         con.commit()
     finally:
