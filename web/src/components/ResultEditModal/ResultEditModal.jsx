@@ -323,8 +323,11 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
                   </tr>
                 </thead>
                 <tbody>
+                  {/* S/R/No만으로는 식별이 안 될 수 있다 — 시즌 막판 상/하위 스플릿처럼
+                      같은 라운드 안에서 그룹별로 No가 1부터 따로 매겨지는 리그가 있어
+                      서로 다른 두 경기가 같은 No를 쓸 수 있다. HT/AT까지 더해 고유하게 만든다. */}
                   {rows.map((r, i) => (
-                    <tr key={`${r.S}-${r.R}-${r.No}`}>
+                    <tr key={`${r.S}-${r.R}-${r.No}-${r.HT}-${r.AT}`}>
                       <td>{r.R}</td>
                       <td>{r.No}</td>
                       <td>{r.HT}</td>
