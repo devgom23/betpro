@@ -32,15 +32,31 @@ function homePoints(m, referenceTeam) {
   return 1
 }
 
-function RtBadge({ label }) {
+// 기준 팀 관점의 실제 승/무/패(W/D/L) + 그 경기의 핸디캡 결과(RT)를 함께 보여준다.
+// 예: L(핸승) = "핸디는 넘었지만(핸승) 실제로는 졌다(L)". 배경색은 기존과 같이 RT
+// 기준으로 정한다 — 바뀌는 건 배지 안의 글자뿐.
+function RtBadge({ label, resultLetter }) {
   if (!label) return null
   const bg = RT_COLOR[label] || '#9E9E9E'
   const fg = label === '핸무' ? '#0D1B2A' : '#fff'
   return (
     <span className="rt-badge" style={{ background: bg, color: fg }}>
-      {label}
+      {resultLetter ? `${resultLetter}(${label})` : label}
     </span>
   )
+}
+
+const RT_ORDER = ['핸승', '핸무', '무', '역']
+
+function wdlBreakdownText(bucket) {
+  if (!bucket) return ''
+  const entries = Object.entries(bucket.breakdown || {})
+  entries.sort((a, b) => {
+    const ai = RT_ORDER.indexOf(a[0])
+    const bi = RT_ORDER.indexOf(b[0])
+    return (ai === -1 ? RT_ORDER.length : ai) - (bi === -1 ? RT_ORDER.length : bi)
+  })
+  return entries.map(([label, n]) => `${label}(${n})`).join(' / ')
 }
 
 // 두 팀의 상대전적(핸승/핸무/무/역 기준). 상세보기 팝업과 리그탭 필터의
@@ -84,29 +100,34 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
     )
   }
 
+  const wdl = data.wdl_summary
+  const wdlTotal = wdl ? wdl.W.total + wdl.D.total + wdl.L.total : data.summary.총
+
   return (
     <>
-      <p className="h2h-caption">결과는 각 경기의 홈팀 기준입니다.</p>
-      <table className="detail-table h2h-summary-table">
-        <thead>
-          <tr>
-            <th className="col-hs">핸승</th>
-            <th className="col-hm">핸무</th>
-            <th className="col-mu">무</th>
-            <th className="col-yk">역</th>
-            <th>토탈</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>{data.summary.핸승}</td>
-            <td>{data.summary.핸무}</td>
-            <td>{data.summary.무}</td>
-            <td>{data.summary.역}</td>
-            <td className="col-total">{data.summary.총}</td>
-          </tr>
-        </tbody>
-      </table>
+      <p className="h2h-caption">
+        {home} 기준 실제 승/무/패이며, 괄호는 그때 핸디캡 결과(RT)입니다.
+      </p>
+      {wdl && (
+        <table className="detail-table h2h-summary-table h2h-wdl-table">
+          <thead>
+            <tr>
+              <th className="col-w">W({wdl.W.total})</th>
+              <th className="col-d">D({wdl.D.total})</th>
+              <th className="col-l">L({wdl.L.total})</th>
+              <th>토탈</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>{wdlBreakdownText(wdl.W)}</td>
+              <td>{wdlBreakdownText(wdl.D)}</td>
+              <td>{wdlBreakdownText(wdl.L)}</td>
+              <td className="col-total">{wdlTotal}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
 
       <div className="match-list-scroll">
         <table className="detail-table match-list">
@@ -134,7 +155,10 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
                   <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
                   <td className="row-label">{m.AT}</td>
                   <td>
-                    <RtBadge label={m.RT_label} />
+                    <RtBadge
+                      label={m.RT_label}
+                      resultLetter={{ 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]}
+                    />
                   </td>
                   <td className="col-total">{homePoints(m, home)}</td>
                 </tr>

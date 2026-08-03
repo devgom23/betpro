@@ -39,6 +39,19 @@
   background: rgba(198, 40, 40, 0.25);
 }
 
+/* 상대전적 실제 승/무/패(W/D/L) 요약 — 승=파랑/무=회색/패=빨강 */
+.detail-table .col-w {
+  background: rgba(21, 101, 192, 0.25);
+}
+
+.detail-table .col-d {
+  background: rgba(117, 117, 117, 0.25);
+}
+
+.detail-table .col-l {
+  background: rgba(198, 40, 40, 0.25);
+}
+
 .detail-table .col-total {
   font-weight: 700;
 }
@@ -67,9 +80,9 @@
   z-index: 1;
 }
 
-/* 상대전적 요약: 역/토탈 사이 구분선 (역이 5칸 중 4번째 컬럼) */
-.h2h-summary-table th:nth-child(4),
-.h2h-summary-table td:nth-child(4) {
+/* 상대전적 요약: L/토탈 사이 구분선 (L이 4칸 중 3번째 컬럼) */
+.h2h-wdl-table th:nth-child(3),
+.h2h-wdl-table td:nth-child(3) {
   border-right: 2px solid var(--border-strong);
 }
 
