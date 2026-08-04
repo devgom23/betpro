@@ -32,16 +32,26 @@ function homePoints(m, referenceTeam) {
   return 1
 }
 
-// 기준 팀 관점의 실제 승/무/패(W/D/L) + 그 경기의 핸디캡 결과(RT)를 함께 보여준다.
-// 예: L(핸승) = "핸디는 넘었지만(핸승) 실제로는 졌다(L)". 배경색은 기존과 같이 RT
-// 기준으로 정한다 — 바뀌는 건 배지 안의 글자뿐.
-function RtBadge({ label, resultLetter }) {
+// "유형" 컬럼 — 그 경기의 핸디캡 결과(RT: 핸승/핸무/무/역/취소)만 보여준다.
+function RtBadge({ label }) {
   if (!label) return null
   const bg = RT_COLOR[label] || '#9E9E9E'
   const fg = label === '핸무' ? '#0D1B2A' : '#fff'
   return (
     <span className="rt-badge" style={{ background: bg, color: fg }}>
-      {resultLetter ? `${resultLetter}(${label})` : label}
+      {label}
+    </span>
+  )
+}
+
+const WDL_COLOR = { W: '#1565C0', D: '#757575', L: '#C62828' }
+
+// "결과" 컬럼 — 기준 팀(home) 관점의 실제 승/무/패(W/D/L)만 보여준다.
+function WdlBadge({ letter }) {
+  if (!letter) return null
+  return (
+    <span className="rt-badge" style={{ background: WDL_COLOR[letter], color: '#fff' }}>
+      {letter}
     </span>
   )
 }
@@ -140,6 +150,7 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
               <th>AS</th>
               <th>AT</th>
               <th>결과</th>
+              <th>유형</th>
               <th>승점</th>
             </tr>
           </thead>
@@ -155,10 +166,10 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
                   <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
                   <td className="row-label">{m.AT}</td>
                   <td>
-                    <RtBadge
-                      label={m.RT_label}
-                      resultLetter={{ 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]}
-                    />
+                    <WdlBadge letter={{ 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]} />
+                  </td>
+                  <td>
+                    <RtBadge label={m.RT_label} />
                   </td>
                   <td className="col-total">{homePoints(m, home)}</td>
                 </tr>
