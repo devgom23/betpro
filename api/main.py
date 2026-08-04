@@ -739,8 +739,12 @@ def table_excel_download(code: str,
         {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
          "KHL": khl, "FW": fw, "FD": fd, "FL": fl})
 
+    records = DATA.df_to_records(sub)
+    _attach_my_picks(records, user["username"], code, scope)
+
     shown = USERLG.label_of(db, code) if _is_user_scope(scope) else code
-    buf = XLS.build_table_excel(list(df.columns), DATA.df_to_records(sub), title=shown)
+    buf = XLS.build_table_excel(
+        list(df.columns) + ["IMPORTANT", "MY_PICK", "MY_HIT", "MEMO"], records, title=shown)
     parts = [shown]
     if season:
         parts.append(str(season))

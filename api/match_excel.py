@@ -56,7 +56,7 @@ UPLOAD_COL_HINTS = {
     "FHW": "해외핸디 홈", "FHD": "해외핸디 무", "FHL": "해외핸디 원정",
 }
 
-RT_LABELS = {1: "핸승", 2: "핸무", 3: "무", 4: "역"}
+RT_LABELS = {1: "핸승", 2: "핸무", 3: "무", 4: "역", 5: "취소"}
 
 # MatchDetailModal.jsx SAMPLE_INDICATORS 와 동일한 순서·라벨
 SAMPLE_INDICATORS = [
@@ -150,6 +150,18 @@ def _int_or_blank(v):
         return int(float(v))
     except (TypeError, ValueError):
         return v
+
+
+_RT_ORDER = ["핸승", "핸무", "무", "역"]
+
+
+def _wdl_breakdown_text(bucket):
+    """HeadToHeadResult.jsx wdlBreakdownText()와 동일 — "핸승(2) / 핸무(3) / 역(1)" 형태."""
+    if not bucket:
+        return ""
+    entries = list((bucket.get("breakdown") or {}).items())
+    entries.sort(key=lambda kv: _RT_ORDER.index(kv[0]) if kv[0] in _RT_ORDER else len(_RT_ORDER))
+    return " / ".join(f"{label}({n})" for label, n in entries)
 
 
 def _points_for(m, reference_team):
@@ -362,22 +374,29 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
 
     ws.cell(row=rr, column=_RIGHT_COL, value="상대전적").font = _BOLD
     rr += 1
-    ws.cell(row=rr, column=_RIGHT_COL, value="결과는 각 경기의 홈팀 기준입니다.")
+    ws.cell(row=rr, column=_RIGHT_COL,
+           value=f"{ht} 기준 실제 승/무/패이며, 괄호는 그때 핸디캡 결과(RT)입니다.")
     rr += 1
     summary = h2h.get("summary")
+    wdl = h2h.get("wdl_summary")
     if summary:
-        _H2H_YK_COL = _RIGHT_COL + 3  # 핸승(+0) 핸무(+1) 무(+2) 역(+3) 토탈(+4)
-        rr = write_row(["핸승", "핸무", "무", "역", "토탈"], rr, start_col=_RIGHT_COL,
-                       font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
-        ws.cell(row=rr - 1, column=_H2H_YK_COL).border = _with_right_divider(_BORDER)
-        summary_row = rr
-        rr = write_row([summary["핸승"], summary["핸무"], summary["무"], summary["역"],
-                        summary["총"]], rr, start_col=_RIGHT_COL)
-        ws.cell(row=summary_row, column=_H2H_YK_COL).border = _with_right_divider(_BORDER)
-        rr += 1
-        rr = write_row(["시즌", "R", "HT", "HS", "AS", "AT", "결과", "승점"], rr, start_col=_RIGHT_COL,
-                       font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
+        _H2H_YK_COL = _RIGHT_COL + 2  # W(+0) D(+1) L(+2) 토탈(+3)
+        if wdl:
+            w_total, d_total, l_total = wdl["W"]["total"], wdl["D"]["total"], wdl["L"]["total"]
+            rr = write_row([f"W({w_total})", f"D({d_total})", f"L({l_total})", "토탈"], rr,
+                           start_col=_RIGHT_COL, font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
+            ws.cell(row=rr - 1, column=_H2H_YK_COL).border = _with_right_divider(_BORDER)
+            summary_row = rr
+            rr = write_row([
+                _wdl_breakdown_text(wdl["W"]), _wdl_breakdown_text(wdl["D"]),
+                _wdl_breakdown_text(wdl["L"]), w_total + d_total + l_total,
+            ], rr, start_col=_RIGHT_COL)
+            ws.cell(row=summary_row, column=_H2H_YK_COL).border = _with_right_divider(_BORDER)
+            rr += 1
+        rr = write_row(["시즌", "R", "HT", "HS", "AS", "AT", "결과", "유형", "승점"], rr,
+                       start_col=_RIGHT_COL, font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
         prev_season = None
+        _WDL_LETTER = {3: "W", 1: "D", 0: "L"}
         for m in h2h.get("matches", []):
             season = m.get("S")
             # 시즌이 바뀌는 경계마다 화면과 같은 굵은 구분선
@@ -385,9 +404,10 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
             hs_val = _int_or_blank(m.get("HS"))
             as_val = _int_or_blank(m.get("AS"))
             row_idx = rr
+            points = _points_for(m, ht)
             rr = write_row([
                 season, m.get("R"), m.get("HT"), hs_val, as_val, m.get("AT"),
-                m.get("RT_label") or "", _points_for(m, ht),
+                _WDL_LETTER.get(points, ""), m.get("RT_label") or "", points,
             ], rr, start_col=_RIGHT_COL, border=_DIVIDER_BORDER if divider else None)
             # 이긴 팀 점수만 빨간 강조 (화면의 winner-score와 동일)
             if isinstance(hs_val, int) and isinstance(as_val, int):
@@ -408,7 +428,7 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
         rr += 1
 
     widths = {1: 18, 2: 12, 3: 12, 4: 12, 5: 12, 6: 10,
-             7: 4, 8: 10, 9: 10, 10: 10, 11: 10, 12: 10, 13: 10, 14: 10, 15: 10}
+             7: 4, 8: 10, 9: 10, 10: 10, 11: 10, 12: 10, 13: 10, 14: 10, 15: 10, 16: 10}
     for col, width in widths.items():
         ws.column_dimensions[get_column_letter(col)].width = width
 
@@ -547,9 +567,10 @@ _GROUP_DEFS = [
     ("TK-W", "23. 국/통) 승 분석"), ("TK-L", "24. 국/통) 패 분석"),
     ("TK-WL", "25. 국/통) 승+패 분석"), ("TK-WDL", "26. 국/통) 승+무+패 분석"),
 ]
+_MYPICK_COLS = [("IMPORTANT", "중요"), ("MY_PICK", "내픽"), ("MY_HIT", "적중"), ("MEMO", "메모")]
 _SUB4 = ["핸승", "핸무", "무", "역"]
-_RT_DISPLAY = {1: "핸승", 2: "핸무", 3: "무", 4: "역"}
-_RT_CODE_FROM_TEXT = {"핸승": 1, "핸무": 2, "무": 3, "역": 4}
+_RT_DISPLAY = {1: "핸승", 2: "핸무", 3: "무", 4: "역", 5: "취소"}
+_RT_CODE_FROM_TEXT = {"핸승": 1, "핸무": 2, "무": 3, "역": 4, "취소": 5}
 
 _GROUP_HEADER_FILL = PatternFill("solid", fgColor="1F2937")
 _GROUP_HEADER_FONT = Font(bold=True, color="FFFFFF")
@@ -603,6 +624,10 @@ def build_column_groups(available_cols):
     add_flat("국내배당", "승(W) / 무(D) / 패(L)", _K_ODDS_COLS)
     add_flat("해외배당", "승(W) / 무(D) / 패(L)", _F_ODDS_COLS)
 
+    mypick_leaves = [{"key": k, "sub": s} for k, s in _MYPICK_COLS if k in available]
+    if mypick_leaves:
+        groups.append({"label1": "내 예측", "label2": "", "kind": "mypick", "cols": mypick_leaves})
+
     ph_leaves = [{"key": k, "sub": s} for k, s in _PH_COLS if k in available]
     if ph_leaves:
         groups.append({"label1": "플핸 예측", "label2": "26개 지표 기반 · 실측 적중률",
@@ -644,6 +669,10 @@ def _format_cell(group, col, value):
             return "" if _blank(value) else str(value)
         n = _num(value)
         return "" if n is None else f"{n:.0f}%"
+    if group["kind"] == "mypick":
+        if sub == "중요":
+            return "★" if value is True or value == 1 or value == "1" else "☆"
+        return "" if _blank(value) else str(value)
     if sub in _SUB4:
         n = _num(value)
         return "" if n is None else str(int(n))
@@ -670,7 +699,16 @@ def _cell_style(group, col, value, row=None):
             2: {"bg": "64B5F6", "fg": "0D1B2A", "bold": True},
             3: {"bg": "757575", "fg": "FFFFFF", "bold": True},
             4: {"bg": "C62828", "fg": "FFFFFF", "bold": True},
+            5: {"bg": "546E7A", "fg": "FFFFFF", "bold": True},
         }.get(code)
+
+    if group["kind"] == "mypick" and sub == "적중":
+        s = "" if _blank(value) else str(value).strip()
+        return {
+            "적중": {"bg": "FDD835", "fg": "0D1B2A", "bold": True},
+            "미적": {"bg": "C62828", "fg": "FFFFFF", "bold": True},
+            "패스": {"bg": "757575", "fg": "FFFFFF", "bold": True},
+        }.get(s)
 
     if (g1 == "해외배당" and sub == "FH") or (g1 == "국내배당" and sub == "KH"):
         n = _num(value)
