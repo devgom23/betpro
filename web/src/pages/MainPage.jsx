@@ -9,8 +9,8 @@ import HeadToHeadPage from './HeadToHeadPage'
 import AdminMasterPage from './AdminMasterPage'
 import AdminAccountsPage from './AdminAccountsPage'
 import BetHistoryPage from './BetHistoryPage'
+import WeeklyPickPage from './WeeklyPickPage'
 import UserLeagueModal from '../components/UserLeagueModal/UserLeagueModal'
-import BetCartTray from '../components/BetCartTray/BetCartTray'
 import './MainPage.css'
 
 // 공식 데이터에만 있는 탭들. 내 데이터는 "내가 만든 리그"만 쓰므로 여기 탭은 띄우지 않는다.
@@ -37,6 +37,8 @@ export default function MainPage() {
   // 리그 목록으로 탭을 잘못 고르는(예: 내 데이터에서 EPL을 여는) 상황을 막기 위함.
   const [leagueState, setLeagueState] = useState({ scope: null, list: [] })
   const [activeTab, setActiveTab] = useState('EPL')
+  // 상단 네비 4개 중 무엇을 보고 있는지. 'leagues'일 때만 리그 탭 줄이 보인다.
+  const [view, setView] = useState('leagues')
   const [showLeagueModal, setShowLeagueModal] = useState(false)
   const isUser = scope === 'user'
   const ready = leagueState.scope === scope
@@ -62,7 +64,6 @@ export default function MainPage() {
   useEffect(() => {
     if (!ready) return
     setActiveTab((cur) => {
-      if (cur === 'bet_history') return cur   // 스코프·역할과 무관하게 항상 유지되는 개인 탭
       if (!isUser && MASTER_ONLY_TABS.includes(cur)) return cur
       if (leagues.some((lg) => lg.code === cur)) return cur
       return leagues[0]?.code ?? ''
@@ -115,15 +116,28 @@ export default function MainPage() {
 
       <nav className="scope-bar">
         <div className="scope-toggle">
-          <button className={scope === 'master' ? 'active' : ''} onClick={() => setScope('master')}>
+          <button
+            className={view === 'leagues' && !isUser ? 'active' : ''}
+            onClick={() => { setView('leagues'); setScope('master') }}
+          >
             📊 공식 데이터
           </button>
-          <button className={scope === 'user' ? 'active' : ''} onClick={() => setScope('user')}>
+          <button
+            className={view === 'leagues' && isUser ? 'active' : ''}
+            onClick={() => { setView('leagues'); setScope('user') }}
+          >
             👤 내 데이터
+          </button>
+          <button className={view === 'weekly' ? 'active' : ''} onClick={() => setView('weekly')}>
+            📋 이번주 픽
+          </button>
+          <button className={view === 'bet_history' ? 'active' : ''} onClick={() => setView('bet_history')}>
+            🎫 베팅내역
           </button>
         </div>
       </nav>
 
+      {view === 'leagues' && (
       <nav className="tab-bar">
         {leagues.map((lg) => (
           <button
@@ -134,12 +148,6 @@ export default function MainPage() {
             {lg.label}
           </button>
         ))}
-        <button
-          className={activeTab === 'bet_history' ? 'active' : ''}
-          onClick={() => setActiveTab('bet_history')}
-        >
-          🎫 베팅내역
-        </button>
         {isUser ? (
           <button className="tab-manage" onClick={() => setShowLeagueModal(true)}>
             ＋ 리그 생성
@@ -174,9 +182,12 @@ export default function MainPage() {
           </>
         )}
       </nav>
+      )}
 
       <main className="content">
-        {activeTab === 'bet_history' && <BetHistoryPage scope={scope} />}
+        {view === 'weekly' && <WeeklyPickPage onGoBetHistory={() => setView('bet_history')} />}
+        {view === 'bet_history' && <BetHistoryPage scope={scope} />}
+        {view === 'leagues' && <>
         {!isUser && activeTab === 'total' && <TotalDbPage scope={scope} />}
         {!isUser && activeTab === 'h2h' && <HeadToHeadPage scope={scope} />}
         {!isUser && activeTab === 'admin_master' && user.role === 'admin' && <AdminMasterPage />}
@@ -198,6 +209,7 @@ export default function MainPage() {
         {ready && leagues.some((lg) => lg.code === activeTab) && (
           <LeaguePage key={`${scope}:${activeTab}`} code={activeTab} scope={scope} />
         )}
+        </>}
       </main>
 
       {showLeagueModal && (
@@ -207,8 +219,6 @@ export default function MainPage() {
           onChanged={loadLeagues}
         />
       )}
-
-      <BetCartTray scope={scope} onRegistered={() => setActiveTab('bet_history')} />
     </div>
   )
 }

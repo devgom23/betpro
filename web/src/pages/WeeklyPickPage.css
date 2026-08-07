@@ -1,0 +1,37 @@
+.wp-page {
+  padding: 16px;
+  padding-bottom: 96px;
+}
+
+.wp-title {
+  margin: 0 0 4px;
+}
+
+.wp-title-bet {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-strong);
+}
+
+.wp-desc {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0 0 16px;
+  max-width: 1100px;
+  line-height: 1.6;
+}
+
+.wp-empty {
+  color: var(--text-muted);
+  padding: 24px;
+  text-align: center;
+}
+
+/* 슬립은 "저장"할 때마다 옆으로 하나씩 늘어난다. */
+.wp-slips {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}

@@ -1,0 +1,149 @@
+.bet-slip {
+  flex: 0 0 auto;
+  width: 420px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--bg-surface);
+}
+
+.slip-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.slip-btn {
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.slip-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.slip-btn-primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+
+.slip-error {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.slip-side {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.slip-side h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.slip-side-controls {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.slip-side-controls select {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-page);
+  color: var(--text-primary);
+}
+
+.slip-side-controls select:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.slip-add {
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.slip-side-table,
+.slip-combo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.slip-side-table th,
+.slip-side-table td,
+.slip-combo-table th,
+.slip-combo-table td {
+  border: 1px solid var(--border-strong);
+  padding: 5px 8px;
+  text-align: center;
+}
+
+.slip-side-table th,
+.slip-combo-table th {
+  background: var(--bg-surface-2);
+  font-weight: 600;
+}
+
+.slip-empty {
+  color: var(--text-muted);
+  padding: 10px;
+}
+
+.slip-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.slip-remove:hover {
+  color: #ef4444;
+}
+
+/* 유형(플핸/핸무)이 두 줄로 쪼개지지 않게 최소 너비를 준다. */
+.slip-combo-table th:nth-child(1),
+.slip-combo-table th:nth-child(2),
+.slip-combo-table td:nth-child(1),
+.slip-combo-table td:nth-child(2) {
+  min-width: 46px;
+  white-space: nowrap;
+}
+
+.slip-combo-table input {
+  width: 78px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-page);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.slip-strong {
+  font-weight: 700;
+}
+
+.slip-combo-total td {
+  background: var(--bg-surface-2);
+  font-weight: 600;
+}

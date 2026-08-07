@@ -517,6 +517,57 @@ def _rt_label(v):
         return None
 
 
+# ─────────────────────────── 이번주 픽 (별표 모아보기) ───────────────────────────
+
+def _scope_league_codes(scope: str, user: dict) -> list[str]:
+    if scope == PATHS.SCOPE_USER:
+        return [lg["code"] for lg in USERLG.list_leagues(_resolve_scope_db(scope, user))]
+    return list(PATHS.LEAGUES)
+
+
+@app.get("/api/weekly_picks")
+def weekly_picks(user: dict = Depends(get_current_user)):
+    """공식 데이터·내 데이터를 가리지 않고 별표(★)로 표시한 경기를 전부 모아 보여준다.
+    "이번주 벳"에서 조합을 만들 대상이 되는 표라서, 리그 표와 같은 컬럼 구성을 그대로 쓰되
+    어느 리그 경기인지 알 수 있도록 L(리그 코드)을 채워서 내려준다."""
+    username = user["username"]
+    rows: list[dict] = []
+    for scope in (PATHS.SCOPE_MASTER, PATHS.SCOPE_USER):
+        try:
+            db = _resolve_scope_db(scope, user)
+        except HTTPException:
+            continue
+        for code in _scope_league_codes(scope, user):
+            starred = {
+                _my_pick_key(p["S"], p["R"], p["No"], p["HT"], p["AT"]): p
+                for p in MYPICKS.list_my_picks(username, code, scope)
+                if p["starred"]
+            }
+            if not starred:
+                continue
+            df = DATA.load_league_df_ranked(db, code)
+            if df.empty:
+                continue
+            for rec in DATA.df_to_records(df):
+                key = _my_pick_key(rec.get("S"), rec.get("R"), rec.get("No"),
+                                   rec.get("HT"), rec.get("AT"))
+                p = starred.get(key)
+                if p is None:
+                    continue
+                rec["L"] = code
+                rec["scope"] = scope
+                rec["IMPORTANT"] = True
+                rec["MY_PICK"] = p["pick"]
+                rec["MY_HIT"] = p["hit"]
+                rec["MEMO"] = p["memo"]
+                rows.append(rec)
+
+    rows.sort(key=lambda r: (str(r.get("DT") or ""), str(r.get("TM") or "")))
+    columns = ["L"] + [c for c in (list(rows[0].keys()) if rows else [])
+                       if c not in ("L", "scope")]
+    return {"columns": columns, "rows": rows, "total": len(rows)}
+
+
 # ─────────────────────────── 베팅내역 (조합베팅) ───────────────────────────
 
 class BetSlipLegBody(BaseModel):

@@ -4,7 +4,6 @@ import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
 import { api } from '../../api/client'
 import { useFontSize } from '../../context/FontSizeContext'
-import { useBetCart } from '../../context/BetCartContext'
 import './LeagueTable.css'
 
 const VISIBLE_ROWS = 20
@@ -29,7 +28,6 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
   const groups = useMemo(() => buildColumnGroups(columns || []), [columns])
   const [detailRow, setDetailRow] = useState(null)
   const [pickRow, setPickRow] = useState(null) // 내픽 팝업 대상 행
-  const betCart = useBetCart()
   // 별표/내픽/메모 클릭 즉시 반영용 오버레이. 새로 조회하면(rows가 바뀌면) 서버가 다시
   // 내려준 최신값으로 자연히 대체되므로 초기화한다.
   // ref로도 같은 값을 들고 있는 이유: React state 갱신은 비동기라 "별표 클릭 직후 곧바로
@@ -241,22 +239,6 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
                     >
                       🔍
                     </button>
-                    {(() => {
-                      const leg = {
-                        code: code || row.Source_League, scope,
-                        S: row.S, R: row.R, No: row.No, HT: row.HT, AT: row.AT, DT: row.DT,
-                      }
-                      const inCart = betCart.hasLeg(leg)
-                      return (
-                        <button
-                          className={`detail-btn bet-cart-btn ${inCart ? 'bet-cart-btn-on' : ''}`}
-                          title={inCart ? '베팅 카트에서 빼기' : '베팅 카트에 담기'}
-                          onClick={() => (inCart ? betCart.removeLeg(leg) : betCart.addLeg(leg))}
-                        >
-                          🎟️
-                        </button>
-                      )
-                    })()}
                   </td>
                   {groups.flatMap((g, gi) => {
                     const key = groupKey(g)
