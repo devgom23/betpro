@@ -79,6 +79,7 @@ import user_leagues as USERLG  # noqa: E402
 import crawler as CRAWL        # noqa: E402
 import kr_crawler as KRCRAWL   # noqa: E402
 import my_picks as MYPICKS     # noqa: E402
+import bet_slips as BETSLIPS   # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -514,6 +515,77 @@ def _rt_label(v):
         return RT_LABELS.get(int(float(v)))
     except (TypeError, ValueError):
         return None
+
+
+# ─────────────────────────── 베팅내역 (조합베팅) ───────────────────────────
+
+class BetSlipLegBody(BaseModel):
+    code: str
+    S: Union[str, int, float]
+    R: Union[str, int, float]
+    No: Union[str, int, float]
+    HT: Union[str, int, float]
+    AT: Union[str, int, float]
+    DT: str
+    pick_type: str
+
+
+class BetSlipBody(BaseModel):
+    scope: str
+    odds: Optional[float] = None
+    stake: Optional[int] = None
+    memo: Optional[str] = None
+    legs: list[BetSlipLegBody]
+
+
+@app.post("/api/bet_slips")
+def create_bet_slip(body: BetSlipBody, user: dict = Depends(get_current_user)):
+    """조합베팅(파를레이) 등록 — 계정 개인 기록, my_picks와 동일하게 scope와 무관하게 본인만 본다."""
+    slip_id = BETSLIPS.create_slip(
+        user["username"], body.scope,
+        [leg.model_dump() for leg in body.legs],
+        body.odds, body.stake, body.memo,
+    )
+    return {"ok": True, "id": slip_id}
+
+
+@app.get("/api/bet_slips")
+def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_current_user)):
+    """등록된 조합베팅을 회차(최신순)로 묶어, 다리별 실제 결과(RT)를 조회해 적중/미적중을 매겨 반환한다."""
+    slips = BETSLIPS.list_slips(user["username"], scope)
+    db = _resolve_scope_db(scope, user)
+    df_cache: dict[str, pd.DataFrame] = {}
+
+    def rt_for(leg: dict):
+        code = leg["code"]
+        if code not in df_cache:
+            df_cache[code] = DATA.load_league_df(db, code)
+        df = df_cache[code]
+        if df.empty or "RT" not in df.columns:
+            return None
+        key = _my_pick_key(leg["S"], leg["R"], leg["No"], leg["HT"], leg["AT"])
+        for _, row in df.iterrows():
+            if _my_pick_key(row.get("S"), row.get("R"), row.get("No"), row.get("HT"), row.get("AT")) == key:
+                return _rt_label(row.get("RT"))
+        return None
+
+    out = []
+    for slip in slips:
+        leg_results = []
+        for leg in slip["legs"]:
+            actual = rt_for(leg)
+            leg["actual"] = actual
+            leg["hit"] = BETSLIPS.judge_leg(leg["pick_type"], actual)
+            leg_results.append(leg["hit"])
+        slip["result"] = BETSLIPS.slip_result(leg_results)
+        out.append(slip)
+    return {"slips": out}
+
+
+@app.delete("/api/bet_slips/{slip_id}")
+def delete_bet_slip(slip_id: int, user: dict = Depends(get_current_user)):
+    BETSLIPS.delete_slip(user["username"], slip_id)
+    return {"ok": True}
 
 
 def _wdl_breakdown(m: pd.DataFrame, reference: str) -> dict:

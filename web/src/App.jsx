@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import { FontSizeProvider } from './context/FontSizeContext'
+import { BetCartProvider } from './context/BetCartContext'
 import LoginPage from './pages/LoginPage'
 import MainPage from './pages/MainPage'
 
@@ -53,7 +54,9 @@ export default function App() {
       <ThemeProvider>
         <FontSizeProvider>
           <AuthProvider>
-            <AppRoutes />
+            <BetCartProvider>
+              <AppRoutes />
+            </BetCartProvider>
           </AuthProvider>
         </FontSizeProvider>
       </ThemeProvider>

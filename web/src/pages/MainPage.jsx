@@ -8,7 +8,9 @@ import TotalDbPage from './TotalDbPage'
 import HeadToHeadPage from './HeadToHeadPage'
 import AdminMasterPage from './AdminMasterPage'
 import AdminAccountsPage from './AdminAccountsPage'
+import BetHistoryPage from './BetHistoryPage'
 import UserLeagueModal from '../components/UserLeagueModal/UserLeagueModal'
+import BetCartTray from '../components/BetCartTray/BetCartTray'
 import './MainPage.css'
 
 // 공식 데이터에만 있는 탭들. 내 데이터는 "내가 만든 리그"만 쓰므로 여기 탭은 띄우지 않는다.
@@ -60,6 +62,7 @@ export default function MainPage() {
   useEffect(() => {
     if (!ready) return
     setActiveTab((cur) => {
+      if (cur === 'bet_history') return cur   // 스코프·역할과 무관하게 항상 유지되는 개인 탭
       if (!isUser && MASTER_ONLY_TABS.includes(cur)) return cur
       if (leagues.some((lg) => lg.code === cur)) return cur
       return leagues[0]?.code ?? ''
@@ -131,6 +134,12 @@ export default function MainPage() {
             {lg.label}
           </button>
         ))}
+        <button
+          className={activeTab === 'bet_history' ? 'active' : ''}
+          onClick={() => setActiveTab('bet_history')}
+        >
+          🎫 베팅내역
+        </button>
         {isUser ? (
           <button className="tab-manage" onClick={() => setShowLeagueModal(true)}>
             ＋ 리그 생성
@@ -167,6 +176,7 @@ export default function MainPage() {
       </nav>
 
       <main className="content">
+        {activeTab === 'bet_history' && <BetHistoryPage scope={scope} />}
         {!isUser && activeTab === 'total' && <TotalDbPage scope={scope} />}
         {!isUser && activeTab === 'h2h' && <HeadToHeadPage scope={scope} />}
         {!isUser && activeTab === 'admin_master' && user.role === 'admin' && <AdminMasterPage />}
@@ -197,6 +207,8 @@ export default function MainPage() {
           onChanged={loadLeagues}
         />
       )}
+
+      <BetCartTray scope={scope} onRegistered={() => setActiveTab('bet_history')} />
     </div>
   )
 }

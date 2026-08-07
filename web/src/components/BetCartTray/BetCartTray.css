@@ -1,0 +1,70 @@
+.bet-cart-tray {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  background: var(--bg-surface);
+  border-top: 2px solid var(--border-strong);
+  padding: 10px 16px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bet-cart-tray-legs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bet-cart-leg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-page);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.bet-cart-leg-match {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bet-cart-leg-remove {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.bet-cart-leg-remove:hover {
+  color: #ef4444;
+}
+
+.bet-cart-tray-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bet-cart-tray-actions input {
+  width: 110px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-page);
+  color: var(--text-primary);
+}
+
+.bet-cart-error {
+  color: #ef4444;
+  font-size: 13px;
+}

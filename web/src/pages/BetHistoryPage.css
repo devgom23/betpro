@@ -1,0 +1,111 @@
+.bet-history-page {
+  padding: 16px;
+  padding-bottom: 96px; /* 하단 베팅카트 트레이에 가려지지 않도록 */
+}
+
+.bet-history-title {
+  margin: 0 0 4px;
+}
+
+.bet-history-desc {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+.bet-history-empty {
+  color: var(--text-muted);
+  padding: 24px;
+  text-align: center;
+}
+
+.bet-history-round {
+  margin-bottom: 28px;
+}
+
+.bet-history-round h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.bet-history-table-wrap {
+  overflow-x: auto;
+}
+
+.bet-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.bet-history-table th,
+.bet-history-table td {
+  border: 1px solid var(--border-strong);
+  padding: 8px 10px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.bet-history-table th {
+  background: var(--bg-surface-2);
+}
+
+.bet-history-nowrap {
+  white-space: nowrap;
+}
+
+.bet-history-legs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.bet-history-leg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+
+.bet-history-leg-match {
+  white-space: nowrap;
+}
+
+.bet-history-leg-pick {
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.bet-history-leg-hit {
+  font-size: 13px;
+}
+
+.bet-history-result {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-weight: 700;
+}
+
+.bet-history-profit-pos {
+  color: #2e7d32;
+  font-weight: 700;
+}
+
+.bet-history-profit-neg {
+  color: #c62828;
+  font-weight: 700;
+}
+
+.bet-history-delete {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
