@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
-import LeagueTable from '../components/LeagueTable/LeagueTable'
+import LeagueTable, { selectKey } from '../components/LeagueTable/LeagueTable'
 import BetSlip from '../components/BetSlip/BetSlip'
 import './WeeklyPickPage.css'
 
@@ -15,6 +15,9 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
   const [data, setData] = useState({ columns: [], rows: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [clearing, setClearing] = useState(false)
+  // 선택 삭제용 체크 상태. 키→행 전체를 들고 있어야 삭제 API에 code/scope/S/R/No/HT/AT를 보낼 수 있다.
+  const [selected, setSelected] = useState(new Map())
   // 슬립은 "저장"을 누를 때마다 옆에 하나씩 늘어난다.
   const [slipIds, setSlipIds] = useState([1])
   const [nextId, setNextId] = useState(2)
@@ -36,12 +39,48 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
   const rows = data.rows || []
   const period = rangeLabel(rows)
 
+  function toggleRow(row) {
+    setSelected((prev) => {
+      const key = selectKey(row)
+      const next = new Map(prev)
+      if (next.has(key)) next.delete(key)
+      else next.set(key, row)
+      return next
+    })
+  }
+
+  async function handleDeleteSelected() {
+    if (selected.size === 0) return
+    if (!window.confirm(`선택한 ${selected.size}개 경기를 이번주 픽에서 지웁니다(리그 데이터는 그대로입니다). 계속할까요?`)) return
+    setClearing(true)
+    setError('')
+    try {
+      const items = [...selected.values()].map((row) => ({
+        code: row.L, scope: row.scope, S: row.S, R: row.R, No: row.No, HT: row.HT, AT: row.AT,
+      }))
+      await api.post('/api/weekly_picks/hide', { items })
+      setSelected(new Map())
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setClearing(false)
+    }
+  }
+
   return (
     <div className="wp-page">
-      <h2 className="wp-title">📋 다음주 픽</h2>
+      <div className="wp-title-row">
+        <h2 className="wp-title">📋 이번주 픽</h2>
+        {rows.length > 0 && (
+          <button className="wp-clear-btn" onClick={handleDeleteSelected} disabled={clearing || selected.size === 0}>
+            🗑 선택 삭제{selected.size > 0 ? ` (${selected.size})` : ''}
+          </button>
+        )}
+      </div>
       <p className="wp-desc">
         {period && <>{period} · </>}
-        공식 데이터/내 데이터를 가리지 않고 별표(★) 표시한 경기를 모두 모아 보여줍니다.
+        별표(★) 표시한 경기 모음 · 체크 후 "선택 삭제"하면 이 화면에서만 빠집니다(리그 데이터는 유지)
       </p>
 
       {loading && <div className="wp-empty">불러오는 중...</div>}
@@ -52,15 +91,20 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
         </div>
       )}
       {rows.length > 0 && (
-        <LeagueTable columns={data.columns} rows={rows} scope="master" />
+        <LeagueTable
+          columns={data.columns}
+          rows={rows}
+          scope="master"
+          selectable
+          selectedKeys={new Set(selected.keys())}
+          onToggleRow={toggleRow}
+          hideIndicators
+        />
       )}
 
       <h2 className="wp-title wp-title-bet">🎲 이번주 벳</h2>
       <p className="wp-desc">
-        위 표의 경기 중 두 경기를 골라 베팅 유형(정/역/무/핸승/핸무/플핸)을 담으면, 두 선택을 조합한
-        가상 배당·수익을 계산해 보여줍니다. "저장"을 누르면 이 슬립은 그대로 남고 옆에 새 슬립이 하나 더
-        생깁니다. "벳등록"을 누르면 조합표의 줄들이 베팅내역 탭에 기록됩니다. 실제 베팅이 아닌
-        시뮬레이션입니다.
+        경기 2개를 골라 유형을 담으면 가상 배당·수익 계산 · "저장"으로 슬립 추가, "벳등록"으로 베팅내역에 기록(시뮬레이션)
       </p>
 
       <div className="wp-slips">

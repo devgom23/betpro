@@ -7,6 +7,36 @@
   margin: 0 0 4px;
 }
 
+.wp-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.wp-title-row .wp-title {
+  margin-bottom: 0;
+}
+
+.wp-clear-btn {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wp-clear-btn:hover {
+  color: #c62828;
+  border-color: #c62828;
+}
+
+.wp-clear-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .wp-title-bet {
   margin-top: 36px;
   padding-top: 24px;
@@ -19,6 +49,9 @@
   margin: 0 0 16px;
   max-width: 1100px;
   line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .wp-empty {

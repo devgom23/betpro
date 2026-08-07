@@ -32,10 +32,34 @@ def list_my_picks(username: str, code: str, scope: str) -> list[dict]:
     con = _connect(username)
     try:
         rows = con.execute(
-            "SELECT S, R, No, HT, AT, starred, pick, hit, memo FROM my_picks WHERE code=? AND scope=?",
+            "SELECT S, R, No, HT, AT, starred, pick, hit, memo, wp_hidden FROM my_picks WHERE code=? AND scope=?",
             (code, scope),
         ).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
+def hide_from_weekly_picks(username: str, items: list[dict]) -> int:
+    """골라준 경기들을 "이번주 픽" 화면에서만 숨긴다. 별표(starred)는 그대로 두므로
+    리그 표의 ★ 표시·적중 기록은 안 바뀐다 — "선택 삭제"에서 쓴다.
+    반환값은 실제로 숨겨진 행 수."""
+    con = _connect(username)
+    try:
+        cur = con.cursor()
+        n = 0
+        for it in items:
+            cur.execute(
+                """
+                UPDATE my_picks SET wp_hidden = 1, updated_dt = datetime('now')
+                WHERE code=? AND scope=? AND S=? AND R=? AND No=? AND HT=? AND AT=?
+                """,
+                (it["code"], it["scope"], normalize(it["S"]), normalize(it["R"]), normalize(it["No"]),
+                 normalize(it["HT"]), normalize(it["AT"])),
+            )
+            n += cur.rowcount
+        con.commit()
+        return n
     finally:
         con.close()
 
@@ -47,11 +71,11 @@ def upsert_my_pick(username: str, code: str, scope: str,
     try:
         con.execute(
             """
-            INSERT INTO my_picks (code, scope, S, R, No, HT, AT, starred, pick, hit, memo, updated_dt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            INSERT INTO my_picks (code, scope, S, R, No, HT, AT, starred, pick, hit, memo, wp_hidden, updated_dt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
             ON CONFLICT(code, scope, S, R, No, HT, AT)
             DO UPDATE SET starred = excluded.starred, pick = excluded.pick, hit = excluded.hit,
-                          memo = excluded.memo, updated_dt = excluded.updated_dt
+                          memo = excluded.memo, wp_hidden = 0, updated_dt = excluded.updated_dt
             """,
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),
              1 if starred else 0, pick or None, hit or None, memo or None),

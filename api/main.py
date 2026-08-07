@@ -525,6 +525,14 @@ def _scope_league_codes(scope: str, user: dict) -> list[str]:
     return list(PATHS.LEAGUES)
 
 
+def _scope_league_labels(scope: str, user: dict) -> dict:
+    """리그 코드 → 화면에 쓰는 리그명(라벨). 내 데이터는 사용자가 리그 생성 시
+    직접 지은 이름(예: ul_2 → 'K2')이라 코드만으론 알아볼 수 없어 따로 매핑해준다."""
+    if scope == PATHS.SCOPE_USER:
+        return {lg["code"]: lg["label"] for lg in USERLG.list_leagues(_resolve_scope_db(scope, user))}
+    return dict(PATHS.LEAGUE_LABEL)
+
+
 @app.get("/api/weekly_picks")
 def weekly_picks(user: dict = Depends(get_current_user)):
     """공식 데이터·내 데이터를 가리지 않고 별표(★)로 표시한 경기를 전부 모아 보여준다.
@@ -537,11 +545,12 @@ def weekly_picks(user: dict = Depends(get_current_user)):
             db = _resolve_scope_db(scope, user)
         except HTTPException:
             continue
+        labels = _scope_league_labels(scope, user)
         for code in _scope_league_codes(scope, user):
             starred = {
                 _my_pick_key(p["S"], p["R"], p["No"], p["HT"], p["AT"]): p
                 for p in MYPICKS.list_my_picks(username, code, scope)
-                if p["starred"]
+                if p["starred"] and not p["wp_hidden"]
             }
             if not starred:
                 continue
@@ -555,6 +564,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
                 if p is None:
                     continue
                 rec["L"] = code
+                rec["L_LABEL"] = labels.get(code, code)
                 rec["scope"] = scope
                 rec["IMPORTANT"] = True
                 rec["MY_PICK"] = p["pick"]
@@ -564,8 +574,30 @@ def weekly_picks(user: dict = Depends(get_current_user)):
 
     rows.sort(key=lambda r: (str(r.get("DT") or ""), str(r.get("TM") or "")))
     columns = ["L"] + [c for c in (list(rows[0].keys()) if rows else [])
-                       if c not in ("L", "scope")]
+                       if c not in ("L", "L_LABEL", "scope")]
     return {"columns": columns, "rows": rows, "total": len(rows)}
+
+
+class HideItem(BaseModel):
+    code: str
+    scope: str
+    S: Union[str, int, float]
+    R: Union[str, int, float]
+    No: Union[str, int, float]
+    HT: Union[str, int, float]
+    AT: Union[str, int, float]
+
+
+class HideBody(BaseModel):
+    items: list[HideItem]
+
+
+@app.post("/api/weekly_picks/hide")
+def hide_weekly_picks(body: HideBody, user: dict = Depends(get_current_user)):
+    """이번주 픽 선택 삭제 — 체크한 경기를 이 화면에서만 숨긴다. 별표(starred)는 그대로 둬서
+    리그 표의 ★ 표시·적중 기록은 안 바뀐다."""
+    cleared = MYPICKS.hide_from_weekly_picks(user["username"], [item.model_dump() for item in body.items])
+    return {"ok": True, "cleared": cleared}
 
 
 # ─────────────────────────── 베팅내역 (조합베팅) ───────────────────────────

@@ -276,6 +276,8 @@ CREATE TABLE IF NOT EXISTS my_picks (
     pick TEXT,
     hit TEXT,
     memo TEXT,
+    -- 이번주 픽 화면에서만 숨긴다("선택 삭제"). starred는 그대로라 리그 표의 별표는 안 꺼진다.
+    wp_hidden INTEGER NOT NULL DEFAULT 0,
     updated_dt TEXT,
     UNIQUE(code, scope, S, R, No, HT, AT)
 )
@@ -364,6 +366,8 @@ def ensure_predlog_db(username: str) -> str:
             con.execute("ALTER TABLE my_picks ADD COLUMN memo TEXT")
         if "hit" not in cols:
             con.execute("ALTER TABLE my_picks ADD COLUMN hit TEXT")
+        if "wp_hidden" not in cols:
+            con.execute("ALTER TABLE my_picks ADD COLUMN wp_hidden INTEGER NOT NULL DEFAULT 0")
         con.execute("PRAGMA foreign_keys=ON;")
         con.execute(_SCHEMA_BET_SLIPS)
         con.execute(_SCHEMA_BET_SLIP_LEGS)

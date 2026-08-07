@@ -89,7 +89,9 @@ function rtCodeOf(v) {
 }
 
 // ── 컬럼 그룹 트리 만들기: 실제로 존재하는(백엔드가 내려준) 컬럼만 순서대로 배치 ──
-export function buildColumnGroups(availableCols) {
+// hideIndicators: 26개 지표 그룹(1~26번)을 아예 빼고 만든다 — 이번주 픽처럼 여러 리그를
+// 한 표에 모아 보여줄 때, 그 표에서 다시 26개 지표까지 볼 일은 없어서 생략용으로 쓴다.
+export function buildColumnGroups(availableCols, { hideIndicators = false } = {}) {
   const available = new Set(availableCols)
   const groups = []
 
@@ -113,11 +115,13 @@ export function buildColumnGroups(availableCols) {
     groups.push({ label1: '플핸 예측', label2: '26개 지표 기반 · 실측 적중률', kind: 'ph', cols: phLeaves })
   }
 
-  for (const [code, title] of GROUP_DEFS) {
-    const leaves = SUB4.map((sub, i) => ({ key: `${code} ${i + 1}`, sub })).filter((c) =>
-      available.has(c.key)
-    )
-    if (leaves.length) groups.push({ label1: title, label2: code, kind: 'indicator', cols: leaves })
+  if (!hideIndicators) {
+    for (const [code, title] of GROUP_DEFS) {
+      const leaves = SUB4.map((sub, i) => ({ key: `${code} ${i + 1}`, sub })).filter((c) =>
+        available.has(c.key)
+      )
+      if (leaves.length) groups.push({ label1: title, label2: code, kind: 'indicator', cols: leaves })
+    }
   }
 
   return groups

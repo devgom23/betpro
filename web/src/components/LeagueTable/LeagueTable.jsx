@@ -24,8 +24,17 @@ function isStarred(v) {
   return v === true || v === 1 || v === '1'
 }
 
-export default function LeagueTable({ code, columns, rows, scope, highlightCols = [] }) {
-  const groups = useMemo(() => buildColumnGroups(columns || []), [columns])
+// 선택 삭제(체크박스)용 행 식별 키. 이번주 픽처럼 여러 리그를 한 표에 모아 보여줄 때
+// 쓰라고 L(리그 코드)·scope까지 포함한다 — 일반 리그 탭에서는 항상 같은 값이라 무해하다.
+export function selectKey(row) {
+  return `${row.L ?? ''}|${row.scope ?? ''}|${row.S}|${row.R}|${row.No}|${row.HT}|${row.AT}`
+}
+
+export default function LeagueTable({
+  code, columns, rows, scope, highlightCols = [],
+  selectable = false, selectedKeys, onToggleRow, hideIndicators = false,
+}) {
+  const groups = useMemo(() => buildColumnGroups(columns || [], { hideIndicators }), [columns, hideIndicators])
   const [detailRow, setDetailRow] = useState(null)
   const [pickRow, setPickRow] = useState(null) // 내픽 팝업 대상 행
   // 별표/내픽/메모 클릭 즉시 반영용 오버레이. 새로 조회하면(rows가 바뀌면) 서버가 다시
@@ -56,7 +65,8 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
 
   // 접힌 그룹까지 반영한 실제 열 개수 (위아래 빈 행의 colSpan 용)
   const leafCount =
-    1 + groups.reduce((n, g) => n + (collapsed.has(groupKey(g)) ? 1 : g.cols.length), 0)
+    (selectable ? 1 : 0) + 1 +
+    groups.reduce((n, g) => n + (collapsed.has(groupKey(g)) ? 1 : g.cols.length), 0)
 
   // 그려야 할 구간이 실제로 바뀔 때만 상태를 갱신한다.
   // (스크롤 이벤트마다 다시 그리면 오히려 버벅이므로, 시작 행이 달라질 때만 갱신)
@@ -155,7 +165,8 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
         <table className={`league-table ${fontSize === 'large' ? 'font-large' : ''}`}>
           <thead>
             <tr>
-              <th className="detail-col sticky-col" rowSpan={2}></th>
+              {selectable && <th className="select-col sticky-col" rowSpan={2}></th>}
+              <th className={`detail-col sticky-col${selectable ? ' sticky-col-2' : ''}`} rowSpan={2}></th>
               {groups.map((g, gi) => {
                 const key = groupKey(g)
                 const isCollapsed = collapsed.has(key)
@@ -231,7 +242,16 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
               const pickState = effectivePick(row)
               return (
                 <tr key={ri} data-row="" className={pickState.important ? 'row-starred' : undefined}>
-                  <td className="detail-col sticky-col">
+                  {selectable && (
+                    <td className="select-col sticky-col">
+                      <input
+                        type="checkbox"
+                        checked={selectedKeys?.has(selectKey(row)) ?? false}
+                        onChange={() => onToggleRow?.(row)}
+                      />
+                    </td>
+                  )}
+                  <td className={`detail-col sticky-col${selectable ? ' sticky-col-2' : ''}`}>
                     <button
                       className="detail-btn"
                       title="상세 경기 정보"
@@ -291,7 +311,9 @@ export default function LeagueTable({ code, columns, rows, scope, highlightCols 
                       })
                     }
                     return g.cols.map((c, ci) => {
-                      const value = row[c.key]
+                      // L(리그) 칸은 내부 매칭용 코드(ul_2 등)가 아니라 사용자가 지은 리그명을 보여준다
+                      // (이번주 픽처럼 여러 스코프 리그를 한 표에 모아 보여줄 때만 L_LABEL이 붙어 온다).
+                      const value = c.key === 'L' && row.L_LABEL != null ? row.L_LABEL : row[c.key]
                       const style = cellStyle(g, c, value, row)
                       const isHighlighted = highlightCols.includes(c.key)
                       const isLastCol = !isLastGroup && ci === g.cols.length - 1
