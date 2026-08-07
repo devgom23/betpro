@@ -528,30 +528,36 @@ class BetSlipLegBody(BaseModel):
     AT: Union[str, int, float]
     DT: str
     pick_type: str
-
-
-class BetSlipBody(BaseModel):
-    scope: str
     odds: Optional[float] = None
+
+
+class BetComboBody(BaseModel):
+    odds: Optional[float] = None      # 미지정이면 다리 배당의 곱으로 계산
     stake: Optional[int] = None
-    memo: Optional[str] = None
     legs: list[BetSlipLegBody]
 
 
+class BetBatchBody(BaseModel):
+    scope: str
+    memo: Optional[str] = None
+    bets: list[BetComboBody]
+
+
 @app.post("/api/bet_slips")
-def create_bet_slip(body: BetSlipBody, user: dict = Depends(get_current_user)):
-    """조합베팅(파를레이) 등록 — 계정 개인 기록, my_picks와 동일하게 scope와 무관하게 본인만 본다."""
-    slip_id = BETSLIPS.create_slip(
+def create_bet_batch(body: BetBatchBody, user: dict = Depends(get_current_user)):
+    """"벳등록" 한 번 = 조합표의 여러 줄을 한 묶음으로 등록. 계정 개인 기록이라 본인만 본다."""
+    batch_id = BETSLIPS.create_batch(
         user["username"], body.scope,
-        [leg.model_dump() for leg in body.legs],
-        body.odds, body.stake, body.memo,
+        [bet.model_dump() for bet in body.bets],
+        body.memo,
     )
-    return {"ok": True, "id": slip_id}
+    return {"ok": True, "batch_id": batch_id}
 
 
 @app.get("/api/bet_slips")
 def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_current_user)):
-    """등록된 조합베팅을 회차(최신순)로 묶어, 다리별 실제 결과(RT)를 조회해 적중/미적중을 매겨 반환한다."""
+    """베팅내역 표 데이터. 회차(금~월) → 등록 묶음(batch) → 조합 순으로 묶고,
+    각 다리의 실제 결과(RT)로 적중/미적중을 판정한 뒤 묶음 소계·회차 합계까지 계산해서 내려준다."""
     slips = BETSLIPS.list_slips(user["username"], scope)
     db = _resolve_scope_db(scope, user)
     df_cache: dict[str, pd.DataFrame] = {}
@@ -565,26 +571,53 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
             return None
         key = _my_pick_key(leg["S"], leg["R"], leg["No"], leg["HT"], leg["AT"])
         for _, row in df.iterrows():
-            if _my_pick_key(row.get("S"), row.get("R"), row.get("No"), row.get("HT"), row.get("AT")) == key:
+            if _my_pick_key(row.get("S"), row.get("R"), row.get("No"),
+                            row.get("HT"), row.get("AT")) == key:
                 return _rt_label(row.get("RT"))
         return None
 
-    out = []
+    rounds: list[dict] = []
     for slip in slips:
-        leg_results = []
         for leg in slip["legs"]:
-            actual = rt_for(leg)
-            leg["actual"] = actual
-            leg["hit"] = BETSLIPS.judge_leg(leg["pick_type"], actual)
-            leg_results.append(leg["hit"])
-        slip["result"] = BETSLIPS.slip_result(leg_results)
-        out.append(slip)
-    return {"slips": out}
+            leg["actual"] = rt_for(leg)
+            leg["hit"] = BETSLIPS.judge_leg(leg["pick_type"], leg["actual"])
+        slip["result"] = BETSLIPS.slip_result([l["hit"] for l in slip["legs"]])
+        # 당첨금 = 뱃금액 × 배당(예상), 적중금 = 실제로 맞았을 때만 받는 금액
+        slip["payout"] = (round(slip["stake"] * slip["odds"])
+                          if slip["stake"] and slip["odds"] else None)
+        slip["hit_amount"] = slip["payout"] if slip["result"] == "적중" else None
+
+        rkey = (slip["round_start"], slip["round_end"])
+        rnd = next((r for r in rounds if r["key"] == rkey), None)
+        if rnd is None:
+            rnd = {"key": rkey, "round_start": rkey[0], "round_end": rkey[1], "batches": []}
+            rounds.append(rnd)
+        batch = next((b for b in rnd["batches"] if b["batch_id"] == slip["batch_id"]), None)
+        if batch is None:
+            batch = {"batch_id": slip["batch_id"], "created_dt": slip["created_dt"], "slips": []}
+            rnd["batches"].append(batch)
+        batch["slips"].append(slip)
+
+    for rnd in rounds:
+        for batch in rnd["batches"]:
+            batch["subtotal"] = BETSLIPS.settle(batch["slips"], roi_base="hit")
+        every = [s for b in rnd["batches"] for s in b["slips"]]
+        rnd["total"] = BETSLIPS.settle(every, roi_base="stake")
+        rnd["max_legs"] = max((len(s["legs"]) for s in every), default=0)
+        rnd.pop("key")
+    return {"rounds": rounds}
 
 
 @app.delete("/api/bet_slips/{slip_id}")
 def delete_bet_slip(slip_id: int, user: dict = Depends(get_current_user)):
     BETSLIPS.delete_slip(user["username"], slip_id)
+    return {"ok": True}
+
+
+@app.delete("/api/bet_batches/{batch_id}")
+def delete_bet_batch(batch_id: str, user: dict = Depends(get_current_user)):
+    """등록 묶음 통째로 삭제 — 잘못 등록한 벳등록 한 건을 되돌릴 때."""
+    BETSLIPS.delete_batch(user["username"], batch_id)
     return {"ok": True}
 
 

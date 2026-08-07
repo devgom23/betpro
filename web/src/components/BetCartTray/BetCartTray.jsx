@@ -29,13 +29,15 @@ export default function BetCartTray({ scope, onRegistered }) {
     try {
       await api.post('/api/bet_slips', {
         scope,
-        odds: odds === '' ? null : Number(odds),
-        stake: stake === '' ? null : Number(stake),
         memo: memo || null,
-        legs: legs.map((l) => ({
-          code: l.code, S: l.S, R: l.R, No: l.No, HT: l.HT, AT: l.AT, DT: l.DT,
-          pick_type: l.pick_type,
-        })),
+        bets: [{
+          odds: odds === '' ? null : Number(odds),
+          stake: stake === '' ? null : Number(stake),
+          legs: legs.map((l) => ({
+            code: l.code, S: l.S, R: l.R, No: l.No, HT: l.HT, AT: l.AT, DT: l.DT,
+            pick_type: l.pick_type,
+          })),
+        }],
       })
       clear()
       setOdds('')

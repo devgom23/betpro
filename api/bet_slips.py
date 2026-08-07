@@ -6,7 +6,8 @@ my_picks.py와 마찬가지로 계정별 predlog.db에 저장해 리그 표 재�
 """
 import re
 import sqlite3
-from datetime import date, datetime, timedelta
+import uuid
+from datetime import date, timedelta
 
 import betpro_paths as PATHS
 from my_picks import normalize
@@ -72,34 +73,55 @@ def _connect(username: str) -> sqlite3.Connection:
     return con
 
 
-def create_slip(username: str, scope: str, legs: list[dict],
-                 odds: float | None, stake: int | None, memo: str | None) -> int:
-    if not legs:
-        raise ValueError("최소 한 개 이상의 경기가 필요합니다.")
-    round_start, round_end = _round_range(legs[0]["DT"])
+def combo_odds(leg_odds: list[float | None]) -> float | None:
+    """조합 배당 = 각 다리 배당의 곱 (예: 1.94 × 1.89 = 3.67)."""
+    vals = [o for o in leg_odds if o]
+    if not vals:
+        return None
+    total = 1.0
+    for o in vals:
+        total *= o
+    return round(total, 2)
+
+
+def create_batch(username: str, scope: str, bets: list[dict], memo: str | None) -> str:
+    """"벳등록" 한 번 = 조합 여러 줄을 한 묶음(batch_id)으로 저장한다.
+    수익금·수익률이 이 묶음 단위(그 한 번에 투자한 금액)로 정산되기 때문에 함께 묶는다."""
+    if not bets:
+        raise ValueError("등록할 조합이 없습니다.")
+    batch_id = uuid.uuid4().hex[:12]
     con = _connect(username)
     try:
-        cur = con.execute(
-            """
-            INSERT INTO bet_slips (scope, round_start, round_end, odds, stake, memo, created_dt)
-            VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-            """,
-            (scope, round_start.isoformat(), round_end.isoformat(), odds, stake, memo or None),
-        )
-        slip_id = cur.lastrowid
-        for i, leg in enumerate(legs):
-            con.execute(
+        for bet in bets:
+            legs = bet["legs"]
+            if not legs:
+                raise ValueError("조합에 최소 한 경기가 필요합니다.")
+            round_start, round_end = _round_range(legs[0]["DT"])
+            odds = bet.get("odds") or combo_odds([l.get("odds") for l in legs])
+            cur = con.execute(
                 """
-                INSERT INTO bet_slip_legs (slip_id, code, S, R, No, HT, AT, pick_type, leg_order)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO bet_slips
+                    (batch_id, scope, round_start, round_end, odds, stake, memo, created_dt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
                 """,
-                (slip_id, leg["code"],
-                 normalize(leg.get("S")), normalize(leg.get("R")), normalize(leg.get("No")),
-                 normalize(leg.get("HT")), normalize(leg.get("AT")),
-                 leg["pick_type"], i),
+                (batch_id, scope, round_start.isoformat(), round_end.isoformat(),
+                 odds, bet.get("stake"), memo or None),
             )
+            slip_id = cur.lastrowid
+            for i, leg in enumerate(legs):
+                con.execute(
+                    """
+                    INSERT INTO bet_slip_legs
+                        (slip_id, code, S, R, No, HT, AT, pick_type, odds, leg_order)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (slip_id, leg["code"],
+                     normalize(leg.get("S")), normalize(leg.get("R")), normalize(leg.get("No")),
+                     normalize(leg.get("HT")), normalize(leg.get("AT")),
+                     leg["pick_type"], leg.get("odds"), i),
+                )
         con.commit()
-        return slip_id
+        return batch_id
     finally:
         con.close()
 
@@ -110,8 +132,9 @@ def list_slips(username: str, scope: str) -> list[dict]:
     try:
         slips = con.execute(
             """
-            SELECT id, scope, round_start, round_end, odds, stake, memo, created_dt
-            FROM bet_slips WHERE scope=? ORDER BY round_start DESC, created_dt DESC
+            SELECT id, batch_id, scope, round_start, round_end, odds, stake, memo, created_dt
+            FROM bet_slips WHERE scope=?
+            ORDER BY round_start DESC, created_dt ASC, id ASC
             """,
             (scope,),
         ).fetchall()
@@ -119,7 +142,7 @@ def list_slips(username: str, scope: str) -> list[dict]:
         for s in slips:
             legs = con.execute(
                 """
-                SELECT code, S, R, No, HT, AT, pick_type, leg_order
+                SELECT code, S, R, No, HT, AT, pick_type, odds, leg_order
                 FROM bet_slip_legs WHERE slip_id=? ORDER BY leg_order
                 """,
                 (s["id"],),
@@ -132,10 +155,36 @@ def list_slips(username: str, scope: str) -> list[dict]:
         con.close()
 
 
+def settle(slips: list[dict], roi_base: str) -> dict:
+    """묶음/회차 정산. 수익금 = 적중금합 − 뱃금액합(대기 중인 줄의 투자금도 포함).
+    수익률 분모는 스샷 기준을 그대로 따른다 — 등록 묶음은 적중금, 회차 합계는 뱃금액.
+    아직 한 줄도 결과가 안 나왔으면(전부 대기) 정산 자체를 하지 않고 공란으로 둔다."""
+    stake_sum = sum(s["stake"] or 0 for s in slips)
+    hit_sum = sum(s["hit_amount"] or 0 for s in slips)
+    settled = any(s["result"] in ("적중", "미적중") for s in slips)
+    profit = hit_sum - stake_sum
+    base = hit_sum if roi_base == "hit" else stake_sum
+    return {
+        "stake": stake_sum,
+        "hit_amount": hit_sum,
+        "profit": profit if settled else None,
+        "roi": round(profit / base * 100) if settled and base else None,
+    }
+
+
 def delete_slip(username: str, slip_id: int) -> None:
     con = _connect(username)
     try:
         con.execute("DELETE FROM bet_slips WHERE id=?", (slip_id,))
+        con.commit()
+    finally:
+        con.close()
+
+
+def delete_batch(username: str, batch_id: str) -> None:
+    con = _connect(username)
+    try:
+        con.execute("DELETE FROM bet_slips WHERE batch_id=?", (batch_id,))
         con.commit()
     finally:
         con.close()

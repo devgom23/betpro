@@ -284,9 +284,14 @@ CREATE TABLE IF NOT EXISTS my_picks (
 # 조합베팅(파를레이) 등록 내역 — my_picks와 마찬가지로 리그 표와 분리된 predlog.db에 둔다.
 # 한 슬립(bet_slips)이 여러 경기 다리(bet_slip_legs)를 갖고, 각 다리는 어느 리그(code)
 # 소속인지 함께 저장해서(교차 리그 조합 가능) 실제 결과(RT) 조회 시 리그별로 찾아간다.
+#
+# batch_id: "이번주 벳"에서 벳등록 한 번에 만들어진 조합들을 하나로 묶는 값.
+#   수익금·수익률이 이 묶음(그 한 번에 투자한 금액) 단위로 정산되므로 반드시 필요하고,
+#   베팅내역 표에서도 등록 묶음끼리 구분선으로 나눠 보여주는 기준이 된다.
 _SCHEMA_BET_SLIPS = """
 CREATE TABLE IF NOT EXISTS bet_slips (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id TEXT,
     scope TEXT NOT NULL,
     round_start TEXT NOT NULL,
     round_end TEXT NOT NULL,
@@ -297,6 +302,7 @@ CREATE TABLE IF NOT EXISTS bet_slips (
 )
 """
 
+# odds: 그 다리 하나의 배당(예: 김포 플핸 1.94). 조합 배당(bet_slips.odds)은 이 값들의 곱이다.
 _SCHEMA_BET_SLIP_LEGS = """
 CREATE TABLE IF NOT EXISTS bet_slip_legs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -304,6 +310,7 @@ CREATE TABLE IF NOT EXISTS bet_slip_legs (
     code TEXT NOT NULL,
     S TEXT, R TEXT, No TEXT, HT TEXT, AT TEXT,
     pick_type TEXT NOT NULL,
+    odds REAL,
     leg_order INTEGER NOT NULL
 )
 """
@@ -360,6 +367,13 @@ def ensure_predlog_db(username: str) -> str:
         con.execute("PRAGMA foreign_keys=ON;")
         con.execute(_SCHEMA_BET_SLIPS)
         con.execute(_SCHEMA_BET_SLIP_LEGS)
+        # my_picks와 같은 방식으로, 먼저 만들어진 표에 뒤에 추가된 컬럼을 보강한다.
+        slip_cols = {r[1] for r in con.execute("PRAGMA table_info(bet_slips)").fetchall()}
+        if "batch_id" not in slip_cols:
+            con.execute("ALTER TABLE bet_slips ADD COLUMN batch_id TEXT")
+        leg_cols = {r[1] for r in con.execute("PRAGMA table_info(bet_slip_legs)").fetchall()}
+        if "odds" not in leg_cols:
+            con.execute("ALTER TABLE bet_slip_legs ADD COLUMN odds REAL")
         con.commit()
     finally:
         con.close()
