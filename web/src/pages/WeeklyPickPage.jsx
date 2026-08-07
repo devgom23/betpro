@@ -38,7 +38,7 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
 
   return (
     <div className="wp-page">
-      <h2 className="wp-title">📋 이번주 픽</h2>
+      <h2 className="wp-title">📋 다음주 픽</h2>
       <p className="wp-desc">
         {period && <>{period} · </>}
         공식 데이터/내 데이터를 가리지 않고 별표(★) 표시한 경기를 모두 모아 보여줍니다.
