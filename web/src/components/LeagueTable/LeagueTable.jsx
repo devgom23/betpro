@@ -34,6 +34,11 @@ export default function LeagueTable({
   code, columns, rows, scope, highlightCols = [],
   selectable = false, selectedKeys, onToggleRow, hideIndicators = false,
 }) {
+  // 이번주 픽처럼 여러 리그·스코프를 한 표에 모아 보여줄 때는 행마다 실제 소속
+  // 리그(L)·스코프(scope)가 다를 수 있다 — LeagueTable에 준 code/scope prop은
+  // 그런 표에서는 안 맞을 수 있으니, 행 자신에 값이 있으면 그걸 우선한다.
+  const rowCode = (row) => row?.Source_League || row?.L || code
+  const rowScope = (row) => row?.scope || scope
   const groups = useMemo(() => buildColumnGroups(columns || [], { hideIndicators }), [columns, hideIndicators])
   const [detailRow, setDetailRow] = useState(null)
   const [pickRow, setPickRow] = useState(null) // 내픽 팝업 대상 행
@@ -112,8 +117,8 @@ export default function LeagueTable({
     pickOverridesRef.current = { ...pickOverridesRef.current, [key]: next }
     setPickOverrides(pickOverridesRef.current)
     try {
-      await api.post(`/api/leagues/${code}/my_picks`, {
-        scope,
+      await api.post(`/api/leagues/${rowCode(row)}/my_picks`, {
+        scope: rowScope(row),
         S: row.S,
         R: row.R,
         No: row.No,
@@ -345,7 +350,7 @@ export default function LeagueTable({
 
         {detailRow && (
           <MatchDetailModal
-            code={code || detailRow.Source_League}
+            code={rowCode(detailRow)}
             row={{
               ...detailRow,
               IMPORTANT: effectivePick(detailRow).important,
@@ -353,7 +358,7 @@ export default function LeagueTable({
               MY_HIT: effectivePick(detailRow).hit,
               MEMO: effectivePick(detailRow).memo,
             }}
-            scope={scope}
+            scope={rowScope(detailRow)}
             onClose={() => setDetailRow(null)}
             onSavePick={(patch) => savePick(detailRow, patch)}
           />
@@ -361,8 +366,8 @@ export default function LeagueTable({
 
         {pickRow && (
           <MyPickModal
-            code={code || pickRow.Source_League}
-            scope={scope}
+            code={rowCode(pickRow)}
+            scope={rowScope(pickRow)}
             row={{
               ...pickRow,
               MY_PICK: effectivePick(pickRow).pick,

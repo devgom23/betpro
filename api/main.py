@@ -52,6 +52,7 @@ import os
 import re
 import sqlite3
 import sys
+from datetime import date, timedelta
 from urllib.parse import quote
 
 # 루트/‘api’ 를 import 경로에 등록 (betpro_paths, betpro_auth, engine)
@@ -525,6 +526,31 @@ def _scope_league_codes(scope: str, user: dict) -> list[str]:
     return list(PATHS.LEAGUES)
 
 
+_DT_RE = re.compile(r"(\d{2})-(\d{2})-(\d{2})")
+
+
+def _betting_day_sort_key(dt_val, tm_val):
+    """새벽 6시 이전 경기는 전날 '베팅일'로 묶어 정렬한다 — LeagueTable의 금/토/일
+    배경색 규칙(columnGroups.js의 bettingDayStyle, WEEKDAY_PREV)과 순서를 맞추기
+    위함이다. 예: 일요일 03:00 경기는 토요일 밤 경기들 바로 다음에 오게 한다."""
+    m = _DT_RE.search(str(dt_val or ""))
+    try:
+        tm_num = float(tm_val)
+    except (TypeError, ValueError):
+        tm_num = None
+    if not m:
+        return (str(dt_val or ""), tm_num if tm_num is not None else 0.0)
+    yy, mm, dd = (int(x) for x in m.groups())
+    d = date(2000 + yy, mm, dd)
+    hour = int(tm_num // 100) if tm_num is not None else None
+    if hour is not None and hour < 6:
+        d -= timedelta(days=1)
+        order = tm_num + 2400  # 그 베팅일 안에서는 맨 뒤에 오게
+    else:
+        order = tm_num if tm_num is not None else 0.0
+    return (d.isoformat(), order)
+
+
 def _scope_league_labels(scope: str, user: dict) -> dict:
     """리그 코드 → 화면에 쓰는 리그명(라벨). 내 데이터는 사용자가 리그 생성 시
     직접 지은 이름(예: ul_2 → 'K2')이라 코드만으론 알아볼 수 없어 따로 매핑해준다."""
@@ -572,7 +598,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
                 rec["MEMO"] = p["memo"]
                 rows.append(rec)
 
-    rows.sort(key=lambda r: (str(r.get("DT") or ""), str(r.get("TM") or "")))
+    rows.sort(key=lambda r: _betting_day_sort_key(r.get("DT"), r.get("TM")))
     columns = ["L"] + [c for c in (list(rows[0].keys()) if rows else [])
                        if c not in ("L", "L_LABEL", "scope")]
     return {"columns": columns, "rows": rows, "total": len(rows)}
