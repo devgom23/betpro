@@ -144,10 +144,10 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
                 <tr key={i} className={seasonStart ? 'season-start' : undefined}>
                   <td>{m.S}</td>
                   <td>{m.R}</td>
-                  <td className="row-label">{m.HT}</td>
+                  <td className={`row-label ${m.HT === home ? 'h2h-home-cell' : ''}`}>{m.HT}</td>
                   <td className={scoreClass(m.HS, m.AS, 'home')}>{m.HS ?? ''}</td>
                   <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
-                  <td className="row-label">{m.AT}</td>
+                  <td className={`row-label ${m.AT === home ? 'h2h-home-cell' : ''}`}>{m.AT}</td>
                   <td>
                     <WdlBadge letter={{ 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]} />
                   </td>

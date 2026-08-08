@@ -206,8 +206,14 @@ function maxCellClass(vals, i) {
   return max > 0 && vals[i] === max ? 'cell-max' : ''
 }
 
-function SampleTable({ row }) {
-  const lines = SAMPLE_INDICATORS.map(([code, label]) => {
+// TK-*/TF-* ("국/통", "해/통")는 그 리그를 통합DB(6대리그 등 여러 리그 합산)와
+// 섞은 지표다. 내 데이터는 리그 하나만 있어 통합 대상이 없으므로 항상 국내/해외
+// 지표와 값이 완전히 같아진다 — 의미 없는 중복이라 내 데이터에서는 아예 뺀다.
+function SampleTable({ row, scope }) {
+  const indicators = scope === 'user'
+    ? SAMPLE_INDICATORS.filter(([code]) => !code.startsWith('TK-') && !code.startsWith('TF-'))
+    : SAMPLE_INDICATORS
+  const lines = indicators.map(([code, label]) => {
     const vals = [1, 2, 3, 4].map((i) => {
       const v = row[`${code} ${i}`]
       const n = Number(v)
@@ -418,7 +424,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
             <h3>🎯 플핸 예측</h3>
             <PhPredictionCard row={row} />
             <h3>📊 지표별 표본</h3>
-            <SampleTable row={row} />
+            <SampleTable row={row} scope={scope} />
           </div>
           <div className="modal-col">
             <h3>📈 폼 지표</h3>

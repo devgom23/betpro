@@ -23,6 +23,12 @@
   color: var(--text-secondary);
 }
 
+/* 상대전적 경기 목록 — 기준 팀(이 조회의 home)이 홈이든 원정이든, 그 팀 칸만
+   아주 연한 흰색 배경으로 살짝 구분한다. */
+.h2h-home-cell {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .detail-table .col-hs {
   background: rgba(21, 101, 192, 0.25);
 }
