@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
+import { scoreClass } from '../../utils/format'
+import RtBadge from '../RtBadge/RtBadge'
 import './HeadToHeadResult.css'
-
-const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828', 취소: '#546E7A' }
-
-// 점수가 둘 다 있고 서로 다를 때만 이긴 쪽 점수를 강조한다(무승부·예정 경기는 강조 없음)
-function scoreClass(hs, as_, side) {
-  if (hs === null || hs === undefined || as_ === null || as_ === undefined) return undefined
-  const winner = hs > as_ ? 'home' : as_ > hs ? 'away' : null
-  return winner === side ? 'winner-score' : undefined
-}
 
 // 승점은 '이 조회의 기준 홈팀'(home prop) 기준(승3/무1/패0) — 그 팀이 각 과거
 // 경기에서 홈이었든 원정이었든 상관없이, 그 팀이 거둔 결과를 그대로 매긴다.
@@ -32,21 +25,11 @@ function homePoints(m, referenceTeam) {
   return 1
 }
 
-// "유형" 컬럼 — 그 경기의 핸디캡 결과(RT: 핸승/핸무/무/역/취소)만 보여준다.
-function RtBadge({ label }) {
-  if (!label) return null
-  const bg = RT_COLOR[label] || '#9E9E9E'
-  const fg = label === '핸무' ? '#0D1B2A' : '#fff'
-  return (
-    <span className="rt-badge" style={{ background: bg, color: fg }}>
-      {label}
-    </span>
-  )
-}
-
 const WDL_COLOR = { W: '#1565C0', D: '#757575', L: '#C62828' }
 
 // "결과" 컬럼 — 기준 팀(home) 관점의 실제 승/무/패(W/D/L)만 보여준다.
+// 모양(.rt-badge)은 RtBadge 와 같은 것을 쓰고 색만 다르다 — 그 CSS는
+// components/RtBadge/RtBadge.css 에 있고, 위에서 RtBadge 를 import 할 때 함께 딸려온다.
 function WdlBadge({ letter }) {
   if (!letter) return null
   return (

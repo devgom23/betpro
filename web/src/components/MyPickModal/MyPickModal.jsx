@@ -1,23 +1,11 @@
 import { useState } from 'react'
 import { api } from '../../api/client'
+import { isStarred, formatTime } from '../../utils/format'
 // .modal-backdrop / .modal-card / .modal-close / .modal-title / .modal-meta 를 그대로 재사용한다.
 import './MyPickModal.css'
 
 const PICK_OPTIONS = ['축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
 const HIT_OPTIONS = ['적중', '미적', '패스']
-
-function isStarred(v) {
-  return v === true || v === 1 || v === '1'
-}
-
-// TM은 'HHMM' 숫자(예: 1930)로 저장되어 있다 — "19:30"으로 보여준다.
-function formatTime(v) {
-  if (v === null || v === undefined || v === '') return ''
-  const n = Number(v)
-  if (Number.isNaN(n)) return ''
-  const s = String(Math.trunc(n)).padStart(4, '0')
-  return `${s.slice(0, 2)}:${s.slice(2)}`
-}
 
 // 실제로 벳팅한 픽을 기록하는 팝업. 경기 정보는 참고용으로만 보여주고, 내픽 값만 수정한다
 // (RT·핸디 등 분석 컬럼과 달리 이 값은 화면에서 직접 입력하는 순수 개인 기록).

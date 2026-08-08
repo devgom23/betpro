@@ -4,6 +4,7 @@ import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
 import { api } from '../../api/client'
 import { useFontSize } from '../../context/FontSizeContext'
+import { isStarred } from '../../utils/format'
 import './LeagueTable.css'
 
 const VISIBLE_ROWS = 20
@@ -18,10 +19,6 @@ function groupKey(g) {
 
 function matchKey(row) {
   return `${row.S}|${row.R}|${row.No}|${row.HT}|${row.AT}`
-}
-
-function isStarred(v) {
-  return v === true || v === 1 || v === '1'
 }
 
 // 선택 삭제(체크박스)용 행 식별 키. 이번주 픽처럼 여러 리그를 한 표에 모아 보여줄 때

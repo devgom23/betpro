@@ -1,18 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
-
-const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828', 취소: '#546E7A' }
-
-function RtBadge({ label }) {
-  if (!label) return null
-  const bg = RT_COLOR[label] || '#9E9E9E'
-  const fg = label === '핸무' ? '#0D1B2A' : '#fff'
-  return (
-    <span className="rt-badge" style={{ background: bg, color: fg }}>
-      {label}
-    </span>
-  )
-}
+import RtBadge from '../components/RtBadge/RtBadge'
 
 // 실제 스코어(HS/AS) 기준 승/무/패 집계 ("양날개" — 팀이 홈/원정 어느 쪽이었든 합산).
 // betpro_ui.py 상대전적 탭의 원본 로직과 동일한 규칙.

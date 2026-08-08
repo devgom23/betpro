@@ -1,0 +1,9 @@
+/* RT 배지 모양. 예전엔 HeadToHeadResult.css / MatchDetailModal.css / MainPage.css
+   세 곳에 똑같은 내용이 각각 들어 있었다 — 이제 이 파일 하나만 쓴다. */
+.rt-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 12px;
+}

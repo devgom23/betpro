@@ -1,39 +1,18 @@
 import { useEffect, useState } from 'react'
 import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
+import RtBadge from '../RtBadge/RtBadge'
+import { isStarred, formatTime, scoreClass } from '../../utils/format'
 import './MatchDetailModal.css'
 
-const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828', 취소: '#546E7A' }
 const PICK_OPTIONS = ['축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
 const HIT_OPTIONS = ['적중', '미적', '패스']
-
-function isStarred(v) {
-  return v === true || v === 1 || v === '1'
-}
 
 function rtLabel(v) {
   if (v === null || v === undefined || v === '') return ''
   const n = Number(v)
   if (Number.isNaN(n)) return ''
   return { 1: '핸승', 2: '핸무', 3: '무', 4: '역', 5: '취소' }[Math.trunc(n)] || ''
-}
-
-function RtBadge({ label }) {
-  if (!label) return null
-  const bg = RT_COLOR[label] || '#9E9E9E'
-  const fg = label === '핸무' ? '#0D1B2A' : '#fff'
-  return (
-    <span className="rt-badge" style={{ background: bg, color: fg }}>
-      {label}
-    </span>
-  )
-}
-
-// 점수가 서로 다를 때만 이긴 쪽 점수를 강조한다(무승부는 강조 없음) — 상대전적 화면과 동일 규칙
-function scoreClass(hs, as_, side) {
-  if (hs === null || hs === undefined || as_ === null || as_ === undefined) return undefined
-  const winner = hs > as_ ? 'home' : as_ > hs ? 'away' : null
-  return winner === side ? 'winner-score' : undefined
 }
 
 function numOrDash(v, digits = 2) {
@@ -47,15 +26,6 @@ function rankSuffix(v) {
   if (v === null || v === undefined || v === '') return ''
   const n = Number(v)
   return Number.isNaN(n) ? '' : `(${Math.trunc(n)}위)`
-}
-
-// TM은 'HHMM' 숫자(예: 1930)로 저장되어 있다 — "19:30"으로 보여준다.
-function formatTime(v) {
-  if (v === null || v === undefined || v === '') return ''
-  const n = Number(v)
-  if (Number.isNaN(n)) return ''
-  const s = String(Math.trunc(n)).padStart(4, '0')
-  return `${s.slice(0, 2)}:${s.slice(2)}`
 }
 
 // 폼(PPG) 값 구간별 색상 — 3.00~2.00 녹색 / 1.99~1.00 노란색 / 0.99~0.00 갈색

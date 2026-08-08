@@ -1,5 +1,8 @@
+import { RT_COLOR } from '../RtBadge/RtBadge'
+
+// 여기서는 '취소'를 빼고 이 4개만 보여준다 — RT_COLOR 에 '취소'가 더 있어도
+// 아래는 RT_ORDER 로만 순회하므로 조회되지 않는다.
 const RT_ORDER = ['핸승', '핸무', '무', '역']
-const RT_COLOR = { 핸승: '#1565C0', 핸무: '#64B5F6', 무: '#757575', 역: '#C62828' }
 
 // 핸승/핸무/무/역 결과분포를 보여준다. (통합DB탭=카드형 / 리그탭 대시보드=한 줄 색상 배지)
 export default function RtSummaryBar({ summary, inline = false }) {

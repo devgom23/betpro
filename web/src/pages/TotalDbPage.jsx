@@ -3,22 +3,7 @@ import { api } from '../api/client'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
 import RtSummaryBar from '../components/RtSummaryBar/RtSummaryBar'
 import FilterForm from '../components/FilterForm/FilterForm'
-
-const ODDS_KEYS = ['kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl']
-
-function buildQueryString(scope, league, query) {
-  const params = new URLSearchParams({ scope, league })
-  if (query) {
-    if (query.season) params.set('season', query.season)
-    if (query.round) params.set('round', query.round)
-    for (const key of ODDS_KEYS) {
-      if (query[key] !== undefined && query[key] !== null) {
-        params.set(key, String(query[key]))
-      }
-    }
-  }
-  return params.toString()
-}
+import { buildQueryString, ODDS_KEYS } from '../utils/query'
 
 export default function TotalDbPage({ scope }) {
   const [dashboard, setDashboard] = useState(null)
@@ -78,7 +63,7 @@ export default function TotalDbPage({ scope }) {
     let cancelled = false
     setError('')
     api
-      .get(`/api/total?${buildQueryString(scope, league, query)}`)
+      .get(`/api/total?${buildQueryString({ scope, league }, query)}`)
       .then((res) => {
         if (!cancelled) setData(res)
       })

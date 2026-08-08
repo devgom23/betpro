@@ -10,22 +10,7 @@ import DeleteMatchesModal from '../components/DeleteMatchesModal/DeleteMatchesMo
 import CrawlModal from '../components/CrawlModal/CrawlModal'
 import KrCrawlModal from '../components/KrCrawlModal/KrCrawlModal'
 import ResultEditModal from '../components/ResultEditModal/ResultEditModal'
-
-const ODDS_KEYS = ['kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl']
-
-function buildQueryString(scope, query) {
-  const params = new URLSearchParams({ scope })
-  if (query) {
-    if (query.season) params.set('season', query.season)
-    if (query.round) params.set('round', query.round)
-    for (const key of ODDS_KEYS) {
-      if (query[key] !== undefined && query[key] !== null) {
-        params.set(key, String(query[key]))
-      }
-    }
-  }
-  return params.toString()
-}
+import { buildQueryString, ODDS_KEYS } from '../utils/query'
 
 function describeQuery(query) {
   if (!query) return ''
@@ -126,7 +111,7 @@ export default function LeaguePage({ code, scope }) {
 
   // ③ 지금 화면에 조회된 분석표 그대로 받기 (표시 상한 없이 조건에 맞는 전부)
   function handleTableDownload() {
-    runDownload('table', `/api/leagues/${code}/table_excel?${buildQueryString(scope, query)}`)
+    runDownload('table', `/api/leagues/${code}/table_excel?${buildQueryString({ scope }, query)}`)
   }
 
   // ② 파일을 고르면 먼저 저장하지 않고 미리보기(건수·중복)만 받아 확인을 받는다
@@ -214,7 +199,7 @@ export default function LeaguePage({ code, scope }) {
     let cancelled = false
     setError('')
     api
-      .get(`/api/leagues/${code}?${buildQueryString(scope, query)}`)
+      .get(`/api/leagues/${code}?${buildQueryString({ scope }, query)}`)
       .then((res) => {
         if (!cancelled) setData(res)
       })

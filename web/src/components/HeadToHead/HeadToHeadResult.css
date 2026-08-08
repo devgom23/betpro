@@ -119,10 +119,4 @@
   margin: 6px 0 0;
 }
 
-.rt-badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 4px;
-  font-weight: 700;
-  font-size: 12px;
-}
+/* .rt-badge 모양은 components/RtBadge/RtBadge.css 로 옮겼다 (RtBadge·WdlBadge 공용). */
