@@ -112,13 +112,13 @@ def create_batch(username: str, scope: str, bets: list[dict], memo: str | None) 
                 con.execute(
                     """
                     INSERT INTO bet_slip_legs
-                        (slip_id, code, S, R, No, HT, AT, pick_type, odds, leg_order)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        (slip_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (slip_id, leg["code"],
                      normalize(leg.get("S")), normalize(leg.get("R")), normalize(leg.get("No")),
                      normalize(leg.get("HT")), normalize(leg.get("AT")),
-                     leg["pick_type"], leg.get("odds"), i),
+                     leg["pick_type"], leg.get("odds"), i, leg.get("scope") or scope),
                 )
         con.commit()
         return batch_id
@@ -127,14 +127,15 @@ def create_batch(username: str, scope: str, bets: list[dict], memo: str | None) 
 
 
 def list_slips(username: str, scope: str) -> list[dict]:
-    """슬립+다리 원본 데이터(등록된 값 그대로, 실제 RT/판정 없음)를 최신 회차부터 반환한다."""
+    """슬립+다리 원본 데이터(등록된 값 그대로, 실제 RT/판정 없음)를 등록된 순서(id) 그대로 반환한다.
+    회차는 더 이상 날짜로 자동 묶지 않고 settle_group_id(=연속된 값끼리)로 구간을 나눈다."""
     con = _connect(username)
     try:
         slips = con.execute(
             """
-            SELECT id, batch_id, scope, round_start, round_end, odds, stake, memo, created_dt
+            SELECT id, batch_id, scope, round_start, round_end, odds, stake, memo, created_dt, settle_group_id
             FROM bet_slips WHERE scope=?
-            ORDER BY round_start DESC, created_dt ASC, id ASC
+            ORDER BY id ASC
             """,
             (scope,),
         ).fetchall()
@@ -142,7 +143,7 @@ def list_slips(username: str, scope: str) -> list[dict]:
         for s in slips:
             legs = con.execute(
                 """
-                SELECT code, S, R, No, HT, AT, pick_type, odds, leg_order
+                SELECT code, S, R, No, HT, AT, pick_type, odds, leg_order, scope
                 FROM bet_slip_legs WHERE slip_id=? ORDER BY leg_order
                 """,
                 (s["id"],),
@@ -182,9 +183,52 @@ def delete_slip(username: str, slip_id: int) -> None:
 
 
 def delete_batch(username: str, batch_id: str) -> None:
+    """등록 묶음을 통째로 지운다 — 이미 회차로 묶인(settle_group_id 있는) 벳은 남긴다."""
     con = _connect(username)
     try:
-        con.execute("DELETE FROM bet_slips WHERE batch_id=?", (batch_id,))
+        con.execute("DELETE FROM bet_slips WHERE batch_id=? AND settle_group_id IS NULL", (batch_id,))
         con.commit()
+    finally:
+        con.close()
+
+
+def delete_slips(username: str, scope: str, slip_ids: list[int]) -> int:
+    """체크박스로 고른 벳들을 지운다 — 이미 회차로 묶인 벳은 걸러지고 그대로 남는다.
+    반환값은 실제로 지워진 행 수(이번주 픽 "선택 삭제"와 같은 방식)."""
+    if not slip_ids:
+        return 0
+    con = _connect(username)
+    try:
+        placeholders = ",".join("?" for _ in slip_ids)
+        cur = con.execute(
+            f"DELETE FROM bet_slips WHERE scope=? AND settle_group_id IS NULL AND id IN ({placeholders})",
+            (scope, *slip_ids),
+        )
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
+
+
+def lock_slips(username: str, scope: str, slip_ids: list[int]) -> str:
+    """체크박스로 고른 벳들을 하나의 회차로 확정한다("회차 설정"). 이미 묶인 벳은 건드리지
+    않는다. 반환값은 새로 만든 묶음 id — 회차총계 구간을 식별하는 데 쓴다."""
+    if not slip_ids:
+        raise ValueError("선택된 벳이 없습니다.")
+    group_id = uuid.uuid4().hex[:12]
+    con = _connect(username)
+    try:
+        placeholders = ",".join("?" for _ in slip_ids)
+        cur = con.execute(
+            f"""
+            UPDATE bet_slips SET settle_group_id=?
+            WHERE scope=? AND settle_group_id IS NULL AND id IN ({placeholders})
+            """,
+            (group_id, scope, *slip_ids),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            raise ValueError("선택된 벳이 이미 다른 회차에 포함되었거나 존재하지 않습니다.")
+        return group_id
     finally:
         con.close()

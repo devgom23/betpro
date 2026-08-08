@@ -1,13 +1,29 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import './BetSlip.css'
 
 export const PICK_TYPES = ['정', '역', '무', '핸승', '핸무', '플핸']
 
+// 슬립 하나(경기 선택·벳금액·예산 설정)를 통째로 저장한다 — 탭을 벗어났다 돌아오거나
+// 새로고침해도 "삭제"를 누르기 전까지는 화면에 그대로 남아있어야 한다.
+const slipStorageKey = (id) => `betpro_week_bet_slip_${id}`
+
+function loadSlipState(id) {
+  try {
+    const raw = localStorage.getItem(slipStorageKey(id))
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 const toNum = (v) => {
   const n = Number(v)
   return Number.isFinite(n) ? n : null
 }
+
+// 최소 벳 단위는 100원 — 자동 배분/재계산 결과도 항상 100원 단위로 맞춘다.
+const roundStake = (v) => Math.round(v / 100) * 100
 
 // 유형별 국내배당을 골라준다. 정/역은 고정 컬럼이 아니라 승·패 배당 중 낮은 쪽이
 // 정배(시장이 강하다고 본 쪽)라는 규칙을 따르고, 핸승/플핸도 같은 기준으로 갈린다.
@@ -31,7 +47,9 @@ export function oddsForPick(row, pick) {
 
 const matchKey = (r) => `${r.L}|${r.S}|${r.R}|${r.No}|${r.HT}|${r.AT}`
 const legKey = (l) => `${matchKey(l.row)}|${l.pick}`
-const fmtOdds = (v) => (v == null ? '-' : v.toFixed(2))
+// 부동소수점 오차 때문에 6.05 같은 값이 toFixed(1)에서 6.0으로 내려가 버리는 걸
+// 막으려고 아주 작은 값을 더해 반올림한다.
+const fmtOdds = (v) => (v == null ? '-' : (Math.round((v + Number.EPSILON) * 10) / 10).toFixed(1))
 const fmtNum = (v) => (v == null ? '-' : Math.round(v).toLocaleString())
 
 // 한 경기 그룹(선택 1 / 선택 2): 경기를 고르고 유형을 담는다.
@@ -86,20 +104,42 @@ function SideBox({ index, rows, legs, onAdd, onRemove }) {
   )
 }
 
-export default function BetSlip({ rows, scope, onSave, onDelete, canDelete, onRegistered }) {
-  const [sides, setSides] = useState([[], []])
+export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, onRegistered }) {
+  const persisted = loadSlipState(id)
+  const [sides, setSides] = useState(persisted?.sides ?? [[], []])
   // 조합별 뱃금액 — 조합 키로 들고 있어야 경기를 추가·삭제해도 입력값이 안 흐트러진다.
-  const [stakes, setStakes] = useState({})
+  const [stakes, setStakes] = useState(persisted?.stakes ?? {})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  // ── 총벳금액입력 / 회차설정(예산 고정) ──
+  // budget: "금액적용"을 누른 순간 고정되는 총 예산. 이후에는 이 값을 항상 정확히
+  // 맞추는 걸 우선한다 — 조합별 수익률을 손대면 나머지 조합들의 벳금액이 자동으로
+  // 재분배되어(비율 유지) 합계가 예산과 늘 같게 유지된다.
+  const [budgetEnabled, setBudgetEnabled] = useState(persisted?.budgetEnabled ?? false)
+  const [budgetInput, setBudgetInput] = useState(persisted?.budgetInput ?? null)
+  const [budget, setBudget] = useState(persisted?.budget ?? null)
+
+  // 경기 선택·벳금액·예산 — "벳등록"을 하더라도 지우지 않는 한 화면에 그대로 남아있어야
+  // 하므로, 바뀔 때마다 이 슬립의 id로 localStorage에 저장한다.
+  useEffect(() => {
+    localStorage.setItem(
+      slipStorageKey(id),
+      JSON.stringify({ sides, stakes, budgetEnabled, budgetInput, budget })
+    )
+  }, [id, sides, stakes, budgetEnabled, budgetInput, budget])
+  // 수익률 입력칸에서 타이핑 중인 값(blur/Enter 전까지는 재계산하지 않는다).
+  const [roiDrafts, setRoiDrafts] = useState({})
 
   const combos = useMemo(() => {
     const [a, b] = sides
     const out = []
     for (const l1 of a) {
       for (const l2 of b) {
+        // 화면에 보이는 배당(소수 1자리)과 당첨금·수익금·수익률 계산이 서로 어긋나지
+        // 않도록, 배당 자체를 소수 1자리로 반올림해서 쓴다(부동소수점 오차 보정 포함).
         const odds = l1.odds != null && l2.odds != null
-          ? Math.round(l1.odds * l2.odds * 100) / 100
+          ? Math.round((l1.odds * l2.odds + Number.EPSILON) * 10) / 10
           : null
         out.push({ key: `${legKey(l1)}::${legKey(l2)}`, l1, l2, odds })
       }
@@ -112,6 +152,66 @@ export default function BetSlip({ rows, scope, onSave, onDelete, canDelete, onRe
 
   function updateSide(i, next) {
     setSides((prev) => prev.map((s, idx) => (idx === i ? next : s)))
+  }
+
+  // "금액적용" — 예산을 배당의 역수 비중으로 나눠 담는다(적은 배당엔 많이, 큰 배당엔 적게)
+  // 이러면 조합마다 실제 수익률은 배당에 따라 달라질 수 있지만, 합계는 항상 예산과 정확히
+  // 같아진다. 이후 표에서 조합별 수익률을 손대며 원하는 대로 다시 조정하면 된다.
+  function applyBudget() {
+    setError('')
+    if (!budgetInput || budgetInput <= 0) {
+      setError('예산을 입력해주세요.')
+      return
+    }
+    const usable = combos.filter((c) => c.odds)
+    if (usable.length === 0) {
+      setError('먼저 조합을 담아주세요.')
+      return
+    }
+    const weights = usable.map((c) => 1 / c.odds)
+    const weightSum = weights.reduce((a, b) => a + b, 0)
+    const next = {}
+    usable.forEach((c, i) => {
+      next[c.key] = roundStake((budgetInput * weights[i]) / weightSum)
+    })
+    setStakes((prev) => ({ ...prev, ...next }))
+    setBudget(budgetInput)
+  }
+
+  // 조합 하나의 수익률을 직접 입력하면, 그 조합의 뱃금액을 먼저 맞추고 남는 예산을
+  // 나머지 조합들에게 "기존 비율 그대로" 다시 나눠준다 — 그래야 합계가 예산에서 안 벗어난다.
+  function commitRoi(combo, text) {
+    setRoiDrafts((prev) => {
+      const next = { ...prev }
+      delete next[combo.key]
+      return next
+    })
+    if (!budget || !combo.odds) return
+    const r = toNum(text)
+    if (r === null) return
+    const newStake = (budget * (1 + r / 100)) / combo.odds
+    if (newStake < 0 || newStake > budget) {
+      setError('이 수익률로는 예산을 초과합니다.')
+      return
+    }
+    const remaining = budget - newStake
+    const others = combos.filter((c) => c.key !== combo.key && c.odds)
+    const oldOthersSum = others.reduce((sum, c) => sum + (toNum(stakes[c.key]) || 0), 0)
+    const next = { [combo.key]: roundStake(newStake) }
+    if (oldOthersSum > 0) {
+      const scale = remaining / oldOthersSum
+      others.forEach((c) => {
+        next[c.key] = roundStake((toNum(stakes[c.key]) || 0) * scale)
+      })
+    } else if (others.length > 0) {
+      const oWeights = others.map((c) => 1 / c.odds)
+      const oWeightSum = oWeights.reduce((a, b) => a + b, 0)
+      others.forEach((c, i) => {
+        next[c.key] = roundStake((remaining * oWeights[i]) / oWeightSum)
+      })
+    }
+    setStakes((prev) => ({ ...prev, ...next }))
+    setError('')
   }
 
   async function handleRegister() {
@@ -131,11 +231,12 @@ export default function BetSlip({ rows, scope, onSave, onDelete, canDelete, onRe
           legs: [c.l1, c.l2].map((l) => ({
             code: l.row.L, S: l.row.S, R: l.row.R, No: l.row.No,
             HT: l.row.HT, AT: l.row.AT, DT: l.row.DT,
-            pick_type: l.pick, odds: l.odds,
+            pick_type: l.pick, odds: l.odds, scope: l.row.scope,
           })),
         })),
       })
-      setStakes({})
+      // 등록 후에도 경기·벳금액은 지우지 않는다 — 사용자가 "삭제"를 누르기 전까지는
+      // 이번주 픽 화면에 그대로 남아있어야 한다.
       onRegistered?.()
     } catch (err) {
       setError(err.message)
@@ -151,7 +252,16 @@ export default function BetSlip({ rows, scope, onSave, onDelete, canDelete, onRe
           📋 벳등록
         </button>
         <button className="slip-btn slip-btn-primary" onClick={onSave}>💾 저장</button>
-        <button className="slip-btn" onClick={onDelete} disabled={!canDelete}>✕ 삭제</button>
+        <button
+          className="slip-btn"
+          onClick={() => {
+            localStorage.removeItem(slipStorageKey(id))
+            onDelete()
+          }}
+          disabled={!canDelete}
+        >
+          ✕ 삭제
+        </button>
       </div>
 
       {error && <p className="error-text slip-error">{error}</p>}
@@ -171,6 +281,38 @@ export default function BetSlip({ rows, scope, onSave, onDelete, canDelete, onRe
       ))}
 
       {combos.length > 0 && (
+        <div className="slip-budget-row">
+          <label className="slip-budget-check">
+            <input
+              type="checkbox"
+              checked={budgetEnabled}
+              onChange={(e) => {
+                setBudgetEnabled(e.target.checked)
+                if (!e.target.checked) setBudget(null)
+              }}
+            />
+            총벳금액입력
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            className="slip-budget-input"
+            placeholder="총 벳 금액"
+            disabled={!budgetEnabled}
+            value={budgetInput == null ? '' : budgetInput.toLocaleString()}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/[^0-9]/g, '')
+              setBudgetInput(digits === '' ? null : Number(digits))
+            }}
+          />
+          <button className="slip-btn" disabled={!budgetEnabled} onClick={applyBudget}>
+            금액적용
+          </button>
+        </div>
+      )}
+
+      {combos.length > 0 && (
+        <div className="slip-combo-wrap">
         <table className="slip-combo-table">
           <thead>
             <tr>
@@ -183,6 +325,7 @@ export default function BetSlip({ rows, scope, onSave, onDelete, canDelete, onRe
               const stake = toNum(stakes[c.key])
               const payout = stake && c.odds ? stake * c.odds : null
               const profit = payout != null ? payout - stakeTotal : null
+              const roiValue = profit != null && stakeTotal ? (profit / stakeTotal * 100).toFixed(1) : null
               return (
                 <tr key={c.key}>
                   <td>{c.l1.pick}</td>
@@ -190,14 +333,41 @@ export default function BetSlip({ rows, scope, onSave, onDelete, canDelete, onRe
                   <td className="slip-strong">{fmtOdds(c.odds)}</td>
                   <td>
                     <input
-                      type="number"
-                      value={stakes[c.key] ?? ''}
-                      onChange={(e) => setStakes((p) => ({ ...p, [c.key]: e.target.value }))}
+                      type="text"
+                      inputMode="numeric"
+                      value={stakes[c.key] == null || stakes[c.key] === '' ? '' : Number(stakes[c.key]).toLocaleString()}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/[^0-9]/g, '')
+                        setStakes((p) => ({ ...p, [c.key]: digits === '' ? '' : Number(digits) }))
+                      }}
+                      onBlur={() => {
+                        // 100원 단위 미만은 입력해도 여기서 반올림해서 맞춘다.
+                        setStakes((p) => {
+                          const raw = toNum(p[c.key])
+                          if (raw == null) return p
+                          const rounded = roundStake(raw)
+                          return rounded === raw ? p : { ...p, [c.key]: rounded }
+                        })
+                      }}
                     />
                   </td>
                   <td>{fmtNum(payout)}</td>
                   <td>{fmtNum(profit)}</td>
-                  <td>{profit != null && stakeTotal ? `${(profit / stakeTotal * 100).toFixed(1)}%` : '-'}</td>
+                  <td>
+                    {budget ? (
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="slip-roi-input"
+                        value={roiDrafts[c.key] ?? roiValue ?? ''}
+                        onChange={(e) => setRoiDrafts((p) => ({ ...p, [c.key]: e.target.value }))}
+                        onBlur={(e) => commitRoi(c, e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur() }}
+                      />
+                    ) : (
+                      roiValue != null ? `${roiValue}%` : '-'
+                    )}
+                  </td>
                 </tr>
               )
             })}
@@ -208,6 +378,7 @@ export default function BetSlip({ rows, scope, onSave, onDelete, canDelete, onRe
             </tr>
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )

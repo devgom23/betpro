@@ -612,6 +612,9 @@ class BetSlipLegBody(BaseModel):
     DT: str
     pick_type: str
     odds: Optional[float] = None
+    # 이번주 픽은 공식/내 데이터를 섞어서 조합을 만들 수 있어, 이 다리가 실제로 어느
+    # 스코프 리그 소속인지 따로 받아야 한다(슬립 전체의 scope와 다를 수 있다).
+    scope: Optional[str] = None
 
 
 class BetComboBody(BaseModel):
@@ -639,27 +642,42 @@ def create_bet_batch(body: BetBatchBody, user: dict = Depends(get_current_user))
 
 @app.get("/api/bet_slips")
 def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_current_user)):
-    """베팅내역 표 데이터. 회차(금~월) → 등록 묶음(batch) → 조합 순으로 묶고,
-    각 다리의 실제 결과(RT)로 적중/미적중을 판정한 뒤 묶음 소계·회차 합계까지 계산해서 내려준다."""
+    """베팅내역 표 데이터. 등록 묶음(batch) → 조합 순으로 묶어 소계를 내고, 등록된 순서 그대로
+    나열한다. 회차는 더 이상 날짜로 자동 구분하지 않고, 사용자가 체크박스로 고른 뒤 "회차 설정"을
+    눌러야 그 구간(settle_group_id)에 회차총계가 붙는다 — 그 전까지는 소계만 있는 미확정 상태다."""
     slips = BETSLIPS.list_slips(user["username"], scope)
-    db = _resolve_scope_db(scope, user)
-    df_cache: dict[str, pd.DataFrame] = {}
+
+    db_by_scope: dict[str, str] = {}
+
+    def db_for(sc: str) -> str:
+        if sc not in db_by_scope:
+            db_by_scope[sc] = _resolve_scope_db(sc, user)
+        return db_by_scope[sc]
+
+    df_cache: dict[tuple, pd.DataFrame] = {}
+
+    def df_for(sc: str, code: str) -> pd.DataFrame:
+        key = (sc, code)
+        if key not in df_cache:
+            df_cache[key] = DATA.load_league_df(db_for(sc), code)
+        return df_cache[key]
 
     def rt_for(leg: dict):
-        code = leg["code"]
-        if code not in df_cache:
-            df_cache[code] = DATA.load_league_df(db, code)
-        df = df_cache[code]
-        if df.empty or "RT" not in df.columns:
-            return None
+        # 다리에 스코프가 저장돼 있으면 그것만 본다. 옛날에 등록돼 스코프가 없는
+        # 다리는 공식/내 데이터 둘 다 뒤져서 찾는다(전에는 슬립 scope 하나만 봐서,
+        # 이번주 픽에서 섞어 담은 내 데이터 다리의 결과를 못 찾는 버그가 있었다).
+        scopes_to_try = [leg["scope"]] if leg.get("scope") else [PATHS.SCOPE_MASTER, PATHS.SCOPE_USER]
         key = _my_pick_key(leg["S"], leg["R"], leg["No"], leg["HT"], leg["AT"])
-        for _, row in df.iterrows():
-            if _my_pick_key(row.get("S"), row.get("R"), row.get("No"),
-                            row.get("HT"), row.get("AT")) == key:
-                return _rt_label(row.get("RT"))
+        for sc in scopes_to_try:
+            df = df_for(sc, leg["code"])
+            if df.empty or "RT" not in df.columns:
+                continue
+            for _, row in df.iterrows():
+                if _my_pick_key(row.get("S"), row.get("R"), row.get("No"),
+                                row.get("HT"), row.get("AT")) == key:
+                    return _rt_label(row.get("RT"))
         return None
 
-    rounds: list[dict] = []
     for slip in slips:
         for leg in slip["legs"]:
             leg["actual"] = rt_for(leg)
@@ -670,25 +688,62 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
                           if slip["stake"] and slip["odds"] else None)
         slip["hit_amount"] = slip["payout"] if slip["result"] == "적중" else None
 
-        rkey = (slip["round_start"], slip["round_end"])
-        rnd = next((r for r in rounds if r["key"] == rkey), None)
-        if rnd is None:
-            rnd = {"key": rkey, "round_start": rkey[0], "round_end": rkey[1], "batches": []}
-            rounds.append(rnd)
-        batch = next((b for b in rnd["batches"] if b["batch_id"] == slip["batch_id"]), None)
-        if batch is None:
-            batch = {"batch_id": slip["batch_id"], "created_dt": slip["created_dt"], "slips": []}
-            rnd["batches"].append(batch)
-        batch["slips"].append(slip)
+    max_legs = max((len(s["legs"]) for s in slips), default=0)
 
-    for rnd in rounds:
-        for batch in rnd["batches"]:
+    # 등록 순서(id) 그대로 훑으며 settle_group_id가 연속으로 같은 구간끼리 하나의 섹션으로 묶는다.
+    # None(미확정)도 하나의 값으로 취급 — 회차 설정 전까지는 계속 같은 섹션에 쌓인다.
+    raw_sections: list[dict] = []
+    for slip in slips:
+        gid = slip["settle_group_id"]
+        if raw_sections and raw_sections[-1]["group_id"] == gid:
+            raw_sections[-1]["slips"].append(slip)
+        else:
+            raw_sections.append({"group_id": gid, "slips": [slip]})
+
+    sections: list[dict] = []
+    for sec in raw_sections:
+        batches: list[dict] = []
+        for slip in sec["slips"]:
+            batch = next((b for b in batches if b["batch_id"] == slip["batch_id"]), None)
+            if batch is None:
+                batch = {"batch_id": slip["batch_id"], "created_dt": slip["created_dt"], "slips": []}
+                batches.append(batch)
+            batch["slips"].append(slip)
+        for batch in batches:
             batch["subtotal"] = BETSLIPS.settle(batch["slips"], roi_base="hit")
-        every = [s for b in rnd["batches"] for s in b["slips"]]
-        rnd["total"] = BETSLIPS.settle(every, roi_base="stake")
-        rnd["max_legs"] = max((len(s["legs"]) for s in every), default=0)
-        rnd.pop("key")
-    return {"rounds": rounds}
+
+        item = {"group_id": sec["group_id"], "batches": batches}
+        if sec["group_id"] is not None:
+            item["round_start"] = min(s["round_start"] for s in sec["slips"])
+            item["round_end"] = max(s["round_end"] for s in sec["slips"])
+            item["total"] = BETSLIPS.settle(sec["slips"], roi_base="stake")
+        else:
+            item["round_start"] = None
+            item["round_end"] = None
+            item["total"] = None
+        sections.append(item)
+
+    return {"max_legs": max_legs, "sections": sections}
+
+
+class SlipIdsBody(BaseModel):
+    scope: str
+    slip_ids: list[int]
+
+
+@app.post("/api/bet_slips/lock")
+def lock_bet_slips(body: SlipIdsBody, user: dict = Depends(get_current_user)):
+    """체크박스로 고른 벳들을 하나의 회차로 확정한다("회차 설정"). 확정되면 회차총계가
+    붙고, 그 벳들은 더 이상 선택 삭제·재설정 대상이 되지 않는다."""
+    group_id = BETSLIPS.lock_slips(user["username"], body.scope, body.slip_ids)
+    return {"ok": True, "group_id": group_id}
+
+
+@app.post("/api/bet_slips/delete_selected")
+def delete_selected_bet_slips(body: SlipIdsBody, user: dict = Depends(get_current_user)):
+    """체크박스로 고른 벳들을 지운다. 이미 회차로 묶인 벳은 걸러지고 그대로 남는다."""
+    deleted = BETSLIPS.delete_slips(user["username"], body.scope, body.slip_ids)
+    return {"ok": True, "deleted": deleted}
 
 
 @app.delete("/api/bet_slips/{slip_id}")
@@ -699,7 +754,8 @@ def delete_bet_slip(slip_id: int, user: dict = Depends(get_current_user)):
 
 @app.delete("/api/bet_batches/{batch_id}")
 def delete_bet_batch(batch_id: str, user: dict = Depends(get_current_user)):
-    """등록 묶음 통째로 삭제 — 잘못 등록한 벳등록 한 건을 되돌릴 때."""
+    """등록 묶음 통째로 삭제 — 잘못 등록한 벳등록 한 건을 되돌릴 때. 이미 회차로 묶인
+    벳은 남긴다(BETSLIPS.delete_batch가 걸러준다)."""
     BETSLIPS.delete_batch(user["username"], batch_id)
     return {"ok": True}
 

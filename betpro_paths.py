@@ -300,7 +300,10 @@ CREATE TABLE IF NOT EXISTS bet_slips (
     odds REAL,
     stake INTEGER,
     memo TEXT,
-    created_dt TEXT NOT NULL
+    created_dt TEXT NOT NULL,
+    -- "회차 설정" 버튼으로 사용자가 직접 고른 벳들을 하나로 묶을 때만 채워진다.
+    -- NULL이면 아직 회차로 확정되지 않은 상태(선택 삭제·회차 설정 둘 다 가능).
+    settle_group_id TEXT
 )
 """
 
@@ -313,7 +316,11 @@ CREATE TABLE IF NOT EXISTS bet_slip_legs (
     S TEXT, R TEXT, No TEXT, HT TEXT, AT TEXT,
     pick_type TEXT NOT NULL,
     odds REAL,
-    leg_order INTEGER NOT NULL
+    leg_order INTEGER NOT NULL,
+    -- 이 다리가 실제로 속한 리그의 스코프(master/user). 이번주 픽은 공식·내 데이터를
+    -- 섞어서 조합을 만들 수 있어, 슬립 전체의 scope(등록 화면 기준)만으론 이 다리가
+    -- 어느 DB에 있는지 알 수 없다 — 결과(RT) 조회 시 반드시 이 값을 써야 한다.
+    scope TEXT
 )
 """
 
@@ -375,9 +382,13 @@ def ensure_predlog_db(username: str) -> str:
         slip_cols = {r[1] for r in con.execute("PRAGMA table_info(bet_slips)").fetchall()}
         if "batch_id" not in slip_cols:
             con.execute("ALTER TABLE bet_slips ADD COLUMN batch_id TEXT")
+        if "settle_group_id" not in slip_cols:
+            con.execute("ALTER TABLE bet_slips ADD COLUMN settle_group_id TEXT")
         leg_cols = {r[1] for r in con.execute("PRAGMA table_info(bet_slip_legs)").fetchall()}
         if "odds" not in leg_cols:
             con.execute("ALTER TABLE bet_slip_legs ADD COLUMN odds REAL")
+        if "scope" not in leg_cols:
+            con.execute("ALTER TABLE bet_slip_legs ADD COLUMN scope TEXT")
         con.commit()
     finally:
         con.close()

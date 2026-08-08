@@ -1,6 +1,6 @@
 .bet-slip {
   flex: 0 0 auto;
-  width: 420px;
+  width: 520px;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   padding: 12px;
@@ -82,6 +82,11 @@
   white-space: nowrap;
 }
 
+/* 뱃금액·수익률 입력칸까지 있으면 420px 카드 폭을 넘길 수 있어 안에서만 가로 스크롤한다. */
+.slip-combo-wrap {
+  overflow-x: auto;
+}
+
 .slip-side-table,
 .slip-combo-table {
   width: 100%;
@@ -137,6 +142,45 @@
   background: var(--bg-page);
   color: var(--text-primary);
   text-align: right;
+}
+
+.slip-roi-input {
+  width: 56px !important;
+}
+
+.slip-budget-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-surface-2);
+}
+
+.slip-budget-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.slip-budget-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-page);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.slip-budget-input:disabled {
+  opacity: 0.5;
 }
 
 .slip-strong {

@@ -4,6 +4,24 @@ import LeagueTable, { selectKey } from '../components/LeagueTable/LeagueTable'
 import BetSlip from '../components/BetSlip/BetSlip'
 import './WeeklyPickPage.css'
 
+const SLIP_IDS_KEY = 'betpro_week_bet_slip_ids'
+
+// 슬립 카드 자체(몇 개가 떠 있는지)도 새로고침·탭 이동에도 남아있어야 한다 —
+// 안의 경기·벳금액은 BetSlip이 자기 id로 따로 저장한다.
+function loadSlipIdsState() {
+  try {
+    const raw = localStorage.getItem(SLIP_IDS_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed.slipIds) && parsed.slipIds.length > 0 && typeof parsed.nextId === 'number') {
+      return parsed
+    }
+  } catch {
+    // 무시하고 기본값으로
+  }
+  return null
+}
+
 function rangeLabel(rows) {
   const dts = rows.map((r) => String(r.DT || '')).filter(Boolean).sort()
   if (dts.length === 0) return null
@@ -18,9 +36,15 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
   const [clearing, setClearing] = useState(false)
   // 선택 삭제용 체크 상태. 키→행 전체를 들고 있어야 삭제 API에 code/scope/S/R/No/HT/AT를 보낼 수 있다.
   const [selected, setSelected] = useState(new Map())
-  // 슬립은 "저장"을 누를 때마다 옆에 하나씩 늘어난다.
-  const [slipIds, setSlipIds] = useState([1])
-  const [nextId, setNextId] = useState(2)
+  // 슬립은 "저장"을 누를 때마다 옆에 하나씩 늘어난다. 탭을 벗어났다 돌아오거나
+  // 새로고침해도 "삭제"를 누르기 전까지는 그대로 남아있어야 해서 localStorage에 저장한다.
+  const persisted = loadSlipIdsState()
+  const [slipIds, setSlipIds] = useState(persisted?.slipIds ?? [1])
+  const [nextId, setNextId] = useState(persisted?.nextId ?? 2)
+
+  useEffect(() => {
+    localStorage.setItem(SLIP_IDS_KEY, JSON.stringify({ slipIds, nextId }))
+  }, [slipIds, nextId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -111,6 +135,7 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
         {slipIds.map((id) => (
           <BetSlip
             key={id}
+            id={id}
             rows={rows}
             scope="master"
             canDelete={slipIds.length > 1}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api, apiFetch } from '../api/client'
 import './BetHistoryPage.css'
 
@@ -32,29 +32,24 @@ function formatCreatedDt(v) {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : v || '-'
 }
 
-function formatRoundLabel(startIso, endIso) {
-  const fmt = (iso) => {
-    const [, mo, d] = iso.split('-')
-    return `${Number(mo)}/${Number(d)}`
-  }
-  return `${fmt(startIso)}(금) ~ ${fmt(endIso)}(월)`
-}
-
 function Badge({ value, map, fallback }) {
   return <span className="bh-badge" style={map[value] || fallback}>{value}</span>
 }
 
 export default function BetHistoryPage({ scope }) {
-  const [rounds, setRounds] = useState([])
+  const [data, setData] = useState({ max_legs: 0, sections: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  // 회차 설정 전(group_id가 없는) 벳만 체크할 수 있다.
+  const [selected, setSelected] = useState(new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const res = await api.get(`/api/bet_slips?scope=${scope}`)
-      setRounds(res.rounds || [])
+      setData({ max_legs: res.max_legs || 0, sections: res.sections || [] })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -63,6 +58,16 @@ export default function BetHistoryPage({ scope }) {
   }, [scope])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { setSelected(new Set()) }, [scope])
+
+  function toggleSlip(id) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function handleDeleteBatch(batchId) {
     if (!window.confirm('이 번에 등록한 벳 묶음을 통째로 삭제할까요?')) return
@@ -70,126 +75,184 @@ export default function BetHistoryPage({ scope }) {
     load()
   }
 
+  async function handleDeleteSelected() {
+    if (selected.size === 0) return
+    if (!window.confirm(`선택한 ${selected.size}개 벳을 삭제할까요?`)) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.post('/api/bet_slips/delete_selected', { scope, slip_ids: [...selected] })
+      setSelected(new Set())
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleLockSelected() {
+    if (selected.size === 0) return
+    if (!window.confirm(`선택한 ${selected.size}개 벳을 하나의 회차로 확정합니다. 확정되면 더 이상 선택 삭제·재설정을 할 수 없어요. 계속할까요?`)) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.post('/api/bet_slips/lock', { scope, slip_ids: [...selected] })
+      setSelected(new Set())
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading) return <div className="bh-empty">불러오는 중...</div>
   if (error) return <div className="bh-empty error-text">{error}</div>
 
+  const { max_legs: maxLegs, sections } = data
+  const legCols = Array.from({ length: maxLegs }, (_, i) => i)
+  // 소계·회차총계 라벨은 체크박스~배당 칸까지를 하나로 합쳐 쓴다.
+  const labelSpan = 4 + maxLegs * 3
+
   return (
     <div className="bh-page">
-      <h2 className="bh-title">📋 베팅내역</h2>
+      <div className="bh-title-row">
+        <h2 className="bh-title">📋 베팅내역</h2>
+        <button className="bh-action-btn" onClick={handleDeleteSelected} disabled={busy || selected.size === 0}>
+          🗑 선택 삭제{selected.size > 0 ? ` (${selected.size})` : ''}
+        </button>
+        <button className="bh-action-btn bh-action-primary" onClick={handleLockSelected} disabled={busy || selected.size === 0}>
+          🔒 회차 설정{selected.size > 0 ? ` (${selected.size})` : ''}
+        </button>
+      </div>
       <p className="bh-desc">
-        "이번주 벳"에서 벳등록한 조합을 금요일~월요일 회차 단위로 모아 보여줍니다.
-        결과를 입력하면 자동으로 적중/미적중을 판정하고, 한 번에 등록한 묶음별로 수익률까지 계산합니다.
+        체크박스로 벳을 고른 뒤 "회차 설정"을 누르면 그 벳들만 묶여 회차총계가 계산됩니다. 확정 전에는 "선택 삭제"로 지울 수 있고, 확정되면 체크박스가 비활성화됩니다.
       </p>
 
-      {rounds.length === 0 && <div className="bh-empty">등록된 베팅내역이 없습니다.</div>}
+      {sections.length === 0 && <div className="bh-empty">등록된 베팅내역이 없습니다.</div>}
 
-      {rounds.map((rnd) => {
-        // 경기 컬럼은 그 회차에서 다리가 가장 많은 벳에 맞춰 늘어난다(3폴·4폴도 그대로 들어감).
-        const legCols = Array.from({ length: rnd.max_legs }, (_, i) => i)
-        // 소계·합계 행의 라벨은 등록일시 ~ 배당까지를 하나로 합쳐 쓴다.
-        const labelSpan = 1 + rnd.max_legs * 3 + 1
-
-        return (
-          <div key={`${rnd.round_start}~${rnd.round_end}`} className="bh-round">
-            <h3>{formatRoundLabel(rnd.round_start, rnd.round_end)}</h3>
-            <div className="bh-table-wrap">
-              <table className="bh-table">
-                <thead>
-                  <tr>
-                    <th>등록일시</th>
-                    {legCols.map((i) => [
-                      <th key={`m${i}`}>경기{i + 1}</th>,
-                      <th key={`t${i}`}>유형{i + 1}</th>,
-                      <th key={`h${i}`}>적중</th>,
-                    ])}
-                    <th>배당</th>
-                    <th>뱃금액</th>
-                    <th>당첨금</th>
-                    <th>결과</th>
-                    <th>적중금</th>
-                    <th>수익금</th>
-                    <th>수익률</th>
-                    <th />
-                  </tr>
-                </thead>
-                {rnd.batches.map((batch) => (
-                  // 등록 묶음마다 tbody를 나눠 굵은 구분선으로 갈라 보여준다.
-                  <tbody key={batch.batch_id} className="bh-batch">
-                    {batch.slips.map((slip) => (
-                      <tr key={slip.id}>
-                        <td className="bh-nowrap">{formatCreatedDt(slip.created_dt)}</td>
-                        {legCols.map((i) => {
-                          const leg = slip.legs[i]
-                          if (!leg) {
+      {sections.length > 0 && (
+        <div className="bh-table-wrap">
+          <table className="bh-table">
+            <thead>
+              <tr>
+                <th className="bh-check-col" />
+                <th className="bh-no-col" />
+                <th>등록일시</th>
+                {legCols.map((i) => [
+                  <th key={`m${i}`}>경기{i + 1}</th>,
+                  <th key={`t${i}`}>유형{i + 1}</th>,
+                  <th key={`h${i}`}>적중</th>,
+                ])}
+                <th>배당</th>
+                <th>뱃금액</th>
+                <th>당첨금</th>
+                <th>결과</th>
+                <th>적중금</th>
+                <th>수익금</th>
+                <th>수익률</th>
+                <th />
+              </tr>
+            </thead>
+            {sections.map((sec, si) => {
+              const locked = sec.group_id != null
+              return (
+                <Fragment key={sec.group_id ?? `pending-${si}`}>
+                  {sec.batches.map((batch) => (
+                    // 등록 묶음마다 tr을 굵은 선으로 갈라 보여준다.
+                    <tbody key={batch.batch_id} className="bh-batch">
+                      {batch.slips.map((slip) => (
+                        <tr key={slip.id} className={locked ? 'bh-row-locked' : undefined}>
+                          <td className="bh-check-col">
+                            <input
+                              type="checkbox"
+                              disabled={locked}
+                              checked={selected.has(slip.id)}
+                              onChange={() => toggleSlip(slip.id)}
+                            />
+                          </td>
+                          <td className="bh-no-col bh-muted">{slip.id}</td>
+                          <td className="bh-nowrap">{formatCreatedDt(slip.created_dt)}</td>
+                          {legCols.map((i) => {
+                            const leg = slip.legs[i]
+                            if (!leg) {
+                              return [
+                                <td key={`m${i}`} />, <td key={`t${i}`} />, <td key={`h${i}`} />,
+                              ]
+                            }
                             return [
-                              <td key={`m${i}`} />, <td key={`t${i}`} />, <td key={`h${i}`} />,
+                              <td key={`m${i}`} className="bh-nowrap">{leg.HT}vs{leg.AT}</td>,
+                              <td key={`t${i}`}>
+                                <Badge value={leg.pick_type} map={PICK_BADGE} fallback={PICK_BADGE_DEFAULT} />
+                              </td>,
+                              <td key={`h${i}`} title={leg.actual ? `실제 결과: ${leg.actual}` : '결과 입력 대기'}>
+                                <Badge value={HIT_SHORT[leg.hit] || leg.hit} map={HIT_BADGE} fallback={HIT_BADGE['대기']} />
+                              </td>,
                             ]
-                          }
-                          return [
-                            <td key={`m${i}`} className="bh-nowrap">{leg.HT}vs{leg.AT}</td>,
-                            <td key={`t${i}`}>
-                              <Badge value={leg.pick_type} map={PICK_BADGE} fallback={PICK_BADGE_DEFAULT} />
-                            </td>,
-                            <td key={`h${i}`} title={leg.actual ? `실제 결과: ${leg.actual}` : '결과 입력 대기'}>
-                              <Badge value={HIT_SHORT[leg.hit] || leg.hit} map={HIT_BADGE} fallback={HIT_BADGE['대기']} />
-                            </td>,
-                          ]
-                        })}
-                        <td className="bh-nowrap">{odds(slip.odds)}</td>
-                        <td className="bh-nowrap">{num(slip.stake)}</td>
-                        <td className="bh-nowrap">{num(slip.payout)}</td>
-                        <td>
-                          <Badge value={slip.result} map={HIT_BADGE} fallback={HIT_BADGE['대기']} />
+                          })}
+                          <td className="bh-nowrap">{odds(slip.odds)}</td>
+                          <td className="bh-nowrap">{num(slip.stake)}</td>
+                          <td className="bh-nowrap">{num(slip.payout)}</td>
+                          <td>
+                            <Badge value={slip.result} map={HIT_BADGE} fallback={HIT_BADGE['대기']} />
+                          </td>
+                          <td className="bh-nowrap">{num(slip.hit_amount)}</td>
+                          <td className="bh-muted">-</td>
+                          <td className="bh-muted">-</td>
+                          <td />
+                        </tr>
+                      ))}
+                      <tr className="bh-subtotal">
+                        <td colSpan={labelSpan} className="bh-subtotal-label">
+                          └ 이 등록 묶음 소계
                         </td>
-                        <td className="bh-nowrap">{num(slip.hit_amount)}</td>
-                        <td className="bh-muted">-</td>
-                        <td className="bh-muted">-</td>
+                        <td className="bh-nowrap">{num(batch.subtotal.stake)}</td>
+                        <td />
+                        <td />
+                        <td className="bh-nowrap">{num(batch.subtotal.hit_amount)}</td>
+                        <td className={`bh-nowrap ${signClass(batch.subtotal.profit)}`}>
+                          {num(batch.subtotal.profit)}
+                        </td>
+                        <td className={`bh-nowrap ${signClass(batch.subtotal.roi)}`}>
+                          {pct(batch.subtotal.roi)}
+                        </td>
+                        <td>
+                          {!locked && (
+                            <button
+                              className="bh-delete"
+                              title="이 등록 묶음 삭제"
+                              onClick={() => handleDeleteBatch(batch.batch_id)}
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    </tbody>
+                  ))}
+                  {locked && (
+                    <tbody className="bh-total-body">
+                      <tr className="bh-total">
+                        <td colSpan={labelSpan} className="bh-total-label">
+                          회차총계 ({sec.round_start}~{sec.round_end})
+                        </td>
+                        <td className="bh-nowrap">{num(sec.total.stake)}</td>
+                        <td />
+                        <td />
+                        <td className="bh-nowrap">{num(sec.total.hit_amount)}</td>
+                        <td className={`bh-nowrap ${signClass(sec.total.profit)}`}>{num(sec.total.profit)}</td>
+                        <td className={`bh-nowrap ${signClass(sec.total.roi)}`}>{pct(sec.total.roi)}</td>
                         <td />
                       </tr>
-                    ))}
-                    <tr className="bh-subtotal">
-                      <td colSpan={labelSpan} className="bh-subtotal-label">
-                        └ 이 등록 묶음 소계
-                      </td>
-                      <td className="bh-nowrap">{num(batch.subtotal.stake)}</td>
-                      <td />
-                      <td />
-                      <td className="bh-nowrap">{num(batch.subtotal.hit_amount)}</td>
-                      <td className={`bh-nowrap ${signClass(batch.subtotal.profit)}`}>
-                        {num(batch.subtotal.profit)}
-                      </td>
-                      <td className={`bh-nowrap ${signClass(batch.subtotal.roi)}`}>
-                        {pct(batch.subtotal.roi)}
-                      </td>
-                      <td>
-                        <button
-                          className="bh-delete"
-                          title="이 등록 묶음 삭제"
-                          onClick={() => handleDeleteBatch(batch.batch_id)}
-                        >
-                          🗑️
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                ))}
-                <tfoot>
-                  <tr className="bh-total">
-                    <td colSpan={labelSpan} className="bh-total-label">[회차종료]</td>
-                    <td className="bh-nowrap">{num(rnd.total.stake)}</td>
-                    <td />
-                    <td />
-                    <td className="bh-nowrap">{num(rnd.total.hit_amount)}</td>
-                    <td className={`bh-nowrap ${signClass(rnd.total.profit)}`}>{num(rnd.total.profit)}</td>
-                    <td className={`bh-nowrap ${signClass(rnd.total.roi)}`}>{pct(rnd.total.roi)}</td>
-                    <td />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-        )
-      })}
+                    </tbody>
+                  )}
+                </Fragment>
+              )
+            })}
+          </table>
+        </div>
+      )}
     </div>
   )
 }
