@@ -155,7 +155,11 @@ export default function BetHistoryPage({ scope }) {
                 <th />
               </tr>
             </thead>
-            {sections.map((sec, si) => {
+            {(() => {
+              // 번호는 실제 DB id가 아니라 화면에 보이는 순서대로 1부터 다시 매긴다 —
+              // 지운 벳은 완전히 삭제되니(복구용으로 남겨두지 않음) 번호에 흔적이 없다.
+              let rowNum = 0
+              return sections.map((sec, si) => {
               const locked = sec.group_id != null
               return (
                 <Fragment key={sec.group_id ?? `pending-${si}`}>
@@ -172,7 +176,7 @@ export default function BetHistoryPage({ scope }) {
                               onChange={() => toggleSlip(slip.id)}
                             />
                           </td>
-                          <td className="bh-no-col bh-muted">{slip.id}</td>
+                          <td className="bh-no-col bh-muted">{++rowNum}</td>
                           <td className="bh-nowrap">{formatCreatedDt(slip.created_dt)}</td>
                           {legCols.map((i) => {
                             const leg = slip.legs[i]
@@ -249,7 +253,8 @@ export default function BetHistoryPage({ scope }) {
                   )}
                 </Fragment>
               )
-            })}
+            })
+            })()}
           </table>
         </div>
       )}
