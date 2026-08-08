@@ -33,7 +33,7 @@ def judge_leg(pick_type: str, rt_label: str | None) -> str:
     if pick_type == "핸무":
         return "적중" if rt_label == "핸무" else "미적중"
     if pick_type == "플핸":
-        return "적중" if rt_label != "핸승" else "미적중"
+        return "적중" if rt_label in ("무", "역") else "미적중"
     # 무 / 역
     return "적중" if rt_label == pick_type else "미적중"
 
