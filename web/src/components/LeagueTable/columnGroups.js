@@ -180,7 +180,8 @@ export function formatCell(group, col, value) {
 // 새벽 6시 이전 경기는 '전날 그룹'으로 취급한다 (예: 토요일 04:00 경기는 금요일 그룹).
 const WEEKDAY_PREV = { Sun: 'Sat', Mon: 'Sun', Tue: 'Mon', Wed: 'Tue', Thu: 'Wed', Fri: 'Thu', Sat: 'Fri' }
 
-function bettingDayStyle(row) {
+// 일반정보 그룹을 접었을 때도 이 색을 그대로 보여줘야 해서(LeagueTable.jsx) export한다.
+export function bettingDayStyle(row) {
   if (!row || !row.DT) return null
   const m = /\(([A-Za-z]{3})\)/.exec(String(row.DT))
   if (!m) return null

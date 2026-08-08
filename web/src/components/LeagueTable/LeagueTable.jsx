@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildColumnGroups, formatCell, cellStyle, myHitStyle } from './columnGroups'
+import { buildColumnGroups, formatCell, cellStyle, myHitStyle, bettingDayStyle } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
 import { api } from '../../api/client'
@@ -269,8 +269,15 @@ export default function LeagueTable({
                     const key = groupKey(g)
                     const isLastGroup = gi === groups.length - 1
                     if (collapsed.has(key)) {
+                      // 일반정보를 접어도 금/토/일 베팅일 색상은 계속 보여야 한다(DT/TM이
+                      // 이 안에 있어서, 접힌 채로도 그 경기가 어느 날짜 그룹인지 알 수 있게).
+                      const style = g.label1 === '일반정보' ? bettingDayStyle(row) : null
                       return [
-                        <td key={`${gi}-c`} className={`collapsed-cell${isLastGroup ? '' : ' group-divider'}`}>
+                        <td
+                          key={`${gi}-c`}
+                          className={`collapsed-cell${isLastGroup ? '' : ' group-divider'}`}
+                          style={style || undefined}
+                        >
                           ·
                         </td>,
                       ]
