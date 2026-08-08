@@ -14,7 +14,8 @@ FastAPI 등 어떤 환경에서도 그대로 재사용할 수 있습니다.
   RT_TEXT_MAP, PH_F_CODES, PH_K_CODES, PH_TABLE, PH_MIN_SAMPLE, PH_BASE_RATE
 
 ⚠️ 계산 로직은 절대 수정 금지 (오랜 실측 검증으로 확정된 부분).
-   원본과 동기화가 필요하면 WEB_BET_PRO.py 해당 줄을 다시 복사하세요.
+   원본 WEB_BET_PRO.py는 React 전환 완료 후 삭제됐다 — 이제 이 파일이 원본이다.
+   (옛 원본이 필요하면 git 이력에서 2ba0102 이전 커밋을 참고)
 """
 import os
 import sqlite3
