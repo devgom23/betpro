@@ -269,16 +269,17 @@ export default function LeagueTable({
                     const key = groupKey(g)
                     const isLastGroup = gi === groups.length - 1
                     if (collapsed.has(key)) {
-                      // 일반정보를 접어도 금/토/일 베팅일 색상은 계속 보여야 한다(DT/TM이
-                      // 이 안에 있어서, 접힌 채로도 그 경기가 어느 날짜 그룹인지 알 수 있게).
-                      const style = g.label1 === '일반정보' ? bettingDayStyle(row) : null
+                      // 일반정보를 접어도 금/토/일 베팅일 색상 + 시간(TM)은 계속 보여야
+                      // 한다 — 접힌 채로도 몇 시 경기인지 바로 알 수 있게.
+                      const isGenInfo = g.label1 === '일반정보'
+                      const style = isGenInfo ? bettingDayStyle(row) : null
                       return [
                         <td
                           key={`${gi}-c`}
                           className={`collapsed-cell${isLastGroup ? '' : ' group-divider'}`}
                           style={style || undefined}
                         >
-                          ·
+                          {isGenInfo ? formatCell(g, { sub: 'TM' }, row.TM) : '·'}
                         </td>,
                       ]
                     }
