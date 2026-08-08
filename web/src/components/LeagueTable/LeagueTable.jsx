@@ -37,7 +37,10 @@ export default function LeagueTable({
   // 이번주 픽처럼 여러 리그·스코프를 한 표에 모아 보여줄 때는 행마다 실제 소속
   // 리그(L)·스코프(scope)가 다를 수 있다 — LeagueTable에 준 code/scope prop은
   // 그런 표에서는 안 맞을 수 있으니, 행 자신에 값이 있으면 그걸 우선한다.
-  const rowCode = (row) => row?.Source_League || row?.L || code
+  // 주의: 일반 리그 표에도 원래부터 'L' 컬럼이 있는데(리그 약어 표시용, 코드가 아님)
+  // 그건 코드로 쓰면 안 된다 — row.scope는 이번주 픽 집계에서만 붙는 값이라, 그게
+  // 있을 때만("이 행은 여러 리그를 모은 표에서 왔다") row.L을 코드로 신뢰한다.
+  const rowCode = (row) => (row?.scope ? row.L : null) || row?.Source_League || code
   const rowScope = (row) => row?.scope || scope
   const groups = useMemo(() => buildColumnGroups(columns || [], { hideIndicators }), [columns, hideIndicators])
   const [detailRow, setDetailRow] = useState(null)

@@ -65,6 +65,41 @@ def _pick_status(df: pd.DataFrame) -> pd.Series:
     return pd.Series(out, index=df.index, dtype=object)
 
 
+def _ddong_columns(df: pd.DataFrame):
+    """똥배(DDONG)/똥사(DDONGSA) — 국내배당 KW·KL 중 1.49 이하인 값을 "똥"으로 보고,
+    같은 라운드(시즌 S + 라운드 R) 안에서 낮은 배당 순으로 똥1, 똥2... 번호를 매긴다.
+    KW·KL이 동시에 1.49 이하로 나오는 경우는 없다고 보고, 있어도 더 낮은 쪽 하나만 쓴다.
+    똥사는 "똥배로 체크된"(DDONG 값이 있는) 경기 중에서만, 실제 결과(RT)가 무(3) 또는
+    역(4)이면 붙는 표시다 — 똥배가 아닌 경기는 결과가 무/역이어도 똥사가 아니다."""
+    n = len(df)
+    ddong = pd.Series([""] * n, index=df.index, dtype=object)
+    ddongsa = pd.Series([""] * n, index=df.index, dtype=object)
+    if df.empty:
+        return ddong, ddongsa
+
+    if "KW" in df.columns and "KL" in df.columns and "S" in df.columns and "R" in df.columns:
+        kw = pd.to_numeric(df["KW"], errors="coerce")
+        kl = pd.to_numeric(df["KL"], errors="coerce")
+        groups: dict[tuple, list[tuple]] = {}
+        for idx, s, r, w, l in zip(df.index, df["S"], df["R"], kw, kl):
+            w_ok = pd.notna(w) and w <= 1.49
+            l_ok = pd.notna(l) and l <= 1.49
+            if not (w_ok or l_ok):
+                continue
+            cand = min(v for v, ok in ((w, w_ok), (l, l_ok)) if ok)
+            groups.setdefault((s, r), []).append((idx, cand))
+        for items in groups.values():
+            items.sort(key=lambda t: t[1])
+            for rank, (idx, _) in enumerate(items, start=1):
+                ddong.loc[idx] = f"똥{rank}"
+
+    if "RT" in df.columns:
+        rt_num = pd.to_numeric(df["RT"], errors="coerce")
+        ddongsa[(ddong != "") & rt_num.isin([3, 4])] = "똥사"
+
+    return ddong, ddongsa
+
+
 def _read_table(db_path: str, table: str) -> pd.DataFrame:
     if not os.path.exists(db_path):
         return pd.DataFrame()
@@ -109,6 +144,7 @@ def load_league_df_ranked(db_path: str, league: str) -> pd.DataFrame:
     # 오염되어 표시용 컬럼이 업로드/삭제 쪽으로 새어 들어가는 사고를 막는다.
     df = standings.attach_rank_and_form(load_league_df(db_path, league)).copy()
     df[PH_STATUS_COL] = _pick_status(df)
+    df["DDONG"], df["DDONGSA"] = _ddong_columns(df)
     _CACHE[key] = (mt, df)
     return df
 

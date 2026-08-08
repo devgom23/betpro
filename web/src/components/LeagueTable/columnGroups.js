@@ -20,6 +20,13 @@ const MYPICK_COLS = [
   ['MY_HIT', '적중'],
 ]
 
+// 똥배 — 국내배당 KW/KL이 1.49 이하로 나온 "똥[안전]배당" 경기를 그 라운드 안에서
+// 낮은 순으로 똥1, 똥2...로 매긴 값(DDONG)과, 실제 결과가 무/역이면 붙는 똥사(DDONGSA).
+const DDONG_COLS = [
+  ['DDONG', '똥'],
+  ['DDONGSA', '똥사'],
+]
+
 const PH_COLS = [
   ['PH_STATUS', '적중'],
   ['PH_F', '해)플핸'],
@@ -102,6 +109,12 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
 
   addFlatGroup('일반정보', '시즌 및 라운드 정보', GEN_COLS)
   addFlatGroup('경기정보', '홈팀 vs 원정팀', MATCH_COLS)
+
+  const ddongLeaves = DDONG_COLS.filter(([k]) => available.has(k)).map(([k, sub]) => ({ key: k, sub }))
+  if (ddongLeaves.length) {
+    groups.push({ label1: '똥배', label2: '', kind: 'flat', cols: ddongLeaves })
+  }
+
   addFlatGroup('국내배당', '승(W) / 무(D) / 패(L)', K_ODDS_COLS)
   addFlatGroup('해외배당', '승(W) / 무(D) / 패(L)', F_ODDS_COLS)
 

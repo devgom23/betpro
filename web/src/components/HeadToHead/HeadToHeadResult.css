@@ -72,6 +72,13 @@
   min-height: 180px;
   max-height: 520px;
   overflow-y: auto;
+  overflow-x: auto;
+}
+
+/* 팀명이 길어도 줄바꿈 없이 한 줄로 — 대신 표가 넓어지면 이 칸 안에서만 가로 스크롤된다. */
+.detail-table.match-list th,
+.detail-table.match-list td {
+  white-space: nowrap;
 }
 
 .match-list-scroll .detail-table.match-list thead th {

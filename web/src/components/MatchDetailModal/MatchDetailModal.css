@@ -13,7 +13,7 @@
 .modal-card {
   position: relative;
   width: 100%;
-  max-width: 980px;
+  max-width: 1320px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 10px;
