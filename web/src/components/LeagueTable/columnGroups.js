@@ -140,8 +140,18 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
   return groups
 }
 
+// 승/패 배당(예: FW/FL) 기준 핸디 부호 추정 — 배당이 더 낮은(유리한) 쪽이 핸디를 준다.
+// 결과·핸디 입력 화면(ResultEditModal)의 computeHandicap과 같은 규칙.
+// 실제 등록된 핸디 라인(KH/FH)이 아직 없을 때, 표에서 잠정치를 보여주는 용도로만 쓴다.
+function inferHandicapSign(w, l) {
+  const wn = toNum(w)
+  const ln = toNum(l)
+  if (wn === null || ln === null) return null
+  return wn > ln ? 1 : -1
+}
+
 // ── 셀 값 포맷 ──
-export function formatCell(group, col, value) {
+export function formatCell(group, col, value, row) {
   const g1 = group.label1
   const sub = col.sub
 
@@ -159,7 +169,10 @@ export function formatCell(group, col, value) {
     return n === null ? '' : String(Math.trunc(n)).padStart(4, '0')
   }
   if (g1 === '국내배당' || g1 === '해외배당') {
-    const n = toNum(value)
+    let n = toNum(value)
+    if (n === null && (sub === 'KH' || sub === 'FH') && row) {
+      n = inferHandicapSign(row[sub === 'KH' ? 'KW' : 'FW'], row[sub === 'KH' ? 'KL' : 'FL'])
+    }
     if (n === null) return ''
     if (sub === 'KH' || sub === 'FH') return (n >= 0 ? '+' : '') + n.toFixed(0)
     return n.toFixed(2)
@@ -219,7 +232,10 @@ function oddsHitSide(row) {
 function khHitSide(row) {
   const hs = toNum(row?.HS)
   const as_ = toNum(row?.AS)
-  const kh = toNum(row?.KH)
+  // 실제 등록된 핸디 라인(KH)이 없으면, KH 칸 자체도 그렇듯(cellStyle 참고)
+  // KW/KL 배당 기준 잠정치로 대신한다 — 그래야 KH 칸에 보이는 값과
+  // KHW/KHD/KHL 적중 표시가 서로 어긋나지 않는다.
+  const kh = toNum(row?.KH) ?? inferHandicapSign(row?.KW, row?.KL)
   if (hs === null || as_ === null || kh === null) return null
   return sideOf(hs + kh, as_)
 }
@@ -229,7 +245,26 @@ export function myHitStyle(value) {
   if (value === '적중') return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
   if (value === '미적') return { background: '#C62828', color: '#fff', fontWeight: 700 }
   if (value === '패스') return { background: '#757575', color: '#fff', fontWeight: 700 }
+  if (value === '고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
   return null
+}
+
+// 내 예측의 "내픽" 배지 색상 — 축플/축정은 다른 픽보다 중요한 픽이라 골드 배경(적중
+// 배지보다 채도를 낮춘 톤)은 유지하고, 둘을 구분하도록 글자색만 달리한다(축플=빨강, 축정=파랑).
+export function myPickStyle(value) {
+  if (value === '축플') return { background: '#D9C36A', color: '#C62828', fontWeight: 700 }
+  if (value === '축정') return { background: '#D9C36A', color: '#1565C0', fontWeight: 700 }
+  return null
+}
+
+// 폼(PPG) 칸 색상 — 상세보기 팝업의 폼 지표와 같은 구간 색상(3.00~2.00 녹색 /
+// 1.99~1.00 노란색 / 0.99~0.00 갈색). 표에서는 칸 전체가 아니라 뱃지로만 보여준다.
+export function formStyle(value) {
+  const n = toNum(value)
+  if (n === null) return null
+  if (n >= 2) return { background: '#2E7D32', color: '#000', fontWeight: 400 }
+  if (n >= 1) return { background: '#FBC02D', color: '#000', fontWeight: 400 }
+  return { background: '#8D6E63', color: '#000', fontWeight: 400 }
 }
 
 // ── 셀 배경/글자색 (인라인 style 객체로 반환) ──
@@ -240,19 +275,11 @@ export function cellStyle(group, col, value, row) {
 
   if (g1 === '일반정보' && (sub === 'DT' || sub === 'TM')) return bettingDayStyle(row)
 
-  // 폼(PPG) 칸 — 상세보기 팝업의 폼 지표와 같은 구간 색상(3.00~2.00 녹색 /
-  // 1.99~1.00 노란색 / 0.99~0.00 갈색). HP/AP는 순위라 대상에서 뺀다.
-  if (g1 === '경기정보' && ['HTF', 'HF', 'AF', 'ATF'].includes(sub)) {
-    const n = toNum(value)
-    if (n === null) return null
-    if (n >= 2) return { background: '#2E7D32', color: '#fff', fontWeight: 700 }
-    if (n >= 1) return { background: '#FBC02D', color: '#fff', fontWeight: 700 }
-    return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
-  }
-
   // 배당 적중 표시 — '적중'(PH_STATUS) 칸과 같은 노란 배경으로 표시한다.
-  // 예정 경기(스코어 없음)는 표시 없음.
+  // 예정 경기(스코어 없음)는 표시 없음. 그 칸 자체에 배당값이 없으면(공란) 적중
+  // 여부와 무관하게 표시하지 않는다 — 숫자 없는 칸이 노랗게만 칠해지는 걸 막는다.
   if ((g1 === '국내배당' || g1 === '해외배당') && (ODDS_HIT_PLAIN_COLS.includes(sub) || ODDS_HIT_KH_COLS.includes(sub))) {
+    if (toNum(value) === null) return null
     const side = ODDS_HIT_KH_COLS.includes(sub) ? khHitSide(row) : oddsHitSide(row)
     if (side && sub.endsWith(side)) return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
     return null
@@ -279,11 +306,16 @@ export function cellStyle(group, col, value, row) {
   }
 
   if ((g1 === '해외배당' && sub === 'FH') || (g1 === '국내배당' && sub === 'KH')) {
-    const n = toNum(value)
-    if (n === null) return null
-    if (n < 0) return { color: '#1565C0', fontWeight: 700 }
-    if (n > 0) return { color: '#C62828', fontWeight: 700 }
-    return null
+    // 핸디캡 라인(KH/FH) 칸은 옆 배당 칸들과 구분되도록 아주 연한 흰색 배경을 항상 깐다.
+    let n = toNum(value)
+    if (n === null && row) {
+      n = inferHandicapSign(row[sub === 'KH' ? 'KW' : 'FW'], row[sub === 'KH' ? 'KL' : 'FL'])
+    }
+    const base = { background: 'rgba(255, 255, 255, 0.06)' }
+    if (n === null) return base
+    if (n < 0) return { ...base, color: '#1565C0', fontWeight: 700 }
+    if (n > 0) return { ...base, color: '#C62828', fontWeight: 700 }
+    return base
   }
 
   if (group.kind === 'ph' && sub === '적중') {

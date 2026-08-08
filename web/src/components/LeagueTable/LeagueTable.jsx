@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildColumnGroups, formatCell, cellStyle, myHitStyle, bettingDayStyle } from './columnGroups'
+import {
+  buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, formStyle, bettingDayStyle,
+} from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
 import { api } from '../../api/client'
@@ -12,9 +14,18 @@ const VISIBLE_ROWS = 20
 const OVERSCAN = 10
 // 아직 실제 행 높이를 재기 전에 쓸 근사값(px)
 const DEFAULT_ROW_H = { small: 28, large: 31 }
+// 폼(PPG) 칸 — 칸 전체가 아니라 값만 뱃지로 강조한다.
+const FORM_COLS = new Set(['HTF', 'HF', 'AF', 'ATF'])
 
 function groupKey(g) {
   return g.label1
+}
+
+// 그룹 경계 구분선 클래스 — 국내배당/해외배당 사이는 두 "배당" 블록이 헷갈리기 쉬워
+// 다른 경계보다 더 두껍게 강조한다(divider-strong, LeagueTable.css 참고).
+function dividerClass(g, isLastGroup) {
+  if (isLastGroup) return ''
+  return g.label1 === '국내배당' ? ' group-divider divider-strong' : ' group-divider'
 }
 
 function matchKey(row) {
@@ -160,12 +171,61 @@ export default function LeagueTable({
     })
   }
 
+  // 26개 지표 그룹을 해외(F-/TF-)/국내(K-/TK-) 묶음으로 한 번에 접고 펼 수 있게 한다.
+  function indicatorBatch(g) {
+    if (g.kind !== 'indicator') return null
+    const code = g.label2 || ''
+    if (code.startsWith('TF-') || code.startsWith('F-')) return 1
+    if (code.startsWith('TK-') || code.startsWith('K-')) return 2
+    return null
+  }
+
+  const batch1Groups = groups.filter((g) => indicatorBatch(g) === 1)
+  const batch2Groups = groups.filter((g) => indicatorBatch(g) === 2)
+
+  // 그룹 제목("1. 해) 승 분석")에서 번호만 뽑아 실제 보이는 범위를 표시한다 —
+  // 내 데이터처럼 통합지표(TF-*/TK-*)가 빠지면 번호가 1~9/14~22로 줄어들기 때문에
+  // "1~13" 같은 고정 문구를 쓰면 실제와 어긋난다.
+  function batchRangeLabel(batchGroups) {
+    const nums = batchGroups.map((g) => parseInt(g.label1, 10)).filter((n) => !Number.isNaN(n))
+    if (nums.length === 0) return ''
+    const min = Math.min(...nums)
+    const max = Math.max(...nums)
+    return min === max ? `${min}` : `${min}~${max}`
+  }
+
+  function toggleBatch(batchGroups) {
+    const keys = batchGroups.map(groupKey)
+    const allCollapsed = keys.length > 0 && keys.every((k) => collapsed.has(k))
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      keys.forEach((k) => (allCollapsed ? next.delete(k) : next.add(k)))
+      return next
+    })
+  }
+
   if (!rows || rows.length === 0) {
     return <p className="table-empty">표시할 경기가 없습니다.</p>
   }
 
   return (
     <div>
+      {(batch1Groups.length > 0 || batch2Groups.length > 0) && (
+        <div className="batch-fold-bar">
+          {batch1Groups.length > 0 && (
+            <button className="batch-fold-btn" onClick={() => toggleBatch(batch1Groups)}>
+              {batch1Groups.every((g) => collapsed.has(groupKey(g))) ? '▸' : '◂'} 해외 지표 (
+              {batchRangeLabel(batch1Groups)})
+            </button>
+          )}
+          {batch2Groups.length > 0 && (
+            <button className="batch-fold-btn" onClick={() => toggleBatch(batch2Groups)}>
+              {batch2Groups.every((g) => collapsed.has(groupKey(g))) ? '▸' : '◂'} 국내 지표 (
+              {batchRangeLabel(batch2Groups)})
+            </button>
+          )}
+        </div>
+      )}
       <div className="league-table-scroll" ref={scrollRef} onScroll={handleScroll}>
         <table className={`league-table ${fontSize === 'large' ? 'font-large' : ''}`}>
           <thead>
@@ -176,10 +236,10 @@ export default function LeagueTable({
                 const key = groupKey(g)
                 const isCollapsed = collapsed.has(key)
                 const isLastGroup = gi === groups.length - 1
-                const dividerClass = isLastGroup ? '' : ' group-divider'
+                const dividerCls = dividerClass(g, isLastGroup)
                 if (isCollapsed) {
                   return (
-                    <th key={gi} colSpan={1} className={`group-header group-collapsed${dividerClass}`}>
+                    <th key={gi} colSpan={1} className={`group-header group-collapsed${dividerCls}`}>
                       <button
                         className="fold-btn fold-btn-collapsed"
                         onClick={() => toggleGroup(key)}
@@ -191,7 +251,7 @@ export default function LeagueTable({
                   )
                 }
                 return (
-                  <th key={gi} colSpan={g.cols.length} className={`group-header${dividerClass}`}>
+                  <th key={gi} colSpan={g.cols.length} className={`group-header${dividerCls}`}>
                     <div className="group-header-row">
                       <div className="group-text">
                         <div className="group-title">{g.label1}</div>
@@ -215,7 +275,7 @@ export default function LeagueTable({
                 const isLastGroup = gi === groups.length - 1
                 if (collapsed.has(key)) {
                   return [
-                    <th key={`${gi}-c`} className={`sub-header collapsed-cell${isLastGroup ? '' : ' group-divider'}`}>
+                    <th key={`${gi}-c`} className={`sub-header collapsed-cell${dividerClass(g, isLastGroup)}`}>
                       ···
                     </th>,
                   ]
@@ -226,7 +286,7 @@ export default function LeagueTable({
                     <th
                       key={`${gi}-${ci}`}
                       className={`sub-header ${highlightCols.includes(c.key) ? 'col-highlight' : ''}${
-                        isLastCol ? ' group-divider' : ''
+                        isLastCol ? dividerClass(g, isLastGroup) : ''
                       }`}
                     >
                       {c.sub}
@@ -276,7 +336,7 @@ export default function LeagueTable({
                       return [
                         <td
                           key={`${gi}-c`}
-                          className={`collapsed-cell${isLastGroup ? '' : ' group-divider'}`}
+                          className={`collapsed-cell${dividerClass(g, isLastGroup)}`}
                           style={style || undefined}
                         >
                           {isGenInfo ? formatCell(g, { sub: 'TM' }, row.TM) : '·'}
@@ -316,7 +376,11 @@ export default function LeagueTable({
                         // MY_PICK
                         return (
                           <td key={`${gi}-${ci}`} className={className}>
-                            <button className="mypick-btn" onClick={() => setPickRow(row)}>
+                            <button
+                              className="mypick-btn"
+                              style={myPickStyle(pickState.pick) || undefined}
+                              onClick={() => setPickRow(row)}
+                            >
                               {pickState.pick || <span className="mypick-blank">－</span>}
                             </button>
                           </td>
@@ -327,20 +391,36 @@ export default function LeagueTable({
                       // L(리그) 칸은 내부 매칭용 코드(ul_2 등)가 아니라 사용자가 지은 리그명을 보여준다
                       // (이번주 픽처럼 여러 스코프 리그를 한 표에 모아 보여줄 때만 L_LABEL이 붙어 온다).
                       const value = c.key === 'L' && row.L_LABEL != null ? row.L_LABEL : row[c.key]
-                      const style = cellStyle(g, c, value, row)
                       const isHighlighted = highlightCols.includes(c.key)
                       const isLastCol = !isLastGroup && ci === g.cols.length - 1
                       const classNames = [
                         isHighlighted ? 'cell-highlight' : '',
-                        isLastCol ? 'group-divider' : '',
+                        isLastCol ? dividerClass(g, isLastGroup).trim() : '',
                       ].filter(Boolean).join(' ')
+                      const text = formatCell(g, c, value, row)
+                      // 폼(PPG) 칸은 칸 전체를 칠하지 않고, 값만 작은 뱃지로 보여준다.
+                      if (g.label1 === '경기정보' && FORM_COLS.has(c.key)) {
+                        const badgeStyle = formStyle(value)
+                        return (
+                          <td key={`${gi}-${ci}`} className={classNames || undefined}>
+                            {badgeStyle ? (
+                              <span className="form-badge" style={badgeStyle}>
+                                {text}
+                              </span>
+                            ) : (
+                              text
+                            )}
+                          </td>
+                        )
+                      }
+                      const style = cellStyle(g, c, value, row)
                       return (
                         <td
                           key={`${gi}-${ci}`}
                           className={classNames || undefined}
                           style={style || undefined}
                         >
-                          {formatCell(g, c, value)}
+                          {text}
                         </td>
                       )
                     })
