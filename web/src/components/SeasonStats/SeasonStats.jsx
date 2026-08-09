@@ -188,9 +188,9 @@ export default function SeasonStats({ code, scope, season, round }) {
                   </div>
                 ))}
 
-                <div className="ss-cell ss-rt ss-foot-cell">승자</div>
+                <div className="ss-cell ss-rt ss-foot-cell">분포</div>
                 <div className="ss-cell ss-sum ss-foot-cell ss-tally">
-                  정 {result.tally['정']} · 중 {result.tally['중']} · 플 {result.tally['플']}
+                  {result.tally['정']}/{result.tally['중']}/{result.tally['플']}
                 </div>
                 {rounds.map((r) => {
                   const t = result.ratio[r]
