@@ -247,8 +247,8 @@ export default function SeasonStats({ code, scope, season, round }) {
                             <span className="ss-pick-main">
                               <span className="ss-pick-odds">{p.odds.toFixed(2)}</span>
                               {p.HT} <span className="ss-pick-vs">vs</span> {p.AT}
+                              {p.HS != null && ` (${p.HS}:${p.AS})`}
                             </span>
-                            {p.HS != null && ` (${p.HS}:${p.AS})`}
                           </li>
                         ))}
                       </ul>
