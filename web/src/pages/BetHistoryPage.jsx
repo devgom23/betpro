@@ -24,6 +24,14 @@ const odds = (v) => (v == null ? '-' : v.toFixed(2))
 const pct = (v) => (v == null ? '-' : `${v}%`)
 const signClass = (v) => (v == null ? '' : v > 0 ? 'bh-pos' : v < 0 ? 'bh-neg' : '')
 
+// 벳 한 줄의 수익금·수익률 — 실제로 적중금이 찍힌 줄에만 보여준다(그 묶음에서
+// 돈이 들어온 유일한 줄이라, "이 등록 묶음 소계"와 같은 기준 — 적중금 대비 묶음
+// 전체 뱃금액 — 으로 계산한 값을 그대로 가져다 쓴다). 미적중·대기 줄은 공란.
+function rowProfitRoi(slip, batch) {
+  if (slip.result !== '적중') return { profit: null, roi: null }
+  return { profit: batch.subtotal.profit, roi: batch.subtotal.roi }
+}
+
 function formatCreatedDt(v) {
   const m = /(\d{4})-(\d{2})-(\d{2})/.exec(v || '')
   return m ? `${m[1]}-${m[2]}-${m[3]}` : v || '-'
@@ -206,8 +214,15 @@ export default function BetHistoryPage({ scope }) {
                             <Badge value={slip.result} map={HIT_BADGE} fallback={HIT_BADGE['대기']} />
                           </td>
                           <td className="bh-nowrap">{num(slip.hit_amount)}</td>
-                          <td className="bh-muted">-</td>
-                          <td className="bh-muted">-</td>
+                          {(() => {
+                            const { profit, roi } = rowProfitRoi(slip, batch)
+                            return (
+                              <>
+                                <td className={`bh-nowrap ${signClass(profit)}`}>{num(profit)}</td>
+                                <td className={`bh-nowrap ${signClass(roi)}`}>{pct(roi)}</td>
+                              </>
+                            )
+                          })()}
                           <td />
                         </tr>
                       ))}
