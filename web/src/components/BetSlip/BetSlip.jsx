@@ -49,7 +49,11 @@ const matchKey = (r) => `${r.L}|${r.S}|${r.R}|${r.No}|${r.HT}|${r.AT}`
 const legKey = (l) => `${matchKey(l.row)}|${l.pick}`
 // 부동소수점 오차 때문에 6.05 같은 값이 toFixed(1)에서 6.0으로 내려가 버리는 걸
 // 막으려고 아주 작은 값을 더해 반올림한다.
+// 소수 1자리 반올림은 아래쪽 조합 배당(다리 배당끼리 곱한 값, combos의 odds)에만 쓴다 —
+// 그 값이 당첨금·수익금 계산과 화면 표시가 어긋나지 않게 맞추는 기준이기 때문이다.
+// 선택 1/2 목록에 나오는 다리 하나짜리 배당은 원본 그대로 소수 2자리로 보여준다.
 const fmtOdds = (v) => (v == null ? '-' : (Math.round((v + Number.EPSILON) * 10) / 10).toFixed(1))
+const fmtLegOdds = (v) => (v == null ? '-' : (Math.round((v + Number.EPSILON) * 100) / 100).toFixed(2))
 const fmtNum = (v) => (v == null ? '-' : Math.round(v).toLocaleString())
 
 // 한 경기 그룹(선택 1 / 선택 2): 경기를 고르고 유형을 담는다.
@@ -89,7 +93,7 @@ function SideBox({ index, rows, legs, onAdd, onRemove }) {
               <td>{l.row.HT}</td>
               <td>{l.row.AT}</td>
               <td>{l.pick}</td>
-              <td>{fmtOdds(l.odds)}</td>
+              <td>{fmtLegOdds(l.odds)}</td>
               <td>
                 <button className="slip-remove" onClick={() => onRemove(l)} aria-label="빼기">✕</button>
               </td>
