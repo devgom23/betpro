@@ -533,6 +533,7 @@ def compute_plushandi(res):
     try:
         fb = _ph_block(res, PH_F_CODES)
         if fb is None:
+            out['PH_PICK'] = '표본부족'
             return out
         tf, nf = fb
         f_sh = (tf[1] + tf[2] + tf[3]) / nf

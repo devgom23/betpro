@@ -46,6 +46,8 @@ def _pick_status(df: pd.DataFrame) -> pd.Series:
         pick = "" if pd.isna(pick) else str(pick).strip()
         if not pick:
             out.append("")
+        elif pick == "표본부족":
+            out.append("")
         elif pick == "—":
             out.append("관망")
         elif pd.isna(rt) or int(rt) not in _RT_TEXT:
