@@ -108,9 +108,18 @@ function SideBox({ index, rows, legs, onAdd, onRemove }) {
   )
 }
 
+// 선택 그룹 수 — 선택1~4까지 항상 4칸을 보여준다(비워 둔 칸은 조합에서 그냥 빠진다).
+const SIDE_COUNT = 4
+
+// 예전에 저장된 슬립은 선택 칸이 2개였을 수 있으니, 부족한 칸은 빈 배열로 채운다.
+function normalizeSides(sides) {
+  const base = Array.isArray(sides) ? sides : []
+  return Array.from({ length: SIDE_COUNT }, (_, i) => base[i] ?? [])
+}
+
 export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, onRegistered }) {
   const persisted = loadSlipState(id)
-  const [sides, setSides] = useState(persisted?.sides ?? [[], []])
+  const [sides, setSides] = useState(normalizeSides(persisted?.sides))
   // 조합별 뱃금액 — 조합 키로 들고 있어야 경기를 추가·삭제해도 입력값이 안 흐트러진다.
   const [stakes, setStakes] = useState(persisted?.stakes ?? {})
   const [busy, setBusy] = useState(false)
@@ -135,24 +144,33 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
   // 수익률 입력칸에서 타이핑 중인 값(blur/Enter 전까지는 재계산하지 않는다).
   const [roiDrafts, setRoiDrafts] = useState({})
 
+  // 다리를 넣어 둔 선택 칸끼리만 곱한다 — 비워 둔 선택 칸은 조합에서 그냥 빠지므로
+  // 선택1·2만 채우면 예전과 똑같이 2다리 조합, 선택1~4를 다 채우면 4다리 조합이 된다.
   const combos = useMemo(() => {
-    const [a, b] = sides
-    const out = []
-    for (const l1 of a) {
-      for (const l2 of b) {
-        // 화면에 보이는 배당(소수 1자리)과 당첨금·수익금·수익률 계산이 서로 어긋나지
-        // 않도록, 배당 자체를 소수 1자리로 반올림해서 쓴다(부동소수점 오차 보정 포함).
-        const odds = l1.odds != null && l2.odds != null
-          ? Math.round((l1.odds * l2.odds + Number.EPSILON) * 10) / 10
-          : null
-        out.push({ key: `${legKey(l1)}::${legKey(l2)}`, l1, l2, odds })
+    const activeSides = sides.filter((legs) => legs.length > 0)
+    if (activeSides.length === 0) return []
+    let acc = [[]]
+    for (const legs of activeSides) {
+      const next = []
+      for (const combo of acc) {
+        for (const leg of legs) next.push([...combo, leg])
       }
+      acc = next
     }
-    return out
+    return acc.map((legs) => {
+      // 화면에 보이는 배당(소수 1자리)과 당첨금·수익금·수익률 계산이 서로 어긋나지
+      // 않도록, 배당 자체를 소수 1자리로 반올림해서 쓴다(부동소수점 오차 보정 포함).
+      const odds = legs.every((l) => l.odds != null)
+        ? Math.round((legs.reduce((p, l) => p * l.odds, 1) + Number.EPSILON) * 10) / 10
+        : null
+      return { key: legs.map(legKey).join('::'), legs, odds }
+    })
   }, [sides])
 
   // 수익금 = 그 조합이 터졌을 때 받는 당첨금 − 이 슬립에 넣은 뱃금액 전부.
   const stakeTotal = combos.reduce((sum, c) => sum + (toNum(stakes[c.key]) || 0), 0)
+  // 지금 채워진 선택 칸 수만큼만 "1/2/3/4" 열을 보여준다(2칸만 채우면 예전처럼 2열).
+  const legColCount = combos.reduce((max, c) => Math.max(max, c.legs.length), 0)
 
   function updateSide(i, next) {
     setSides((prev) => prev.map((s, idx) => (idx === i ? next : s)))
@@ -232,7 +250,7 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
         bets: usable.map((c) => ({
           odds: c.odds,
           stake: Math.round(toNum(stakes[c.key])),
-          legs: [c.l1, c.l2].map((l) => ({
+          legs: c.legs.map((l) => ({
             code: l.row.L, S: l.row.S, R: l.row.R, No: l.row.No,
             HT: l.row.HT, AT: l.row.AT, DT: l.row.DT,
             pick_type: l.pick, odds: l.odds, scope: l.row.scope,
@@ -320,7 +338,8 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
         <table className="slip-combo-table">
           <thead>
             <tr>
-              <th>1</th><th>2</th><th>뱃배당</th><th>뱃금액</th>
+              {Array.from({ length: legColCount }, (_, i) => <th key={i}>{i + 1}</th>)}
+              <th>뱃배당</th><th>뱃금액</th>
               <th>당첨금</th><th>수익금</th><th>수익률</th>
             </tr>
           </thead>
@@ -332,8 +351,7 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
               const roiValue = profit != null && stakeTotal ? (profit / stakeTotal * 100).toFixed(1) : null
               return (
                 <tr key={c.key}>
-                  <td>{c.l1.pick}</td>
-                  <td>{c.l2.pick}</td>
+                  {c.legs.map((l, i) => <td key={i}>{l.pick}</td>)}
                   <td className="slip-strong">{fmtOdds(c.odds)}</td>
                   <td>
                     <input
@@ -376,7 +394,7 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
               )
             })}
             <tr className="slip-combo-total">
-              <td colSpan={3}>뱃금액 합계</td>
+              <td colSpan={legColCount + 1}>뱃금액 합계</td>
               <td>{stakeTotal ? stakeTotal.toLocaleString() : '-'}</td>
               <td colSpan={3} />
             </tr>
