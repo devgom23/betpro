@@ -1695,6 +1695,11 @@ def _fill_missing_ph_side(df: pd.DataFrame, db: str, scope: str, touched_idx: li
     for side, ph_col, w_col, l_col in _PH_SIDES:
         codes = engine.PH_K_CODES if side == "K" else engine.PH_F_CODES
         side_cols = [f"{c} {i}" for c in codes for i in (1, 2, 3, 4)] + [ph_col]
+        if side == "F":
+            # PICK/실측/비중은 해외(F) 표본만으로 결정되므로(engine.compute_plushandi 참고)
+            # 해외 쪽이 이번에 처음 계산될 때만 같이 저장한다 — 그동안 표본·PH_F는 채워지고도
+            # 이 3개 컬럼만 안 옮겨져서 픽이 영원히 빈 값으로 남던 버그.
+            side_cols += ["PH_PICK", "PH_HIT", "PH_DOM"]
         for c in side_cols:
             if c not in df.columns:
                 df[c] = np.nan
