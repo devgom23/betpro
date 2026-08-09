@@ -275,6 +275,11 @@ export function cellStyle(group, col, value, row) {
 
   if (g1 === '일반정보' && (sub === 'DT' || sub === 'TM')) return bettingDayStyle(row)
 
+  // 똥사 — 똥배(강한 정배)인데 실제 결과가 무/역으로 뒤집힌 경우라 눈에 띄게 빨간 글씨로.
+  if (g1 === '똥배' && sub === '똥사' && !isBlank(value)) {
+    return { color: '#C62828', fontWeight: 700 }
+  }
+
   // 배당 적중 표시 — '적중'(PH_STATUS) 칸과 같은 노란 배경으로 표시한다.
   // 예정 경기(스코어 없음)는 표시 없음. 그 칸 자체에 배당값이 없으면(공란) 적중
   // 여부와 무관하게 표시하지 않는다 — 숫자 없는 칸이 노랗게만 칠해지는 걸 막는다.
