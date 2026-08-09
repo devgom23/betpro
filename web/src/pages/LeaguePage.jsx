@@ -10,6 +10,7 @@ import DeleteMatchesModal from '../components/DeleteMatchesModal/DeleteMatchesMo
 import CrawlModal from '../components/CrawlModal/CrawlModal'
 import KrCrawlModal from '../components/KrCrawlModal/KrCrawlModal'
 import ResultEditModal from '../components/ResultEditModal/ResultEditModal'
+import SeasonStats from '../components/SeasonStats/SeasonStats'
 import { buildQueryString, ODDS_KEYS } from '../utils/query'
 
 function describeQuery(query) {
@@ -332,6 +333,10 @@ export default function LeaguePage({ code, scope }) {
             </button>
           </div>
         </div>
+      )}
+
+      {!h2h && (
+        <SeasonStats code={code} scope={scope} season={query?.season} round={query?.round} />
       )}
 
       {h2h ? (

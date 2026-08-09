@@ -1,0 +1,272 @@
+.season-stats {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  margin-bottom: 10px;
+}
+
+.ss-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 7px 10px;
+}
+
+.ss-fold {
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--accent);
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+
+.ss-fold:hover {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+.ss-bar-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ss-bar-focus {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* 이번 라운드 똥배 배당 — 표 안의 강조 테두리와 같은 색으로 맞춰 둘을 눈으로 잇는다 */
+.ss-bar-focus b {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 5px;
+  border: 1px solid #f59e0b;
+  border-radius: 4px;
+  color: #f59e0b;
+}
+
+.ss-body {
+  padding: 0 10px 10px;
+}
+
+.ss-block + .ss-block {
+  margin-top: 12px;
+}
+
+.ss-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 5px;
+}
+
+.ss-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* 라운드가 38개까지 늘어나므로 블록마다 가로 스크롤을 준다 — 페이지 자체는 안 밀린다 */
+.ss-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ss-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.ss-grid th,
+.ss-grid td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  text-align: center;
+  vertical-align: top;
+}
+
+.ss-grid thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-page);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.ss-grid tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* 결과 이름·합계 칸은 가로 스크롤에도 항상 보이게 왼쪽에 고정한다 */
+.ss-grid .ss-rt,
+.ss-grid .ss-head-rt {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-surface);
+  font-weight: 700;
+  min-width: 42px;
+}
+
+.ss-grid .ss-sum,
+.ss-grid .ss-head-sum {
+  position: sticky;
+  left: 42px;
+  z-index: 2;
+  background: var(--bg-surface);
+  min-width: 62px;
+  border-right: 2px solid var(--border-strong);
+}
+
+.ss-grid thead .ss-head-rt,
+.ss-grid thead .ss-head-sum {
+  z-index: 3;
+  background: var(--bg-page);
+}
+
+.ss-pct {
+  color: var(--text-muted-2);
+}
+
+.ss-tally {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.ss-foot td {
+  background: rgba(148, 163, 184, 0.06);
+  font-weight: 600;
+}
+
+/* 지금 조회 중인 라운드 열 */
+.ss-grid .ss-cur {
+  background: rgba(245, 158, 11, 0.16);
+}
+
+.ss-grid thead th.ss-cur {
+  background: rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+  font-weight: 700;
+}
+
+/* 똥배 배당값 — 한 라운드에 여러 개면 세로로 쌓인다 */
+.ss-odds {
+  display: block;
+  line-height: 1.5;
+}
+
+/* 이번 라운드에 나온 배당과 같은 값 = "과거에 이 배당은 이 결과였다" */
+.ss-odds-hit {
+  border: 1px solid #f59e0b;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.18);
+  color: #f59e0b;
+  font-weight: 700;
+}
+
+.ss-winner {
+  display: inline-block;
+  min-width: 16px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: #fff;
+  font-weight: 700;
+}
+
+/* ── ③ 라운드 이력 카드 ── */
+.ss-history {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  align-items: stretch;
+}
+
+.ss-card {
+  flex: 0 0 auto;
+  min-width: 190px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--bg-page);
+}
+
+.ss-card-cur {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.ss-card-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.ss-card-counts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 8px;
+  font-size: 11px;
+}
+
+.ss-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.ss-count b {
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+.ss-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ss-card-ratio {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 5px 0;
+  padding: 2px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.ss-card-ratio span {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted-2);
+  margin: 0 3px;
+}
+
+.ss-picks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.ss-pick-none {
+  color: var(--text-muted-2);
+  text-align: center;
+}

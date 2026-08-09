@@ -458,6 +458,146 @@ def league_rows(code: str,
     }
 
 
+# ───────────────── 시즌 지표 (똥배 격자 / 결과 격자 / 라운드 이력) ─────────────────
+# 조회 조건이 "시즌 1개 + 라운드 1개"로 좁혀졌을 때만 만든다(사용자 지정) — 전체 조회에서는
+# 라운드 축 자체가 의미가 없어 계산하지 않는다.
+DDONG_MAX = 1.49          # 똥배 기준: 국내배당(KW/KL) 중 낮은 쪽이 이 값 이하 (표 컬럼과 동일 규칙)
+_RT_MAIN = (1, 2, 3, 4)   # 취소(5)·결과없음은 어느 표에서도 세지 않는다
+
+
+def _num_col(df: pd.DataFrame, name: str) -> pd.Series:
+    """숫자 컬럼을 안전하게 꺼낸다 — 아예 없는 컬럼이면 전부 NaN인 열로 취급."""
+    if name not in df.columns:
+        return pd.Series(np.nan, index=df.index, dtype="float64")
+    return pd.to_numeric(df[name], errors="coerce")
+
+
+def _ddong_odds(df: pd.DataFrame) -> pd.Series:
+    """행별 똥배 배당값(국내 KW/KL 중 낮은 쪽). 똥배가 아니면 NaN."""
+    low = pd.concat([_num_col(df, "KW"), _num_col(df, "KL")], axis=1).min(axis=1)
+    return low.where(low <= DDONG_MAX)
+
+
+def _r2(v) -> float:
+    """배당값을 소수 2자리로 맞춘다(값끼리 같은지 비교해야 해서 표기를 통일)."""
+    return float(f"{float(v):.2f}")
+
+
+def _score_int(v):
+    return None if v is None or pd.isna(v) else int(float(v))
+
+
+def _pct(n: int, total: int) -> int:
+    return int(n / total * 100 + 0.5) if total else 0
+
+
+@app.get("/api/leagues/{code}/season_stats")
+def season_stats(code: str,
+                 scope: str = PATHS.SCOPE_MASTER,
+                 season: Optional[str] = None,
+                 round: Optional[str] = None,   # noqa: A002
+                 user: dict = Depends(get_current_user)):
+    """
+    조회 중인 '시즌 1개 + 라운드 1개' 기준 지표 3종.
+      ① 똥배 격자   그 시즌 똥배 경기를 (결과 4줄 × 라운드) 격자에 배당값으로 배치
+      ② 결과 격자   그 시즌 전 경기를 같은 격자에 개수로 배치 + 라운드별 정(핸승+핸무)/플(무+역)
+      ③ 라운드 이력 같은 라운드를 과거 시즌까지 훑어 결과 분포 + 그 라운드 똥배 목록
+    시즌·라운드 중 하나라도 '전체'면 available=false만 돌려준다(계산 안 함).
+    """
+    _check_league_for(code, scope, user)
+    if not season or season == "ALL" or not round or round == "ALL":
+        return {"available": False}
+
+    db = _resolve_scope_db(scope, user)
+    df = DATA.load_league_df(db, code)
+    if df.empty or "S" not in df.columns or "R" not in df.columns:
+        return {"available": False}
+
+    df = df.copy()
+    df["_S"] = df["S"].astype(str)
+    df["_R"] = df["R"].astype(str)
+    df["_rt"] = _num_col(df, "RT")
+    df["_dd"] = _ddong_odds(df)
+
+    cur = df[df["_S"] == str(season)]
+    if cur.empty:
+        return {"available": False}
+
+    rounds = sorted(cur["_R"].dropna().unique().tolist(), key=_round_sort_key)
+
+    # ① 똥배 격자 — 결과 줄마다 라운드별 똥배 배당값 목록
+    dd = cur[cur["_dd"].notna() & cur["_rt"].isin(_RT_MAIN)]
+    ddong_total = len(dd)
+    ddong_rows = []
+    for rt in _RT_MAIN:
+        g = dd[dd["_rt"] == rt]
+        cells = {r: sorted(_r2(v) for v in gg["_dd"]) for r, gg in g.groupby("_R")}
+        ddong_rows.append({
+            "rt": RT_LABELS[rt], "count": len(g),
+            "pct": _pct(len(g), ddong_total), "cells": cells,
+        })
+
+    # 이번 라운드에 나온 똥배 배당값 — 같은 값이 과거 라운드 어느 결과 줄에 있었는지
+    # 화면에서 색으로 찾아보기 위한 기준값이다.
+    focus = sorted({_r2(v) for v in cur.loc[cur["_R"] == str(round), "_dd"].dropna()})
+
+    # ② 결과 격자 — 그 시즌 전 경기의 라운드별 결과 개수
+    valid = cur[cur["_rt"].isin(_RT_MAIN)]
+    result_total = len(valid)
+    result_rows = []
+    for rt in _RT_MAIN:
+        g = valid[valid["_rt"] == rt]
+        result_rows.append({
+            "rt": RT_LABELS[rt], "count": len(g),
+            "pct": _pct(len(g), result_total),
+            "cells": {r: int(n) for r, n in g["_R"].value_counts().items()},
+        })
+
+    ratio, tally = {}, {"정": 0, "중": 0, "플": 0}
+    for r in rounds:
+        g = valid[valid["_R"] == r]
+        jung = int(g["_rt"].isin((1, 2)).sum())
+        pl = int(g["_rt"].isin((3, 4)).sum())
+        if jung == 0 and pl == 0:
+            continue
+        winner = "정" if jung > pl else ("플" if pl > jung else "중")
+        ratio[r] = {"jung": jung, "pl": pl, "winner": winner}
+        tally[winner] += 1
+
+    # ③ 라운드 이력 — 같은 라운드를 시즌별로 (오래된 시즌 → 최근 시즌 순)
+    history = []
+    same = df[df["_R"] == str(round)]
+    for s in sorted(same["_S"].dropna().unique().tolist()):
+        g = same[same["_S"] == s]
+        counts = {RT_LABELS[rt]: int((g["_rt"] == rt).sum()) for rt in _RT_MAIN}
+        picks = [
+            {
+                "rank": rank,
+                "rt": RT_LABELS.get(int(row["_rt"])) if pd.notna(row["_rt"]) else None,
+                "odds": _r2(row["_dd"]),
+                "HT": str(row.get("HT") or ""), "AT": str(row.get("AT") or ""),
+                "HS": _score_int(row.get("HS")), "AS": _score_int(row.get("AS")),
+            }
+            for rank, (_, row) in enumerate(
+                g[g["_dd"].notna()].sort_values("_dd").iterrows(), start=1)
+        ]
+        history.append({
+            "season": s, "counts": counts,
+            "jung": counts["핸승"] + counts["핸무"],
+            "pl": counts["무"] + counts["역"],
+            "picks": picks,
+        })
+
+    return {
+        "available": True,
+        "season": str(season), "round": str(round), "rounds": rounds,
+        "ddong": {"rows": ddong_rows, "total": ddong_total, "focus": focus},
+        "result": {"rows": result_rows, "total": result_total,
+                   "ratio": ratio, "tally": tally},
+        "history": history,
+    }
+
+
 def _my_pick_key(s, r, no, ht, at) -> tuple:
     return tuple(MYPICKS.normalize(v) for v in (s, r, no, ht, at))
 
