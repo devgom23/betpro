@@ -904,13 +904,13 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
                 batches.append(batch)
             batch["slips"].append(slip)
         for batch in batches:
-            batch["subtotal"] = BETSLIPS.settle(batch["slips"], roi_base="hit")
+            batch["subtotal"] = BETSLIPS.settle(batch["slips"])
 
         item = {"group_id": sec["group_id"], "batches": batches}
         if sec["group_id"] is not None:
             item["round_start"] = min(s["round_start"] for s in sec["slips"])
             item["round_end"] = max(s["round_end"] for s in sec["slips"])
-            item["total"] = BETSLIPS.settle(sec["slips"], roi_base="stake")
+            item["total"] = BETSLIPS.settle(sec["slips"])
         else:
             item["round_start"] = None
             item["round_end"] = None

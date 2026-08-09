@@ -159,20 +159,19 @@ def list_slips(username: str, scope: str) -> list[dict]:
         con.close()
 
 
-def settle(slips: list[dict], roi_base: str) -> dict:
+def settle(slips: list[dict]) -> dict:
     """묶음/회차 정산. 수익금 = 적중금합 − 뱃금액합(대기 중인 줄의 투자금도 포함).
-    수익률 분모는 스샷 기준을 그대로 따른다 — 등록 묶음은 적중금, 회차 합계는 뱃금액.
+    수익률 = 수익금 ÷ 뱃금액(투자한 돈 대비 얼마 벌었나) — 등록 묶음·회차 합계 모두 동일.
     아직 한 줄도 결과가 안 나왔으면(전부 대기) 정산 자체를 하지 않고 공란으로 둔다."""
     stake_sum = sum(s["stake"] or 0 for s in slips)
     hit_sum = sum(s["hit_amount"] or 0 for s in slips)
     settled = any(s["result"] in ("적중", "미적중") for s in slips)
     profit = hit_sum - stake_sum
-    base = hit_sum if roi_base == "hit" else stake_sum
     return {
         "stake": stake_sum,
         "hit_amount": hit_sum,
         "profit": profit if settled else None,
-        "roi": round(profit / base * 100) if settled and base else None,
+        "roi": round(profit / stake_sum * 100) if settled and stake_sum else None,
     }
 
 
