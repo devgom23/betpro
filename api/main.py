@@ -727,8 +727,18 @@ def weekly_picks(user: dict = Depends(get_current_user)):
             df = DATA.load_league_df_ranked(db, code)
             if df.empty:
                 continue
-            df = EVM.attach_for_league(df)   # 핸승 위험도(RISK/GRADE/ENGINE/WARN/VERDICT)
-            for rec in DATA.df_to_records(df):
+            df = EVM.attach_for_league(df)   # 핸승 위험도(RISK/GRADE/ENGINE/WARN/VERDICT) — 위험도
+            # 계산엔 리그 전체 이력이 필요해 df 자체는 그대로 두지만, 별표 몇 개 보자고
+            # 수천 행×200개 컬럼을 전부 JSON 직렬화(df_to_records)할 필요는 없다 —
+            # 여기서 별표 찍힌 행만 먼저 추려서 그만큼만 변환한다(리그당 실측 0.3~0.5초 절약).
+            sub = df[["S", "R", "No", "HT", "AT"]]
+            keep_idx = [
+                i for i, s, r, no, ht, at in sub.itertuples(name=None)
+                if _my_pick_key(s, r, no, ht, at) in starred
+            ]
+            if not keep_idx:
+                continue
+            for rec in DATA.df_to_records(df.loc[keep_idx]):
                 key = _my_pick_key(rec.get("S"), rec.get("R"), rec.get("No"),
                                    rec.get("HT"), rec.get("AT"))
                 p = starred.get(key)
@@ -833,6 +843,23 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
             df_cache[key] = DATA.load_league_df(db_for(sc), code)
         return df_cache[key]
 
+    # (S,R,No,HT,AT) -> RT라벨 인덱스. 예전엔 다리마다 리그 전체를 처음부터 한 줄씩
+    # (iterrows) 다시 훑어서, 벳이 몇 개만 쌓여도 몇 초씩 걸렸다(12벳/28다리 실측
+    # 6.8초). 리그당 인덱스를 딱 한 번만 만들어 이후 모든 다리가 그걸 재사용한다.
+    rt_index_cache: dict[tuple, dict] = {}
+
+    def rt_index_for(sc: str, code: str) -> dict:
+        key = (sc, code)
+        if key not in rt_index_cache:
+            df = df_for(sc, code)
+            idx: dict = {}
+            if not df.empty and {"S", "R", "No", "HT", "AT", "RT"}.issubset(df.columns):
+                sub = df[["S", "R", "No", "HT", "AT", "RT"]]
+                for s, r, no, ht, at, rt in sub.itertuples(index=False, name=None):
+                    idx[_my_pick_key(s, r, no, ht, at)] = _rt_label(rt)
+            rt_index_cache[key] = idx
+        return rt_index_cache[key]
+
     def rt_for(leg: dict):
         # 다리에 스코프가 저장돼 있으면 그것만 본다. 옛날에 등록돼 스코프가 없는
         # 다리는 공식/내 데이터 둘 다 뒤져서 찾는다(전에는 슬립 scope 하나만 봐서,
@@ -840,13 +867,9 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
         scopes_to_try = [leg["scope"]] if leg.get("scope") else [PATHS.SCOPE_MASTER, PATHS.SCOPE_USER]
         key = _my_pick_key(leg["S"], leg["R"], leg["No"], leg["HT"], leg["AT"])
         for sc in scopes_to_try:
-            df = df_for(sc, leg["code"])
-            if df.empty or "RT" not in df.columns:
-                continue
-            for _, row in df.iterrows():
-                if _my_pick_key(row.get("S"), row.get("R"), row.get("No"),
-                                row.get("HT"), row.get("AT")) == key:
-                    return _rt_label(row.get("RT"))
+            idx = rt_index_for(sc, leg["code"])
+            if key in idx:
+                return idx[key]
         return None
 
     for slip in slips:
