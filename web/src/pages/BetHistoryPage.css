@@ -116,6 +116,43 @@
   border-top: 2px solid var(--border-strong);
 }
 
+/* 경기 이름 띠 — 묶음 안 모든 행이 같은 경기 조합이라 여기 한 번만 보여준다
+   (다리별 "경기N" 칸을 없앤 대신). "이번주 벳" 조합 화면의 선택 박스와 같은 개념. */
+.bh-match-strip td {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface));
+  border-bottom: 2px solid var(--border-strong);
+  text-align: left;
+  padding: 7px 10px;
+}
+
+.bh-match-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: normal;
+}
+
+.bh-match-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bh-match-chip b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .bh-subtotal td {
   background: var(--bg-surface-2);
 }

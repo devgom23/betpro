@@ -19,9 +19,6 @@ const HIT_BADGE = {
   대기: { background: '#757575', color: '#fff' },
   취소: { background: '#546E7A', color: '#fff' },
 }
-// 다리 셀은 좁아서 "미적중" 대신 스샷처럼 "미적"으로 줄여 쓴다.
-const HIT_SHORT = { 적중: '적중', 미적중: '미적', 대기: '대기', 취소: '취소' }
-
 const num = (v) => (v == null ? '-' : v.toLocaleString())
 const odds = (v) => (v == null ? '-' : v.toFixed(2))
 const pct = (v) => (v == null ? '-' : `${v}%`)
@@ -112,8 +109,13 @@ export default function BetHistoryPage({ scope }) {
 
   const { max_legs: maxLegs, sections } = data
   const legCols = Array.from({ length: maxLegs }, (_, i) => i)
+  // 경기 이름은 각 등록 묶음 위에 한 번(띠 형태)만 보여주고, 표 본문은 유형 배지만
+  // 나열한다 — "이번주 벳"에서 조합을 만들 때 쓰는 화면과 같은 구조. 같은 묶음
+  // 안에서는 항상 같은 경기 조합에 유형만 바꿔가며 등록하므로, 첫 슬립의 다리
+  // 목록을 그 묶음의 경기 목록으로 그대로 써도 된다.
+  const matchStripSpan = 3 + maxLegs + 1 + 7   // 체크박스+#+등록일시 + 유형N + 배당 + (뱃금액~삭제 7칸)
   // 소계·회차총계 라벨은 체크박스~배당 칸까지를 하나로 합쳐 쓴다.
-  const labelSpan = 4 + maxLegs * 3
+  const labelSpan = 4 + maxLegs
 
   return (
     <div className="bh-page">
@@ -140,11 +142,7 @@ export default function BetHistoryPage({ scope }) {
                 <th className="bh-check-col" />
                 <th className="bh-no-col" />
                 <th>등록일시</th>
-                {legCols.map((i) => [
-                  <th key={`m${i}`}>경기{i + 1}</th>,
-                  <th key={`t${i}`}>유형{i + 1}</th>,
-                  <th key={`h${i}`}>적중</th>,
-                ])}
+                {legCols.map((i) => <th key={`t${i}`}>유형{i + 1}</th>)}
                 <th>배당</th>
                 <th>뱃금액</th>
                 <th>당첨금</th>
@@ -166,6 +164,19 @@ export default function BetHistoryPage({ scope }) {
                   {sec.batches.map((batch) => (
                     // 등록 묶음마다 tr을 굵은 선으로 갈라 보여준다.
                     <tbody key={batch.batch_id} className="bh-batch">
+                      {/* 같은 묶음은 항상 같은 경기 조합에 유형만 바꿔가며 등록한 것이라,
+                          첫 슬립의 다리 목록을 그 묶음의 경기 목록으로 그대로 쓴다. */}
+                      <tr className="bh-match-strip">
+                        <td colSpan={matchStripSpan}>
+                          <div className="bh-match-chips">
+                            {(batch.slips[0]?.legs || []).map((leg, i) => (
+                              <span key={i} className="bh-match-chip">
+                                <b>{i + 1}</b> {leg.HT} vs {leg.AT}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
                       {batch.slips.map((slip) => (
                         <tr key={slip.id} className={locked ? 'bh-row-locked' : undefined}>
                           <td className="bh-check-col">
@@ -180,20 +191,13 @@ export default function BetHistoryPage({ scope }) {
                           <td className="bh-nowrap">{formatCreatedDt(slip.created_dt)}</td>
                           {legCols.map((i) => {
                             const leg = slip.legs[i]
-                            if (!leg) {
-                              return [
-                                <td key={`m${i}`} />, <td key={`t${i}`} />, <td key={`h${i}`} />,
-                              ]
-                            }
-                            return [
-                              <td key={`m${i}`} className="bh-nowrap">{leg.HT}vs{leg.AT}</td>,
+                            return (
                               <td key={`t${i}`}>
-                                <Badge value={leg.pick_type} map={PICK_BADGE} fallback={PICK_BADGE_DEFAULT} />
-                              </td>,
-                              <td key={`h${i}`} title={leg.actual ? `실제 결과: ${leg.actual}` : '결과 입력 대기'}>
-                                <Badge value={HIT_SHORT[leg.hit] || leg.hit} map={HIT_BADGE} fallback={HIT_BADGE['대기']} />
-                              </td>,
-                            ]
+                                {leg && (
+                                  <Badge value={leg.pick_type} map={PICK_BADGE} fallback={PICK_BADGE_DEFAULT} />
+                                )}
+                              </td>
+                            )
                           })}
                           <td className="bh-nowrap">{odds(slip.odds)}</td>
                           <td className="bh-nowrap">{num(slip.stake)}</td>
