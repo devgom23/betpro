@@ -727,6 +727,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
             df = DATA.load_league_df_ranked(db, code)
             if df.empty:
                 continue
+            df = EVM.attach_for_league(df)   # 핸승 위험도(RISK/GRADE/ENGINE/WARN/VERDICT)
             for rec in DATA.df_to_records(df):
                 key = _my_pick_key(rec.get("S"), rec.get("R"), rec.get("No"),
                                    rec.get("HT"), rec.get("AT"))
