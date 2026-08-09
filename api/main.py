@@ -81,6 +81,7 @@ import crawler as CRAWL        # noqa: E402
 import kr_crawler as KRCRAWL   # noqa: E402
 import my_picks as MYPICKS     # noqa: E402
 import bet_slips as BETSLIPS   # noqa: E402
+import ev_model as EVM         # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -430,6 +431,9 @@ def league_rows(code: str,
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
     df = DATA.load_league_df_ranked(db, code)   # 표시용 순위(HP/AP) 포함
+    # 베팅 기대수익률(EV) 컬럼을 붙인다. 저장하지 않고 조회할 때마다 계산한다 —
+    # 확률 추정에 그 리그의 과거 경기 전체를 쓰므로 경기가 쌓이면 값도 같이 갱신된다.
+    df = EVM.attach_for_league(df)
     if df.empty:
         # 데이터가 아직 없어도 can_write는 반드시 내려줘야 한다.
         # 이게 빠지면 "비어 있는 리그에 업로드" UI가 사라져 첫 등록 자체가 막힌다.

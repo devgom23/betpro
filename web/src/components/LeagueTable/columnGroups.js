@@ -27,13 +27,17 @@ const DDONG_COLS = [
   ['DDONGSA', '똥사'],
 ]
 
-const PH_COLS = [
-  ['PH_STATUS', '적중'],
-  ['PH_F', '해)플핸'],
-  ['PH_K', '국)플핸'],
-  ['PH_PICK', 'PICK'],
-  ['PH_HIT', '실측'],
-  ['PH_DOM', '비중'],
+// 핸승 위험도 — "플핸 예측"을 대체한다. 예전 PICK(플핸(무)/플핸(역)/...)은
+// 실측 적중률이 아니라 고정 보정표 값이었고(예: 78% 표시인데 실제 52.8%),
+// 여기 값은 전부 실측으로 검증했다(6대리그 13,410경기, columnGroups.js formatCell/
+// cellStyle 쪽과 api/ev_model.py의 GRADE_BINS/WARN_GAP_PP 주석 참고).
+const RISK_COLS = [
+  ['VERDICT', '적중'],
+  ['RISK', '위험'],
+  ['GRADE', '등급'],
+  ['ENGINE', '엔진'],
+  ['WARN', '⚠'],
+  ['ODD_FLAG', '상태'],
 ]
 
 // 26개 지표 그룹: [코드, 그룹제목]. 각 코드는 항상 4칸(핸승/핸무/무/역)으로 펼쳐진다.
@@ -123,9 +127,9 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
     groups.push({ label1: '내 예측', label2: '', kind: 'mypick', cols: myPickLeaves })
   }
 
-  const phLeaves = PH_COLS.filter(([k]) => available.has(k)).map(([k, sub]) => ({ key: k, sub }))
-  if (phLeaves.length) {
-    groups.push({ label1: '플핸 예측', label2: '26개 지표 기반 · 실측 적중률', kind: 'ph', cols: phLeaves })
+  const riskLeaves = RISK_COLS.filter(([k]) => available.has(k)).map(([k, sub]) => ({ key: k, sub }))
+  if (riskLeaves.length) {
+    groups.push({ label1: '핸승 위험도', label2: '배당 기준 · 낮을수록 안전', kind: 'risk', cols: riskLeaves })
   }
 
   if (!hideIndicators) {
@@ -177,8 +181,9 @@ export function formatCell(group, col, value, row) {
     if (sub === 'KH' || sub === 'FH') return (n >= 0 ? '+' : '') + n.toFixed(0)
     return n.toFixed(2)
   }
-  if (group.kind === 'ph') {
-    if (sub === 'PICK' || sub === '적중') return isBlank(value) ? '' : String(value)
+  if (group.kind === 'risk') {
+    if (sub === '적중' || sub === '등급' || sub === '상태') return isBlank(value) ? '' : String(value)
+    if (sub === '⚠') return value === 1 || value === '1' || value === true ? '⚠' : ''
     const n = toNum(value)
     return n === null ? '' : `${n.toFixed(0)}%`
   }
@@ -323,45 +328,49 @@ export function cellStyle(group, col, value, row) {
     return base
   }
 
-  if (group.kind === 'ph' && sub === '적중') {
+  if (group.kind === 'risk' && sub === '적중') {
+    // 결과가 무·역이면 보험(플핸+핸무) 벳이 실제로 적중한 것 / 핸무면 원금만 건진 것 /
+    // 핸승이면 전액 손실 — 예측이 아니라 그 경기가 실제로 어떻게 끝났는지의 판정이다.
     if (value === '적중') return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
-    // 보험: 핸승 여부(큰 분류)는 맞혔지만 괄호 안 세부결과(핸무/무/역)는 다르게 나온 경우.
     if (value === '보험') return { background: '#00897B', color: '#fff', fontWeight: 700 }
     if (value === '미적') return { background: '#C62828', color: '#fff', fontWeight: 700 }
-    if (value === '관망') return { background: '#757575', color: '#fff', fontWeight: 700 }
     return null
   }
 
-  if (group.kind === 'ph' && sub === 'PICK') {
-    const s = isBlank(value) ? '' : String(value).trim()
-    if (s.startsWith('플핸')) {
-      if (s.includes('(역)')) return { background: '#4A148C', color: '#fff', fontWeight: 700 }
-      if (s.includes('(무)')) return { background: '#6A1B9A', color: '#fff', fontWeight: 700 }
-      if (s.includes('(핸무)')) return { background: '#E65100', color: '#fff', fontWeight: 700 }
-      return { background: '#7B1FA2', color: '#fff' }
-    }
-    if (s === '핸승') return { background: '#1565C0', color: '#fff', fontWeight: 700 }
-    return { color: '#9E9E9E' }
-  }
-
-  if (group.kind === 'ph' && sub === '실측') {
+  // 위험(RISK)·엔진(ENGINE) 둘 다 "핸승 날 확률(%)" 값이라 같은 색 등급을 쓴다 —
+  // api/ev_model.py의 GRADE_BINS(안전~15/양호~25/보통~35/주의~45/위험~)와 맞춘 경계.
+  if (group.kind === 'risk' && (sub === '위험' || sub === '엔진')) {
     const n = toNum(value)
     if (n === null) return { color: '#9E9E9E' }
-    if (n >= 80) return { background: '#1B5E20', color: '#fff', fontWeight: 700 }
-    if (n >= 75) return { background: '#2E7D32', color: '#fff', fontWeight: 700 }
-    if (n >= 70) return { background: '#66BB6A', color: '#0D1B2A' }
-    if (n >= 65) return { background: '#C5E1A5', color: '#1B5E20' }
-    return { color: '#9E9E9E' }
+    if (n < 15) return { background: '#1B5E20', color: '#fff', fontWeight: 700 }
+    if (n < 25) return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 }
+    if (n < 35) return { background: '#FBC02D', color: '#0D1B2A' }
+    if (n < 45) return { background: '#EF6C00', color: '#fff', fontWeight: 700 }
+    return { background: '#C62828', color: '#fff', fontWeight: 700 }
   }
 
-  if (group.kind === 'ph' && (sub === '해)플핸' || sub === '국)플핸')) {
-    const n = toNum(value)
-    if (n === null) return null
-    if (n >= 85) return { background: '#311B92', color: '#fff', fontWeight: 700 }
-    if (n >= 80) return { background: '#512DA8', color: '#fff' }
-    if (n >= 75) return { background: '#9575CD', color: '#1A1A1A' }
-    if (n < 50) return { background: '#1565C0', color: '#fff', fontWeight: 700 }
+  if (group.kind === 'risk' && sub === '등급') {
+    const s = isBlank(value) ? '' : String(value)
+    if (s === '안전') return { background: '#1B5E20', color: '#fff', fontWeight: 700 }
+    if (s === '양호') return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 }
+    if (s === '보통') return { background: '#FBC02D', color: '#0D1B2A' }
+    if (s === '주의') return { background: '#EF6C00', color: '#fff', fontWeight: 700 }
+    if (s === '위험') return { background: '#C62828', color: '#fff', fontWeight: 700 }
     return null
+  }
+
+  // ⚠ — 엔진이 배당보다 낙관적일 때만 뜬다(api/ev_model.py WARN_GAP_PP 주석 참고).
+  // 실측: 이 표시가 붙은 경기는 핸승률 47.8%(안 붙은 경기는 30.2%) — 지표만 보고
+  // 안심하면 안 되는 경기라는 뜻이라 항상 눈에 띄는 빨간색으로 강조한다.
+  if (group.kind === 'risk' && sub === '⚠') {
+    if (value === 1 || value === '1' || value === true) {
+      return { color: '#C62828', fontWeight: 700 }
+    }
+    return null
+  }
+
+  if (group.kind === 'risk' && sub === '상태') {
+    return isBlank(value) ? null : { color: '#9E9E9E' }
   }
 
   return null
