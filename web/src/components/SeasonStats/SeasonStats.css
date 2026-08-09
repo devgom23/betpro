@@ -293,6 +293,16 @@
   text-align: center;
 }
 
+/* 배당값·팀 이름 — 목록 기본 크기(10px)는 너무 작아 이 부분만 12px로 키운다 */
+.ss-pick-main {
+  font-size: 12px;
+}
+
+/* "vs"만 원래 크기 그대로 유지 */
+.ss-pick-vs {
+  font-size: 10px;
+}
+
 /* 배당값과 팀 이름 사이 구분선 */
 .ss-pick-odds {
   padding-right: 5px;

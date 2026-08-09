@@ -244,8 +244,10 @@ export default function SeasonStats({ code, scope, season, round }) {
                         {h.picks.length === 0 && <li className="ss-pick-none">똥배 없음</li>}
                         {h.picks.map((p) => (
                           <li key={p.rank} style={{ color: RT_TEXT[p.rt] || '#78909C' }}>
-                            {p.rank}똥 : <span className="ss-pick-odds">{p.odds.toFixed(2)}</span>
-                            {p.HT} vs {p.AT}
+                            <span className="ss-pick-main">
+                              <span className="ss-pick-odds">{p.odds.toFixed(2)}</span>
+                              {p.HT} <span className="ss-pick-vs">vs</span> {p.AT}
+                            </span>
                             {p.HS != null && ` (${p.HS}:${p.AS})`}
                           </li>
                         ))}
