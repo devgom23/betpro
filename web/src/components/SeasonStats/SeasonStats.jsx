@@ -24,6 +24,8 @@ function gridTemplate(roundCount) {
 export default function SeasonStats({ code, scope, season, round }) {
   const [data, setData] = useState(null)
   const [open, setOpen] = useState(true)
+  const [ddongOpen, setDdongOpen] = useState(true)
+  const [resultOpen, setResultOpen] = useState(true)
   const [historyOpen, setHistoryOpen] = useState(true)
   // 표①·표②는 라운드 열이 서로 포개져 보여야 하므로, 한쪽을 가로 스크롤하면
   // 다른 쪽도 같은 위치로 맞춘다(폭은 이미 같은 grid-template-columns라 동일하니
@@ -93,11 +95,15 @@ export default function SeasonStats({ code, scope, season, round }) {
           {/* ① 똥배 격자 — 결과별로 라운드마다 어떤 배당이 나왔는지 */}
           <div className="ss-block">
             <div className="ss-title">
+              <button className="ss-fold ss-fold-sub" onClick={() => setDdongOpen((v) => !v)}>
+                {ddongOpen ? '◂' : '▸'}
+              </button>
               ① 라운드별 똥배 현황
               <span className="ss-hint">
                 국내배당 1.49 이하 · 노란 칸이 이번 라운드, 테두리 친 값은 이번 라운드와 같은 배당
               </span>
             </div>
+            {ddongOpen && (
             <div className="ss-scroll" ref={ddongScrollRef} onScroll={syncScroll(resultScrollRef)}>
               <div className="ss-tgrid" style={{ gridTemplateColumns: template }}>
                 <div className="ss-cell ss-head-rt">결과</div>
@@ -135,14 +141,19 @@ export default function SeasonStats({ code, scope, season, round }) {
                 ))}
               </div>
             </div>
+            )}
           </div>
 
           {/* ② 결과 격자 — 그 시즌 전 경기의 라운드별 결과 개수 */}
           <div className="ss-block">
             <div className="ss-title">
+              <button className="ss-fold ss-fold-sub" onClick={() => setResultOpen((v) => !v)}>
+                {resultOpen ? '◂' : '▸'}
+              </button>
               ② 라운드별 결과 분포
               <span className="ss-hint">정 = 핸승+핸무 · 플 = 무+역</span>
             </div>
+            {resultOpen && (
             <div className="ss-scroll" ref={resultScrollRef} onScroll={syncScroll(ddongScrollRef)}>
               <div className="ss-tgrid" style={{ gridTemplateColumns: template }}>
                 <div className="ss-cell ss-head-rt">결과</div>
@@ -195,6 +206,7 @@ export default function SeasonStats({ code, scope, season, round }) {
                 })}
               </div>
             </div>
+            )}
           </div>
 
           {/* ③ 라운드 이력 — 같은 라운드를 과거 시즌까지(최근 시즌부터) */}
