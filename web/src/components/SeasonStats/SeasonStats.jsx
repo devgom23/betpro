@@ -225,13 +225,15 @@ export default function SeasonStats({ code, scope, season, round }) {
                         ))}
                       </div>
                       <div className="ss-card-ratio">
-                        {h.jung} <span>vs</span> {h.pl}
+                        <span className="ss-ratio-jung">{h.jung}</span> <span>vs</span>{' '}
+                        <span className="ss-ratio-pl">{h.pl}</span>
                       </div>
                       <ul className="ss-picks">
                         {h.picks.length === 0 && <li className="ss-pick-none">똥배 없음</li>}
                         {h.picks.map((p) => (
                           <li key={p.rank} style={{ color: RT_TEXT[p.rt] || '#78909C' }}>
-                            {p.rank}픽({p.rt || '예정'}) : {p.odds.toFixed(2)} {p.HT} vs {p.AT}
+                            {p.rank}똥 : <span className="ss-pick-odds">{p.odds.toFixed(2)}</span>
+                            {p.HT} vs {p.AT}
                             {p.HS != null && ` (${p.HS}:${p.AS})`}
                           </li>
                         ))}
