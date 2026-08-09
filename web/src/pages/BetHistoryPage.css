@@ -111,6 +111,20 @@
   font-size: 12px;
 }
 
+/* 유형 배지 옆에 그 다리의 적중 여부를 글자색으로만 덧붙인다(새 칸을 만들지 않고). */
+.bh-leg-hit {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.bh-leg-hit-ok {
+  color: #42a5f5;
+}
+
+.bh-leg-hit-no {
+  color: #ef5350;
+}
+
 /* 등록 묶음(한 번의 벳등록)끼리는 굵은 선으로 갈라 준다. */
 .bh-batch + .bh-batch td {
   border-top: 2px solid var(--border-strong);

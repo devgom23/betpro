@@ -202,7 +202,11 @@ export default function BetHistoryPage({ scope }) {
                             return (
                               <td key={`t${i}`}>
                                 {leg && (
-                                  <Badge value={leg.pick_type} map={PICK_BADGE} fallback={PICK_BADGE_DEFAULT} />
+                                  <>
+                                    <Badge value={leg.pick_type} map={PICK_BADGE} fallback={PICK_BADGE_DEFAULT} />
+                                    {leg.hit === '적중' && <span className="bh-leg-hit bh-leg-hit-ok"> 적중</span>}
+                                    {leg.hit === '미적중' && <span className="bh-leg-hit bh-leg-hit-no"> 미적</span>}
+                                  </>
                                 )}
                               </td>
                             )
