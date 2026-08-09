@@ -267,6 +267,12 @@ td.sticky-col {
   color: var(--text-muted-2);
 }
 
+/* 전체 조회처럼 여러 라운드가 한 표에 섞여 있을 때, 라운드가 바뀌는 첫 행 위에
+   굵은 선을 그어 라운드 경계를 한눈에 구분할 수 있게 한다 */
+.league-table tbody tr.round-start td {
+  border-top: 3px solid var(--accent);
+}
+
 /* 중요 표시된 행은 hover 음영과 다르게 항상 옅은 금색으로 구분되게 한다 */
 .league-table tbody tr.row-starred td,
 .league-table tbody tr.row-starred td.sticky-col {

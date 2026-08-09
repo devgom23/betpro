@@ -305,8 +305,16 @@ export default function LeagueTable({
             {windowRows.map((row, i) => {
               const ri = startIndex + i
               const pickState = effectivePick(row)
+              // 전체 조회처럼 여러 라운드가 한 표에 섞여 있을 때 라운드가 바뀌는
+              // 지점을 굵은 선으로 구분한다(직전 행과 시즌·라운드가 다르면 경계).
+              const prevRow = ri > 0 ? rows[ri - 1] : null
+              const isRoundStart = prevRow && (prevRow.S !== row.S || prevRow.R !== row.R)
+              const rowClass = [
+                pickState.important ? 'row-starred' : '',
+                isRoundStart ? 'round-start' : '',
+              ].filter(Boolean).join(' ')
               return (
-                <tr key={ri} data-row="" className={pickState.important ? 'row-starred' : undefined}>
+                <tr key={ri} data-row="" className={rowClass || undefined}>
                   {selectable && (
                     <td className="select-col sticky-col">
                       <input
