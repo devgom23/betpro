@@ -14,7 +14,7 @@ from my_picks import normalize
 
 # RT 결과와 직접 비교 가능한 핸디캡 계열 픽만 자동판정한다. 축플/축정/정/정무 등
 # 다른 마켓은 RT(핸디 결과) 하나만으로는 승패를 알 수 없어 이번 범위에서 제외한다.
-HANDI_PICKS = {"핸승", "플핸", "핸무", "무", "역"}
+HANDI_PICKS = {"핸승", "플핸", "핸무", "무", "역", "정"}
 
 _DT_RE = re.compile(r"(\d{2})-(\d{2})-(\d{2})")
 
@@ -28,6 +28,9 @@ def judge_leg(pick_type: str, rt_label: str | None) -> str:
         return "취소"
     if pick_type not in HANDI_PICKS:
         return "대기"
+    if pick_type == "정":
+        # 정배가 실제로 이겼으면 적중(핸승=2점차+ 승, 핸무=정확히 1점차 승 — 둘 다 정배의 승리).
+        return "적중" if rt_label in ("핸승", "핸무") else "미적중"
     if pick_type == "핸승":
         return "적중" if rt_label == "핸승" else "미적중"
     if pick_type == "핸무":
