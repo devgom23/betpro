@@ -28,6 +28,13 @@
   background: rgba(59, 130, 246, 0.25);
 }
 
+/* ③ 라운드 이력처럼 제목 줄 안에 끼워 넣는 작은 접기 버튼 */
+.ss-fold-sub {
+  padding: 2px 6px;
+  margin-right: 2px;
+  font-size: 11px;
+}
+
 .ss-bar-meta {
   font-size: 12px;
   color: var(--text-muted);
@@ -79,58 +86,61 @@
   border-radius: 6px;
 }
 
-.ss-grid {
-  border-collapse: separate;
-  border-spacing: 0;
+/* 표①·표②를 <table>이 아니라 CSS Grid로 그린다 — table-layout:fixed는 셀 내용에
+   따라 브라우저가 열 폭을 다르게 계산해서(실측: 두 표가 서로 다른 폭이 됨) 라운드
+   열이 안 포개졌다. 두 표가 완전히 같은 grid-template-columns(SeasonStats.jsx의
+   gridTemplate())를 쓰면 폭 계산에 흔들릴 여지가 없어 항상 정확히 포개진다. */
+.ss-tgrid {
+  display: grid;
   font-size: 11px;
   white-space: nowrap;
   color: var(--text-secondary);
 }
 
-.ss-grid th,
-.ss-grid td {
+.ss-cell {
   padding: 3px 6px;
   border-bottom: 1px solid var(--border);
   border-right: 1px solid var(--border);
   text-align: center;
-  vertical-align: top;
+  overflow: hidden;
 }
 
-.ss-grid thead th {
+.ss-head-rt,
+.ss-head-sum,
+.ss-th {
   position: sticky;
   top: 0;
   background: var(--bg-page);
   color: var(--text-muted);
   font-weight: 600;
+  z-index: 1;
 }
 
-.ss-grid tbody tr:last-child td {
-  border-bottom: none;
+.ss-foot-cell {
+  background: rgba(148, 163, 184, 0.06);
+  font-weight: 600;
 }
 
-/* 결과 이름·합계 칸은 가로 스크롤에도 항상 보이게 왼쪽에 고정한다 */
-.ss-grid .ss-rt,
-.ss-grid .ss-head-rt {
+/* 결과 이름·합계 칸은 가로 스크롤에도 항상 보이게 왼쪽에 고정한다.
+   (뒤에 나오는 규칙일수록 우선하므로 ss-foot-cell 배경 위에 이 sticky 배경이 이긴다 —
+   원래 표에서도 그랬듯 합계 줄이라도 고정 칸은 늘 표면색을 유지한다.) */
+.ss-rt,
+.ss-sum {
   position: sticky;
   left: 0;
   z-index: 2;
   background: var(--bg-surface);
   font-weight: 700;
-  min-width: 42px;
 }
 
-.ss-grid .ss-sum,
-.ss-grid .ss-head-sum {
-  position: sticky;
+.ss-sum {
   left: 42px;
-  z-index: 2;
-  background: var(--bg-surface);
-  min-width: 62px;
+  font-weight: 400;
   border-right: 2px solid var(--border-strong);
 }
 
-.ss-grid thead .ss-head-rt,
-.ss-grid thead .ss-head-sum {
+.ss-head-rt,
+.ss-head-sum {
   z-index: 3;
   background: var(--bg-page);
 }
@@ -144,17 +154,12 @@
   color: var(--text-muted);
 }
 
-.ss-foot td {
-  background: rgba(148, 163, 184, 0.06);
-  font-weight: 600;
-}
-
 /* 지금 조회 중인 라운드 열 */
-.ss-grid .ss-cur {
+.ss-cell.ss-cur {
   background: rgba(245, 158, 11, 0.16);
 }
 
-.ss-grid thead th.ss-cur {
+.ss-th.ss-cur {
   background: rgba(245, 158, 11, 0.3);
   color: #f59e0b;
   font-weight: 700;

@@ -564,10 +564,10 @@ def season_stats(code: str,
         ratio[r] = {"jung": jung, "pl": pl, "winner": winner}
         tally[winner] += 1
 
-    # ③ 라운드 이력 — 같은 라운드를 시즌별로 (오래된 시즌 → 최근 시즌 순)
+    # ③ 라운드 이력 — 같은 라운드를 시즌별로 (최근 시즌 → 오래된 시즌 순)
     history = []
     same = df[df["_R"] == str(round)]
-    for s in sorted(same["_S"].dropna().unique().tolist()):
+    for s in sorted(same["_S"].dropna().unique().tolist(), reverse=True):
         g = same[same["_S"] == s]
         counts = {RT_LABELS[rt]: int((g["_rt"] == rt).sum()) for rt in _RT_MAIN}
         picks = [
