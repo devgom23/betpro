@@ -155,13 +155,20 @@ function FormTable({ row }) {
 
 // 최근 10경기 승패. 홈팀은 왼쪽이 과거→오른쪽이 최신, 원정팀은 왼쪽이 최신→오른쪽이 과거라
 // 두 팀의 '가장 최근 경기'가 가운데에서 마주보게 된다 (백엔드가 이미 그 순서로 만들어 보낸다).
+// 10경기 미만(시즌 초반 등)이면 안쪽(구분선 쪽)이 아니라 바깥쪽 끝을 과거 자리로 비워두고
+// 실제 경기들을 구분선 쪽으로 채운다 — 즉 가장 최근 경기는 경기 수와 무관하게 항상
+// 구분선 바로 옆(offset 위치)에 오고, 경기가 쌓일수록 그 다음 경기가 그 안쪽으로 채워진다.
 // HR10/AR10 문자열과 HR10H/AR10H(같은 자리수의 'H'/'A')를 나란히 훑어 칸 10개를 만들고,
 // 그 경기가 홈경기였던 칸만 배경을 칠해 눈에 띄게 한다.
 function recentCells(results, venues) {
-  return Array.from({ length: 10 }, (_, i) => ({
-    ch: results[i] || '',
-    isHome: venues[i] === 'H',
-  }))
+  const offset = Math.max(0, 10 - results.length)
+  return Array.from({ length: 10 }, (_, i) => {
+    const idx = i - offset
+    return {
+      ch: idx >= 0 ? results[idx] || '' : '',
+      isHome: idx >= 0 ? venues[idx] === 'H' : false,
+    }
+  })
 }
 
 function RecentTable({ row }) {
