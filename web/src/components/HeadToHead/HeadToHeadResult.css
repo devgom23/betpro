@@ -93,10 +93,39 @@
   z-index: 1;
 }
 
-/* 상대전적 요약: L/토탈 사이 구분선 (L이 4칸 중 3번째 컬럼) */
-.h2h-wdl-table th:nth-child(3),
-.h2h-wdl-table td:nth-child(3) {
-  border-right: 2px solid var(--border-strong);
+/* 상대전적 요약(전체기준/홈기준) 그리드 — W/D/L 그룹 사이, 토탈 앞에 구분선.
+   table-layout:fixed + colgroup(WdlCols)로 폭을 고정해야 전체기준(숫자가 큼)과
+   홈기준(숫자가 작음) 두 표가 내용과 무관하게 항상 같은 폭으로 나란히 맞는다. */
+.h2h-wdl-grid {
+  table-layout: fixed;
+  width: auto;
+  margin-bottom: 8px;
+}
+
+.h2h-col-label {
+  width: 64px;
+}
+
+.h2h-col-rt {
+  width: 38px;
+}
+
+.h2h-col-total {
+  width: 46px;
+}
+
+.h2h-wdl-grid th:nth-child(2),
+.h2h-wdl-grid td:nth-child(2),
+.h2h-wdl-grid th:nth-child(6),
+.h2h-wdl-grid td:nth-child(6),
+.h2h-wdl-grid th:nth-child(10),
+.h2h-wdl-grid td:nth-child(10) {
+  border-left: 2px solid var(--border-strong);
+}
+
+.h2h-wdl-grid th:last-child,
+.h2h-wdl-grid td:last-child {
+  border-left: 2px solid var(--border-strong);
 }
 
 .detail-table .winner-score {

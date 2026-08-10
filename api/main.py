@@ -954,12 +954,13 @@ def delete_bet_batch(batch_id: str, user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
-def _wdl_breakdown(m: pd.DataFrame, reference: str) -> dict:
+def _wdl_breakdown(m: pd.DataFrame, reference: str, home_only: bool = False) -> dict:
     """
     기준 팀(reference)이 각 경기에서 홈이었든 원정이었든 상관없이 실제 스코어로
     이겼는지(W)/비겼는지(D)/졌는지(L) 판정하고, 그 W/D/L 안에서 핸디캡 결과(RT)가
     어떻게 갈렸는지 세부 집계한다. 예: W인데 RT=역이면 "실제로는 이겼지만 핸디는
     못 넘음"이라는 뜻 — RT는 항상 '그 경기 자체의 홈팀' 기준 원본값을 그대로 쓴다.
+    home_only=True면 기준 팀이 그 경기에서 실제로 홈이었던 맞대결만 센다("홈기준").
     """
     buckets = {"W": {}, "D": {}, "L": {}}
     if m.empty or "HS" not in m.columns or "AS" not in m.columns or "HT" not in m.columns:
@@ -969,6 +970,8 @@ def _wdl_breakdown(m: pd.DataFrame, reference: str) -> dict:
         if pd.isna(hs) or pd.isna(as_):
             continue
         row_ht = str(row.get("HT", "")).strip()
+        if home_only and row_ht != reference:
+            continue
         mine, theirs = (hs, as_) if row_ht == reference else (as_, hs)
         letter = "W" if mine > theirs else "L" if mine < theirs else "D"
         lab = _rt_label(row.get("RT")) or "기타"
@@ -986,7 +989,7 @@ def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
     cross=False면 home=홈팀·away=원정팀으로 지정한 방향만 정확히 일치하는 경기만.
     """
     ht, at = str(home).strip(), str(away).strip()
-    empty = {"summary": None, "wdl_summary": None, "matches": [], "total": 0}
+    empty = {"summary": None, "wdl_summary": None, "wdl_summary_home": None, "matches": [], "total": 0}
     if total_df.empty or "HT" not in total_df.columns or "AT" not in total_df.columns:
         return empty
 
@@ -1011,9 +1014,11 @@ def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
             summary[lab] += 1
     summary["총"] = int(sum(summary.values()))
 
-    # 기준 팀(ht)이 홈/원정 상관없이 실제로 이겼는지/비겼는지/졌는지 기준 요약.
-    # limit으로 잘리기 전 전체 맞대결(m) 기준이라 "최근 N경기만 표시"와 무관하게 정확하다.
+    # 기준 팀(ht)이 홈/원정 상관없이 실제로 이겼는지/비겼는지/졌는지 기준 요약("전체기준")과,
+    # 그 팀이 실제로 홈이었던 맞대결만 추린 요약("홈기준"). 둘 다 limit으로 잘리기 전
+    # 전체 맞대결(m) 기준이라 "최근 N경기만 표시"와 무관하게 정확하다.
     wdl_summary = _wdl_breakdown(m, ht)
+    wdl_summary_home = _wdl_breakdown(m, ht, home_only=True)
 
     cols = [c for c in ["S", "R", "DT", "HT", "HS", "AS", "AT", "RT", "FW", "FD", "FL"]
             if c in m.columns]
@@ -1024,6 +1029,7 @@ def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
     return {
         "summary": summary,
         "wdl_summary": wdl_summary,
+        "wdl_summary_home": wdl_summary_home,
         "matches": DATA.df_to_records(out),
         "total": len(m),
     }
