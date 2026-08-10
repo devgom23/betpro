@@ -153,12 +153,20 @@ export default function LeagueTable({
     const el = scrollRef.current
     if (!el) return
     const thead = el.querySelector('thead')
+    const headerRow1 = el.querySelector('thead tr:first-child')
     const firstRow = el.querySelector('tbody tr[data-row]')
     if (!thead || !firstRow) return
     const h = firstRow.getBoundingClientRect().height
     if (h > 0 && Math.abs(h - rowH) > 0.5) setRowH(h)
     if (h > 0) {
       el.style.maxHeight = `${thead.getBoundingClientRect().height + h * VISIBLE_ROWS}px`
+    }
+    // 헤더 1번째 줄(그룹명) 높이를 재서 2번째 줄(L/S/R 등)이 스크롤 중 붙는 위치로 쓴다.
+    // CSS에 숫자를 고정해두면 실제 높이와 어긋나 돋보기·체크박스 칸(rowSpan)의 아래
+    // 경계선과 2번째 줄의 경계선이 다른 높이에 생겨 계단처럼 보인다.
+    if (headerRow1) {
+      const row1H = headerRow1.getBoundingClientRect().height
+      if (row1H > 0) el.style.setProperty('--header-row1-h', `${row1H}px`)
     }
   }, [rows, fontSize, rowH, collapsed])
 
