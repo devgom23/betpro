@@ -106,11 +106,24 @@
   background: transparent;
 }
 
+/* 돋보기·체크박스 칸의 오른쪽·아래쪽 경계선은 옆칸/아래칸의 border와 맞대는 대신
+   이 칸 자체에 box-shadow로 그린다. sticky 칸은 스크롤 중 별도 레이어로 다시
+   그려지는데, 이때 화면 배율(줌)에 따라 border가 옆/아래 칸과 반 픽셀씩 어긋나
+   삐뚤빼뚤해 보일 수 있다. box-shadow는 그 칸 자신의 박스에 고정되어 그려지므로
+   스크롤·배율과 무관하게 항상 같은 자리에서 끊김 없이 이어진다. */
 .sticky-col {
   position: sticky;
   left: 0;
   background: var(--bg-surface);
   z-index: 4;
+  box-shadow: inset -1px -1px 0 0 var(--border);
+}
+
+/* border-right/bottom(공용 규칙)보다 우선하도록 더 구체적인 선택자로 꺼야 box-shadow만 남는다 */
+.league-table th.sticky-col,
+.league-table td.sticky-col {
+  border-right: none;
+  border-bottom: none;
 }
 
 td.sticky-col {
