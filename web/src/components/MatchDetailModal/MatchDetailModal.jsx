@@ -155,13 +155,13 @@ function FormTable({ row }) {
 
 // 최근 10경기 승패. 홈팀은 왼쪽이 과거→오른쪽이 최신, 원정팀은 왼쪽이 최신→오른쪽이 과거라
 // 두 팀의 '가장 최근 경기'가 가운데에서 마주보게 된다 (백엔드가 이미 그 순서로 만들어 보낸다).
-// 10경기 미만(시즌 초반 등)이면 안쪽(구분선 쪽)이 아니라 바깥쪽 끝을 과거 자리로 비워두고
-// 실제 경기들을 구분선 쪽으로 채운다 — 즉 가장 최근 경기는 경기 수와 무관하게 항상
-// 구분선 바로 옆(offset 위치)에 오고, 경기가 쌓일수록 그 다음 경기가 그 안쪽으로 채워진다.
+// 10경기 미만(시즌 초반 등)이면 각자 자기 쪽 바깥쪽 끝부터 채워 구분선 쪽으로 자라난다 —
+// 홈팀은 왼쪽 끝부터(그대로, offset 없음), 원정팀은 오른쪽 끝부터(alignEnd로 offset을 줘서
+// 뒤에서부터 채움) 채우므로, 경기가 쌓일수록 최신 경기가 구분선에 가까워진다.
 // HR10/AR10 문자열과 HR10H/AR10H(같은 자리수의 'H'/'A')를 나란히 훑어 칸 10개를 만들고,
 // 그 경기가 홈경기였던 칸만 배경을 칠해 눈에 띄게 한다.
-function recentCells(results, venues) {
-  const offset = Math.max(0, 10 - results.length)
+function recentCells(results, venues, alignEnd = false) {
+  const offset = alignEnd ? Math.max(0, 10 - results.length) : 0
   return Array.from({ length: 10 }, (_, i) => {
     const idx = i - offset
     return {
@@ -174,7 +174,7 @@ function recentCells(results, venues) {
 function RecentTable({ row }) {
   // 시즌 첫 라운드면 아직 치른 경기가 없어 양쪽 다 비어 있다 — 폼 지표와 같이 '-'로 둔다.
   const homeCells = recentCells(String(row.HR10 || ''), String(row.HR10H || ''))
-  const awayCells = recentCells(String(row.AR10 || ''), String(row.AR10H || ''))
+  const awayCells = recentCells(String(row.AR10 || ''), String(row.AR10H || ''), true)
   return (
     <>
       <table className="detail-table recent-table">
