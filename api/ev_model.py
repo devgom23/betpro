@@ -42,17 +42,14 @@ RATIO_LO, RATIO_HI = 0.6, 1.7
 # 결과 컬럼 이름 — 표에 그대로 실린다
 EV_COLS = ['EV_WIN', 'EV_DRAW', 'EV_PL', 'EV_COVER', 'EV_BEST', 'EV_N', 'ODD_FLAG']
 
-# '핸승 위험도' 등급 경계(%). 배당에서 뽑은 핸승확률 기준.
-# 실측 검증(6대리그 13,410경기): 안전 10.9%/양호 19.2%/보통 30.1%/주의 40.9%/위험 52.1%
+# 핸값(RISK) 색상 경계(15/25/35/45%, web/src/.../columnGroups.js에서 색을 칠할 때 씀)의
+# 근거 — 실측 검증(6대리그 13,410경기): 안전 10.9%/양호 19.2%/보통 30.1%/주의 40.9%/위험 52.1%
 # — 5구간 전부 표시값과 실제 핸승률의 오차가 1.3%p 이내였다.
-GRADE_BINS = [0, 15, 25, 35, 45, 101]
-GRADE_LABELS = ['안전', '양호', '보통', '주의', '위험']
 
-# 엔진(26개 지표)이 배당보다 이만큼(%p) 더 "핸승 안 난다"고 볼 때 경고를 띄운다.
-# 실측: 이 경고가 붙은 253경기는 실제 핸승률 47.8%(경고 없는 경기는 30.2%) —
-# 지표만 믿고 안심하면 안 되는 경기를 잡아낸다(배당이 항상 더 정확했다).
-WARN_GAP_PP = 10.0
-RISK_COLS = ['VERDICT', 'RISK', 'GRADE', 'ENGINE', 'WARN']
+# 실측 참고: F값이 배당보다 10%p 이상 더 "핸승 안 난다"고 봤던 253경기는 실제
+# 핸승률이 47.8%였다(그 외 경기는 30.2%) — 지표만 믿고 안심하면 안 되는 경기가
+# 있다는 뜻이고, 그런 경기일수록 배당(핸값)이 더 정확했다.
+RISK_COLS = ['RISK', 'WIN_RISK', 'K_VALUE', 'F_VALUE', 'AI_PICK']
 
 
 def _num(df: pd.DataFrame, name: str) -> pd.Series:
@@ -127,7 +124,7 @@ def attach(df: pd.DataFrame, table: dict) -> pd.DataFrame:
                            바꿔도 EV는 두 단독 EV의 가중평균이라 이 값 근처를 벗어나지 못한다.
     EV_BEST              = 위 4개 중 최대값 (1.0 미만이면 "걸 게 없는 경기")
 
-    RISK/GRADE/ENGINE/WARN/VERDICT는 build_table(과거 구간 평균)과 무관하게 이 경기
+    RISK/WIN_RISK/K_VALUE/F_VALUE/AI_PICK는 build_table(과거 구간 평균)과 무관하게 이 경기
     "자신의" 배당에서 직접 뽑는다 — 구간 평균보다 오차가 훨씬 작다(모듈 상단 주석 참고).
     """
     n = len(df)
@@ -135,7 +132,7 @@ def attach(df: pd.DataFrame, table: dict) -> pd.DataFrame:
     res = {c: blank.copy() for c in ('EV_WIN', 'EV_DRAW', 'EV_PL', 'EV_COVER', 'EV_BEST', 'EV_N')}
     res['ODD_FLAG'] = pd.Series([''] * n, index=df.index, dtype=object)
     for c in RISK_COLS:
-        res[c] = pd.Series([None] * n, index=df.index, dtype=object) if c in ('GRADE',) else blank.copy()
+        res[c] = blank.copy()
 
     o_win = _num(df, '_o_win').where(lambda s: s > 1)   # 배당 1 이하는 입력 오류(원금도 안 되는 배당은 없다)
     o_draw = _num(df, '_o_draw').where(lambda s: s > 1)
@@ -176,26 +173,34 @@ def attach(df: pd.DataFrame, table: dict) -> pd.DataFrame:
                           np.where(weird, '배당이상', ''))),
         index=df.index, dtype=object)
 
-    # 위험 — 이 경기 배당에서 마진을 제거해 뽑은 핸승 확률(%)
+    # 핸값 — 이 경기 배당에서 마진을 제거해 뽑은 핸승 확률(%)
     risk = ((1 / o_win) / margin * 100).where(ok_risk)
     res['RISK'] = risk
-    res['GRADE'] = pd.cut(risk, GRADE_BINS, labels=GRADE_LABELS, right=False).astype(object)
 
-    # 엔진 — 26개 지표(PH_F=비핸승%)를 핸승% 기준으로 뒤집은 값. 참고용(배당이 더 정확).
+    # 정값 — 핸디캡과 무관하게 "정배가 실제로 이길 확률(%)". KW/KD/KL(승무패 배당)
+    # 자체에서 마진을 걷어낸 값이다. 위험(RISK)은 핸디 커버 여부를 묻지만 이건 그냥
+    # 실제 스코어로 이기느냐만 묻는 거라 답이 다르다 — KH 방향 판정도 필요 없다
+    # (정배는 KW/KL 중 배당이 낮은 쪽으로 그냥 정해진다).
+    kw_ = _num(df, 'KW').where(lambda s: s > 1)
+    kd_ = _num(df, 'KD').where(lambda s: s > 1)
+    kl_ = _num(df, 'KL').where(lambda s: s > 1)
+    fav_win_odds = pd.concat([kw_, kl_], axis=1).min(axis=1)
+    margin2 = 1 / kw_ + 1 / kd_ + 1 / kl_
+    res['WIN_RISK'] = (1 / fav_win_odds) / margin2 * 100
+
+    # F값 — 해외 13개 지표(PH_F=비핸승%)를 핸승% 기준으로 뒤집은 값. 참고용(배당이 더 정확).
+    # K값 — 국내 13개 지표(PH_K=비핸승%)를 핸승% 기준으로 뒤집은 값. 마찬가지로 참고용.
     ph_f = _num(df, 'PH_F')
-    engine = 100 - ph_f
-    res['ENGINE'] = engine
-    res['WARN'] = ((risk - engine) >= WARN_GAP_PP).where(risk.notna() & engine.notna(), False).astype(float)
+    ph_k = _num(df, 'PH_K')
+    f_value = 100 - ph_f
+    k_value = 100 - ph_k
+    res['F_VALUE'] = f_value
+    res['K_VALUE'] = k_value
 
-    # 적중/보험/미적 — 예측이 아니라 "보험(플핸+핸무) 베팅이 실제로 어떻게 됐나"의
-    # 결과 판정이다. 배당 유무와 무관하게 RT만 있으면 항상 매길 수 있다.
-    rt = df['_rt']
-    verdict = np.select(
-        [rt.isin([3, 4]), rt == 2, rt == 1],
-        ['적중', '보험', '미적'],
-        default=None,
-    )
-    res['VERDICT'] = pd.Series(verdict, index=df.index, dtype=object)
+    # AI픽 — RISK(배당)·F값·K값 중 있는 값들의 평균을 종합 핸승확률로 삼는다.
+    # 배당이 있으면 RISK가 가장 정확하다고 실측됐지만, 여기서는 세 신호를 동등하게
+    # 평균 낸다(가중치 조정은 추후 백테스트로 검증한 뒤에 반영).
+    res['AI_PICK'] = pd.concat([risk, f_value, k_value], axis=1).mean(axis=1, skipna=True)
 
     out = df.copy()
     for c in EV_COLS + RISK_COLS:

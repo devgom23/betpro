@@ -14,10 +14,13 @@ const F_ODDS_COLS = ['FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL']
 
 // 내 예측(별표/실제 벳팅 픽) — 화면에서 직접 클릭·팝업으로 입력하는 칸이라
 // formatCell/cellStyle이 아니라 LeagueTable.jsx가 직접 렌더링한다.
+// PICK_VERDICT(적중)는 저장되는 값이 아니라 내픽+RT로 그때그때 자동 계산한다
+// (computeAutoVerdict 참고). MY_HIT은 '벳'으로 이름을 바꿔 배팅 비중 태그로 쓴다.
 const MYPICK_COLS = [
   ['IMPORTANT', '중요'],
+  ['PICK_VERDICT', '적중'],
   ['MY_PICK', '내픽'],
-  ['MY_HIT', '적중'],
+  ['MY_HIT', '벳'],
 ]
 
 // 똥배 — 국내배당 KW/KL이 1.49 이하로 나온 "똥[안전]배당" 경기를 그 라운드 안에서
@@ -30,14 +33,13 @@ const DDONG_COLS = [
 // 핸승 위험도 — "플핸 예측"을 대체한다. 예전 PICK(플핸(무)/플핸(역)/...)은
 // 실측 적중률이 아니라 고정 보정표 값이었고(예: 78% 표시인데 실제 52.8%),
 // 여기 값은 전부 실측으로 검증했다(6대리그 13,410경기, columnGroups.js formatCell/
-// cellStyle 쪽과 api/ev_model.py의 GRADE_BINS/WARN_GAP_PP 주석 참고).
+// cellStyle 쪽과 api/ev_model.py 상단 주석 참고).
 const RISK_COLS = [
-  ['VERDICT', '적중'],
-  ['RISK', '위험'],
-  ['GRADE', '등급'],
-  ['ENGINE', '엔진'],
-  ['WARN', '⚠'],
-  ['ODD_FLAG', '상태'],
+  ['RISK', '핸값'],
+  ['WIN_RISK', '정값'],
+  ['K_VALUE', 'K값'],
+  ['F_VALUE', 'F값'],
+  ['AI_PICK', 'AI픽'],
 ]
 
 // 26개 지표 그룹: [코드, 그룹제목]. 각 코드는 항상 4칸(핸승/핸무/무/역)으로 펼쳐진다.
@@ -122,14 +124,23 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
   addFlatGroup('국내배당', '승(W) / 무(D) / 패(L)', K_ODDS_COLS)
   addFlatGroup('해외배당', '승(W) / 무(D) / 패(L)', F_ODDS_COLS)
 
-  const myPickLeaves = MYPICK_COLS.filter(([k]) => available.has(k)).map(([k, sub]) => ({ key: k, sub }))
-  if (myPickLeaves.length) {
+  // PICK_VERDICT(적중)는 저장된 컬럼이 아니라 내픽+RT로 그때그때 계산하는 값이라
+  // 백엔드가 내려준 컬럼 목록엔 절대 없다 — IMPORTANT/MY_PICK/MY_HIT 중 하나라도
+  // 있으면(=이 표에서 내 예측 기능 자체가 켜져 있으면) 무조건 같이 보여준다.
+  const myPickActive = MYPICK_COLS.some(([k]) => k !== 'PICK_VERDICT' && available.has(k))
+  if (myPickActive) {
+    const myPickLeaves = MYPICK_COLS.map(([k, sub]) => ({ key: k, sub }))
     groups.push({ label1: '내 예측', label2: '', kind: 'mypick', cols: myPickLeaves })
   }
 
   const riskLeaves = RISK_COLS.filter(([k]) => available.has(k)).map(([k, sub]) => ({ key: k, sub }))
   if (riskLeaves.length) {
-    groups.push({ label1: '핸승 위험도', label2: '배당 기준 · 낮을수록 안전', kind: 'risk', cols: riskLeaves })
+    groups.push({
+      label1: '핸승 위험도',
+      label2: '핸승% · 정승% · K/F값=핸승% · AI픽=플핸%',
+      kind: 'risk',
+      cols: riskLeaves,
+    })
   }
 
   if (!hideIndicators) {
@@ -182,10 +193,10 @@ export function formatCell(group, col, value, row) {
     return n.toFixed(2)
   }
   if (group.kind === 'risk') {
-    if (sub === '적중' || sub === '등급' || sub === '상태') return isBlank(value) ? '' : String(value)
-    if (sub === '⚠') return value === 1 || value === '1' || value === true ? '⚠' : ''
     const n = toNum(value)
-    return n === null ? '' : `${n.toFixed(0)}%`
+    if (n === null) return ''
+    if (sub === 'AI픽') return `플핸${(100 - n).toFixed(0)}%`
+    return `${n.toFixed(0)}%`
   }
   if (SUB4.includes(sub)) {
     const n = toNum(value)
@@ -245,12 +256,48 @@ function khHitSide(row) {
   return sideOf(hs + kh, as_)
 }
 
-// 내 예측의 "적중" 배지 색상 — 플핸예측 쪽 적중(PH_STATUS)과 같은 배색을 그대로 쓴다.
+// 내 예측의 "벳"(옛 적중칸을 재활용 — 배팅 비중 태그) 배지 색상.
 export function myHitStyle(value) {
-  if (value === '적중') return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
-  if (value === '미적') return { background: '#C62828', color: '#fff', fontWeight: 700 }
   if (value === '패스') return { background: '#757575', color: '#fff', fontWeight: 700 }
   if (value === '고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
+  if (value === '축') return { background: '#00897B', color: '#fff', fontWeight: 700 }
+  if (value === '메인벳') return { background: '#1565C0', color: '#fff', fontWeight: 700 }
+  if (value === 'S벳') return { background: '#6A1B9A', color: '#fff', fontWeight: 700 }
+  return null
+}
+
+// 내픽+RT를 그때그때 대조해 적중/보험/미적을 자동 판정한다(저장값 아님).
+// 픽마다 "적중으로 치는 결과"·"보험(부분 환급)으로 치는 결과"가 다르다 — 나머지는 전부 미적.
+const PICK_VERDICT_MAP = {
+  플핸무: { hit: [3, 4], insure: [2] },
+  정무: { hit: [1, 2], insure: [3] },
+  축정: { hit: [1, 2], insure: [] },
+  축플: { hit: [3, 4], insure: [] },
+  무핸무: { hit: [2, 3], insure: [] },
+  플핸: { hit: [3, 4], insure: [] },
+  정: { hit: [1, 2], insure: [] },
+  핸승: { hit: [1], insure: [] },
+  핸무: { hit: [2], insure: [] },
+  무: { hit: [3], insure: [] },
+  역: { hit: [4], insure: [] },
+}
+
+export function computeAutoVerdict(pick, rt) {
+  if (isBlank(pick)) return ''
+  const rule = PICK_VERDICT_MAP[pick]
+  if (!rule) return ''
+  const code = rtCodeOf(rt)
+  if (code === null || code < 1 || code > 4) return ''
+  if (rule.hit.includes(code)) return '적중'
+  if (rule.insure.includes(code)) return '보험'
+  return '미적'
+}
+
+// 내 예측의 자동 "적중" 배지 색상 — 예전 핸승위험도 그룹의 적중(VERDICT) 배색을 그대로 쓴다.
+export function pickVerdictStyle(value) {
+  if (value === '적중') return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
+  if (value === '보험') return { background: '#00897B', color: '#fff', fontWeight: 700 }
+  if (value === '미적') return { background: '#C62828', color: '#fff', fontWeight: 700 }
   return null
 }
 
@@ -328,18 +375,9 @@ export function cellStyle(group, col, value, row) {
     return base
   }
 
-  if (group.kind === 'risk' && sub === '적중') {
-    // 결과가 무·역이면 보험(플핸+핸무) 벳이 실제로 적중한 것 / 핸무면 원금만 건진 것 /
-    // 핸승이면 전액 손실 — 예측이 아니라 그 경기가 실제로 어떻게 끝났는지의 판정이다.
-    if (value === '적중') return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
-    if (value === '보험') return { background: '#00897B', color: '#fff', fontWeight: 700 }
-    if (value === '미적') return { background: '#C62828', color: '#fff', fontWeight: 700 }
-    return null
-  }
-
-  // 위험(RISK)·엔진(ENGINE) 둘 다 "핸승 날 확률(%)" 값이라 같은 색 등급을 쓴다 —
-  // api/ev_model.py의 GRADE_BINS(안전~15/양호~25/보통~35/주의~45/위험~)와 맞춘 경계.
-  if (group.kind === 'risk' && (sub === '위험' || sub === '엔진')) {
+  // 핸값(RISK)·K값·F값·AI픽 모두 "핸승 날 확률(%)" 값이라 같은 색 등급을 쓴다 —
+  // 실측 검증(6대리그 13,410경기, api/ev_model.py 상단 주석 참고) 경계: 15/25/35/45%.
+  if (group.kind === 'risk' && (sub === '핸값' || sub === 'K값' || sub === 'F값' || sub === 'AI픽')) {
     const n = toNum(value)
     if (n === null) return { color: '#9E9E9E' }
     if (n < 15) return { background: '#1B5E20', color: '#fff', fontWeight: 700 }
@@ -349,28 +387,17 @@ export function cellStyle(group, col, value, row) {
     return { background: '#C62828', color: '#fff', fontWeight: 700 }
   }
 
-  if (group.kind === 'risk' && sub === '등급') {
-    const s = isBlank(value) ? '' : String(value)
-    if (s === '안전') return { background: '#1B5E20', color: '#fff', fontWeight: 700 }
-    if (s === '양호') return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 }
-    if (s === '보통') return { background: '#FBC02D', color: '#0D1B2A' }
-    if (s === '주의') return { background: '#EF6C00', color: '#fff', fontWeight: 700 }
-    if (s === '위험') return { background: '#C62828', color: '#fff', fontWeight: 700 }
-    return null
-  }
-
-  // ⚠ — 엔진이 배당보다 낙관적일 때만 뜬다(api/ev_model.py WARN_GAP_PP 주석 참고).
-  // 실측: 이 표시가 붙은 경기는 핸승률 47.8%(안 붙은 경기는 30.2%) — 지표만 보고
-  // 안심하면 안 되는 경기라는 뜻이라 항상 눈에 띄는 빨간색으로 강조한다.
-  if (group.kind === 'risk' && sub === '⚠') {
-    if (value === 1 || value === '1' || value === true) {
-      return { color: '#C62828', fontWeight: 700 }
-    }
-    return null
-  }
-
-  if (group.kind === 'risk' && sub === '상태') {
-    return isBlank(value) ? null : { color: '#9E9E9E' }
+  // 정값(WIN_RISK) — "정배가 실제로 이길 확률"이라 핸값과는 분포 자체가 다르다
+  // (실측 6대리그 15,834경기 결과 대부분이 31~90% 구간에 몰려 있다 — 핸값 경계를
+  // 그대로 쓰면 거의 전부 '위험' 한 가지 색으로만 칠해진다). 그래서 경계를 따로 잡았다:
+  // 31~40%→실제 37.8% / 41~50%→44.6% / 51~60%→57.0% / 61~70%→68.2% / 71~80%→75.3% / 81~90%→88.4%.
+  if (group.kind === 'risk' && sub === '정값') {
+    const n = toNum(value)
+    if (n === null) return { color: '#9E9E9E' }
+    if (n < 40) return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 } // 양호
+    if (n < 55) return { background: '#FBC02D', color: '#0D1B2A' }                  // 보통
+    if (n < 70) return { background: '#EF6C00', color: '#fff', fontWeight: 700 }    // 주의
+    return { background: '#C62828', color: '#fff', fontWeight: 700 }                // 위험
   }
 
   return null

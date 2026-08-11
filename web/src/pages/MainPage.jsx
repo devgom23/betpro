@@ -32,13 +32,15 @@ export default function MainPage() {
   const { user, loginTime, logout } = useAuth()
   const { theme, setTheme } = useTheme()
   const { fontSize, setFontSize } = useFontSize()
-  const [scope, setScope] = useState('master')
+  // 스코프/탭/네비 위치를 localStorage에 저장해뒀다가 새로고침(F5) 때 그대로 복원한다
+  // — 안 그러면 새로고침할 때마다 항상 "공식 데이터 · EPL"로 초기화돼버린다.
+  const [scope, setScope] = useState(() => localStorage.getItem('betpro_scope') || 'master')
   // 목록과 그것이 어느 스코프의 것인지를 함께 담는다 — 스코프를 바꾼 직후 이전 스코프의
   // 리그 목록으로 탭을 잘못 고르는(예: 내 데이터에서 EPL을 여는) 상황을 막기 위함.
   const [leagueState, setLeagueState] = useState({ scope: null, list: [] })
-  const [activeTab, setActiveTab] = useState('EPL')
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('betpro_activeTab') || 'EPL')
   // 상단 네비 4개 중 무엇을 보고 있는지. 'leagues'일 때만 리그 탭 줄이 보인다.
-  const [view, setView] = useState('leagues')
+  const [view, setView] = useState(() => localStorage.getItem('betpro_view') || 'leagues')
   const [showLeagueModal, setShowLeagueModal] = useState(false)
   const isUser = scope === 'user'
   const ready = leagueState.scope === scope
@@ -58,6 +60,10 @@ export default function MainPage() {
   useEffect(() => {
     loadLeagues()
   }, [loadLeagues])
+
+  useEffect(() => { localStorage.setItem('betpro_scope', scope) }, [scope])
+  useEffect(() => { localStorage.setItem('betpro_activeTab', activeTab) }, [activeTab])
+  useEffect(() => { localStorage.setItem('betpro_view', view) }, [view])
 
   // 목록이 확정되면 열린 탭을 정리한다 — 스코프 전환뿐 아니라 리그 생성·삭제 직후에도
   // 같은 규칙으로 동작한다(사라진 리그를 보고 있으면 첫 리그로, 하나도 없으면 안내 화면으로).

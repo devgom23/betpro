@@ -136,6 +136,12 @@ td.sticky-col {
 }
 
 .detail-btn {
+  /* 🔍 이모지는 line-height 기반 정렬로는 글자 자체(글리프)가 위로 붙어 보일 수 있어
+     (박스 자체는 셀 안에서 이미 정확히 중앙인데, 이모지 그림이 그 박스 안에서
+     비대칭으로 그려짐) — flex로 내용물을 직접 중앙 정렬해 렌더링 편차를 없앤다. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -154,7 +160,7 @@ td.sticky-col {
 }
 
 .league-table tbody tr:hover td {
-  background: rgba(148, 163, 184, 0.08);
+  background: rgba(148, 163, 184, 0.22);
 }
 
 .table-empty {

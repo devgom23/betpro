@@ -6,7 +6,7 @@ import { isStarred, formatTime, scoreClass } from '../../utils/format'
 import './MatchDetailModal.css'
 
 const PICK_OPTIONS = ['축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
-const HIT_OPTIONS = ['적중', '미적', '패스', '고민']
+const HIT_OPTIONS = ['패스', '고민', '축', '메인벳', 'S벳']
 
 function rtLabel(v) {
   if (v === null || v === undefined || v === '') return ''
@@ -78,38 +78,48 @@ function OddsTable({ row }) {
   )
 }
 
-function PhPredictionCard({ row }) {
-  const pick = row.PH_PICK
-  const pickStyle = (() => {
-    const s = String(pick || '').trim()
-    if (s.startsWith('플핸')) {
-      if (s.includes('(역)')) return { background: '#4A148C', color: '#fff' }
-      if (s.includes('(무)')) return { background: '#6A1B9A', color: '#fff' }
-      if (s.includes('(핸무)')) return { background: '#E65100', color: '#fff' }
-      return { background: '#7B1FA2', color: '#fff' }
-    }
-    if (s === '핸승') return { background: '#1565C0', color: '#fff' }
-    return {}
-  })()
+// 핸값/K값/F값/AI픽 경계(15/25/35/45%) — web/.../columnGroups.js cellStyle과 동일.
+// 정값만 분포가 달라 따로 경계(40/55/70%)를 쓴다 — 그쪽 주석 참고.
+function riskCellStyle(kind, n) {
+  if (n === null || Number.isNaN(n)) return { color: '#9E9E9E' }
+  if (kind === 'win') {
+    if (n < 40) return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 }
+    if (n < 55) return { background: '#FBC02D', color: '#0D1B2A' }
+    if (n < 70) return { background: '#EF6C00', color: '#fff', fontWeight: 700 }
+    return { background: '#C62828', color: '#fff', fontWeight: 700 }
+  }
+  if (n < 15) return { background: '#1B5E20', color: '#fff', fontWeight: 700 }
+  if (n < 25) return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 }
+  if (n < 35) return { background: '#FBC02D', color: '#0D1B2A' }
+  if (n < 45) return { background: '#EF6C00', color: '#fff', fontWeight: 700 }
+  return { background: '#C62828', color: '#fff', fontWeight: 700 }
+}
 
+function RiskCard({ row }) {
+  const toN = (v) => (v === null || v === undefined || v === '' ? null : Number(v))
+  const items = [
+    ['핸값', toN(row.RISK), 'std'],
+    ['정값', toN(row.WIN_RISK), 'win'],
+    ['K값', toN(row.K_VALUE), 'std'],
+    ['F값', toN(row.F_VALUE), 'std'],
+    ['AI픽', toN(row.AI_PICK), 'std'],
+  ]
   return (
     <table className="detail-table">
       <thead>
         <tr>
-          <th>해)플핸</th>
-          <th>국)플핸</th>
-          <th>PICK</th>
-          <th>실측</th>
-          <th>비중</th>
+          {items.map(([label]) => (
+            <th key={label}>{label}</th>
+          ))}
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td>{row.PH_F != null ? `${Number(row.PH_F).toFixed(0)}%` : '-'}</td>
-          <td>{row.PH_K != null ? `${Number(row.PH_K).toFixed(0)}%` : '-'}</td>
-          <td style={pickStyle}>{pick || '-'}</td>
-          <td>{row.PH_HIT != null ? `${Number(row.PH_HIT).toFixed(0)}%` : '-'}</td>
-          <td>{row.PH_DOM != null ? `${Number(row.PH_DOM).toFixed(0)}%` : '-'}</td>
+          {items.map(([label, n, kind]) => (
+            <td key={label} style={riskCellStyle(kind, n)}>
+              {n === null ? '-' : label === 'AI픽' ? `플핸${(100 - n).toFixed(0)}%` : `${n.toFixed(0)}%`}
+            </td>
+          ))}
         </tr>
       </tbody>
     </table>
@@ -318,7 +328,7 @@ function MyPickBar({ row, onSavePick }) {
         </select>
       </label>
       <label className="mypick-bar-field">
-        적중
+        벳
         <select value={hit} onChange={handleHitChange}>
           <option value="">선택 안함</option>
           {HIT_OPTIONS.map((o) => (
@@ -427,8 +437,8 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
           <div className="modal-col">
             <h3>💰 배당</h3>
             <OddsTable row={row} />
-            <h3>🎯 플핸 예측</h3>
-            <PhPredictionCard row={row} />
+            <h3>🎯 핸승 위험도</h3>
+            <RiskCard row={row} />
             <h3>📊 지표별 표본</h3>
             <SampleTable row={row} scope={scope} />
           </div>

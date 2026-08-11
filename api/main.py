@@ -727,7 +727,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
             df = DATA.load_league_df_ranked(db, code)
             if df.empty:
                 continue
-            df = EVM.attach_for_league(df)   # 핸승 위험도(RISK/GRADE/ENGINE/WARN/VERDICT) — 위험도
+            df = EVM.attach_for_league(df)   # 핸승 위험도(RISK/WIN_RISK/K_VALUE/F_VALUE/AI_PICK) — 위험도
             # 계산엔 리그 전체 이력이 필요해 df 자체는 그대로 두지만, 별표 몇 개 보자고
             # 수천 행×200개 컬럼을 전부 JSON 직렬화(df_to_records)할 필요는 없다 —
             # 여기서 별표 찍힌 행만 먼저 추려서 그만큼만 변환한다(리그당 실측 0.3~0.5초 절약).

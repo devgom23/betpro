@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, formStyle, bettingDayStyle,
+  computeAutoVerdict, pickVerdictStyle,
 } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
@@ -26,6 +27,12 @@ function groupKey(g) {
 function dividerClass(g, isLastGroup) {
   if (isLastGroup) return ''
   return g.label1 === '국내배당' ? ' group-divider divider-strong' : ' group-divider'
+}
+
+// "핸승 위험도" 그룹 안에서 배당 직접계산(핸값/정값)과 지표 기반(K값/F값/AI픽) 값을
+// 가르는 구분선 — 그룹과 그룹 사이에 쓰는 것과 똑같은 굵기(group-divider)를 그대로 쓴다.
+function riskSubDividerClass(g, c) {
+  return g.kind === 'risk' && c.key === 'WIN_RISK' ? ' group-divider' : ''
 }
 
 function matchKey(row) {
@@ -295,7 +302,7 @@ export default function LeagueTable({
                       key={`${gi}-${ci}`}
                       className={`sub-header ${highlightCols.includes(c.key) ? 'col-highlight' : ''}${
                         isLastCol ? dividerClass(g, isLastGroup) : ''
-                      }`}
+                      }${riskSubDividerClass(g, c)}`}
                     >
                       {c.sub}
                     </th>
@@ -348,6 +355,9 @@ export default function LeagueTable({
                       // 일반정보를 접어도 금/토/일 베팅일 색상 + 시간(TM)은 계속 보여야
                       // 한다 — 접힌 채로도 몇 시 경기인지 바로 알 수 있게.
                       const isGenInfo = g.label1 === '일반정보'
+                      // 똥배를 접어도 똥1/똥2 순번은 계속 보여야 한다 — 그게 이 그룹의
+                      // 핵심 정보라 접혀서 안 보이면 의미가 없다.
+                      const isDdong = g.label1 === '똥배'
                       const style = isGenInfo ? bettingDayStyle(row) : null
                       return [
                         <td
@@ -355,7 +365,11 @@ export default function LeagueTable({
                           className={`collapsed-cell${dividerClass(g, isLastGroup)}`}
                           style={style || undefined}
                         >
-                          {isGenInfo ? formatCell(g, { sub: 'TM' }, row.TM) : '·'}
+                          {isGenInfo
+                            ? formatCell(g, { sub: 'TM' }, row.TM)
+                            : isDdong
+                              ? row.DDONG || '·'
+                              : '·'}
                         </td>,
                       ]
                     }
@@ -373,6 +387,18 @@ export default function LeagueTable({
                               >
                                 {pickState.important ? '★' : '☆'}
                               </button>
+                            </td>
+                          )
+                        }
+                        if (c.key === 'PICK_VERDICT') {
+                          const verdict = computeAutoVerdict(pickState.pick, row.RT)
+                          return (
+                            <td
+                              key={`${gi}-${ci}`}
+                              className={className}
+                              style={pickVerdictStyle(verdict) || undefined}
+                            >
+                              {verdict || <span className="mypick-blank">－</span>}
                             </td>
                           )
                         }
@@ -412,6 +438,7 @@ export default function LeagueTable({
                       const classNames = [
                         isHighlighted ? 'cell-highlight' : '',
                         isLastCol ? dividerClass(g, isLastGroup).trim() : '',
+                        riskSubDividerClass(g, c).trim(),
                       ].filter(Boolean).join(' ')
                       const text = formatCell(g, c, value, row)
                       // 폼(PPG) 칸은 칸 전체를 칠하지 않고, 값만 작은 뱃지로 보여준다.
