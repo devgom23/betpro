@@ -1,24 +1,32 @@
 @echo off
-chcp 65001 >nul
 cd /d "%~dp0"
 
 echo.
 echo ============================================
-echo   BETPRO í´ë¡œë“œ ì½”ë“œ ì‹œì‘
-echo   ì‘ì—… í´ë”: %~dp0
+echo   BETPRO ÀüÃ¼ ½ÇÇà (¹é¿£µå + ÇÁ·ĞÆ® + Å¬·Îµå ÄÚµå)
+echo   ÀÛ¾÷ Æú´õ: %~dp0
 echo ============================================
+echo.
+
+echo [1/3] ¹é¿£µå(API) ¼­¹ö¸¦ »õ Ã¢¿¡¼­ ½ÃÀÛÇÕ´Ï´Ù...
+start "BETPRO ¹é¿£µå (API)" cmd /k "%~dp0API_½ÇÇà.bat"
+
+echo [2/3] ÇÁ·ĞÆ®(È­¸é) ¼­¹ö¸¦ »õ Ã¢¿¡¼­ ½ÃÀÛÇÕ´Ï´Ù...
+start "BETPRO ÇÁ·ĞÆ® (È­¸é)" cmd /k "cd /d %~dp0web && npm run dev"
+
+echo [3/3] ÀÌ Ã¢¿¡¼­ Å¬·Îµå ÄÚµå¸¦ ½ÃÀÛÇÕ´Ï´Ù...
 echo.
 
 where claude >nul 2>&1
 if errorlevel 1 goto noclaude
 
-claude
+claude --continue --model sonnet
 exit /b 0
 
 :noclaude
 echo.
-echo [ì˜¤ë¥˜] claude ëª…ë ¹ì–´ë¥¼ ì°¾ì§€ ëª»í–ˆìŠµë‹ˆë‹¤.
-echo        Claude Codeê°€ ì„¤ì¹˜ë˜ì–´ ìˆëŠ”ì§€ í™•ì¸í•´ì£¼ì„¸ìš”.
+echo [¿À·ù] claude ¸í·É¾î¸¦ Ã£Áö ¸øÇß½À´Ï´Ù.
+echo        Claude Code°¡ ¼³Ä¡µÇ¾î ÀÖ´ÂÁö È®ÀÎÇØÁÖ¼¼¿ä.
 echo.
 pause
 exit /b 1
