@@ -259,7 +259,8 @@ function khHitSide(row) {
 // 내 예측의 "벳"(옛 적중칸을 재활용 — 배팅 비중 태그) 배지 색상.
 export function myHitStyle(value) {
   if (value === '패스') return { background: '#757575', color: '#fff', fontWeight: 700 }
-  if (value === '고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
+  if (value === '패스고민') return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
+  if (value === '벳고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
   if (value === '축') return { background: '#00897B', color: '#fff', fontWeight: 700 }
   if (value === '메인벳') return { background: '#1565C0', color: '#fff', fontWeight: 700 }
   if (value === 'S벳') return { background: '#6A1B9A', color: '#fff', fontWeight: 700 }
