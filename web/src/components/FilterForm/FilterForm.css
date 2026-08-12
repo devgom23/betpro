@@ -44,6 +44,12 @@
   border-color: var(--accent);
 }
 
+/* 드롭박스를 펼쳤을 때 현재 선택된 항목이 목록 안에서도 강조되어 보이게 한다 */
+.filter-row select option:checked {
+  background: var(--accent);
+  color: #fff;
+}
+
 .filter-actions {
   display: flex;
   gap: 6px;

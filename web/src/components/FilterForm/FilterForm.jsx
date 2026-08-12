@@ -153,9 +153,7 @@ export default function FilterForm({ filters, leagueKey, onSearch, teams = [], o
           <span className="filter-label">상대 전적 조회</span>
           <div className="filter-row h2h-row">
             <select value={h2hHome} onChange={(e) => setH2hHome(e.target.value)}>
-              <option value="" disabled>
-                홈팀 선택
-              </option>
+              <option value="">홈팀 선택</option>
               {teams.map((t) => (
                 <option key={t} value={t}>
                   {t}
@@ -164,9 +162,7 @@ export default function FilterForm({ filters, leagueKey, onSearch, teams = [], o
             </select>
             <span className="h2h-vs">vs</span>
             <select value={h2hAway} onChange={(e) => setH2hAway(e.target.value)}>
-              <option value="" disabled>
-                원정팀 선택
-              </option>
+              <option value="">원정팀 선택</option>
               {teams.map((t) => (
                 <option key={t} value={t}>
                   {t}
