@@ -34,12 +34,16 @@ const DDONG_COLS = [
 // 실측 적중률이 아니라 고정 보정표 값이었고(예: 78% 표시인데 실제 52.8%),
 // 여기 값은 전부 실측으로 검증했다(6대리그 13,410경기, columnGroups.js formatCell/
 // cellStyle 쪽과 api/ev_model.py 상단 주석 참고).
+// 배당 기반 값(핸승값/국정값/해정값/배당·AI) → 26개 지표 기반 값(K값/F값/KF·AI)
+// 순서. LeagueTable.jsx riskSubDividerClass가 배당·AI 뒤에 구분선을 넣는다.
 const RISK_COLS = [
-  ['RISK', '핸값'],
-  ['WIN_RISK', '정값'],
+  ['RISK', '핸승값'],
+  ['WIN_RISK', '국정값'],
+  ['WIN_RISK_F', '해정값'],
+  ['AI_PICK', '배당·AI'],
   ['K_VALUE', 'K값'],
   ['F_VALUE', 'F값'],
-  ['AI_PICK', 'AI픽'],
+  ['KF_AI', 'KF·AI'],
 ]
 
 // 26개 지표 그룹: [코드, 그룹제목]. 각 코드는 항상 4칸(핸승/핸무/무/역)으로 펼쳐진다.
@@ -137,7 +141,7 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
   if (riskLeaves.length) {
     groups.push({
       label1: '핸승 위험도',
-      label2: '핸승% · 정승% · K/F값=핸승% · AI픽=플핸%',
+      label2: '국/해배 배당률 분석 / 26개 지표분석',
       kind: 'risk',
       cols: riskLeaves,
     })
@@ -195,7 +199,7 @@ export function formatCell(group, col, value, row) {
   if (group.kind === 'risk') {
     const n = toNum(value)
     if (n === null) return ''
-    if (sub === 'AI픽') return `플핸${(100 - n).toFixed(0)}%`
+    if (sub === '배당·AI' || sub === 'KF·AI') return `플${(100 - n).toFixed(0)}%`
     return `${n.toFixed(0)}%`
   }
   if (SUB4.includes(sub)) {
@@ -376,9 +380,9 @@ export function cellStyle(group, col, value, row) {
     return base
   }
 
-  // 핸값(RISK)·K값·F값·AI픽 모두 "핸승 날 확률(%)" 값이라 같은 색 등급을 쓴다 —
+  // 핸승값(RISK)·배AI·K값·F값·KFAI 모두 "핸승 날 확률(%)" 값이라 같은 색 등급을 쓴다 —
   // 실측 검증(6대리그 13,410경기, api/ev_model.py 상단 주석 참고) 경계: 15/25/35/45%.
-  if (group.kind === 'risk' && (sub === '핸값' || sub === 'K값' || sub === 'F값' || sub === 'AI픽')) {
+  if (group.kind === 'risk' && ['핸승값', '배당·AI', 'K값', 'F값', 'KF·AI'].includes(sub)) {
     const n = toNum(value)
     if (n === null) return { color: '#9E9E9E' }
     if (n < 15) return { background: '#1B5E20', color: '#fff', fontWeight: 700 }
@@ -388,11 +392,12 @@ export function cellStyle(group, col, value, row) {
     return { background: '#C62828', color: '#fff', fontWeight: 700 }
   }
 
-  // 정값(WIN_RISK) — "정배가 실제로 이길 확률"이라 핸값과는 분포 자체가 다르다
-  // (실측 6대리그 15,834경기 결과 대부분이 31~90% 구간에 몰려 있다 — 핸값 경계를
-  // 그대로 쓰면 거의 전부 '위험' 한 가지 색으로만 칠해진다). 그래서 경계를 따로 잡았다:
-  // 31~40%→실제 37.8% / 41~50%→44.6% / 51~60%→57.0% / 61~70%→68.2% / 71~80%→75.3% / 81~90%→88.4%.
-  if (group.kind === 'risk' && sub === '정값') {
+  // 국정값·해정값(WIN_RISK/WIN_RISK_F) — "정배가 실제로 이길 확률"이라 핸승값과는
+  // 분포 자체가 다르다(실측 6대리그 15,834경기 결과 대부분이 31~90% 구간에 몰려
+  // 있다 — 핸승값 경계를 그대로 쓰면 거의 전부 '위험' 한 가지 색으로만 칠해진다).
+  // 그래서 경계를 따로 잡았다: 31~40%→실제 37.8% / 41~50%→44.6% / 51~60%→57.0% /
+  // 61~70%→68.2% / 71~80%→75.3% / 81~90%→88.4%.
+  if (group.kind === 'risk' && (sub === '국정값' || sub === '해정값')) {
     const n = toNum(value)
     if (n === null) return { color: '#9E9E9E' }
     if (n < 40) return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 } // 양호

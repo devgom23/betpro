@@ -305,3 +305,106 @@ td.sticky-col {
 .league-table tbody tr.row-starred:hover td {
   background: rgba(245, 179, 1, 0.24);
 }
+
+/* ── 핸승 위험도 "참고" 버튼 + 색상 구간 참고표 팝업 ── */
+.risk-legend-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--accent);
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.risk-legend-btn:hover {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+  z-index: 50;
+}
+
+.modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 1320px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px 28px;
+  color: var(--text-secondary);
+}
+
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.modal-close:hover {
+  background: var(--border);
+}
+
+.modal-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 30px;
+}
+
+.modal-meta {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.risk-legend-card {
+  max-width: 520px;
+}
+
+.risk-legend-group-title {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.detail-table th,
+.detail-table td {
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.risk-legend-table td {
+  font-size: 12px;
+  line-height: 1.5;
+}

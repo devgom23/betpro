@@ -42,14 +42,27 @@ RATIO_LO, RATIO_HI = 0.6, 1.7
 # 결과 컬럼 이름 — 표에 그대로 실린다
 EV_COLS = ['EV_WIN', 'EV_DRAW', 'EV_PL', 'EV_COVER', 'EV_BEST', 'EV_N', 'ODD_FLAG']
 
-# 핸값(RISK) 색상 경계(15/25/35/45%, web/src/.../columnGroups.js에서 색을 칠할 때 씀)의
+# 핸승값(RISK) 색상 경계(15/25/35/45%, web/src/.../columnGroups.js에서 색을 칠할 때 씀)의
 # 근거 — 실측 검증(6대리그 13,410경기): 안전 10.9%/양호 19.2%/보통 30.1%/주의 40.9%/위험 52.1%
 # — 5구간 전부 표시값과 실제 핸승률의 오차가 1.3%p 이내였다.
+RISK_COLS = ['RISK', 'WIN_RISK', 'WIN_RISK_F', 'AI_PICK', 'K_VALUE', 'F_VALUE', 'KF_AI']
 
-# 실측 참고: F값이 배당보다 10%p 이상 더 "핸승 안 난다"고 봤던 253경기는 실제
-# 핸승률이 47.8%였다(그 외 경기는 30.2%) — 지표만 믿고 안심하면 안 되는 경기가
-# 있다는 뜻이고, 그런 경기일수록 배당(핸값)이 더 정확했다.
-RISK_COLS = ['RISK', 'WIN_RISK', 'K_VALUE', 'F_VALUE', 'AI_PICK']
+# 국정값·해정값(정배가 그냥 이길 확률)을 배AI 평균에 넣기 전에 핸승값과 같은
+# 스케일(실제 핸승률 기준)로 맞추는 변환 곡선. 핸승값은 "핸디까지 커버해서 이길
+# 확률"이라 정배 승리 확률(국정값·해정값, 평균 52%대)보다 항상 낮게 나온다
+# (핸무처럼 이기긴 해도 핸승은 아닌 경우가 섞여 있어서) — 이 변환 없이 그대로
+# 평균 내면 핸승값(평균 30%대)과 스케일이 달라 배AI 색상이 핸승값 기준과 어긋난다.
+# 실측(6대리그, 국정값+해정값 통합 51,000+경기, 10%p 구간별 실제 핸승률):
+#   35%→16.8% / 45%→22.5% / 55%→31.6% / 65%→41.4% / 75%→52.1% / 85%→67.7%
+_WIN_TO_HANDSEUNG_X = [35.0, 45.0, 55.0, 65.0, 75.0, 85.0]
+_WIN_TO_HANDSEUNG_Y = [16.8, 22.5, 31.6, 41.4, 52.1, 67.7]
+
+
+def _win_to_handseung(pct: pd.Series) -> pd.Series:
+    """국정값/해정값(정배 승리 확률, %)을 핸승값과 같은 실제-핸승률 스케일로 변환한다."""
+    arr = pct.to_numpy(dtype='float64')
+    out = np.interp(arr, _WIN_TO_HANDSEUNG_X, _WIN_TO_HANDSEUNG_Y)
+    return pd.Series(out, index=pct.index).where(pct.notna())
 
 
 def _num(df: pd.DataFrame, name: str) -> pd.Series:
@@ -124,7 +137,7 @@ def attach(df: pd.DataFrame, table: dict) -> pd.DataFrame:
                            바꿔도 EV는 두 단독 EV의 가중평균이라 이 값 근처를 벗어나지 못한다.
     EV_BEST              = 위 4개 중 최대값 (1.0 미만이면 "걸 게 없는 경기")
 
-    RISK/WIN_RISK/K_VALUE/F_VALUE/AI_PICK는 build_table(과거 구간 평균)과 무관하게 이 경기
+    RISK/WIN_RISK/WIN_RISK_F/AI_PICK/K_VALUE/F_VALUE/KF_AI는 build_table(과거 구간 평균)과 무관하게 이 경기
     "자신의" 배당에서 직접 뽑는다 — 구간 평균보다 오차가 훨씬 작다(모듈 상단 주석 참고).
     """
     n = len(df)
@@ -173,34 +186,51 @@ def attach(df: pd.DataFrame, table: dict) -> pd.DataFrame:
                           np.where(weird, '배당이상', ''))),
         index=df.index, dtype=object)
 
-    # 핸값 — 이 경기 배당에서 마진을 제거해 뽑은 핸승 확률(%)
+    # 핸승값 — 이 경기 핸디배당(KHW/KHD/KHL)에서 마진을 제거해 뽑은 핸승 확률(%)
     risk = ((1 / o_win) / margin * 100).where(ok_risk)
     res['RISK'] = risk
 
-    # 정값 — 핸디캡과 무관하게 "정배가 실제로 이길 확률(%)". KW/KD/KL(승무패 배당)
-    # 자체에서 마진을 걷어낸 값이다. 위험(RISK)은 핸디 커버 여부를 묻지만 이건 그냥
+    # 국정값 — 핸디캡과 무관하게 "정배가 실제로 이길 확률(%)". KW/KD/KL(국내 승무패 배당)
+    # 자체에서 마진을 걷어낸 값이다. 핸승값은 핸디 커버 여부를 묻지만 이건 그냥
     # 실제 스코어로 이기느냐만 묻는 거라 답이 다르다 — KH 방향 판정도 필요 없다
     # (정배는 KW/KL 중 배당이 낮은 쪽으로 그냥 정해진다).
     kw_ = _num(df, 'KW').where(lambda s: s > 1)
     kd_ = _num(df, 'KD').where(lambda s: s > 1)
     kl_ = _num(df, 'KL').where(lambda s: s > 1)
-    fav_win_odds = pd.concat([kw_, kl_], axis=1).min(axis=1)
-    margin2 = 1 / kw_ + 1 / kd_ + 1 / kl_
-    res['WIN_RISK'] = (1 / fav_win_odds) / margin2 * 100
+    fav_win_odds_k = pd.concat([kw_, kl_], axis=1).min(axis=1)
+    margin_k = 1 / kw_ + 1 / kd_ + 1 / kl_
+    win_risk = (1 / fav_win_odds_k) / margin_k * 100
+    res['WIN_RISK'] = win_risk
 
-    # F값 — 해외 13개 지표(PH_F=비핸승%)를 핸승% 기준으로 뒤집은 값. 참고용(배당이 더 정확).
-    # K값 — 국내 13개 지표(PH_K=비핸승%)를 핸승% 기준으로 뒤집은 값. 마찬가지로 참고용.
-    ph_f = _num(df, 'PH_F')
+    # 해정값 — 국정값과 같은 계산을 해외 승무패 배당(FW/FD/FL)으로 한 값.
+    fw_ = _num(df, 'FW').where(lambda s: s > 1)
+    fd_ = _num(df, 'FD').where(lambda s: s > 1)
+    fl_ = _num(df, 'FL').where(lambda s: s > 1)
+    fav_win_odds_f = pd.concat([fw_, fl_], axis=1).min(axis=1)
+    margin_f = 1 / fw_ + 1 / fd_ + 1 / fl_
+    win_risk_f = (1 / fav_win_odds_f) / margin_f * 100
+    res['WIN_RISK_F'] = win_risk_f
+
+    # 배AI — 핸승값(핸디배당)·국정값(국내 승무패)·해정값(해외 승무패) 중 있는 값들의
+    # 평균을 종합 핸승확률로 삼는다. 국정값·해정값은 핸승값과 스케일이 달라(위
+    # _win_to_handseung 주석 참고) 평균 내기 전에 먼저 핸승률 스케일로 변환한다.
+    # 화면에는 100에서 뺀 "플핸 확률"로 표시한다(플핸이 나올 확률이 높을수록 좋다는 뜻).
+    win_risk_adj = _win_to_handseung(win_risk)
+    win_risk_f_adj = _win_to_handseung(win_risk_f)
+    res['AI_PICK'] = pd.concat([risk, win_risk_adj, win_risk_f_adj], axis=1).mean(axis=1, skipna=True)
+
+    # K값 — 국내 13개 지표(PH_K=비핸승%)를 핸승% 기준으로 뒤집은 값. 참고용(배당이 더 정확).
+    # F값 — 해외 13개 지표(PH_F=비핸승%)를 핸승% 기준으로 뒤집은 값. 마찬가지로 참고용.
     ph_k = _num(df, 'PH_K')
-    f_value = 100 - ph_f
+    ph_f = _num(df, 'PH_F')
     k_value = 100 - ph_k
-    res['F_VALUE'] = f_value
+    f_value = 100 - ph_f
     res['K_VALUE'] = k_value
+    res['F_VALUE'] = f_value
 
-    # AI픽 — RISK(배당)·F값·K값 중 있는 값들의 평균을 종합 핸승확률로 삼는다.
-    # 배당이 있으면 RISK가 가장 정확하다고 실측됐지만, 여기서는 세 신호를 동등하게
-    # 평균 낸다(가중치 조정은 추후 백테스트로 검증한 뒤에 반영).
-    res['AI_PICK'] = pd.concat([risk, f_value, k_value], axis=1).mean(axis=1, skipna=True)
+    # KFAI — K값·F값(26개 지표 기반)만으로 낸 종합 핸승확률. 배AI(배당 기반)와는
+    # 완전히 다른 신호원이라 따로 구분해 둔다. 화면 표시는 배AI와 동일하게 플핸%.
+    res['KF_AI'] = pd.concat([k_value, f_value], axis=1).mean(axis=1, skipna=True)
 
     out = df.copy()
     for c in EV_COLS + RISK_COLS:

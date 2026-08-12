@@ -78,8 +78,8 @@ function OddsTable({ row }) {
   )
 }
 
-// 핸값/K값/F값/AI픽 경계(15/25/35/45%) — web/.../columnGroups.js cellStyle과 동일.
-// 정값만 분포가 달라 따로 경계(40/55/70%)를 쓴다 — 그쪽 주석 참고.
+// 핸승값/배AI 경계(15/25/35/45%) — web/.../columnGroups.js cellStyle과 동일.
+// 국정값/해정값만 분포가 달라 따로 경계(40/55/70%)를 쓴다 — 그쪽 주석 참고.
 function riskCellStyle(kind, n) {
   if (n === null || Number.isNaN(n)) return { color: '#9E9E9E' }
   if (kind === 'win') {
@@ -98,11 +98,13 @@ function riskCellStyle(kind, n) {
 function RiskCard({ row }) {
   const toN = (v) => (v === null || v === undefined || v === '' ? null : Number(v))
   const items = [
-    ['핸값', toN(row.RISK), 'std'],
-    ['정값', toN(row.WIN_RISK), 'win'],
+    ['핸승값', toN(row.RISK), 'std'],
+    ['국정값', toN(row.WIN_RISK), 'win'],
+    ['해정값', toN(row.WIN_RISK_F), 'win'],
+    ['배당·AI', toN(row.AI_PICK), 'std'],
     ['K값', toN(row.K_VALUE), 'std'],
     ['F값', toN(row.F_VALUE), 'std'],
-    ['AI픽', toN(row.AI_PICK), 'std'],
+    ['KF·AI', toN(row.KF_AI), 'std'],
   ]
   return (
     <table className="detail-table">
@@ -117,7 +119,7 @@ function RiskCard({ row }) {
         <tr>
           {items.map(([label, n, kind]) => (
             <td key={label} style={riskCellStyle(kind, n)}>
-              {n === null ? '-' : label === 'AI픽' ? `플핸${(100 - n).toFixed(0)}%` : `${n.toFixed(0)}%`}
+              {n === null ? '-' : label === '배당·AI' || label === 'KF·AI' ? `플${(100 - n).toFixed(0)}%` : `${n.toFixed(0)}%`}
             </td>
           ))}
         </tr>

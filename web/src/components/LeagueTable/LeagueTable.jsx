@@ -29,10 +29,11 @@ function dividerClass(g, isLastGroup) {
   return g.label1 === '국내배당' ? ' group-divider divider-strong' : ' group-divider'
 }
 
-// "핸승 위험도" 그룹 안에서 배당 직접계산(핸값/정값)과 지표 기반(K값/F값/AI픽) 값을
-// 가르는 구분선 — 그룹과 그룹 사이에 쓰는 것과 똑같은 굵기(group-divider)를 그대로 쓴다.
+// "핸승 위험도" 그룹 안에서 배당 기반 값(핸승값/국정값/해정값/배당·AI)과 26개
+// 지표 기반 값(K값/F값/KF·AI)을 가르는 구분선 — 그룹과 그룹 사이에 쓰는 것과
+// 똑같은 굵기(group-divider)를 그대로 쓴다.
 function riskSubDividerClass(g, c) {
-  return g.kind === 'risk' && c.key === 'WIN_RISK' ? ' group-divider' : ''
+  return g.kind === 'risk' && c.key === 'AI_PICK' ? ' group-divider' : ''
 }
 
 function matchKey(row) {
@@ -68,6 +69,7 @@ export default function LeagueTable({
   const pickOverridesRef = useRef({})
   const [pickOverrides, setPickOverrides] = useState({})
   const [collapsed, setCollapsed] = useState(() => new Set())
+  const [showRiskLegend, setShowRiskLegend] = useState(false)
   const { fontSize } = useFontSize() // 'small' | 'large' — 상단바 토글로 전역 제어, 표 데이터 셀에만 적용
   const scrollRef = useRef(null)
 
@@ -272,6 +274,15 @@ export default function LeagueTable({
                         <div className="group-title">{g.label1}</div>
                         <div className="group-subtitle">{g.label2}</div>
                       </div>
+                      {g.kind === 'risk' && (
+                        <button
+                          className="risk-legend-btn"
+                          onClick={() => setShowRiskLegend(true)}
+                          title="색상별 구간 참고표"
+                        >
+                          참고
+                        </button>
+                      )}
                       <button
                         className="fold-btn fold-btn-expanded"
                         onClick={() => toggleGroup(key)}
@@ -509,6 +520,93 @@ export default function LeagueTable({
             onSaved={(patch) => savePick(pickRow, patch)}
           />
         )}
+
+        {showRiskLegend && <RiskLegendModal onClose={() => setShowRiskLegend(false)} />}
+      </div>
+    </div>
+  )
+}
+
+// 핸승값·배당·AI·K값·F값·KF·AI는 같은 5구간 색상(15/25/35/45%), 국정값·해정값은
+// 정배 승리 확률이라 스케일이 달라 따로 4구간 색상(40/55/70%)을 쓴다 —
+// columnGroups.js cellStyle의 두 색상 규칙과 그대로 맞춘 참고표.
+const RISK_LEGEND_5 = [
+  { label: '안전', range: '0~15%', bg: '#1B5E20', color: '#fff' },
+  { label: '양호', range: '15~25%', bg: '#66BB6A', color: '#0D1B2A' },
+  { label: '보통', range: '25~35%', bg: '#FBC02D', color: '#0D1B2A' },
+  { label: '주의', range: '35~45%', bg: '#EF6C00', color: '#fff' },
+  { label: '위험', range: '45%~', bg: '#C62828', color: '#fff' },
+]
+const RISK_LEGEND_WIN = [
+  { label: '양호', range: '~40%', bg: '#66BB6A', color: '#0D1B2A' },
+  { label: '보통', range: '40~55%', bg: '#FBC02D', color: '#0D1B2A' },
+  { label: '주의', range: '55~70%', bg: '#EF6C00', color: '#fff' },
+  { label: '위험', range: '70%~', bg: '#C62828', color: '#fff' },
+]
+// RISK_LEGEND_5을 100-n으로 뒤집은 표시값 기준(화면에 실제 보이는 플핸% 숫자) — 순서도
+// "안전→위험"이 "높은 %→낮은 %"가 되도록 그대로 뒤집는다.
+const RISK_LEGEND_5_FLIPPED = [
+  { label: '안전', range: '85~100%', bg: '#1B5E20', color: '#fff' },
+  { label: '양호', range: '75~85%', bg: '#66BB6A', color: '#0D1B2A' },
+  { label: '보통', range: '65~75%', bg: '#FBC02D', color: '#0D1B2A' },
+  { label: '주의', range: '55~65%', bg: '#EF6C00', color: '#fff' },
+  { label: '위험', range: '~55%', bg: '#C62828', color: '#fff' },
+]
+
+function RiskLegendModal({ onClose }) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card risk-legend-card" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">
+          ✕
+        </button>
+        <h2 className="modal-title">📖 핸승 위험도 색상 참고표</h2>
+        <p className="modal-meta">실측(6대리그) 기준 색상별 구간입니다.</p>
+
+        <p className="risk-legend-group-title">핸승값 · K값 · F값 (핸승이 나올 확률, 적을수록 좋음)</p>
+        <table className="detail-table risk-legend-table">
+          <tbody>
+            <tr>
+              {RISK_LEGEND_5.map((b) => (
+                <td key={b.label} style={{ background: b.bg, color: b.color, fontWeight: 700 }}>
+                  {b.label}
+                  <br />
+                  {b.range}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+
+        <p className="risk-legend-group-title">국정값 · 해정값 (정배가 나올 확률, 적을수록 좋음)</p>
+        <table className="detail-table risk-legend-table">
+          <tbody>
+            <tr>
+              {RISK_LEGEND_WIN.map((b) => (
+                <td key={b.label} style={{ background: b.bg, color: b.color, fontWeight: 700 }}>
+                  {b.label}
+                  <br />
+                  {b.range}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+
+        <p className="risk-legend-group-title">배당·AI · KF·AI (플핸이 나올 확률, 높을수록 좋음)</p>
+        <table className="detail-table risk-legend-table">
+          <tbody>
+            <tr>
+              {RISK_LEGEND_5_FLIPPED.map((b) => (
+                <td key={b.label} style={{ background: b.bg, color: b.color, fontWeight: 700 }}>
+                  {b.label}
+                  <br />
+                  {b.range}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   )
