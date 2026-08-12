@@ -23,7 +23,7 @@ function gridTemplate(roundCount) {
 
 export default function SeasonStats({ code, scope, season, round }) {
   const [data, setData] = useState(null)
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const [ddongOpen, setDdongOpen] = useState(true)
   const [resultOpen, setResultOpen] = useState(true)
   const [historyOpen, setHistoryOpen] = useState(true)
@@ -70,6 +70,11 @@ export default function SeasonStats({ code, scope, season, round }) {
   const { rounds, ddong, result, history } = data
   const colCls = (r) => (r === data.round ? ' ss-cur' : '')
   const template = gridTemplate(rounds.length)
+  // 똥사 = 똥배(정배가 극단적으로 강한 경기) 중 무·역이 나온(=정배가 완전히 무너진) 경기 수
+  const ddongSago = ddong.rows
+    .filter((r) => r.rt === '무' || r.rt === '역')
+    .reduce((sum, r) => sum + r.count, 0)
+  const ddongSagoPct = ddong.total > 0 ? ((ddongSago / ddong.total) * 100).toFixed(1) : '0.0'
 
   return (
     <div className="season-stats">
@@ -78,7 +83,11 @@ export default function SeasonStats({ code, scope, season, round }) {
           {open ? '◂' : '▸'} 시즌 지표
         </button>
         <span className="ss-bar-meta">
-          {data.season} 시즌 · {data.round} 기준 · 똥배 {ddong.total}건 / 전체 {result.total}경기
+          {data.season} 시즌 · {data.round} 기준 · 전체 {result.total}경기 ·{' '}
+          <span className="ss-bar-rt">
+            {result.rows.map((row) => `${row.rt} ${row.count} (${row.pct}%)`).join(' / ')}
+          </span>{' '}
+          · 똥배 {ddong.total} / <span className="ss-bar-sago">똥사 {ddongSago} ({ddongSagoPct}%)</span>
         </span>
         {focus.size > 0 && (
           <span className="ss-bar-focus">

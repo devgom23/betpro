@@ -224,10 +224,10 @@ export default function LeaguePage({ code, scope }) {
     <div>
       <div className="league-dashboard">
         <span>
-          📋 등록된 시즌 {filters.seasons.length} · 경기수 {filters.total_rows.toLocaleString()}
+          📋 등록된 시즌 {filters.seasons.length} · 경기수 {filters.total_rows.toLocaleString()} · 국배 등록{' '}
+          {(filters.kw_count ?? 0).toLocaleString()} · 해배 등록 {(filters.fw_count ?? 0).toLocaleString()}
         </span>
         <RtSummaryBar summary={filters.rt_summary} inline />
-        <PickSummaryBar summary={filters.hit_summary} />
       </div>
 
       <FilterForm

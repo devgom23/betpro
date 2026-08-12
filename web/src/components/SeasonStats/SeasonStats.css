@@ -36,12 +36,22 @@
 }
 
 .ss-bar-meta {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
+.ss-bar-rt {
+  color: #fff;
+  font-weight: 700;
+}
+
+.ss-bar-sago {
+  color: #ef5350;
+  font-weight: 700;
+}
+
 .ss-bar-focus {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
