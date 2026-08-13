@@ -18,11 +18,15 @@
 }
 
 .bh-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border-strong);
   background: transparent;
   color: var(--text-muted);
-  border-radius: 6px;
-  padding: 3px 10px;
+  border-radius: 5px;
+  height: 26px;
+  padding: 0 12px;
   font-size: 12px;
   cursor: pointer;
 }

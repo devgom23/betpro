@@ -111,8 +111,6 @@ export default function LoginPage() {
             </label>
           </div>
         </form>
-
-        <div className="login-placeholder">스샷 및 각종 내용 입력</div>
       </div>
     </div>
   )

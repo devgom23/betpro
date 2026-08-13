@@ -1,7 +1,7 @@
 .login-page {
   width: 100%;
   min-height: 100vh;
-  background: #ffffff;
+  background: var(--bg-page);
   display: flex;
   justify-content: center;
   padding: 64px 24px;
@@ -27,7 +27,7 @@
   gap: 10px;
   font-size: 26px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 .brand-logo {
@@ -39,7 +39,7 @@
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 1.5px;
-  color: #94a3b8;
+  color: var(--text-muted);
   text-transform: uppercase;
 }
 
@@ -47,7 +47,7 @@
   margin: 12px 0 0;
   font-size: 17px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 .login-form {
@@ -69,7 +69,7 @@
   position: absolute;
   left: 14px;
   display: flex;
-  color: #94a3b8;
+  color: var(--text-muted);
   pointer-events: none;
 }
 
@@ -77,35 +77,39 @@
   width: 100%;
   padding: 12px 14px 12px 42px;
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #0f172a;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
 }
 
 .input-group input::placeholder {
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .input-group input:focus {
-  border-color: #3b82f6;
-  background: #ffffff;
+  border-color: var(--accent);
+  background: var(--bg-input);
 }
 
 .login-error {
   margin: 0;
   font-size: 13px;
-  color: #dc2626;
+  color: var(--danger-text);
   text-align: center;
 }
 
 .login-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin-top: 4px;
-  padding: 13px;
-  border-radius: 10px;
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 8px;
   border: none;
-  background: #0f172a;
+  background: var(--accent);
   color: #ffffff;
   font-size: 15px;
   font-weight: 700;
@@ -113,11 +117,11 @@
 }
 
 .login-button:hover {
-  background: #1e293b;
+  background: var(--accent-hover);
 }
 
 .login-button:disabled {
-  background: #94a3b8;
+  background: var(--text-muted);
   cursor: not-allowed;
 }
 
@@ -133,23 +137,10 @@
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--text-muted);
   cursor: pointer;
 }
 
 .checkbox input {
   cursor: pointer;
-}
-
-.login-placeholder {
-  width: 100%;
-  min-height: 340px;
-  border: 2px dashed #c4b5fd;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #a78bfa;
-  font-size: 14px;
-  font-weight: 600;
 }

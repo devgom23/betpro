@@ -15,11 +15,15 @@
 }
 
 .slip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border-strong);
   background: var(--bg-surface-2);
   color: var(--text-secondary);
   border-radius: 6px;
-  padding: 6px 12px;
+  height: 32px;
+  padding: 0 16px;
   cursor: pointer;
   font-size: 13px;
 }
@@ -73,11 +77,15 @@
 }
 
 .slip-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border-strong);
   background: var(--bg-surface-2);
   color: var(--text-secondary);
   border-radius: 6px;
-  padding: 6px 10px;
+  height: 32px;
+  padding: 0 16px;
   cursor: pointer;
   white-space: nowrap;
 }

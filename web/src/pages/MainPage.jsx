@@ -78,15 +78,41 @@ export default function MainPage() {
 
   return (
     <div className="main-page">
-      <header className="info-bar">
-        <div className="info-bar-left">
-          <span className="info-item">
-            🛡️ {user.role === 'admin' ? '관리자' : '고객'} {user.username}
-          </span>
-          <span className="info-item">접속시간 {formatDateTime(loginTime)}</span>
-          <span className="info-item">이용가능기간 {formatPeriod(user.start_date, user.expiry)}</span>
+      <header className="top-bar">
+        <div className="top-bar-brand">
+          <span className="app-name">⚽ BET PRO W</span>
+          <span className="app-version-chip">v1.0</span>
         </div>
-        <div className="info-bar-right">
+
+        <div className="scope-toggle">
+          <button
+            className={view === 'leagues' && !isUser ? 'active' : ''}
+            onClick={() => { setView('leagues'); setScope('master') }}
+          >
+            공식 데이터
+          </button>
+          <button
+            className={view === 'leagues' && isUser ? 'active' : ''}
+            onClick={() => { setView('leagues'); setScope('user') }}
+          >
+            내 데이터
+          </button>
+          <button className={view === 'weekly' ? 'active' : ''} onClick={() => setView('weekly')}>
+            이번주 픽
+          </button>
+          <button className={view === 'bet_history' ? 'active' : ''} onClick={() => setView('bet_history')}>
+            베팅내역
+          </button>
+        </div>
+
+        <div className="top-bar-spacer" />
+
+        <div className="top-bar-right">
+          <span className="info-item">
+            {user.role === 'admin' ? '관리자' : '고객'} {user.username}
+          </span>
+          <span className="info-item">접속 {formatDateTime(loginTime)}</span>
+          <span className="info-item">이용기간 {formatPeriod(user.start_date, user.expiry)}</span>
           <div className="font-size-toggle">
             <button
               className={fontSize === 'small' ? 'active' : ''}
@@ -103,10 +129,10 @@ export default function MainPage() {
           </div>
           <div className="theme-toggle">
             <button className={theme === 'light' ? 'active' : ''} onClick={() => setTheme('light')}>
-              ☀ Light
+              Light
             </button>
             <button className={theme === 'dark' ? 'active' : ''} onClick={() => setTheme('dark')}>
-              Dark ☾
+              Dark
             </button>
           </div>
           <button className="logout-button" onClick={logout}>
@@ -115,59 +141,34 @@ export default function MainPage() {
         </div>
       </header>
 
-      <div className="brand-bar">
-        <span className="app-name">⚽ BET PRO W</span>
-        <span className="app-version">Version 1.0 Update 2026-06-01</span>
-      </div>
-
-      <nav className="scope-bar">
-        <div className="scope-toggle">
-          <button
-            className={view === 'leagues' && !isUser ? 'active' : ''}
-            onClick={() => { setView('leagues'); setScope('master') }}
-          >
-            📊 공식 데이터
-          </button>
-          <button
-            className={view === 'leagues' && isUser ? 'active' : ''}
-            onClick={() => { setView('leagues'); setScope('user') }}
-          >
-            👤 내 데이터
-          </button>
-          <button className={view === 'weekly' ? 'active' : ''} onClick={() => setView('weekly')}>
-            📋 이번주 픽
-          </button>
-          <button className={view === 'bet_history' ? 'active' : ''} onClick={() => setView('bet_history')}>
-            🎫 베팅내역
-          </button>
-        </div>
-      </nav>
-
       {view === 'leagues' && (
       <nav className="tab-bar">
-        {leagues.map((lg) => (
-          <button
-            key={lg.code}
-            className={activeTab === lg.code ? 'active' : ''}
-            onClick={() => setActiveTab(lg.code)}
-          >
-            {lg.label}
-          </button>
-        ))}
-        {isUser ? (
-          <button className="tab-manage" onClick={() => setShowLeagueModal(true)}>
-            ＋ 리그 생성
-          </button>
-        ) : (
-          <>
+        <div className="tab-bar-leagues">
+          {leagues.map((lg) => (
+            <button
+              key={lg.code}
+              className={activeTab === lg.code ? 'active' : ''}
+              onClick={() => setActiveTab(lg.code)}
+            >
+              {lg.label}
+            </button>
+          ))}
+          {isUser && (
+            <button className="tab-manage" onClick={() => setShowLeagueModal(true)}>
+              ＋ 리그 생성
+            </button>
+          )}
+        </div>
+        {!isUser && (
+          <div className="tab-bar-admin">
             <button
               className={activeTab === 'total' ? 'active' : ''}
               onClick={() => setActiveTab('total')}
             >
-              📈 통합DB
+              통합DB
             </button>
             <button className={activeTab === 'h2h' ? 'active' : ''} onClick={() => setActiveTab('h2h')}>
-              🆚 상대전적
+              상대전적
             </button>
             {user.role === 'admin' && (
               <>
@@ -175,17 +176,17 @@ export default function MainPage() {
                   className={activeTab === 'admin_master' ? 'active' : ''}
                   onClick={() => setActiveTab('admin_master')}
                 >
-                  🛠 마스터관리
+                  마스터관리
                 </button>
                 <button
                   className={activeTab === 'admin_accounts' ? 'active' : ''}
                   onClick={() => setActiveTab('admin_accounts')}
                 >
-                  👑 계정관리
+                  계정관리
                 </button>
               </>
             )}
-          </>
+          </div>
         )}
       </nav>
       )}

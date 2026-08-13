@@ -24,53 +24,102 @@ body {
    - 기본값(:root)은 다크. data-theme="light" 를 <html> 에 설정하면 라이트로 전환.
    ════════════════════════════════════════════════════════════ */
 :root {
-  --bg-page: #0f172a;
-  --bg-surface: #1e293b;
-  --bg-surface-2: #16202f;
-  --bg-input: #0f172a;
+  --bg-page: #0d1421;
+  --bg-surface: #18212f;
+  --bg-surface-2: #131b28;
+  --bg-input: #0d1421;
 
-  --border: #334155;
-  --border-strong: #475569;
+  --border: #2e3a4d;
+  --border-strong: #47566d;
 
-  --text-primary: #f8fafc;
-  --text-secondary: #e2e8f0;
-  --text-muted: #94a3b8;
-  --text-muted-2: #64748b;
+  --text-primary: #f4f7fb;
+  --text-secondary: #d3dbe6;
+  --text-muted: #93a1b5;
+  --text-muted-2: #6b7a91;
 
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
+  --accent: #2563eb;
+  --accent-hover: #3b82f6;
 
   --danger: #dc2626;
   --danger-hover: #b91c1c;
-  --danger-text: #f87171;
-  --warning-text: #fca5a5;
-  --notice-text: #93c5fd;
+  --danger-text: #ff9d9d;
+  --warning-text: #ffc48a;
+  --notice-text: #a9caff;
 
-  --highlight-text: #fde68a;
+  --highlight-text: #ffd98a;
+
+  /* 표·버튼 등에 하드코딩돼 있던 반투명 오버레이를 변수로 통일 */
+  --row-hover: rgba(148, 163, 184, 0.22);
+  --group-tint-kr: #1b2b46;
+  --group-tint-fo: #272442;
+  --cell-highlight: rgba(245, 158, 11, 0.16);
+  --cell-highlight-strong: rgba(245, 158, 11, 0.3);
+  --fold-btn-bg: rgba(59, 130, 246, 0.15);
+  --fold-btn-bg-hover: rgba(59, 130, 246, 0.35);
+  --ddong-focus: #f59e0b;
+  --ddong-focus-bg: #3a2f14;
+
+  /* RT(핸승/핸무/무/역)·PICK(적중/보험/미적/관망) 뱃지용 연한 칩 색상 —
+     스샷 실측(옅은 배경 틴트 + 진한 글씨) 기준. 다크/라이트 각각 값이 다르다. */
+  --chip-blue-bg: #1c3768;
+  --chip-blue-fg: #a9caff;
+  --chip-green-bg: #17402a;
+  --chip-green-fg: #93e2b0;
+  --chip-gray-bg: #2c3648;
+  --chip-gray-fg: #cbd5e1;
+  --chip-red-bg: #4a1f22;
+  --chip-red-fg: #ffabab;
+  --chip-yellow-bg: #4a3a12;
+  --chip-yellow-fg: #fde68a;
+  --chip-teal-bg: #123f3a;
+  --chip-teal-fg: #7fe0d2;
 }
 
 :root[data-theme='light'] {
-  --bg-page: #f1f5f9;
+  --bg-page: #eaeef3;
   --bg-surface: #ffffff;
-  --bg-surface-2: #f8fafc;
+  --bg-surface-2: #eef2f7;
   --bg-input: #ffffff;
 
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
+  --border: #cbd5e1;
+  --border-strong: #94a3b8;
 
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-  --text-muted-2: #94a3b8;
+  --text-primary: #0b1220;
+  --text-secondary: #2c3849;
+  --text-muted: #55617a;
+  --text-muted-2: #6b7688;
 
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
+  --accent: #1d4ed8;
+  --accent-hover: #1740b8;
 
   --danger: #dc2626;
   --danger-hover: #b91c1c;
-  --danger-text: #dc2626;
-  --warning-text: #b91c1c;
-  --notice-text: #1d4ed8;
+  --danger-text: #b91c1c;
+  --warning-text: #92400e;
+  --notice-text: #1740b8;
 
-  --highlight-text: #92400e;
+  --highlight-text: #7c4a03;
+
+  --row-hover: #eef2f7;
+  --group-tint-kr: #eaf0fb;
+  --group-tint-fo: #f2eefb;
+  --cell-highlight: #fef8e7;
+  --cell-highlight-strong: #fde68a;
+  --fold-btn-bg: #f1f4f9;
+  --fold-btn-bg-hover: #e2e9f5;
+  --ddong-focus: #b45309;
+  --ddong-focus-bg: #fef3c7;
+
+  --chip-blue-bg: #dbeafe;
+  --chip-blue-fg: #1e40af;
+  --chip-green-bg: #dcfce7;
+  --chip-green-fg: #14532d;
+  --chip-gray-bg: #e5e9f0;
+  --chip-gray-fg: #3c4759;
+  --chip-red-bg: #fee2e2;
+  --chip-red-fg: #991b1b;
+  --chip-yellow-bg: #fef3c7;
+  --chip-yellow-fg: #78350f;
+  --chip-teal-bg: #ccfbf1;
+  --chip-teal-fg: #115e59;
 }
