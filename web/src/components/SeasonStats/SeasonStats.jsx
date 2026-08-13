@@ -7,7 +7,7 @@ const RT_ROWS = ['핸승', '핸무', '무', '역']
 
 // 표 안에서 글자로 쓰는 결과 색 — RT_COLOR(배지 배경용)를 어두운 배경 위에서도
 // 읽히도록 같은 계열로 밝힌 값이다.
-const RT_TEXT = { 핸승: '#42A5F5', 핸무: '#90CAF9', 무: '#B0BEC5', 역: '#EF5350' }
+const RT_TEXT = { 핸승: '#42A5F5', 핸무: '#93e2b0', 무: '#B0BEC5', 역: '#EF5350' }
 const WINNER_BG = { 정: '#1565C0', 플: '#7B1FA2', 중: '#616161' }
 
 // 표①·표②의 라운드 열 폭. <table table-layout:fixed>는 셀 내용에 따라 브라우저마다
@@ -83,11 +83,13 @@ export default function SeasonStats({ code, scope, season, round }) {
           {open ? '◂' : '▸'} 시즌 지표
         </button>
         <span className="ss-bar-meta">
-          {data.season} 시즌 · {data.round} 기준 · 전체 {result.total}경기 ·{' '}
+          <strong>{data.season}</strong> 시즌 · <strong>{data.round}</strong> 기준 · 전체{' '}
+          <strong>{result.total}</strong>경기 ·{' '}
           <span className="ss-bar-rt">
             {result.rows.map((row) => `${row.rt} ${row.count} (${row.pct}%)`).join(' / ')}
           </span>{' '}
-          · 똥배 {ddong.total} / <span className="ss-bar-sago">똥사 {ddongSago} ({ddongSagoPct}%)</span>
+          · 똥배 <strong>{ddong.total}</strong> /{' '}
+          <span className="ss-bar-sago">똥사 {ddongSago} ({ddongSagoPct}%)</span>
         </span>
         {focus.size > 0 && (
           <span className="ss-bar-focus">

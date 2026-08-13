@@ -1,4 +1,4 @@
-import { RT_COLOR } from '../RtBadge/RtBadge'
+import { RT_CHIP } from '../RtBadge/RtBadge'
 
 // 여기서는 '취소'를 빼고 이 4개만 보여준다 — RT_COLOR 에 '취소'가 더 있어도
 // 아래는 RT_ORDER 로만 순회하므로 조회되지 않는다.
@@ -11,18 +11,14 @@ export default function RtSummaryBar({ summary, inline = false }) {
   if (inline) {
     return (
       <span className="rt-summary-inline">
-        {RT_ORDER.map((name) => {
-          const bg = RT_COLOR[name]
-          const fg = name === '핸무' ? '#0D1B2A' : '#fff'
-          return (
-            <span className="rt-badge-item" key={name} style={{ background: bg, color: fg }}>
-              {name} {summary[name].toLocaleString()}
-              <span className="rt-badge-pct">
-                ({((summary[name] / summary.총) * 100).toFixed(1)}%)
-              </span>
+        {RT_ORDER.map((name) => (
+          <span className="rt-badge-item" key={name} style={RT_CHIP[name]}>
+            {name} {summary[name].toLocaleString()}
+            <span className="rt-badge-pct">
+              ({((summary[name] / summary.총) * 100).toFixed(1)}%)
             </span>
-          )
-        })}
+          </span>
+        ))}
       </span>
     )
   }
@@ -41,7 +37,12 @@ export default function RtSummaryBar({ summary, inline = false }) {
 }
 
 const PICK_ORDER = ['적중', '보험', '미적', '관망']
-const PICK_COLOR = { 적중: '#FDD835', 보험: '#00897B', 미적: '#C62828', 관망: '#757575' }
+const PICK_CHIP = {
+  적중: { background: 'var(--chip-yellow-bg)', color: 'var(--chip-yellow-fg)' },
+  보험: { background: 'var(--chip-teal-bg)', color: 'var(--chip-teal-fg)' },
+  미적: { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' },
+  관망: { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' },
+}
 
 // PICK 결과(적중/보험/미적/관망) 분포 배지. 플핸예측 컬럼의 배경색과 동일한 색상을 쓴다.
 // 보험 = 핸승 여부(큰 분류)는 맞혔지만 괄호 안 세부결과(핸무/무/역)는 다르게 나온 경우.
@@ -49,18 +50,14 @@ export function PickSummaryBar({ summary }) {
   if (!summary) return null
   return (
     <span className="rt-summary-inline">
-      {PICK_ORDER.map((name) => {
-        const bg = PICK_COLOR[name]
-        const fg = name === '적중' ? '#0D1B2A' : '#fff'
-        return (
-          <span className="rt-badge-item" key={name} style={{ background: bg, color: fg }}>
-            {name} {summary[name].toLocaleString()}
-            <span className="rt-badge-pct">
-              ({((summary[name] / summary.총) * 100).toFixed(1)}%)
-            </span>
+      {PICK_ORDER.map((name) => (
+        <span className="rt-badge-item" key={name} style={PICK_CHIP[name]}>
+          {name} {summary[name].toLocaleString()}
+          <span className="rt-badge-pct">
+            ({((summary[name] / summary.총) * 100).toFixed(1)}%)
           </span>
-        )
-      })}
+        </span>
+      ))}
     </span>
   )
 }

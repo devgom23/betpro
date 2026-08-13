@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, formStyle, bettingDayStyle,
-  computeAutoVerdict, pickVerdictStyle,
+  computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches,
 } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
@@ -17,10 +17,6 @@ const OVERSCAN = 10
 const DEFAULT_ROW_H = { small: 28, large: 31 }
 // 폼(PPG) 칸 — 칸 전체가 아니라 값만 뱃지로 강조한다.
 const FORM_COLS = new Set(['HTF', 'HF', 'AF', 'ATF'])
-
-function groupKey(g) {
-  return g.label1
-}
 
 // 그룹 경계 구분선 클래스 — 국내배당/해외배당 사이는 두 "배당" 블록이 헷갈리기 쉬워
 // 다른 경계보다 더 두껍게 강조한다(divider-strong, LeagueTable.css 참고).
@@ -49,6 +45,13 @@ export function selectKey(row) {
 export default function LeagueTable({
   code, columns, rows, scope, highlightCols = [],
   selectable = false, selectedKeys, onToggleRow, hideIndicators = false,
+  // 접기 상태·참고 팝업을 표 바깥(예: 조회 조건 줄)에서 같이 제어하고 싶을 때 쓴다.
+  // 안 주면 이 컴포넌트가 내부 상태로 그대로 관리한다(기존 동작과 동일).
+  collapsed: collapsedProp, onCollapsedChange,
+  showRiskLegend: showRiskLegendProp, onShowRiskLegendChange,
+  // true면 이 컴포넌트 자체의 해외지표/국내지표 접기·참고 버튼 줄을 그리지 않는다
+  // (호출한 쪽이 같은 상태를 받아 자기 화면에 대신 그릴 때 쓴다).
+  hideToolbar = false,
 }) {
   // 이번주 픽처럼 여러 리그·스코프를 한 표에 모아 보여줄 때는 행마다 실제 소속
   // 리그(L)·스코프(scope)가 다를 수 있다 — LeagueTable에 준 code/scope prop은
@@ -68,8 +71,12 @@ export default function LeagueTable({
   // ref는 즉시(동기) 최신값을 읽고 쓸 수 있어 이 경쟁 상태를 막아준다.
   const pickOverridesRef = useRef({})
   const [pickOverrides, setPickOverrides] = useState({})
-  const [collapsed, setCollapsed] = useState(() => new Set())
-  const [showRiskLegend, setShowRiskLegend] = useState(false)
+  const [collapsedState, setCollapsedState] = useState(() => new Set())
+  const collapsed = collapsedProp ?? collapsedState
+  const setCollapsed = onCollapsedChange ?? setCollapsedState
+  const [showRiskLegendState, setShowRiskLegendState] = useState(false)
+  const showRiskLegend = showRiskLegendProp ?? showRiskLegendState
+  const setShowRiskLegend = onShowRiskLegendChange ?? setShowRiskLegendState
   const { fontSize } = useFontSize() // 'small' | 'large' — 상단바 토글로 전역 제어, 표 데이터 셀에만 적용
   const scrollRef = useRef(null)
 
@@ -188,28 +195,7 @@ export default function LeagueTable({
     })
   }
 
-  // 26개 지표 그룹을 해외(F-/TF-)/국내(K-/TK-) 묶음으로 한 번에 접고 펼 수 있게 한다.
-  function indicatorBatch(g) {
-    if (g.kind !== 'indicator') return null
-    const code = g.label2 || ''
-    if (code.startsWith('TF-') || code.startsWith('F-')) return 1
-    if (code.startsWith('TK-') || code.startsWith('K-')) return 2
-    return null
-  }
-
-  const batch1Groups = groups.filter((g) => indicatorBatch(g) === 1)
-  const batch2Groups = groups.filter((g) => indicatorBatch(g) === 2)
-
-  // 그룹 제목("1. 해) 승 분석")에서 번호만 뽑아 실제 보이는 범위를 표시한다 —
-  // 내 데이터처럼 통합지표(TF-*/TK-*)가 빠지면 번호가 1~9/14~22로 줄어들기 때문에
-  // "1~13" 같은 고정 문구를 쓰면 실제와 어긋난다.
-  function batchRangeLabel(batchGroups) {
-    const nums = batchGroups.map((g) => parseInt(g.label1, 10)).filter((n) => !Number.isNaN(n))
-    if (nums.length === 0) return ''
-    const min = Math.min(...nums)
-    const max = Math.max(...nums)
-    return min === max ? `${min}` : `${min}~${max}`
-  }
+  const { batch1Groups, batch2Groups } = splitIndicatorBatches(groups)
 
   function toggleBatch(batchGroups) {
     const keys = batchGroups.map(groupKey)
@@ -227,20 +213,21 @@ export default function LeagueTable({
 
   return (
     <div>
-      {(batch1Groups.length > 0 || batch2Groups.length > 0) && (
+      {!hideToolbar && (batch1Groups.length > 0 || batch2Groups.length > 0) && (
         <div className="batch-fold-bar">
           {batch1Groups.length > 0 && (
             <button className="batch-fold-btn" onClick={() => toggleBatch(batch1Groups)}>
-              {batch1Groups.every((g) => collapsed.has(groupKey(g))) ? '▸' : '◂'} 해외 지표 (
-              {batchRangeLabel(batch1Groups)})
+              해외지표 {batch1Groups.every((g) => collapsed.has(groupKey(g))) ? '펼치기' : '접기'}
             </button>
           )}
           {batch2Groups.length > 0 && (
             <button className="batch-fold-btn" onClick={() => toggleBatch(batch2Groups)}>
-              {batch2Groups.every((g) => collapsed.has(groupKey(g))) ? '▸' : '◂'} 국내 지표 (
-              {batchRangeLabel(batch2Groups)})
+              국내지표 {batch2Groups.every((g) => collapsed.has(groupKey(g))) ? '펼치기' : '접기'}
             </button>
           )}
+          <button className="batch-fold-btn" onClick={() => setShowRiskLegend(true)} title="색상별 구간 참고표">
+            핸승 위험도 참고
+          </button>
         </div>
       )}
       <div className="league-table-scroll" ref={scrollRef} onScroll={handleScroll}>
@@ -274,15 +261,6 @@ export default function LeagueTable({
                         <div className="group-title">{g.label1}</div>
                         <div className="group-subtitle">{g.label2}</div>
                       </div>
-                      {g.kind === 'risk' && (
-                        <button
-                          className="risk-legend-btn"
-                          onClick={() => setShowRiskLegend(true)}
-                          title="색상별 구간 참고표"
-                        >
-                          참고
-                        </button>
-                      )}
                       <button
                         className="fold-btn fold-btn-expanded"
                         onClick={() => toggleGroup(key)}
@@ -403,13 +381,16 @@ export default function LeagueTable({
                         }
                         if (c.key === 'PICK_VERDICT') {
                           const verdict = computeAutoVerdict(pickState.pick, row.RT)
+                          const badgeStyle = pickVerdictStyle(verdict)
                           return (
-                            <td
-                              key={`${gi}-${ci}`}
-                              className={className}
-                              style={pickVerdictStyle(verdict) || undefined}
-                            >
-                              {verdict || <span className="mypick-blank">－</span>}
+                            <td key={`${gi}-${ci}`} className={className}>
+                              {verdict ? (
+                                <span className="cell-badge" style={badgeStyle}>
+                                  {verdict}
+                                </span>
+                              ) : (
+                                <span className="mypick-blank">－</span>
+                              )}
                             </td>
                           )
                         }
@@ -459,6 +440,21 @@ export default function LeagueTable({
                           <td key={`${gi}-${ci}`} className={classNames || undefined}>
                             {badgeStyle ? (
                               <span className="form-badge" style={badgeStyle}>
+                                {text}
+                              </span>
+                            ) : (
+                              text
+                            )}
+                          </td>
+                        )
+                      }
+                      // RT(핸승/핸무/무/역) 칸도 칸 전체가 아니라 값만 알약 모양 뱃지로 보여준다.
+                      if (g.label1 === '경기정보' && c.key === 'RT') {
+                        const badgeStyle = cellStyle(g, c, value, row)
+                        return (
+                          <td key={`${gi}-${ci}`} className={classNames || undefined}>
+                            {badgeStyle ? (
+                              <span className="cell-badge" style={badgeStyle}>
                                 {text}
                               </span>
                             ) : (
@@ -521,7 +517,7 @@ export default function LeagueTable({
           />
         )}
 
-        {showRiskLegend && <RiskLegendModal onClose={() => setShowRiskLegend(false)} />}
+        {!hideToolbar && showRiskLegend && <RiskLegendModal onClose={() => setShowRiskLegend(false)} />}
       </div>
     </div>
   )
@@ -553,7 +549,7 @@ const RISK_LEGEND_5_FLIPPED = [
   { label: '위험', range: '~55%', bg: '#C62828', color: '#fff' },
 ]
 
-function RiskLegendModal({ onClose }) {
+export function RiskLegendModal({ onClose }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card risk-legend-card" onClick={(e) => e.stopPropagation()}>

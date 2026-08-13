@@ -19,18 +19,22 @@
   font-weight: 700;
   font-size: 12px;
   color: var(--accent);
-  background: rgba(59, 130, 246, 0.1);
-  border-radius: 6px;
-  padding: 4px 10px;
+  background: var(--fold-btn-bg);
+  border-radius: 5px;
+  padding: 0 12px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .ss-fold:hover {
-  background: rgba(59, 130, 246, 0.25);
+  background: var(--fold-btn-bg-hover);
 }
 
 /* ③ 라운드 이력처럼 제목 줄 안에 끼워 넣는 작은 접기 버튼 */
 .ss-fold-sub {
-  padding: 2px 6px;
+  height: 20px;
+  padding: 0 8px;
   margin-right: 2px;
   font-size: 11px;
 }
@@ -40,19 +44,24 @@
   color: var(--text-muted);
 }
 
+.ss-bar-meta strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
 .ss-bar-rt {
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 700;
 }
 
 .ss-bar-sago {
-  color: #ef5350;
+  color: var(--danger-text);
   font-weight: 700;
 }
 
 .ss-bar-focus {
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 /* 이번 라운드 똥배 배당 — 표 안의 강조 테두리와 같은 색으로 맞춰 둘을 눈으로 잇는다 */
@@ -60,9 +69,9 @@
   display: inline-block;
   margin-left: 4px;
   padding: 1px 5px;
-  border: 1px solid #f59e0b;
+  border: 1px solid var(--ddong-focus);
   border-radius: 4px;
-  color: #f59e0b;
+  color: var(--ddong-focus);
 }
 
 .ss-body {
@@ -166,12 +175,12 @@
 
 /* 지금 조회 중인 라운드 열 */
 .ss-cell.ss-cur {
-  background: rgba(245, 158, 11, 0.16);
+  background: var(--cell-highlight);
 }
 
 .ss-th.ss-cur {
-  background: rgba(245, 158, 11, 0.3);
-  color: #f59e0b;
+  background: var(--cell-highlight-strong);
+  color: var(--ddong-focus);
   font-weight: 700;
 }
 
@@ -183,10 +192,10 @@
 
 /* 이번 라운드에 나온 배당과 같은 값 = "과거에 이 배당은 이 결과였다" */
 .ss-odds-hit {
-  border: 1px solid #f59e0b;
+  border: 1px solid var(--ddong-focus);
   border-radius: 4px;
-  background: rgba(245, 158, 11, 0.18);
-  color: #f59e0b;
+  background: var(--cell-highlight);
+  color: var(--ddong-focus);
   font-weight: 700;
 }
 
@@ -217,8 +226,8 @@
 }
 
 .ss-card-cur {
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.08);
+  border-color: var(--ddong-focus);
+  background: var(--cell-highlight);
 }
 
 .ss-card-head {

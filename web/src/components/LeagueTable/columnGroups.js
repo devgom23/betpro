@@ -159,6 +159,29 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
   return groups
 }
 
+// 그룹을 접기/펼치기 상태(Set)에서 식별하는 키. LeagueTable.jsx와, 그 바깥(조회
+// 조건 줄)에서 접기 버튼을 같이 쓰는 LeaguePage.jsx가 함께 쓴다.
+export function groupKey(g) {
+  return g.label1
+}
+
+// 26개 지표 그룹을 해외(F-/TF-)/국내(K-/TK-) 묶음으로 한 번에 접고 펼 수 있게
+// 나눈다. LeagueTable.jsx 내부 접기 버튼과 LeaguePage.jsx의 조회 조건 줄
+// 접기 버튼이 같은 로직을 쓰도록 여기 하나로 모았다.
+export function splitIndicatorBatches(groups) {
+  function indicatorBatch(g) {
+    if (g.kind !== 'indicator') return null
+    const code = g.label2 || ''
+    if (code.startsWith('TF-') || code.startsWith('F-')) return 1
+    if (code.startsWith('TK-') || code.startsWith('K-')) return 2
+    return null
+  }
+  return {
+    batch1Groups: groups.filter((g) => indicatorBatch(g) === 1),
+    batch2Groups: groups.filter((g) => indicatorBatch(g) === 2),
+  }
+}
+
 // 승/패 배당(예: FW/FL) 기준 핸디 부호 추정 — 배당이 더 낮은(유리한) 쪽이 핸디를 준다.
 // 결과·핸디 입력 화면(ResultEditModal)의 computeHandicap과 같은 규칙.
 // 실제 등록된 핸디 라인(KH/FH)이 아직 없을 때, 표에서 잠정치를 보여주는 용도로만 쓴다.
@@ -300,9 +323,9 @@ export function computeAutoVerdict(pick, rt) {
 
 // 내 예측의 자동 "적중" 배지 색상 — 예전 핸승위험도 그룹의 적중(VERDICT) 배색을 그대로 쓴다.
 export function pickVerdictStyle(value) {
-  if (value === '적중') return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
-  if (value === '보험') return { background: '#00897B', color: '#fff', fontWeight: 700 }
-  if (value === '미적') return { background: '#C62828', color: '#fff', fontWeight: 700 }
+  if (value === '적중') return { background: 'var(--chip-yellow-bg)', color: 'var(--chip-yellow-fg)', fontWeight: 700 }
+  if (value === '보험') return { background: 'var(--chip-teal-bg)', color: 'var(--chip-teal-fg)', fontWeight: 700 }
+  if (value === '미적') return { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)', fontWeight: 700 }
   return null
 }
 
@@ -334,7 +357,7 @@ export function cellStyle(group, col, value, row) {
 
   // 똥사 — 똥배(강한 정배)인데 실제 결과가 무/역으로 뒤집힌 경우라 눈에 띄게 빨간 글씨로.
   if (g1 === '똥배' && sub === '똥사' && !isBlank(value)) {
-    return { color: '#C62828', fontWeight: 700 }
+    return { color: 'var(--danger-text)', fontWeight: 700 }
   }
 
   // 배당 적중 표시 — '적중'(PH_STATUS) 칸과 같은 노란 배경으로 표시한다.
@@ -359,11 +382,11 @@ export function cellStyle(group, col, value, row) {
 
   if (g1 === '경기정보' && sub === 'RT') {
     const code = rtCodeOf(value)
-    if (code === 1) return { background: '#1565C0', color: '#fff', fontWeight: 700 }
-    if (code === 2) return { background: '#64B5F6', color: '#0D1B2A', fontWeight: 700 }
-    if (code === 3) return { background: '#757575', color: '#fff', fontWeight: 700 }
-    if (code === 4) return { background: '#C62828', color: '#fff', fontWeight: 700 }
-    if (code === 5) return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+    if (code === 1) return { background: 'var(--chip-blue-bg)', color: 'var(--chip-blue-fg)', fontWeight: 700 }
+    if (code === 2) return { background: 'var(--chip-green-bg)', color: 'var(--chip-green-fg)', fontWeight: 700 }
+    if (code === 3) return { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)', fontWeight: 700 }
+    if (code === 4) return { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)', fontWeight: 700 }
+    if (code === 5) return { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)', fontWeight: 700 }
     return null
   }
 

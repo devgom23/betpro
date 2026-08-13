@@ -1,6 +1,6 @@
 .league-table-scroll {
   overflow: auto;
-  max-height: calc(100vh - 220px);
+  max-height: calc(100vh - 160px);
   border: 1px solid var(--border);
   border-radius: 8px;
 }
@@ -152,7 +152,7 @@ td.sticky-col {
 }
 
 .detail-btn:hover {
-  background: rgba(59, 130, 246, 0.3);
+  background: var(--fold-btn-bg-hover);
 }
 
 .bet-cart-btn-on {
@@ -160,7 +160,7 @@ td.sticky-col {
 }
 
 .league-table tbody tr:hover td {
-  background: rgba(148, 163, 184, 0.22);
+  background: var(--row-hover);
 }
 
 .table-empty {
@@ -177,18 +177,22 @@ td.sticky-col {
 }
 
 .batch-fold-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border-strong);
   cursor: pointer;
   font-weight: 600;
   font-size: 12px;
-  color: var(--accent);
-  background: rgba(59, 130, 246, 0.1);
-  border-radius: 6px;
-  padding: 5px 10px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border-radius: 5px;
+  height: 26px;
+  padding: 0 12px;
 }
 
 .batch-fold-btn:hover {
-  background: rgba(59, 130, 246, 0.25);
+  background: var(--row-hover);
 }
 
 /* 폼(PPG) 뱃지 — 칸 전체를 칠하지 않고 값만 작은 알약 모양으로 강조한다 */
@@ -200,6 +204,16 @@ td.sticky-col {
   font-weight: 700;
 }
 
+/* RT(핸승/핸무/무/역)·PICK 결과(적중/보험/미적) 뱃지 — RtBadge.css의 알약 모양과
+   동일하게 맞춰 칸 전체가 아니라 값만 강조한다 */
+.cell-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
 /* ── 표 그룹 접기/펼치기 ──
    글자 길이·컬럼 폭과 무관하게 항상 눈에 띄도록, 접힘/펼침 버튼 모두
    같은 파란 배경 박스 스타일을 쓴다(방향만 반대: 펼침=◂ / 접힘=▸). */
@@ -208,12 +222,12 @@ td.sticky-col {
   cursor: pointer;
   font-weight: 700;
   color: var(--accent);
-  background: rgba(59, 130, 246, 0.15);
+  background: var(--fold-btn-bg);
   border-radius: 4px;
 }
 
 .fold-btn:hover {
-  background: rgba(59, 130, 246, 0.35);
+  background: var(--fold-btn-bg-hover);
   color: #fff;
 }
 
@@ -248,12 +262,12 @@ td.sticky-col {
 
 /* ── 배당 조회에 쓰인 컬럼 강조 (검색 조건이었던 칸을 표에서 표시) ── */
 .league-table .col-highlight {
-  background: rgba(245, 158, 11, 0.18);
-  color: #f59e0b;
+  background: var(--cell-highlight);
+  color: var(--highlight-text);
 }
 
 .league-table td.cell-highlight {
-  box-shadow: inset 0 0 0 2px #f59e0b;
+  box-shadow: inset 0 0 0 2px var(--ddong-focus);
   font-weight: 700;
 }
 
@@ -283,7 +297,7 @@ td.sticky-col {
 }
 
 .mypick-btn:hover {
-  background: rgba(59, 130, 246, 0.15);
+  background: var(--fold-btn-bg);
 }
 
 .mypick-blank {
@@ -306,23 +320,7 @@ td.sticky-col {
   background: rgba(245, 179, 1, 0.24);
 }
 
-/* ── 핸승 위험도 "참고" 버튼 + 색상 구간 참고표 팝업 ── */
-.risk-legend-btn {
-  flex-shrink: 0;
-  border: 1px solid var(--border-strong);
-  cursor: pointer;
-  font-weight: 700;
-  font-size: 11px;
-  color: var(--accent);
-  background: rgba(59, 130, 246, 0.1);
-  border-radius: 4px;
-  padding: 2px 6px;
-}
-
-.risk-legend-btn:hover {
-  background: rgba(59, 130, 246, 0.25);
-}
-
+/* ── 핸승 위험도 색상 구간 참고표 팝업 (여는 버튼은 .batch-fold-btn 재사용) ── */
 .modal-backdrop {
   position: fixed;
   inset: 0;

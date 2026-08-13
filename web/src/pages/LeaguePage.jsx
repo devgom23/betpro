@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, saveBlob } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import LeagueTable from '../components/LeagueTable/LeagueTable'
+import LeagueTable, { RiskLegendModal } from '../components/LeagueTable/LeagueTable'
+import { buildColumnGroups, groupKey, splitIndicatorBatches } from '../components/LeagueTable/columnGroups'
 import FilterForm from '../components/FilterForm/FilterForm'
 import HeadToHeadResult from '../components/HeadToHead/HeadToHeadResult'
 import RtSummaryBar, { PickSummaryBar } from '../components/RtSummaryBar/RtSummaryBar'
@@ -48,6 +49,23 @@ export default function LeaguePage({ code, scope }) {
   const [showKrCrawlModal, setShowKrCrawlModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [leagues, setLeagues] = useState([])
+
+  // 표의 "해외지표 접기/국내지표 접기/핸승 위험도 참고" — 조회 조건 줄에서 같이
+  // 보여주려고 표(LeagueTable) 대신 여기서 상태를 들고 있다가 props로 내려준다.
+  const [collapsed, setCollapsed] = useState(() => new Set())
+  const [showRiskLegend, setShowRiskLegend] = useState(false)
+  const groups = useMemo(() => buildColumnGroups(data?.columns || []), [data?.columns])
+  const { batch1Groups, batch2Groups } = splitIndicatorBatches(groups)
+
+  function toggleBatch(batchGroups) {
+    const keys = batchGroups.map(groupKey)
+    const allCollapsed = keys.length > 0 && keys.every((k) => collapsed.has(k))
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      keys.forEach((k) => (allCollapsed ? next.delete(k) : next.add(k)))
+      return next
+    })
+  }
 
   // 재계산('내 데이터' 리그 1개 전용 — RT 없는 예정 경기만, 이 리그 하나만 대상)
   const [busyRecomputePending, setBusyRecomputePending] = useState(false)
@@ -224,8 +242,10 @@ export default function LeaguePage({ code, scope }) {
     <div>
       <div className="league-dashboard">
         <span>
-          📋 등록된 시즌 {filters.seasons.length} · 경기수 {filters.total_rows.toLocaleString()} · 국배 등록{' '}
-          {(filters.kw_count ?? 0).toLocaleString()} · 해배 등록 {(filters.fw_count ?? 0).toLocaleString()}
+          등록된 시즌 <strong>{filters.seasons.length}</strong> · 경기수{' '}
+          <strong>{filters.total_rows.toLocaleString()}</strong> · 국배 등록{' '}
+          <strong>{(filters.kw_count ?? 0).toLocaleString()}</strong> · 해배 등록{' '}
+          <strong>{(filters.fw_count ?? 0).toLocaleString()}</strong>
         </span>
         <RtSummaryBar summary={filters.rt_summary} inline />
       </div>
@@ -247,28 +267,28 @@ export default function LeaguePage({ code, scope }) {
                 onClick={() => setShowCrawlModal(true)}
                 title="스코어맨 화면에서 경기·배당을 그대로 가져옵니다"
               >
-                🛰 Data 가져오기
+                Data 가져오기
               </button>
               <button
                 className="btn-reset"
                 onClick={() => setShowKrCrawlModal(true)}
                 title="젠토토 화면에서 국내배당(초기배당)을 가져와 기존 경기에 채웁니다"
               >
-                🇰🇷 국내배당 가져오기
+                KR 국내배당 가져오기
               </button>
               <button
                 className="btn-reset"
                 onClick={() => setShowEditModal(true)}
                 title="경기결과(RT)·국내핸디(KH)·해외핸디(FH)를 직접 입력합니다"
               >
-                📝 결과·핸디 입력
+                결과·핸디 입력
               </button>
               <button
                 className="btn-reset"
                 onClick={() => setShowTemplateModal(true)}
                 title="리그·시즌·라운드를 입력해 업로드용 표본 엑셀을 만듭니다"
               >
-                ⬇ 경기 Data 업로드 엑셀 만들기
+                경기 Data 업로드 엑셀 만들기
               </button>
               <button
                 className="btn-reset"
@@ -276,7 +296,7 @@ export default function LeaguePage({ code, scope }) {
                 disabled={busyExcel === 'upload'}
                 title="표본 파일에 입력한 경기를 DB에 등록합니다"
               >
-                {busyExcel === 'upload' ? '읽는 중...' : '⬆ 경기 Data 업로드'}
+                {busyExcel === 'upload' ? '읽는 중...' : '경기 Data 업로드'}
               </button>
               <input
                 ref={fileInputRef}
@@ -293,7 +313,7 @@ export default function LeaguePage({ code, scope }) {
             disabled={busyExcel === 'table'}
             title="지금 조회된 표를 그대로 받습니다"
           >
-            {busyExcel === 'table' ? '받는 중...' : '⬇ 엑셀 다운로드'}
+            {busyExcel === 'table' ? '받는 중...' : '엑셀 다운로드'}
           </button>
         </div>
       )}
@@ -362,12 +382,31 @@ export default function LeaguePage({ code, scope }) {
       ) : (
         <>
           <div className="league-summary">
-            <span>🔍 조회 조건: {describeQuery(query)}</span>
+            <span>조회 조건 {describeQuery(query)}</span>
             <span>
               <strong>{data.total.toLocaleString()}</strong>경기
             </span>
             <RtSummaryBar summary={data.rt_summary} inline />
             <PickSummaryBar summary={data.hit_summary} />
+            <div className="league-summary-toolbar">
+              {batch1Groups.length > 0 && (
+                <button className="batch-fold-btn" onClick={() => toggleBatch(batch1Groups)}>
+                  해외지표 {batch1Groups.every((g) => collapsed.has(groupKey(g))) ? '펼치기' : '접기'}
+                </button>
+              )}
+              {batch2Groups.length > 0 && (
+                <button className="batch-fold-btn" onClick={() => toggleBatch(batch2Groups)}>
+                  국내지표 {batch2Groups.every((g) => collapsed.has(groupKey(g))) ? '펼치기' : '접기'}
+                </button>
+              )}
+              <button
+                className="batch-fold-btn"
+                onClick={() => setShowRiskLegend(true)}
+                title="색상별 구간 참고표"
+              >
+                핸승 위험도 참고
+              </button>
+            </div>
           </div>
           <LeagueTable
             code={code}
@@ -375,7 +414,13 @@ export default function LeaguePage({ code, scope }) {
             rows={data.rows}
             scope={scope}
             highlightCols={ODDS_KEYS.filter((k) => query?.[k] !== undefined).map((k) => k.toUpperCase())}
+            collapsed={collapsed}
+            onCollapsedChange={setCollapsed}
+            showRiskLegend={showRiskLegend}
+            onShowRiskLegendChange={setShowRiskLegend}
+            hideToolbar
           />
+          {showRiskLegend && <RiskLegendModal onClose={() => setShowRiskLegend(false)} />}
         </>
       )}
 
