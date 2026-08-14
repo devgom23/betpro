@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
@@ -356,6 +356,127 @@ function MyPickBar({ row, onSavePick }) {
   )
 }
 
+// 종합픽 — 배당(기준선) 위에 지표·상대전적 보정을 얹어 플핸 확률 하나로 정리한 값.
+// 계산 근거와 각 신호를 왜 쓰거나 안 쓰는지는 api/pick_ai.py 상단 주석에 실측과 함께 있다.
+// 팝업을 열 때마다 백엔드에서 그 자리에서 계산한다(저장하지 않는 표시 전용 값).
+const PICK_DIR_TEXT = { 1: '핸승 쪽', '-1': '플핸 쪽', 0: '중립' }
+
+function signalDirClass(s) {
+  if (s.state === 'info') return 'pick-dir-info'
+  if (s.state === 'none') return 'pick-dir-none'
+  if (s.dir > 0) return 'pick-dir-up'
+  if (s.dir < 0) return 'pick-dir-down'
+  return 'pick-dir-flat'
+}
+
+// 점 색의 뜻 — 빨강: 핸승 쪽 신호 / 초록: 플핸 쪽 신호 / 회색 채움: 신호는 있지만 중립
+// / 빈 원: 판단 제외(표본 부족) 또는 참고용(계산에는 안 쓰는 정보). 마우스를 올리면 뜬다.
+function signalDirTitle(s) {
+  if (s.state === 'none') return '판단 제외 — 표본이 부족하거나 오늘 배당과 비교할 수 없음'
+  if (s.state === 'info') return '참고용 — 확률 계산에는 반영하지 않음'
+  if (s.dir > 0) return '핸승 쪽 신호'
+  if (s.dir < 0) return '플핸 쪽 신호'
+  return '신호는 있지만 중립(기준선과 거의 같음)'
+}
+
+function PickAiCard({ code, row, scope }) {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+
+  // row는 LeagueTable이 매 렌더마다 새로 만들어 넘기는 객체다(스프레드로 내픽을 얹어서
+  // 준다). 그래서 row 자체를 의존성에 걸면 표가 다시 그려질 때마다 계산을 새로 요청해
+  // 화면이 멈춘다 — 경기를 가리키는 값들만 문자열로 묶어 그것이 바뀔 때만 호출한다.
+  const rowRef = useRef(row)
+  rowRef.current = row
+  const matchKey = [row.S, row.R, row.No, row.HT, row.AT].join('|')
+
+  useEffect(() => {
+    let alive = true
+    setData(null)
+    setError('')
+    api
+      .post('/api/pick_ai', { scope, code, row: rowRef.current })
+      .then((res) => alive && setData(res))
+      .catch((err) => alive && setError(err.message))
+    return () => {
+      alive = false
+    }
+  }, [code, scope, matchKey])
+
+  if (error) return <p className="error-text">{error}</p>
+  if (!data) return <p className="pick-loading">계산 중...</p>
+  if (!data.available) return <p className="pick-loading">{data.reason}</p>
+
+  const { base, final, adjust, signals } = data
+  return (
+    <div className="pick-card">
+      <div className={`pick-head pick-grade-${final.grade_key}`}>
+        <span className="pick-head-label">플핸 성공 확률</span>
+        <span className="pick-head-value">{final.pl.toFixed(0)}%</span>
+        <span className="pick-head-grade">{final.grade}</span>
+      </div>
+
+      <table className="detail-table pick-table">
+        <tbody>
+          <tr className="pick-base-row">
+            <td className="row-label">기준선 (배당)</td>
+            <td className="pick-sig-text">
+              배AI {base.ai_pick.toFixed(0)}% → 플핸 {base.pl.toFixed(0)}%
+            </td>
+            <td className="pick-adj">-</td>
+          </tr>
+          {signals.map((s) => (
+            <tr key={s.key}>
+              <td className="row-label">
+                {s.label}
+                <span className={`pick-dot ${signalDirClass(s)}`} title={signalDirTitle(s)} />
+              </td>
+              <td className="pick-sig-text">
+                {s.value_text}
+                {s.state === 'ok' && s.dir !== 0 && (
+                  <em className="pick-sig-dir"> · {PICK_DIR_TEXT[s.dir]}</em>
+                )}
+              </td>
+              <td className={`pick-adj ${s.adjust > 0 ? 'pick-adj-up' : s.adjust < 0 ? 'pick-adj-down' : ''}`}>
+                {s.state === 'ok' && s.adjust !== 0
+                  ? `${s.adjust > 0 ? '+' : ''}${s.adjust.toFixed(1)}%p`
+                  : '-'}
+              </td>
+            </tr>
+          ))}
+          {adjust.consensus !== 0 && (
+            <tr>
+              <td className="row-label">신호 합치</td>
+              <td className="pick-sig-text">{data.consensus_text}</td>
+              <td className={`pick-adj ${adjust.consensus > 0 ? 'pick-adj-up' : 'pick-adj-down'}`}>
+                {adjust.consensus > 0 ? '+' : ''}
+                {adjust.consensus.toFixed(1)}%p
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+
+      <p
+        className={`pick-consensus pick-consensus-${
+          data.consensus === '불일치'
+            ? 'off'
+            : data.consensus === '핸승' || data.consensus === '플핸'
+              ? 'on'
+              : 'none'
+        }`}
+      >
+        {data.consensus_text}
+      </p>
+      {data.warnings.map((w) => (
+        <p key={w} className="pick-warn">
+          ⚠ {w}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 export default function MatchDetailModal({ code, row, scope, onClose, onSavePick }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
@@ -445,6 +566,8 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
             <SampleTable row={row} scope={scope} />
           </div>
           <div className="modal-col">
+            <h3>🧭 종합픽</h3>
+            <PickAiCard code={code} row={row} scope={scope} />
             <h3>📈 폼 지표</h3>
             <FormTable row={row} />
             <h3>🔟 최근10경기 전적</h3>

@@ -18,6 +18,7 @@ BETPRO API 서버 (FastAPI) - 골격
   GET  /api/leagues/{code}/filters     시즌·라운드 선택지
   GET  /api/leagues/{code}             대형 분석표 데이터(시즌/라운드/배당 필터)
   GET  /api/head_to_head               두 팀 상대전적 (상세 팝업/상대전적 탭 공용)
+  POST /api/pick_ai                    종합픽 (상세 팝업 — 배당/지표/상대전적/흐름 요약)
   GET  /api/leagues/{code}/match_excel 상세보기 팝업 내용 엑셀(1시트) 다운로드
   GET  /api/leagues/{code}/table_excel 현재 조회된 분석표 엑셀 다운로드
   GET  /api/leagues/{code}/upload_template  경기 업로드용 빈 표본 양식 (쓰기 권한 필요)
@@ -82,6 +83,7 @@ import kr_crawler as KRCRAWL   # noqa: E402
 import my_picks as MYPICKS     # noqa: E402
 import bet_slips as BETSLIPS   # noqa: E402
 import ev_model as EVM         # noqa: E402
+import pick_ai as PICKAI       # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -1021,7 +1023,8 @@ def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
     wdl_summary = _wdl_breakdown(m, ht)
     wdl_summary_home = _wdl_breakdown(m, ht, home_only=True)
 
-    cols = [c for c in ["S", "R", "DT", "HT", "HS", "AS", "AT", "RT", "FW", "FD", "FL"]
+    cols = [c for c in ["S", "R", "DT", "HT", "HS", "AS", "AT", "RT",
+                        "KW", "KD", "KL", "FW", "FD", "FL"]
             if c in m.columns]
     out = m[cols].head(limit).copy()
     if "RT" in out.columns:
@@ -1063,6 +1066,35 @@ def head_to_head(scope: str = PATHS.SCOPE_MASTER,
     db = _resolve_scope_db(scope, user)
     df = _h2h_source_df(db, scope, code)
     return _head_to_head_calc(df, home, away, cross=cross, limit=limit)
+
+
+class PickAiBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    code: str = ""
+    row: dict
+
+
+@app.post("/api/pick_ai")
+def pick_ai(body: PickAiBody, user: dict = Depends(get_current_user)):
+    """종합픽 — 핸승위험도·지표표본·상대전적·최근흐름을 한 번에 정리해 돌려준다.
+
+    화면이 이미 들고 있는 경기 한 줄을 그대로 받아서 계산한다(리그 전체를 다시 읽지
+    않으므로 팝업이 즉시 뜬다). 상대전적만 화면에 없는 값이라 여기서 직접 구한다.
+    저장은 하지 않는다 — 팝업을 열 때마다 그 자리에서 계산하는 표시 전용 값이다.
+    """
+    if body.code and body.scope == PATHS.SCOPE_USER:
+        _check_league_for(body.code, body.scope, user)
+    ht = str(body.row.get("HT") or "").strip()
+    at = str(body.row.get("AT") or "").strip()
+    h2h = None
+    if ht and at:
+        db = _resolve_scope_db(body.scope, user)
+        # limit을 크게 잡는다 — pick_ai가 "오늘과 같은 정배/역배 구도였던 맞대결만" 골라
+        # 다시 세아려야 해서(아래 compute() 참고) summary 집계만으론 안 되고 개별 경기
+        # 목록(matches)이 전부 있어야 한다.
+        h2h = _head_to_head_calc(_h2h_source_df(db, body.scope, body.code),
+                                 ht, at, cross=True, limit=500)
+    return PICKAI.compute(body.row, h2h, scope=body.scope)
 
 
 @app.get("/api/leagues/{code}/match_excel")
@@ -1559,7 +1591,7 @@ def crawl_close(user: dict = Depends(get_current_user)):
 # 저장은 새 엔드포인트 없이 기존 /api/crawl/save(= _merge_and_save)를 그대로 쓴다.
 KR_LEAGUE_NAME_GUESS = {
     "K1": "K리그1", "K2": "K리그2", "EP": "EPL",
-    "La": "라리가", "BD": "분데스리", "SA": "세리에A", "Er": "에레디비", "L1": "프리그1",
+    "La": "라리가", "BD": "분데스리", "SA": "세리에A", "Er": "네덜란드 에레디비시", "L1": "프리그1",
 }
 
 

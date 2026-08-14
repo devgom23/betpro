@@ -206,9 +206,140 @@
   border-right: 2px solid var(--border-strong);
 }
 
-/* 지표별 표본: 국내(국) 지표 블록과 해외(해) 지표 블록 경계 구분선 */
-.sample-group-start td {
-  border-top: 2px solid var(--border-strong);
+/* 지표별 표본: 국내(국) 지표 블록과 해외(해) 지표 블록 경계 구분선.
+   다른 컴포넌트(LeagueTable.css 등)에도 동일 특이도의 .detail-table td 규칙이
+   있어, 로드 순서에 따라 그 규칙이 이 규칙을 덮어쓸 수 있다 — 상위에 .sample-table을
+   붙여 특이도를 한 단계 높여서 로드 순서와 무관하게 항상 이기도록 한다. */
+.sample-table .sample-group-start td {
+  border-top: 3px solid var(--accent);
+}
+
+/* ── 종합픽 ── */
+.pick-loading {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
+
+.pick-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  border-bottom: none;
+}
+
+.pick-head-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pick-head-value {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.pick-head-grade {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+/* 플핸 확률이 높을수록 초록, 낮을수록 빨강 — 표의 RT 색과 같은 계열을 쓴다 */
+.pick-grade-best { background: var(--chip-green-bg); }
+.pick-grade-best .pick-head-value,
+.pick-grade-best .pick-head-grade { color: var(--chip-green-fg); }
+.pick-grade-good { background: var(--chip-teal-bg); }
+.pick-grade-good .pick-head-value,
+.pick-grade-good .pick-head-grade { color: var(--chip-teal-fg); }
+.pick-grade-mid { background: var(--chip-gray-bg); }
+.pick-grade-mid .pick-head-value,
+.pick-grade-mid .pick-head-grade { color: var(--chip-gray-fg); }
+.pick-grade-bad { background: var(--chip-yellow-bg); }
+.pick-grade-bad .pick-head-value,
+.pick-grade-bad .pick-head-grade { color: var(--chip-yellow-fg); }
+.pick-grade-worst { background: var(--chip-red-bg); }
+.pick-grade-worst .pick-head-value,
+.pick-grade-worst .pick-head-grade { color: var(--chip-red-fg); }
+
+.pick-table {
+  border-radius: 0 0 8px 8px;
+}
+
+.pick-table td {
+  text-align: left;
+}
+
+.pick-table .row-label {
+  white-space: nowrap;
+  width: 1%;
+}
+
+/* 기준선 줄은 나머지 보정 줄과 성격이 달라 살짝 눌러 구분한다 */
+.pick-base-row td {
+  background: var(--bg-surface-2);
+  font-weight: 600;
+}
+
+.pick-sig-text {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.pick-sig-dir {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pick-adj {
+  white-space: nowrap;
+  width: 1%;
+  text-align: right;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.pick-adj-up { color: var(--chip-red-fg); }
+.pick-adj-down { color: var(--chip-green-fg); }
+
+/* 신호별 방향 점 — 핸승 쪽=빨강 / 플핸 쪽=초록 / 중립=회색 / 판단제외·참고=빈 원 */
+.pick-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 5px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.pick-dir-up { background: var(--chip-red-fg); }
+.pick-dir-down { background: var(--chip-green-fg); }
+.pick-dir-flat { background: var(--text-muted-2); }
+.pick-dir-none,
+.pick-dir-info {
+  border: 1px solid var(--border-strong);
+}
+
+.pick-consensus {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pick-consensus-on { color: var(--text-primary); }
+.pick-consensus-off { color: var(--warning-text); }
+.pick-consensus-none { color: var(--text-muted); }
+
+.pick-warn {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 /* 지표별 표본 토탈행: 숫자 아래 줄에 그 결과가 전체에서 차지하는 비율 */
