@@ -29,20 +29,26 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* 핸승/핸무/무/역 컬럼 — RtBadge의 RT_CHIP(옅은 배경 틴트 + 진한 글씨)과 같은
+   --chip-* 토큰을 써서, 표 색상과 배지 색상이 앱 전체에서 하나의 기준을 따르게 한다. */
 .detail-table .col-hs {
-  background: rgba(21, 101, 192, 0.25);
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
 }
 
 .detail-table .col-hm {
-  background: rgba(100, 181, 246, 0.25);
+  background: var(--chip-green-bg);
+  color: var(--chip-green-fg);
 }
 
 .detail-table .col-mu {
-  background: rgba(117, 117, 117, 0.25);
+  background: var(--chip-gray-bg);
+  color: var(--chip-gray-fg);
 }
 
 .detail-table .col-yk {
-  background: rgba(198, 40, 40, 0.25);
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
 }
 
 /* 상대전적 실제 승/무/패(W/D/L) 요약 — 승=파랑/무=회색/패=빨강 */

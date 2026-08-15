@@ -103,21 +103,6 @@
   color: var(--text-muted);
 }
 
-.modal-score {
-  text-align: center;
-  font-size: 20px;
-  margin: 8px 0 16px;
-  color: var(--text-primary);
-}
-
-.modal-score strong {
-  margin: 0 10px;
-}
-
-.modal-score .winner-score {
-  color: #c62828;
-}
-
 .modal-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -139,14 +124,31 @@
   flex-direction: column;
 }
 
-.modal-col h3 {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 16px 0 6px;
+/* 배당/핸승 위험도/지표별 표본 같은 표 하나하나를 카드 하나로 감싼다.
+   .detail-section-grow(상대전적)만 남는 세로 공간을 마저 채워 오른쪽 칸 높이를 맞춘다. */
+.detail-section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-surface-2);
+  padding: 12px 14px;
+  margin-bottom: 14px;
 }
 
-.modal-col h3:first-child {
-  margin-top: 0;
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.detail-section-grow {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+.modal-col h3,
+.detail-section h3 {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
 }
 
 .detail-table {
@@ -174,20 +176,62 @@
   color: var(--text-secondary);
 }
 
+/* 구분/승(홈)/무/패(원정) 4칸 너비를 항상 똑같이 맞춘다(내용 길이에 안 흔들리게). */
+.odds-table {
+  table-layout: fixed;
+}
+
+.odds-table th,
+.odds-table td {
+  width: 25%;
+}
+
+/* 구분 칸(국내 배당/국내 핸디/...)도 다른 3칸처럼 가운데 정렬 —
+   .detail-table .row-label(왼쪽 정렬)보다 특이도를 높여서 이 표에서만 덮어쓴다. */
+.detail-table.odds-table .row-label {
+  text-align: center;
+}
+
+/* 배당표 맨 위 — 홈팀명/점수/원정팀명을 승(홈)·무·패(원정) 컬럼과 같은 자리에 맞춘 줄.
+   예정 경기라 점수가 없으면 odds-score-cell에 '-'만 뜬다. */
+.odds-teams-row th {
+  background: var(--bg-surface);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 8px 7px;
+}
+
+.odds-team-name {
+  white-space: normal;
+  word-break: keep-all;
+}
+
+.odds-score-cell {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* 핸승/핸무/무/역 컬럼 — RtBadge의 RT_CHIP(옅은 배경 틴트 + 진한 글씨)과 같은
+   --chip-* 토큰을 써서, 표 색상과 배지 색상이 앱 전체에서 하나의 기준을 따르게 한다. */
 .detail-table .col-hs {
-  background: rgba(21, 101, 192, 0.25);
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
 }
 
 .detail-table .col-hm {
-  background: rgba(100, 181, 246, 0.25);
+  background: var(--chip-green-bg);
+  color: var(--chip-green-fg);
 }
 
 .detail-table .col-mu {
-  background: rgba(117, 117, 117, 0.25);
+  background: var(--chip-gray-bg);
+  color: var(--chip-gray-fg);
 }
 
 .detail-table .col-yk {
-  background: rgba(198, 40, 40, 0.25);
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
 }
 
 .detail-table .col-total {
@@ -214,120 +258,244 @@
   border-top: 3px solid var(--accent);
 }
 
-/* ── 종합픽 ── */
+/* ── 종합픽 — 팝업 헤더 바로 아래, 전체 폭 밴드로 배치해 결론을 스크롤 없이 먼저 보여준다 ── */
+.pick-band {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-surface-2);
+  padding: 12px 14px 14px;
+  margin: 0 0 18px;
+}
+
+.pick-band-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.pick-band-head h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pick-band-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .pick-loading {
   font-size: 12px;
   color: var(--text-muted);
-  margin: 0 0 4px;
+  margin: 0;
 }
 
-.pick-head {
-  display: flex;
-  align-items: baseline;
+.pick-cards {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1fr 1fr;
   gap: 10px;
-  padding: 8px 12px;
+  align-items: stretch;
+}
+
+@media (max-width: 980px) {
+  .pick-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* 판정 블록 — 결론(플핸 성공 확률)과 그 기준선(배당)을 한 카드에 */
+.pick-verdict-card {
   border: 1px solid var(--border);
-  border-radius: 8px 8px 0 0;
-  border-bottom: none;
-}
-
-.pick-head-label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.pick-head-value {
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.pick-head-grade {
-  margin-left: auto;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 플핸 확률이 높을수록 초록, 낮을수록 빨강 — 표의 RT 색과 같은 계열을 쓴다 */
-.pick-grade-best { background: var(--chip-green-bg); }
-.pick-grade-best .pick-head-value,
-.pick-grade-best .pick-head-grade { color: var(--chip-green-fg); }
-.pick-grade-good { background: var(--chip-teal-bg); }
-.pick-grade-good .pick-head-value,
-.pick-grade-good .pick-head-grade { color: var(--chip-teal-fg); }
-.pick-grade-mid { background: var(--chip-gray-bg); }
-.pick-grade-mid .pick-head-value,
-.pick-grade-mid .pick-head-grade { color: var(--chip-gray-fg); }
-.pick-grade-bad { background: var(--chip-yellow-bg); }
-.pick-grade-bad .pick-head-value,
-.pick-grade-bad .pick-head-grade { color: var(--chip-yellow-fg); }
-.pick-grade-worst { background: var(--chip-red-bg); }
-.pick-grade-worst .pick-head-value,
-.pick-grade-worst .pick-head-grade { color: var(--chip-red-fg); }
+.pick-grade-best { --grade-fg: var(--chip-green-fg); --grade-bg: var(--chip-green-bg); }
+.pick-grade-good { --grade-fg: var(--chip-teal-fg); --grade-bg: var(--chip-teal-bg); }
+.pick-grade-mid { --grade-fg: var(--chip-gray-fg); --grade-bg: var(--chip-gray-bg); }
+.pick-grade-bad { --grade-fg: var(--chip-yellow-fg); --grade-bg: var(--chip-yellow-bg); }
+.pick-grade-worst { --grade-fg: var(--chip-red-fg); --grade-bg: var(--chip-red-bg); }
 
-.pick-table {
-  border-radius: 0 0 8px 8px;
+.pick-verdict-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.pick-table td {
-  text-align: left;
+.pick-verdict-label {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
-.pick-table .row-label {
-  white-space: nowrap;
-  width: 1%;
+.pick-verdict-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--grade-bg);
+  color: var(--grade-fg);
 }
 
-/* 기준선 줄은 나머지 보정 줄과 성격이 달라 살짝 눌러 구분한다 */
-.pick-base-row td {
-  background: var(--bg-surface-2);
-  font-weight: 600;
+.pick-verdict-value {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--grade-fg);
 }
 
-.pick-sig-text {
+.pick-bar {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--border);
+  margin: 8px 0 4px;
+}
+
+.pick-bar-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--grade-fg);
+}
+
+.pick-bar-marker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 13px;
+  background: var(--text-muted-2);
+}
+
+.pick-bar-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.pick-verdict-base {
+  margin-top: auto;
+  padding-top: 8px;
+  font-size: 11px;
   color: var(--text-secondary);
-  line-height: 1.5;
 }
 
-.pick-sig-dir {
-  font-style: normal;
+.pick-verdict-base-label {
+  display: block;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+/* 신호 카드 4장 — 해외지표 / 국내지표 / 상대전적 / 최근흐름.
+   실제로 확률에 반영된(핸승 쪽·플핸 쪽) 신호만 테두리를 강조해 눈에 띄게 한다. */
+.pick-sig-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pick-sig-card-up { border-color: var(--chip-red-fg); }
+.pick-sig-card-down { border-color: var(--chip-green-fg); }
+
+.pick-sig-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pick-sig-label {
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-primary);
 }
 
-.pick-adj {
-  white-space: nowrap;
-  width: 1%;
-  text-align: right;
+.pick-sig-badge {
+  margin-left: auto;
+  font-size: 10px;
   font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.pick-sig-badge-up { background: var(--chip-red-bg); color: var(--chip-red-fg); }
+.pick-sig-badge-down { background: var(--chip-green-bg); color: var(--chip-green-fg); }
+.pick-sig-badge-flat { background: var(--chip-gray-bg); color: var(--chip-gray-fg); }
+.pick-sig-badge-none {
+  background: transparent;
   color: var(--text-muted);
-}
-
-.pick-adj-up { color: var(--chip-red-fg); }
-.pick-adj-down { color: var(--chip-green-fg); }
-
-/* 신호별 방향 점 — 핸승 쪽=빨강 / 플핸 쪽=초록 / 중립=회색 / 판단제외·참고=빈 원 */
-.pick-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-left: 5px;
-  border-radius: 50%;
-  vertical-align: middle;
-}
-
-.pick-dir-up { background: var(--chip-red-fg); }
-.pick-dir-down { background: var(--chip-green-fg); }
-.pick-dir-flat { background: var(--text-muted-2); }
-.pick-dir-none,
-.pick-dir-info {
   border: 1px solid var(--border-strong);
 }
 
+.pick-sig-desc {
+  margin: 0;
+  flex: 1;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* 시즌전적 — 홈/원정 두 줄을 문장 대신 표로 그려서 라벨(홈/원정) 폭을 맞추고
+   숫자 칸 사이에 구분선이 서게 한다. .detail-table을 그대로 재사용해 다른
+   표들과 톤을 맞추고, 카드 안에 들어가는 크기라 여백/글자만 줄인다. */
+.pick-season-table {
+  flex: 1;
+  font-size: 10px;
+}
+
+.pick-season-table th,
+.pick-season-table td {
+  padding: 2px 6px;
+}
+
+.pick-season-table .row-label {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.pick-sig-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+.pick-sig-foot-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.pick-sig-foot-up { color: var(--chip-red-fg); }
+.pick-sig-foot-down { color: var(--chip-green-fg); }
+
+/* 그 카드 하나에만 해당하는 주의사항 — 전체 밴드 아래 공용 줄을 차지하지 않도록
+   카드 안에 작게 붙인다. */
+.pick-sig-warn {
+  margin: 0;
+  font-size: 10px;
+  color: var(--warning-text);
+}
+
+.pick-notes {
+  margin-top: 10px;
+}
+
 .pick-consensus {
-  margin: 6px 0 0;
+  margin: 0;
   font-size: 12px;
   font-weight: 600;
 }

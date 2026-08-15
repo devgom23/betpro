@@ -1039,6 +1039,25 @@ def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
     }
 
 
+def _season_matches(total_df: pd.DataFrame, team: str, season) -> list:
+    """종합픽의 '시즌전적' 신호용 — team이 이번 시즌(season)에 홈/원정 상관없이 치른
+    경기 원본 목록. 정배/역배 판정과 핸디캡 결과 집계는 pick_ai.py가 한다(여기선 그
+    판단에 필요한 원본 칼럼만 추려서 넘긴다)."""
+    t = str(team).strip()
+    if not t or total_df.empty or "HT" not in total_df.columns or "AT" not in total_df.columns:
+        return []
+    h = total_df["HT"].astype(str).str.strip()
+    a = total_df["AT"].astype(str).str.strip()
+    mask = (h == t) | (a == t)
+    if "S" in total_df.columns:
+        mask &= total_df["S"].astype(str) == str(season)
+    m = total_df[mask]
+    if m.empty:
+        return []
+    cols = [c for c in ["S", "R", "HT", "AT", "RT", "KW", "KL", "FW", "FL"] if c in m.columns]
+    return DATA.df_to_records(m[cols])
+
+
 def _h2h_source_df(db: str, scope: str, code: str) -> pd.DataFrame:
     """
     상대전적 검색 대상.
@@ -1087,14 +1106,20 @@ def pick_ai(body: PickAiBody, user: dict = Depends(get_current_user)):
     ht = str(body.row.get("HT") or "").strip()
     at = str(body.row.get("AT") or "").strip()
     h2h = None
+    season_matches = None
     if ht and at:
         db = _resolve_scope_db(body.scope, user)
+        src_df = _h2h_source_df(db, body.scope, body.code)
         # limit을 크게 잡는다 — pick_ai가 "오늘과 같은 정배/역배 구도였던 맞대결만" 골라
         # 다시 세아려야 해서(아래 compute() 참고) summary 집계만으론 안 되고 개별 경기
         # 목록(matches)이 전부 있어야 한다.
-        h2h = _head_to_head_calc(_h2h_source_df(db, body.scope, body.code),
-                                 ht, at, cross=True, limit=500)
-    return PICKAI.compute(body.row, h2h, scope=body.scope)
+        h2h = _head_to_head_calc(src_df, ht, at, cross=True, limit=500)
+        season = body.row.get("S")
+        season_matches = {
+            "home": _season_matches(src_df, ht, season),
+            "away": _season_matches(src_df, at, season),
+        }
+    return PICKAI.compute(body.row, h2h, scope=body.scope, season_matches=season_matches)
 
 
 @app.get("/api/leagues/{code}/match_excel")
@@ -1589,9 +1614,15 @@ def crawl_close(user: dict = Depends(get_current_user)):
 # 스코어맨(해외배당) 크롤과 흐름은 같지만 목적이 다르다 — 이미 있는 경기의
 # 국내배당 칸(KW~KHL)만 채우는 '백필 전용' 기능이라 새 경기를 만들지 않는다.
 # 저장은 새 엔드포인트 없이 기존 /api/crawl/save(= _merge_and_save)를 그대로 쓴다.
+#   젠토토 사이트의 '리그 선택' 검색 필터 값(game_name[])을 CDP로 직접 확인해 맞춘
+#   것들 — 화면 표시 텍스트(예: '라리가')와 실제 필터/game-name title 속성값(예:
+#   '스페인 라리가')이 다르면 _parse_lines()의 title 매칭이 걸러버려 아무 것도
+#   못 찾는다(에레디비시도 같은 이유로 이미 한 번 고쳤다). EP/BD/SA/L1은 아직
+#   실측 확인 전이라 원래 값 그대로 둔다 — 같은 증상(가져오기 실패)이 나면 그
+#   리그도 같은 방식(회차 화면 열고 리그 체크박스의 실제 value 확인)으로 맞춘다.
 KR_LEAGUE_NAME_GUESS = {
     "K1": "K리그1", "K2": "K리그2", "EP": "EPL",
-    "La": "라리가", "BD": "분데스리", "SA": "세리에A", "Er": "네덜란드 에레디비시", "L1": "프리그1",
+    "La": "스페인 라리가", "BD": "분데스리", "SA": "세리에A", "Er": "네덜란드 에레디비시", "L1": "프리그1",
 }
 
 

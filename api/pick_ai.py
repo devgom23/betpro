@@ -47,10 +47,6 @@ import numpy as np
 _CAL_X = [10.0, 22.5, 27.5, 32.5, 40.0, 55.0, 70.0]
 _CAL_Y = [16.5, 22.3, 26.8, 32.6, 39.3, 55.3, 70.0]
 
-# 배AI 구간별 실측 핸무율 — 예측이 안 되는 값이라 "이만큼은 늘 깔린다"는 경고로만 쓴다.
-_HANMU_X = [10.0, 22.5, 27.5, 32.5, 40.0, 55.0]
-_HANMU_Y = [22.2, 22.7, 24.0, 25.3, 25.6, 23.3]
-
 # 지표 표본이 이 미만이면 판단에 쓰지 않는다. 국내지표(K-*)는 대부분 여기서 걸린다.
 MIN_IND_SAMPLE = 40
 MIN_H2H_SAMPLE = 3      # 이 미만이면 상대전적을 판단에서 뺀다
@@ -110,32 +106,6 @@ def _ind_counts(row, code):
     return vals, sum(vals)
 
 
-def _streak(seq: str, newest_first: bool):
-    """최근 연승/연패. 양수=연승, 음수=연패, 0=직전이 무승부.
-    HR10은 왼쪽이 과거(오른쪽 끝이 최신), AR10은 왼쪽이 최신이라 방향을 맞춰 읽는다."""
-    s = str(seq or "").strip()
-    if not s:
-        return None
-    ordered = s if newest_first else s[::-1]    # 항상 '최신부터'로 통일
-    head = ordered[0]
-    if head not in ("W", "L"):
-        return 0
-    n = 0
-    for ch in ordered:
-        if ch != head:
-            break
-        n += 1
-    return n if head == "W" else -n
-
-
-def _streak_text(st):
-    if st is None:
-        return "-"
-    if st == 0:
-        return "직전 무"
-    return f"{abs(st)}연{'승' if st > 0 else '패'}"
-
-
 def _home_is_fav(row):
     """정배(시장이 강하다고 본 쪽)가 홈인지. 국내배당 우선, 없으면 해외배당."""
     for w, l in (("KW", "KL"), ("FW", "FL")):
@@ -148,6 +118,65 @@ def _home_is_fav(row):
 def _round_num(v):
     m = re.search(r"\d+", str(v or ""))
     return int(m.group()) if m else 0
+
+
+_RT_LABEL = {1: "핸승", 2: "핸무", 3: "무", 4: "역"}
+
+
+def _team_is_fav(m, team):
+    """그 경기(m)에서 team이 정배였는지. team이 그 경기의 홈이면 그대로,
+    원정이면 홈 기준을 뒤집는다. RT는 항상 '정배가 커버했는지' 기준의 값이라
+    (팀이 홈/원정 어느 쪽이었든) 뒤집어 읽을 필요 없이 그대로 쓸 수 있다."""
+    home_fav = _home_is_fav(m)
+    if home_fav is None:
+        return None
+    is_home = str(m.get("HT") or "").strip() == team
+    return home_fav if is_home else (not home_fav)
+
+
+def _season_record(today_row: dict, matches: list | None, team: str):
+    """team의 이번 시즌 경기 중 '오늘과 같은 정배/역배 구도'였던 경기만 추려
+    핸디캡 결과(핸승/핸무/무/역)를 센다 — 상대전적과 같은 방식으로, 오늘 이
+    팀이 처한 상황과 실제로 비교 가능한 경기만 골라 본다."""
+    if not team:
+        return None
+    today_fav = _team_is_fav(today_row, team)
+    if today_fav is None:
+        return None
+    counts = {"핸승": 0, "핸무": 0, "무": 0, "역": 0}
+    total = 0
+    for m in matches or []:
+        if _team_is_fav(m, team) != today_fav:
+            continue
+        rt = _num(m.get("RT"))
+        if rt is None or int(rt) not in _RT_LABEL:
+            continue
+        counts[_RT_LABEL[int(rt)]] += 1
+        total += 1
+    return {"fav": today_fav, "counts": counts, "total": total}
+
+
+def _season_side_text(side_label, rec):
+    if not rec:
+        return f"{side_label} 정배 판정 불가"
+    role = "정" if rec["fav"] else "역"
+    if rec["total"] == 0:
+        return f"{side_label}({role}) 이번 시즌 표본 없음"
+    c = rec["counts"]
+    return f"{side_label}({role}) 핸승({c['핸승']}) 핸무({c['핸무']}) 무({c['무']}) 역({c['역']})"
+
+
+def _season_row(side_label, rec):
+    """화면이 표로 그릴 수 있게 구조화한 한 줄 — value_text(문장)와 같은 내용을
+    행/열이 맞는 표로도 보여주기 위한 것(가독성: 숫자를 나열식 문장 대신 표로)."""
+    if not rec:
+        return {"side": side_label, "role": None, "total": 0, "counts": None}
+    return {
+        "side": side_label,
+        "role": "정" if rec["fav"] else "역",
+        "total": rec["total"],
+        "counts": rec["counts"],
+    }
 
 
 def _h2h_fav_signal(today_row: dict, h2h: dict | None):
@@ -186,14 +215,17 @@ def _h2h_fav_signal(today_row: dict, h2h: dict | None):
     return {"fav_name": today_fav_name, "rt": kept_rt}, None
 
 
-def compute(row: dict, h2h: dict | None = None, scope: str = "master") -> dict:
+def compute(row: dict, h2h: dict | None = None, scope: str = "master",
+           season_matches: dict | None = None) -> dict:
     """경기 한 건의 종합픽을 계산한다.
 
-    row   : 상세보기가 이미 들고 있는 경기 한 줄(배AI·지표표본·최근10경기 전부 포함)
-    h2h   : _head_to_head_calc() 결과. summary에 {핸승/핸무/무/역/총} 카운트가 들어 있다.
-    scope : 'user'면 통합(TF-*) 지표를 쓰지 않는다 — 내 데이터는 리그가 하나뿐이라
-            통합 대상이 없어 TF-*가 F-*와 항상 같은 값이 된다(상세보기 지표별 표본에서
-            같은 이유로 TK-*/TF-* 행을 숨기고 있다).
+    row            : 상세보기가 이미 들고 있는 경기 한 줄(배AI·지표표본 전부 포함)
+    h2h            : _head_to_head_calc() 결과. summary에 {핸승/핸무/무/역/총} 카운트가 들어 있다.
+    scope          : 'user'면 통합(TF-*) 지표를 쓰지 않는다 — 내 데이터는 리그가 하나뿐이라
+                     통합 대상이 없어 TF-*가 F-*와 항상 같은 값이 된다(상세보기 지표별 표본에서
+                     같은 이유로 TK-*/TF-* 행을 숨기고 있다).
+    season_matches : {"home": [...], "away": [...]} — 홈팀/원정팀이 이번 시즌 치른 경기
+                     원본 목록(main.py._season_matches). '시즌전적' 신호에 쓴다.
     """
     signals = []
     warnings = []
@@ -203,7 +235,6 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master") -> dict:
     if ai is None:
         ai = _num(row.get("RISK"))
     base_hit = _interp(ai, _CAL_X, _CAL_Y)
-    hanmu = _interp(ai, _HANMU_X, _HANMU_Y)
 
     if base_hit is None:
         # 배당이 없으면 기준선 자체가 없다 — 보정만 남아봐야 의미가 없으므로 여기서 끝낸다.
@@ -275,9 +306,10 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master") -> dict:
             "value_text": (f"'{h2h_fav['fav_name']}' 정배였던 맞대결 {h2h_total}경기 중 "
                            f"핸승 {cover_n}회 ({h2h_hit:.0f}%)"),
             "dir": h2h_dir, "adjust": round(adj_h2h, 1),
+            # 그 카드에만 해당하는 주의사항이라, 전체 카드 아래 공용 warnings 줄이
+            # 아니라 이 신호 카드 안에 붙인다(화면 쪽 sigWarn 참고).
+            "warn": f"표본이 {h2h_total}경기로 적어 참고 수준." if h2h_total < 5 else None,
         })
-        if h2h_total < 5:
-            warnings.append(f"상대전적 표본이 {h2h_total}경기로 적어 참고 수준입니다.")
     elif h2h_skip_reason:
         signals.append({
             "key": "h2h", "label": "상대전적", "state": "none",
@@ -292,19 +324,20 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master") -> dict:
             "dir": 0, "adjust": 0.0,
         })
 
-    # ── ④ 최근 흐름: 보여주기만 하고 숫자에는 넣지 않는다 ──
-    home_fav = _home_is_fav(row)
-    h_st = _streak(row.get("HR10"), newest_first=False)
-    a_st = _streak(row.get("AR10"), newest_first=True)
-    if home_fav is None:
-        flow_text = f"홈 {_streak_text(h_st)} / 원정 {_streak_text(a_st)}"
-    else:
-        fav_st, dog_st = (h_st, a_st) if home_fav else (a_st, h_st)
-        flow_text = f"정배 {_streak_text(fav_st)} / 역배 {_streak_text(dog_st)}"
+    # ── ④ 시즌전적: 홈팀·원정팀 각각, 이번 시즌 '오늘과 같은 정배/역배 구도'였던
+    # 경기만 추려 핸디캡 결과를 센다. 상대전적처럼 표본이 갈리는 조건이라 계산에는
+    # 안 넣고 참고용으로만 보여준다(상대전적만큼 검증되지 않았고, 시즌 초반엔 표본이
+    # 금방 말라 신뢰하기 어렵다).
+    ht_name = str(row.get("HT") or "").strip()
+    at_name = str(row.get("AT") or "").strip()
+    home_rec = _season_record(row, (season_matches or {}).get("home"), ht_name)
+    away_rec = _season_record(row, (season_matches or {}).get("away"), at_name)
+    season_text = f"{_season_side_text('홈', home_rec)}\n{_season_side_text('원정', away_rec)}"
     signals.append({
-        "key": "flow", "label": "최근 흐름", "state": "info",
-        "value_text": flow_text,
-        "note": "배당에 이미 반영돼 있어 확률 계산에는 넣지 않습니다",
+        "key": "season", "label": "시즌전적", "state": "info",
+        "value_text": season_text,
+        "rows": [_season_row("홈", home_rec), _season_row("원정", away_rec)],
+        "note": "오늘과 같은 정배/역배 구도였던 이번 시즌 경기만 모은 값 — 확률 계산에는 반영하지 않습니다",
         "dir": 0, "adjust": 0.0,
     })
 
@@ -351,8 +384,6 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master") -> dict:
     flag = str(row.get("ODD_FLAG") or "").strip()
     if flag:
         warnings.append(f"배당 이상 표시({flag})가 있어 기준선 신뢰도가 낮습니다.")
-    if hanmu:
-        warnings.append(f"플핸으로 걸어도 핸무가 약 {hanmu:.0f}% 확률로 깔려 있습니다(예측 불가 구간).")
 
     return {
         "available": True,
@@ -376,6 +407,5 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master") -> dict:
             "grade": grade,
             "grade_key": grade_key,
         },
-        "hanmu": round(hanmu, 1) if hanmu else None,
         "warnings": warnings,
     }
