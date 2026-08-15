@@ -106,8 +106,8 @@
 }
 
 .score-input.winner-score {
-  border-color: #c62828;
-  color: #c62828;
+  border-color: var(--chip-red-fg);
+  color: var(--chip-red-fg);
   font-weight: 700;
 }
 

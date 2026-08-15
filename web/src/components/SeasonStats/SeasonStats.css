@@ -199,15 +199,6 @@
   font-weight: 700;
 }
 
-.ss-winner {
-  display: inline-block;
-  min-width: 16px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  color: #fff;
-  font-weight: 700;
-}
-
 /* ── ③ 라운드 이력 카드 ── */
 .ss-history {
   display: flex;
@@ -292,11 +283,11 @@
 }
 
 .ss-card-ratio .ss-ratio-jung {
-  color: #42a5f5;
+  color: var(--chip-blue-fg);
 }
 
 .ss-card-ratio .ss-ratio-pl {
-  color: #ef5350;
+  color: var(--chip-red-fg);
 }
 
 .ss-picks {

@@ -195,15 +195,6 @@ td.sticky-col {
   background: var(--row-hover);
 }
 
-/* 폼(PPG) 뱃지 — 칸 전체를 칠하지 않고 값만 작은 알약 모양으로 강조한다 */
-.form-badge {
-  display: inline-block;
-  min-width: 34px;
-  padding: 2px 6px;
-  border-radius: 5px;
-  font-weight: 700;
-}
-
 /* RT(핸승/핸무/무/역)·PICK 결과(적중/보험/미적) 뱃지 — RtBadge.css의 알약 모양과
    동일하게 맞춰 칸 전체가 아니라 값만 강조한다 */
 .cell-badge {

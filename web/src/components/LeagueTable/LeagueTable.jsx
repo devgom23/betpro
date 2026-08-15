@@ -433,18 +433,12 @@ export default function LeagueTable({
                         riskSubDividerClass(g, c).trim(),
                       ].filter(Boolean).join(' ')
                       const text = formatCell(g, c, value, row)
-                      // 폼(PPG) 칸은 칸 전체를 칠하지 않고, 값만 작은 뱃지로 보여준다.
+                      // 폼(PPG) 칸 — 상세보기 팝업의 폼 지표와 같은 스타일로, 뱃지가 아니라
+                      // 칸 전체를 배경색으로 칠한다.
                       if (g.label1 === '경기정보' && FORM_COLS.has(c.key)) {
-                        const badgeStyle = formStyle(value)
                         return (
-                          <td key={`${gi}-${ci}`} className={classNames || undefined}>
-                            {badgeStyle ? (
-                              <span className="form-badge" style={badgeStyle}>
-                                {text}
-                              </span>
-                            ) : (
-                              text
-                            )}
+                          <td key={`${gi}-${ci}`} className={classNames || undefined} style={formStyle(value) || undefined}>
+                            {text}
                           </td>
                         )
                       }

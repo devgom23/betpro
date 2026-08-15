@@ -349,14 +349,14 @@ export function myPickStyle(value) {
   return null
 }
 
-// 폼(PPG) 칸 색상 — 상세보기 팝업의 폼 지표와 같은 구간 색상(3.00~2.00 녹색 /
-// 1.99~1.00 노란색 / 0.99~0.00 갈색). 표에서는 칸 전체가 아니라 뱃지로만 보여준다.
+// 폼(PPG) 칸 색상 — 상세보기 팝업의 폼 지표와 완전히 같은 스타일(3.00~2.00 녹색 /
+// 1.99~1.00 노란색 / 0.99~0.00 갈색, 흰 굵은 글씨)로 칸 전체를 칠한다.
 export function formStyle(value) {
   const n = toNum(value)
   if (n === null) return null
-  if (n >= 2) return { background: '#2E7D32', color: '#000', fontWeight: 400 }
-  if (n >= 1) return { background: '#FBC02D', color: '#000', fontWeight: 400 }
-  return { background: '#8D6E63', color: '#000', fontWeight: 400 }
+  if (n >= 2) return { background: '#2E7D32', color: '#fff', fontWeight: 700 }
+  if (n >= 1) return { background: '#FBC02D', color: '#fff', fontWeight: 700 }
+  return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
 }
 
 // ── 셀 배경/글자색 (인라인 style 객체로 반환) ──
@@ -387,7 +387,7 @@ export function cellStyle(group, col, value, row) {
     const as_ = toNum(row.AS)
     if (hs !== null && as_ !== null && hs !== as_) {
       const winner = hs > as_ ? 'HS' : 'AS'
-      if (sub === winner) return { color: '#C62828', fontWeight: 700 }
+      if (sub === winner) return { color: 'var(--chip-red-fg)', fontWeight: 700 }
     }
     return null
   }
@@ -410,8 +410,8 @@ export function cellStyle(group, col, value, row) {
     }
     const base = { background: 'rgba(255, 255, 255, 0.06)' }
     if (n === null) return base
-    if (n < 0) return { ...base, color: '#1565C0', fontWeight: 700 }
-    if (n > 0) return { ...base, color: '#C62828', fontWeight: 700 }
+    if (n < 0) return { ...base, color: 'var(--chip-blue-fg)', fontWeight: 700 }
+    if (n > 0) return { ...base, color: 'var(--chip-red-fg)', fontWeight: 700 }
     return base
   }
 

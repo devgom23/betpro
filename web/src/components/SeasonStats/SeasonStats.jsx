@@ -5,10 +5,21 @@ import './SeasonStats.css'
 
 const RT_ROWS = ['핸승', '핸무', '무', '역']
 
-// 표 안에서 글자로 쓰는 결과 색 — RT_COLOR(배지 배경용)를 어두운 배경 위에서도
-// 읽히도록 같은 계열로 밝힌 값이다.
-const RT_TEXT = { 핸승: '#42A5F5', 핸무: '#93e2b0', 무: '#B0BEC5', 역: '#EF5350' }
-const WINNER_BG = { 정: '#1565C0', 플: '#7B1FA2', 중: '#616161' }
+// 표 안에서 글자로 쓰는 결과 색 — RtBadge의 RT_CHIP과 같은 --chip-* 토큰이라
+// 다크/라이트 테마 모두에서 앱 전체와 같은 기준으로 읽힌다.
+const RT_TEXT = {
+  핸승: 'var(--chip-blue-fg)',
+  핸무: 'var(--chip-green-fg)',
+  무: 'var(--chip-gray-fg)',
+  역: 'var(--chip-red-fg)',
+}
+// 정(핸승+핸무)/플(무+역)/중(동률) — 정배·플핸 축은 내 예측 픽 색상과 같은 파랑/빨강,
+// 중립은 회색. 뱃지가 아니라 칸 전체를 이 색으로 칠한다(내 예측 내픽 칸과 같은 방식).
+const WINNER_CHIP = {
+  정: { background: 'var(--chip-blue-bg)', color: 'var(--chip-blue-fg)', fontWeight: 700 },
+  플: { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)', fontWeight: 700 },
+  중: { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)', fontWeight: 700 },
+}
 
 // 표①·표②의 라운드 열 폭. <table table-layout:fixed>는 셀 내용에 따라 브라우저마다
 // 폭 계산이 흔들려서(실측: 두 표가 서로 다른 폭으로 나옴) 대신 CSS Grid를 쓴다 —
@@ -206,12 +217,12 @@ export default function SeasonStats({ code, scope, season, round }) {
                 {rounds.map((r) => {
                   const t = result.ratio[r]
                   return (
-                    <div key={r} className={`ss-cell ss-foot-cell${colCls(r)}`}>
-                      {t && (
-                        <span className="ss-winner" style={{ background: WINNER_BG[t.winner] }}>
-                          {t.winner}
-                        </span>
-                      )}
+                    <div
+                      key={r}
+                      className={`ss-cell ss-foot-cell${colCls(r)}`}
+                      style={t ? WINNER_CHIP[t.winner] : undefined}
+                    >
+                      {t ? t.winner : ''}
                     </div>
                   )
                 })}
@@ -254,7 +265,7 @@ export default function SeasonStats({ code, scope, season, round }) {
                       <ul className="ss-picks">
                         {h.picks.length === 0 && <li className="ss-pick-none">똥배 없음</li>}
                         {h.picks.map((p) => (
-                          <li key={p.rank} style={{ color: RT_TEXT[p.rt] || '#78909C' }}>
+                          <li key={p.rank} style={{ color: RT_TEXT[p.rt] || 'var(--text-muted)' }}>
                             <span className="ss-pick-main">
                               <span className="ss-pick-odds">{p.odds.toFixed(2)}</span>
                               {p.HT} <span className="ss-pick-vs">vs</span> {p.AT}
