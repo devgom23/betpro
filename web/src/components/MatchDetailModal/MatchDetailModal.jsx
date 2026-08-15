@@ -469,8 +469,71 @@ function SeasonRowsTable({ rows }) {
   )
 }
 
+// 배AI → 실제 핸승률 보정표. api/pick_ai.py의 _CAL_X/_CAL_Y를 그대로 옮긴 것이라
+// 저기 값이 바뀌면 여기도 같이 맞춰야 한다(설명용 화면일 뿐, 계산은 백엔드가 한다).
+const CAL_TABLE = [
+  { ai: 10.0, hit: 16.5 },
+  { ai: 22.5, hit: 22.3 },
+  { ai: 27.5, hit: 26.8 },
+  { ai: 32.5, hit: 32.6 },
+  { ai: 40.0, hit: 39.3 },
+  { ai: 55.0, hit: 55.3 },
+  { ai: 70.0, hit: 70.0 },
+]
+
+function BaselineHelpModal({ base, onClose }) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card baseline-help-card" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">
+          ✕
+        </button>
+        <h2 className="modal-title">기준선은 이렇게 산출됩니다</h2>
+        <p className="modal-meta">배당이 말하는 핸승 확률(배AI)을 출발점으로 삼습니다.</p>
+
+        <ol className="baseline-help-steps">
+          <li>배AI(핸승 위험도의 배당·AI 값)를 가져옵니다.</li>
+          <li>
+            배AI를 아래 실측 보정표에 대입해 "실제 핸승률"로 바꿉니다. 배AI 30% 이상은
+            표가 실측과 거의 같아 그대로 쓰고, 20%대 이하 낮은 구간만 실측이 더 높게
+            나와(예: 배AI 10%대 → 실제 16.5%) 그만큼 끌어올립니다.
+          </li>
+          <li>100%에서 그 실제 핸승률을 빼서 "플핸 성공 확률"(기준선)로 씁니다.</li>
+        </ol>
+
+        <table className="detail-table baseline-help-table">
+          <thead>
+            <tr>
+              <th className="row-label">배AI</th>
+              {CAL_TABLE.map((r) => (
+                <th key={r.ai}>{r.ai}%</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="row-label">실제 핸승률</td>
+              {CAL_TABLE.map((r) => (
+                <td key={r.ai}>{r.hit}%</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+
+        {base && (
+          <p className="baseline-help-example">
+            이 경기: 배AI {base.ai_pick.toFixed(1)}% → 보정 후 핸승률 {base.hit.toFixed(1)}% → 기준선(플핸){' '}
+            {base.pl.toFixed(1)}%
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function PickCards({ data }) {
   const { base, final, signals, warnings, consensus, consensus_text } = data
+  const [showBaseHelp, setShowBaseHelp] = useState(false)
   return (
     <>
       <div className="pick-cards">
@@ -489,10 +552,10 @@ function PickCards({ data }) {
             <span>기준선 {base.pl.toFixed(0)}%</span>
             <span>100%</span>
           </div>
-          <div className="pick-verdict-base">
-            <span className="pick-verdict-base-label">기준선 (배당)</span>
-            배AI {base.ai_pick.toFixed(0)}% → 플핸 {base.pl.toFixed(0)}%
-          </div>
+          <button type="button" className="pick-baseline-help-btn" onClick={() => setShowBaseHelp(true)}>
+            기준선 설명
+          </button>
+          {showBaseHelp && <BaselineHelpModal base={base} onClose={() => setShowBaseHelp(false)} />}
         </div>
         {signals.map((s) => {
           const badge = sigBadge(s)
@@ -561,13 +624,17 @@ function PickBand({ code, row, scope }) {
   return (
     <section className="pick-band">
       <div className="pick-band-head">
-        <h3>종합픽</h3>
+        <h3>종합 분석</h3>
         <span className="pick-band-sub">4개 신호 · 배당 기준선 대비</span>
       </div>
       {error && <p className="error-text">{error}</p>}
       {!error && !data && <p className="pick-loading">계산 중...</p>}
       {!error && data && !data.available && <p className="pick-loading">{data.reason}</p>}
       {!error && data && data.available && <PickCards data={data} />}
+      <div className="pick-band-risk">
+        <h3>핸승 위험도</h3>
+        <RiskCard row={row} />
+      </div>
     </section>
   )
 }
@@ -586,6 +653,36 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // 지표별 표본은 그 경기 데이터양대로 자연스러운 높이 그대로 두고, 상대전적(히스토리가
+  // 많을수록 길어짐) 쪽의 아래 테두리를 지표별 표본의 아래 테두리와 맞춘다.
+  // 단순히 "지표별 표본 자기 높이"를 상대전적 max-height로 그대로 쓰면 안 된다 — 왼쪽
+  // 칸은 위에 '배당' 하나만 있고 오른쪽 칸은 '폼 지표'+'최근10경기' 둘이 있어서, 상대전적이
+  // 시작하는 y좌표 자체가 지표별 표본보다 더 아래다. 그래서 두 카드의 높이가 같아도
+  // 아래 끝은 안 맞는다 — 대신 "지표별 표본의 화면상 아래쪽 y좌표 − 상대전적이 시작하는
+  // y좌표"를 상대전적의 max-height로 써야 두 카드의 아래 끝이 실제로 일직선이 된다.
+  // 위쪽에 있는 카드들(배당/폼 지표/최근10경기) 높이가 바뀌어도 다시 재야 해서, 개별
+  // 요소가 아니라 전체 modal-columns 크기 변화를 관찰한다.
+  const sampleSectionRef = useRef(null)
+  const h2hSectionRef = useRef(null)
+  const columnsRef = useRef(null)
+  const [h2hMaxHeight, setH2hMaxHeight] = useState(null)
+
+  useEffect(() => {
+    const sampleEl = sampleSectionRef.current
+    const h2hEl = h2hSectionRef.current
+    const columnsEl = columnsRef.current
+    if (!sampleEl || !h2hEl || !columnsEl) return
+    const update = () => {
+      const sampleBottom = sampleEl.getBoundingClientRect().bottom
+      const h2hTop = h2hEl.getBoundingClientRect().top
+      setH2hMaxHeight(Math.max(0, sampleBottom - h2hTop))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(columnsEl)
+    return () => ro.disconnect()
+  }, [])
 
   async function handleDownload() {
     setDownloading(true)
@@ -640,17 +737,13 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
 
         <PickBand code={code} row={row} scope={scope} />
 
-        <div className="modal-columns">
+        <div className="modal-columns" ref={columnsRef}>
           <div className="modal-col">
             <section className="detail-section">
               <h3>배당</h3>
               <OddsTable row={row} />
             </section>
-            <section className="detail-section">
-              <h3>핸승 위험도</h3>
-              <RiskCard row={row} />
-            </section>
-            <section className="detail-section">
+            <section className="detail-section" ref={sampleSectionRef}>
               <h3>지표별 표본</h3>
               <SampleTable row={row} scope={scope} />
             </section>
@@ -664,8 +757,14 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
               <h3>최근10경기 전적</h3>
               <RecentTable row={row} />
             </section>
-            <section className="detail-section detail-section-grow">
-              <h3>상대전적</h3>
+            <section
+              className="detail-section detail-section-grow"
+              ref={h2hSectionRef}
+              style={h2hMaxHeight ? { maxHeight: `${h2hMaxHeight}px` } : undefined}
+            >
+              <h3>
+                상대전적 <span className="detail-section-note">승점은 홈팀 기준으로 작성되었습니다.</span>
+              </h3>
               <HeadToHeadResult scope={scope} code={code} home={ht} away={at} cross />
             </section>
           </div>

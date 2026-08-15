@@ -124,8 +124,11 @@
   flex-direction: column;
 }
 
-/* 배당/핸승 위험도/지표별 표본 같은 표 하나하나를 카드 하나로 감싼다.
-   .detail-section-grow(상대전적)만 남는 세로 공간을 마저 채워 오른쪽 칸 높이를 맞춘다. */
+/* 배당/지표별 표본 같은 표 하나하나를 카드 하나로 감싼다. 지표별 표본은 그 경기
+   데이터양대로의 자연스러운 높이 그대로 두고(고정 성장 없음), 상대전적(.detail-section-grow)만
+   남는 세로 공간을 채우면서 MatchDetailModal.jsx가 재서 넣어준 지표별 표본 높이를
+   max-height로 씌운다 — 상대전적 히스토리가 아무리 길어도 지표별 표본 아래 테두리를
+   넘지 않고 그 안(match-list-scroll)에서 스크롤된다. */
 .detail-section {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -142,6 +145,15 @@
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  overflow: hidden;
+}
+
+/* .match-list-scroll의 min-height:180px(HeadToHeadResult.css)는 상대전적 조회 탭처럼
+   flex 부모가 없는 곳의 바닥값이다 — 여기서는 지표별 표본 높이를 그대로 max-height로
+   씌우는데, 그 값이 180px보다 작으면 min-height가 이겨서 카드 밖으로 넘쳐버린다.
+   상세보기 팝업 안에서는 그 바닥값이 필요 없으니 0으로 풀어 남은 공간만큼만 차지하게 한다. */
+.detail-section-grow .match-list-scroll {
+  min-height: 0;
 }
 
 .modal-col h3,
@@ -149,6 +161,12 @@
   font-size: 13px;
   color: var(--text-secondary);
   margin: 0 0 8px;
+}
+
+.detail-section-note {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 .detail-table {
@@ -304,6 +322,20 @@
   }
 }
 
+/* 핸승 위험도 — 종합 분석과 성격이 겹치는 요약 지표라 같은 밴드(같은 너비) 안,
+   카드 그리드 아래에 이어 붙인다. 계산 방식은 서로 다르므로 구분선으로 갈라 둔다. */
+.pick-band-risk {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pick-band-risk h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 /* 판정 블록 — 결론(플핸 성공 확률)과 그 기준선(배당)을 한 카드에 */
 .pick-verdict-card {
   border: 1px solid var(--border);
@@ -379,17 +411,50 @@
   color: var(--text-muted);
 }
 
-.pick-verdict-base {
-  margin-top: auto;
-  padding-top: 8px;
-  font-size: 11px;
+.pick-baseline-help-btn {
+  margin-top: 8px;
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
   color: var(--text-secondary);
+  font-size: 10px;
+  padding: 3px 8px;
+  cursor: pointer;
 }
 
-.pick-verdict-base-label {
-  display: block;
-  color: var(--text-muted);
-  margin-bottom: 2px;
+.pick-baseline-help-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.baseline-help-card {
+  max-width: 560px;
+}
+
+.baseline-help-steps {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.baseline-help-steps li + li {
+  margin-top: 6px;
+}
+
+.baseline-help-table {
+  margin-bottom: 12px;
+}
+
+.baseline-help-example {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+  border-radius: 6px;
+  padding: 8px 10px;
 }
 
 /* 신호 카드 4장 — 해외지표 / 국내지표 / 상대전적 / 최근흐름.
@@ -557,8 +622,10 @@
   background: rgba(66, 165, 245, 0.28);
 }
 
+/* 실제 승/무/패(W/D/L) 색 — 상대전적의 col-w/col-d/col-l·결과 배지와 같은 축(승=파랑/
+   패=빨강)으로 맞춘다. */
 .recent-W {
-  color: #4CAF50;
+  color: var(--chip-blue-fg);
 }
 
 .recent-D {
@@ -566,7 +633,7 @@
 }
 
 .recent-L {
-  color: #EF5350;
+  color: var(--chip-red-fg);
 }
 
 .cell-max {

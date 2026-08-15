@@ -407,14 +407,14 @@ export default function LeagueTable({
                             </td>
                           )
                         }
-                        // MY_PICK
+                        // MY_PICK — 뱃지가 아니라 칸 전체 배경으로 정배/플핸 쪽을 구분한다.
                         return (
-                          <td key={`${gi}-${ci}`} className={className}>
-                            <button
-                              className="mypick-btn"
-                              style={myPickStyle(pickState.pick) || undefined}
-                              onClick={() => setPickRow(row)}
-                            >
+                          <td
+                            key={`${gi}-${ci}`}
+                            className={className}
+                            style={myPickStyle(pickState.pick) || undefined}
+                          >
+                            <button className="mypick-btn" onClick={() => setPickRow(row)}>
                               {pickState.pick || <span className="mypick-blank">－</span>}
                             </button>
                           </td>

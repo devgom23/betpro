@@ -329,11 +329,23 @@ export function pickVerdictStyle(value) {
   return null
 }
 
-// 내 예측의 "내픽" 배지 색상 — 축플/축정은 다른 픽보다 중요한 픽이라 골드 배경(적중
+// 정배 쪽(정무/정/핸승/핸무)과 플핸 쪽(플핸/플핸무/무/역/무핸무)을 셀 색만으로 바로
+// 구분하기 위한 그룹 — RtBadge와 같은 파랑/빨강 축을 그대로 쓴다.
+const MY_PICK_FAV_GROUP = new Set(['정무', '정', '핸승', '핸무'])
+const MY_PICK_DOG_GROUP = new Set(['플핸', '플핸무', '무', '역', '무핸무'])
+
+// 내 예측의 "내픽" 칸 색상 — 축플/축정은 다른 픽보다 중요한 픽이라 골드 배경(적중
 // 배지보다 채도를 낮춘 톤)은 유지하고, 둘을 구분하도록 글자색만 달리한다(축플=빨강, 축정=파랑).
+// 나머지 픽은 뱃지가 아니라 칸 전체 배경으로 정배 쪽/플핸 쪽을 구분한다.
 export function myPickStyle(value) {
-  if (value === '축플') return { background: '#D9C36A', color: '#C62828', fontWeight: 700 }
-  if (value === '축정') return { background: '#D9C36A', color: '#1565C0', fontWeight: 700 }
+  if (value === '축플') return { background: 'var(--chip-yellow-bg)', color: 'var(--chip-red-fg)', fontWeight: 700 }
+  if (value === '축정') return { background: 'var(--chip-yellow-bg)', color: 'var(--chip-blue-fg)', fontWeight: 700 }
+  if (MY_PICK_FAV_GROUP.has(value)) {
+    return { background: 'var(--chip-blue-bg)', color: 'var(--chip-blue-fg)', fontWeight: 700 }
+  }
+  if (MY_PICK_DOG_GROUP.has(value)) {
+    return { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)', fontWeight: 700 }
+  }
   return null
 }
 

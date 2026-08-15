@@ -25,7 +25,13 @@ function homePoints(m, referenceTeam) {
   return 1
 }
 
-const WDL_COLOR = { W: '#1565C0', D: '#757575', L: '#C62828' }
+// RtBadge(RT_CHIP)와 같은 옅은 배경 틴트 + 진한 글씨 스타일 — 승=파랑/무=회색/패=빨강,
+// 상대전적 요약 표의 col-w/col-d/col-l과 같은 축이라 --chip-* 토큰을 그대로 쓴다.
+const WDL_CHIP = {
+  W: { background: 'var(--chip-blue-bg)', color: 'var(--chip-blue-fg)' },
+  D: { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' },
+  L: { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' },
+}
 
 // "결과" 컬럼 — 기준 팀(home) 관점의 실제 승/무/패(W/D/L)만 보여준다.
 // 모양(.rt-badge)은 RtBadge 와 같은 것을 쓰고 색만 다르다 — 그 CSS는
@@ -33,15 +39,17 @@ const WDL_COLOR = { W: '#1565C0', D: '#757575', L: '#C62828' }
 function WdlBadge({ letter }) {
   if (!letter) return null
   return (
-    <span className="rt-badge" style={{ background: WDL_COLOR[letter], color: '#fff' }}>
+    <span className="rt-badge" style={WDL_CHIP[letter]}>
       {letter}
     </span>
   )
 }
 
 const RT_ORDER = ['핸승', '핸무', '무', '역']
-// 지표별 표본(SampleTable)과 같은 배색을 그대로 쓴다 — 핸승=파랑/핸무=하늘/무=회색/역=빨강.
-const RT_COL_CLASS = { 핸승: 'col-hs', 핸무: 'col-hm', 무: 'col-mu', 역: 'col-yk' }
+// 상대전적 표는 핸승/핸무/무/역 개별 색이 아니라, 그 칸이 속한 승/무/패(W/D/L) 그룹
+// 색으로 통일한다 — 글자는 핸승/핸무/무/역 그대로 두고, 배경만 그룹당 하나의 색으로
+// 묶어서 어디까지가 W(승)·D(무)·L(패) 구간인지 색으로도 바로 보이게 한다.
+const GROUP_COL_CLASS = { W: 'col-w', D: 'col-d', L: 'col-l' }
 
 // 전체기준·홈기준 두 표가 내용(숫자 자릿수)과 무관하게 항상 같은 폭으로 나란히
 // 맞춰지도록, 칸마다 실제 셀 내용 대신 이 colgroup 폭을 그대로 쓰게 고정한다
@@ -53,50 +61,59 @@ function WdlCols() {
       {Array.from({ length: 12 }, (_, i) => (
         <col key={i} className="h2h-col-rt" />
       ))}
-      <col className="h2h-col-total" />
+      {['w', 'd', 'l'].map((k) => (
+        <col key={k} className="h2h-col-total" />
+      ))}
     </colgroup>
   )
 }
 
-// 상대전적 W/D/L 요약 한 블록 — "전체기준"(그 팀이 홈이든 원정이든)과 "홈기준"(그 팀이
-// 실제로 홈이었던 맞대결만)을 같은 모양으로 두 번 그려서 나란히 비교할 수 있게 한다.
-function WdlGrid({ title, wdl }) {
+function WdlRow({ title, wdl }) {
   if (!wdl) return null
-  const total = wdl.W.total + wdl.D.total + wdl.L.total
+  return (
+    <tr>
+      <td className="row-label">{title}</td>
+      {['W', 'D', 'L'].flatMap((key) =>
+        RT_ORDER.map((lab) => (
+          <td key={`${key}-${lab}`} className={GROUP_COL_CLASS[key]}>
+            {(wdl[key]?.breakdown?.[lab] || 0) || '-'}
+          </td>
+        ))
+      )}
+      <td className="col-total col-w">{wdl.W.total}</td>
+      <td className="col-total col-d">{wdl.D.total}</td>
+      <td className="col-total col-l">{wdl.L.total}</td>
+    </tr>
+  )
+}
+
+// 상대전적 W/D/L 요약 — "전체기준"(그 팀이 홈이든 원정이든)과 "홈기준"(그 팀이 실제로
+// 홈이었던 맞대결만)을 같은 표 안에 두 줄로 이어 붙여, 헤더 하나로 바로 비교할 수 있게 한다.
+// 헤더는 한 줄로 압축한다 — W/D/L 접두어 없이 핸승/핸무/무/역만 반복해서 보여주고(그룹
+// 구분은 세로선으로), 맨 뒤 토탈은 승/무/패 세 칸으로 나눠 W/D/L 각각의 합계를 바로 본다.
+function WdlGrid({ wdl, wdlHome }) {
+  if (!wdl) return null
   return (
     <table className="detail-table h2h-wdl-grid">
       <WdlCols />
       <thead>
         <tr>
-          <th className="row-label">{title}</th>
-          <th colSpan={4} className="col-w">W-{wdl.W.total}</th>
-          <th colSpan={4} className="col-d">D-{wdl.D.total}</th>
-          <th colSpan={4} className="col-l">L-{wdl.L.total}</th>
-          <th rowSpan={2}>토탈</th>
-        </tr>
-        <tr>
-          <th className="row-label">결과</th>
+          <th className="row-label">기준</th>
           {['W', 'D', 'L'].flatMap((key) =>
             RT_ORDER.map((lab) => (
-              <th key={`${key}-${lab}`} className={RT_COL_CLASS[lab]}>
+              <th key={`${key}-${lab}`} className={GROUP_COL_CLASS[key]}>
                 {lab}
               </th>
             ))
           )}
+          <th className="col-w">승</th>
+          <th className="col-d">무</th>
+          <th className="col-l">패</th>
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td />
-          {['W', 'D', 'L'].flatMap((key) =>
-            RT_ORDER.map((lab) => (
-              <td key={`${key}-${lab}`} className={RT_COL_CLASS[lab]}>
-                {(wdl[key]?.breakdown?.[lab] || 0) || '-'}
-              </td>
-            ))
-          )}
-          <td className="col-total">{total}</td>
-        </tr>
+        <WdlRow title="전체기준" wdl={wdl} />
+        <WdlRow title="홈기준" wdl={wdlHome} />
       </tbody>
     </table>
   )
@@ -148,12 +165,7 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
 
   return (
     <>
-      <p className="h2h-caption">
-        {home} 기준 실제 승/무/패이며, 칸 안 숫자는 그때 핸디캡 결과(RT) 건수입니다.
-        "홈기준"은 그 경기에서 {home}이 실제로 홈이었던 맞대결만 센 것입니다.
-      </p>
-      <WdlGrid title="전체기준" wdl={wdl} />
-      <WdlGrid title="홈기준" wdl={wdlHome} />
+      <WdlGrid wdl={wdl} wdlHome={wdlHome} />
 
       <div className="match-list-scroll">
         <table className="detail-table match-list">
@@ -199,7 +211,6 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
           최근 {data.matches.length}경기만 표시 (총 {data.total}경기)
         </p>
       )}
-      <p className="h2h-more">승점은 홈팀 기준으로 작성되었습니다.</p>
     </>
   )
 }

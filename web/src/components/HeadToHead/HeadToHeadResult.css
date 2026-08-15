@@ -51,17 +51,22 @@
   color: var(--chip-red-fg);
 }
 
-/* 상대전적 실제 승/무/패(W/D/L) 요약 — 승=파랑/무=회색/패=빨강 */
+/* 상대전적 실제 승/무/패(W/D/L) 요약 — 승=파랑/무=회색/패=빨강. col-hs/col-mu/col-yk와
+   같은 --chip-* 토큰을 그대로 써서(파랑·회색·빨강은 색만 같고 축이 다를 뿐) 디자인
+   가이드 색상 기준을 그대로 따른다. */
 .detail-table .col-w {
-  background: rgba(21, 101, 192, 0.25);
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
 }
 
 .detail-table .col-d {
-  background: rgba(117, 117, 117, 0.25);
+  background: var(--chip-gray-bg);
+  color: var(--chip-gray-fg);
 }
 
 .detail-table .col-l {
-  background: rgba(198, 40, 40, 0.25);
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
 }
 
 .detail-table .col-total {
@@ -113,7 +118,7 @@
 }
 
 .h2h-col-rt {
-  width: 38px;
+  width: 44px;
 }
 
 .h2h-col-total {
@@ -125,12 +130,9 @@
 .h2h-wdl-grid th:nth-child(6),
 .h2h-wdl-grid td:nth-child(6),
 .h2h-wdl-grid th:nth-child(10),
-.h2h-wdl-grid td:nth-child(10) {
-  border-left: 2px solid var(--border-strong);
-}
-
-.h2h-wdl-grid th:last-child,
-.h2h-wdl-grid td:last-child {
+.h2h-wdl-grid td:nth-child(10),
+.h2h-wdl-grid th:nth-child(14),
+.h2h-wdl-grid td:nth-child(14) {
   border-left: 2px solid var(--border-strong);
 }
 
