@@ -28,8 +28,8 @@
 }
 
 .wp-clear-btn:hover {
-  color: #c62828;
-  border-color: #c62828;
+  color: var(--chip-red-fg);
+  border-color: var(--chip-red-fg);
 }
 
 .wp-clear-btn:disabled {
