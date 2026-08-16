@@ -25,7 +25,7 @@ function dividerClass(g, isLastGroup) {
   return g.label1 === '국내배당' ? ' group-divider divider-strong' : ' group-divider'
 }
 
-// "핸승 위험도" 그룹 안에서 배당 기반 값(핸승값/국정값/해정값/배당·AI)과 26개
+// "핸승 위험도" 그룹 안에서 배당 기반 값(국정값/국플값/해정값/배당·AI)과 26개
 // 지표 기반 값(K값/F값/KF·AI)을 가르는 구분선 — 그룹과 그룹 사이에 쓰는 것과
 // 똑같은 굵기(group-divider)를 그대로 쓴다.
 function riskSubDividerClass(g, c) {
@@ -517,7 +517,7 @@ export default function LeagueTable({
   )
 }
 
-// 핸승값·배당·AI·K값·F값·KF·AI는 같은 5구간 색상(15/25/35/45%), 국정값·해정값은
+// 국플값·배당·AI·K값·F값·KF·AI는 같은 5구간 색상(15/25/35/45%), 국정값·해정값은
 // 정배 승리 확률이라 스케일이 달라 따로 4구간 색상(40/55/70%)을 쓴다 —
 // columnGroups.js cellStyle의 두 색상 규칙과 그대로 맞춘 참고표.
 const RISK_LEGEND_5 = [
@@ -553,7 +553,7 @@ export function RiskLegendModal({ onClose }) {
         <h2 className="modal-title">📖 핸승 위험도 색상 참고표</h2>
         <p className="modal-meta">실측(6대리그) 기준 색상별 구간입니다.</p>
 
-        <p className="risk-legend-group-title">핸승값 · K값 · F값 (핸승이 나올 확률, 적을수록 좋음)</p>
+        <p className="risk-legend-group-title">K값 · F값 (핸승이 나올 확률, 적을수록 좋음)</p>
         <table className="detail-table risk-legend-table">
           <tbody>
             <tr>
@@ -583,7 +583,7 @@ export function RiskLegendModal({ onClose }) {
           </tbody>
         </table>
 
-        <p className="risk-legend-group-title">배당·AI · KF·AI (플핸이 나올 확률, 높을수록 좋음)</p>
+        <p className="risk-legend-group-title">국플값 · 배당·AI · KF·AI (플핸이 나올 확률, 높을수록 좋음)</p>
         <table className="detail-table risk-legend-table">
           <tbody>
             <tr>

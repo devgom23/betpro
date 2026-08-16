@@ -28,6 +28,25 @@ function rankSuffix(v) {
   return Number.isNaN(n) ? '' : `(${Math.trunc(n)}위)`
 }
 
+// 팀이름 옆 (적중/전체) 배지 — "이번주 벳"에서 이 팀을 선택("+추가")한 횟수 기준.
+// api/main.py team_bet_record 참고: 조합으로 곱해지기 전, 경기당 1건 + 그 경기에서
+// 가장 먼저 담은 유형의 적중 여부만 센다(베팅내역의 개별 벳/조합 개수와는 다르다).
+function TeamBetRecord({ name }) {
+  const [rec, setRec] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    setRec(null)
+    if (!name) return undefined
+    api
+      .get(`/api/team_bet_record?name=${encodeURIComponent(name)}`)
+      .then((res) => { if (!cancelled) setRec(res) })
+      .catch(() => { if (!cancelled) setRec(null) })
+    return () => { cancelled = true }
+  }, [name])
+  if (!rec) return null
+  return <span className="team-bet-record"> ({rec.hit}/{rec.total})</span>
+}
+
 // 폼(PPG) 값 구간별 색상 — 3.00~2.00 녹색 / 1.99~1.00 노란색 / 0.99~0.00 갈색
 function formStyle(v) {
   if (v === null || v === undefined || v === '' || v === '-') return undefined
@@ -40,6 +59,8 @@ function formStyle(v) {
 
 const SAMPLE_INDICATORS = [
   ['K-W', '국) 승'], ['K-L', '국) 패'], ['K-WL', '국) 승+패'], ['K-WDL', '국) 승+무+패'],
+  // 27번 — 플핸측(언더독) 핸디배당이 같고 플핸측이 같은 편(홈/원정)인 과거 경기만.
+  ['K-PL', '국) 플핸'],
   ['K-W-HT', '국) 승=홈팀'], ['K-L-AT', '국) 패=원정팀'],
   ['TK-W', '국/통) 승'], ['TK-L', '국/통) 패'], ['TK-WL', '국/통) 승+패'], ['TK-WDL', '국/통) 승+무+패'],
   ['F-W', '해) 승'], ['F-L', '해) 패'], ['F-WL', '해) 승+패'], ['F-WDL', '해) 승+무+패'],
@@ -79,9 +100,16 @@ function OddsTable({ row }) {
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
   const homeFav = homeIsFav(row)
   const roleSuffix = (isHome) => {
-    if (homeFav === null) return ''
+    if (homeFav === null) return null
     const isFav = isHome ? homeFav : !homeFav
-    return isFav ? ' (정)' : ' (역)'
+    return <span className={isFav ? 'odds-role-fav' : 'odds-role-dog'}> {isFav ? '(정)' : '(역)'}</span>
+  }
+  // 정배 쪽 컬럼(승=홈팀 칸 / 패=원정팀 칸) 전체에 아주 연한 파란 배경을 준다 —
+  // 홈이 정배면 '승' 컬럼(KW/KHW/FW/FHW), 원정이 정배면 '패' 컬럼(KL/KHL/FL/FHL).
+  const favColClass = (col) => {
+    if (homeFav === null) return undefined
+    const favCol = homeFav ? 'w' : 'l'
+    return col === favCol ? 'odds-fav-col' : undefined
   }
   return (
     <table className="detail-table odds-table">
@@ -110,18 +138,18 @@ function OddsTable({ row }) {
         </tr>
         <tr>
           <th>구분</th>
-          <th>승</th>
+          <th className={favColClass('w')}>승</th>
           <th>무</th>
-          <th>패</th>
+          <th className={favColClass('l')}>패</th>
         </tr>
       </thead>
       <tbody>
         {rows.map(([label, w, d, l]) => (
           <tr key={label}>
             <td className="row-label">{label}</td>
-            <td>{numOrDash(row[w])}</td>
+            <td className={favColClass('w')}>{numOrDash(row[w])}</td>
             <td>{numOrDash(row[d])}</td>
-            <td>{numOrDash(row[l])}</td>
+            <td className={favColClass('l')}>{numOrDash(row[l])}</td>
           </tr>
         ))}
       </tbody>
@@ -129,7 +157,7 @@ function OddsTable({ row }) {
   )
 }
 
-// 핸승값/배AI 경계(15/25/35/45%) — web/.../columnGroups.js cellStyle과 동일.
+// 국플값/배AI 경계(15/25/35/45%) — web/.../columnGroups.js cellStyle과 동일.
 // 국정값/해정값만 분포가 달라 따로 경계(40/55/70%)를 쓴다 — 그쪽 주석 참고.
 function riskCellStyle(kind, n) {
   if (n === null || Number.isNaN(n)) return { color: '#9E9E9E' }
@@ -148,15 +176,19 @@ function riskCellStyle(kind, n) {
 
 function RiskCard({ row }) {
   const toN = (v) => (v === null || v === undefined || v === '' ? null : Number(v))
+  // 국플값(RISK)은 백엔드가 '핸승 확률'로 내려주므로 화면에서만 100에서 빼서
+  // 플핸 확률로 보여준다(리그 표 columnGroups.js formatCell과 같은 방식). 색은
+  // 원본값 기준으로 매겨야 방향이 맞아서, 배당·AI/KF·AI와 같은 'std' 등급을 쓴다.
   const items = [
-    ['핸승값', toN(row.RISK), 'std'],
     ['국정값', toN(row.WIN_RISK), 'win'],
+    ['국플값', toN(row.RISK), 'std'],
     ['해정값', toN(row.WIN_RISK_F), 'win'],
     ['배당·AI', toN(row.AI_PICK), 'std'],
     ['K값', toN(row.K_VALUE), 'std'],
     ['F값', toN(row.F_VALUE), 'std'],
     ['KF·AI', toN(row.KF_AI), 'std'],
   ]
+  const FLIPPED = new Set(['국플값', '배당·AI', 'KF·AI'])
   return (
     <table className="detail-table">
       <thead>
@@ -170,7 +202,13 @@ function RiskCard({ row }) {
         <tr>
           {items.map(([label, n, kind]) => (
             <td key={label} style={riskCellStyle(kind, n)}>
-              {n === null ? '-' : label === '배당·AI' || label === 'KF·AI' ? `플${(100 - n).toFixed(0)}%` : `${n.toFixed(0)}%`}
+              {n === null
+                ? '-'
+                : label === '국플값'
+                  ? `${(100 - n).toFixed(0)}%`
+                  : FLIPPED.has(label)
+                    ? `플${(100 - n).toFixed(0)}%`
+                    : `${n.toFixed(0)}%`}
             </td>
           ))}
         </tr>
@@ -278,7 +316,27 @@ function maxCellClass(vals, i) {
 // TK-*/TF-* ("국/통", "해/통")는 그 리그를 통합DB(6대리그 등 여러 리그 합산)와
 // 섞은 지표다. 내 데이터는 리그 하나만 있어 통합 대상이 없으므로 항상 국내/해외
 // 지표와 값이 완전히 같아진다 — 의미 없는 중복이라 내 데이터에서는 아예 뺀다.
+// 지표별 표본에서 "정배 쪽" 지표 줄을 짚어준다 — 배당이 낮은 쪽이 정배다.
+// 국내는 KW/KL, 해외는 FW/FL로 각각 따로 판정한다. 둘이 서로 다른 팀을 정배로 보는
+// 경기가 실측 4.25%(16,748경기 중 711건) 있는데, 그 엇갈림 자체가 "국내와 해외 시장이
+// 갈렸다"는 볼 만한 신호라 하나로 합치지 않는다.
+// 대상은 승/패 단일 지표 4줄뿐이다(승=홈팀·통합 같은 파생 지표는 제외 — 줄이 너무 많아지면
+// 테두리가 오히려 안 튄다).
+function favSampleCodes(row) {
+  const out = new Set()
+  const pick = (winKey, loseKey, winCode, loseCode) => {
+    const w = numOrNull(row[winKey])
+    const l = numOrNull(row[loseKey])
+    if (w === null || l === null || w === l) return   // 배당이 없거나 같으면 정배가 없다
+    out.add(w < l ? winCode : loseCode)
+  }
+  pick('KW', 'KL', 'K-W', 'K-L')
+  pick('FW', 'FL', 'F-W', 'F-L')
+  return out
+}
+
 function SampleTable({ row, scope }) {
+  const favCodes = favSampleCodes(row)
   const indicators = scope === 'user'
     ? SAMPLE_INDICATORS.filter(([code]) => !code.startsWith('TK-') && !code.startsWith('TF-'))
     : SAMPLE_INDICATORS
@@ -311,8 +369,15 @@ function SampleTable({ row, scope }) {
         {lines.map((l, li) => {
           const isForeign = /^(F|TF)-/.test(l.code)
           const groupStart = li > 0 && isForeign && !/^(F|TF)-/.test(lines[li - 1].code)
+          // 국)플핸(K-PL)은 경기마다 다른 정배 판정과 무관하게 항상 강조한다 —
+          // 다른 지표는 "이 경기의 정배 쪽이라서" 강조되지만, 이건 새로 만든 지표
+          // 자체를 표에서 놓치지 않게 눈에 띄우는 목적이라 매번 켜져 있어야 한다.
+          const cls = [
+            groupStart && 'sample-group-start',
+            (favCodes.has(l.code) || l.code === 'K-PL') && 'sample-fav-row',
+          ].filter(Boolean).join(' ')
           return (
-            <tr key={l.code} className={groupStart ? 'sample-group-start' : undefined}>
+            <tr key={l.code} className={cls || undefined}>
               <td className="row-label">{l.label}</td>
               {l.vals.map((v, i) => (
                 <td key={i} className={maxCellClass(l.vals, i)}>
@@ -469,71 +534,8 @@ function SeasonRowsTable({ rows }) {
   )
 }
 
-// 배AI → 실제 핸승률 보정표. api/pick_ai.py의 _CAL_X/_CAL_Y를 그대로 옮긴 것이라
-// 저기 값이 바뀌면 여기도 같이 맞춰야 한다(설명용 화면일 뿐, 계산은 백엔드가 한다).
-const CAL_TABLE = [
-  { ai: 10.0, hit: 16.5 },
-  { ai: 22.5, hit: 22.3 },
-  { ai: 27.5, hit: 26.8 },
-  { ai: 32.5, hit: 32.6 },
-  { ai: 40.0, hit: 39.3 },
-  { ai: 55.0, hit: 55.3 },
-  { ai: 70.0, hit: 70.0 },
-]
-
-function BaselineHelpModal({ base, onClose }) {
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card baseline-help-card" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="닫기">
-          ✕
-        </button>
-        <h2 className="modal-title">기준선은 이렇게 산출됩니다</h2>
-        <p className="modal-meta">배당이 말하는 핸승 확률(배AI)을 출발점으로 삼습니다.</p>
-
-        <ol className="baseline-help-steps">
-          <li>배AI(핸승 위험도의 배당·AI 값)를 가져옵니다.</li>
-          <li>
-            배AI를 아래 실측 보정표에 대입해 "실제 핸승률"로 바꿉니다. 배AI 30% 이상은
-            표가 실측과 거의 같아 그대로 쓰고, 20%대 이하 낮은 구간만 실측이 더 높게
-            나와(예: 배AI 10%대 → 실제 16.5%) 그만큼 끌어올립니다.
-          </li>
-          <li>100%에서 그 실제 핸승률을 빼서 "플핸 성공 확률"(기준선)로 씁니다.</li>
-        </ol>
-
-        <table className="detail-table baseline-help-table">
-          <thead>
-            <tr>
-              <th className="row-label">배AI</th>
-              {CAL_TABLE.map((r) => (
-                <th key={r.ai}>{r.ai}%</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td className="row-label">실제 핸승률</td>
-              {CAL_TABLE.map((r) => (
-                <td key={r.ai}>{r.hit}%</td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-
-        {base && (
-          <p className="baseline-help-example">
-            이 경기: 배AI {base.ai_pick.toFixed(1)}% → 보정 후 핸승률 {base.hit.toFixed(1)}% → 기준선(플핸){' '}
-            {base.pl.toFixed(1)}%
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
-
 function PickCards({ data }) {
   const { base, final, signals, warnings, consensus, consensus_text } = data
-  const [showBaseHelp, setShowBaseHelp] = useState(false)
   return (
     <>
       <div className="pick-cards">
@@ -552,10 +554,15 @@ function PickCards({ data }) {
             <span>기준선 {base.pl.toFixed(0)}%</span>
             <span>100%</span>
           </div>
-          <button type="button" className="pick-baseline-help-btn" onClick={() => setShowBaseHelp(true)}>
-            기준선 설명
-          </button>
-          {showBaseHelp && <BaselineHelpModal base={base} onClose={() => setShowBaseHelp(false)} />}
+          {consensus_text && (
+            <p
+              className={`pick-consensus pick-consensus-${
+                consensus === '불일치' ? 'off' : consensus === '핸승' || consensus === '플핸' ? 'on' : 'none'
+              }`}
+            >
+              {consensus_text}
+            </p>
+          )}
         </div>
         {signals.map((s) => {
           const badge = sigBadge(s)
@@ -575,17 +582,8 @@ function PickCards({ data }) {
           )
         })}
       </div>
-      {(consensus_text || warnings.length > 0) && (
+      {warnings.length > 0 && (
         <div className="pick-notes">
-          {consensus_text && (
-            <p
-              className={`pick-consensus pick-consensus-${
-                consensus === '불일치' ? 'off' : consensus === '핸승' || consensus === '플핸' ? 'on' : 'none'
-              }`}
-            >
-              {consensus_text}
-            </p>
-          )}
           {warnings.map((w) => (
             <p key={w} className="pick-warn">
               주의 | {w}
@@ -632,7 +630,9 @@ function PickBand({ code, row, scope }) {
       {!error && data && !data.available && <p className="pick-loading">{data.reason}</p>}
       {!error && data && data.available && <PickCards data={data} />}
       <div className="pick-band-risk">
-        <h3>핸승 위험도</h3>
+        <h3>
+          핸승 위험도 <span className="detail-section-note">국정값/해정값 : 정배승확률</span>
+        </h3>
         <RiskCard row={row} />
       </div>
     </section>
@@ -715,8 +715,10 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
         <h2 className="modal-title">
           <span>
             {ht}
-            {rankSuffix(row.HP)} vs {at}
+            {rankSuffix(row.HP)}
+            <TeamBetRecord name={ht} /> vs {at}
             {rankSuffix(row.AP)}
+            <TeamBetRecord name={at} />
           </span>
           <button
             className={`star-btn ${isStarred(row.IMPORTANT) ? 'star-on' : ''}`}

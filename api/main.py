@@ -845,13 +845,10 @@ def create_bet_batch(body: BetBatchBody, user: dict = Depends(get_current_user))
     return {"ok": True, "batch_id": batch_id}
 
 
-@app.get("/api/bet_slips")
-def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_current_user)):
-    """베팅내역 표 데이터. 등록 묶음(batch) → 조합 순으로 묶어 소계를 내고, 등록된 순서 그대로
-    나열한다. 회차는 더 이상 날짜로 자동 구분하지 않고, 사용자가 체크박스로 고른 뒤 "회차 설정"을
-    눌러야 그 구간(settle_group_id)에 회차총계가 붙는다 — 그 전까지는 소계만 있는 미확정 상태다."""
-    slips = BETSLIPS.list_slips(user["username"], scope)
-
+def _attach_leg_hits(slips: list[dict], user: dict) -> None:
+    """슬립 목록(BETSLIPS.list_slips*)에 다리별 실제 결과(actual/dt/hit)와 슬립 전체
+    결과(result/payout/hit_amount)를 붙인다. /api/bet_slips와 /api/team_bet_record가
+    "다리마다 리그 df를 찾아 RT 대조"라는 같은 계산을 반복하지 않도록 여기 한 곳으로 모았다."""
     db_by_scope: dict[str, str] = {}
 
     def db_for(sc: str) -> str:
@@ -910,6 +907,15 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
                           if slip["stake"] and slip["odds"] else None)
         slip["hit_amount"] = slip["payout"] if slip["result"] == "적중" else None
 
+
+@app.get("/api/bet_slips")
+def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_current_user)):
+    """베팅내역 표 데이터. 등록 묶음(batch) → 조합 순으로 묶어 소계를 내고, 등록된 순서 그대로
+    나열한다. 회차는 더 이상 날짜로 자동 구분하지 않고, 사용자가 체크박스로 고른 뒤 "회차 설정"을
+    눌러야 그 구간(settle_group_id)에 회차총계가 붙는다 — 그 전까지는 소계만 있는 미확정 상태다."""
+    slips = BETSLIPS.list_slips(user["username"], scope)
+    _attach_leg_hits(slips, user)
+
     max_legs = max((len(s["legs"]) for s in slips), default=0)
 
     # 등록 순서(id) 그대로 훑으며 settle_group_id가 연속으로 같은 구간끼리 하나의 섹션으로 묶는다.
@@ -951,6 +957,36 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
     summary["total_count"] = len(slips)
 
     return {"max_legs": max_legs, "sections": sections, "summary": summary}
+
+
+@app.get("/api/team_bet_record")
+def team_bet_record(name: str, user: dict = Depends(get_current_user)):
+    """상세보기 팀명 옆 (적중/전체) 배지용. "전체"는 베팅내역의 개별 벳(조합) 개수가
+    아니라 "이번주 벳"에서 그 팀을 선택("+추가")한 횟수다 — 한 경기에 유형을 여러 개
+    담아도(예: 플핸/핸무 둘 다 추가) 조합 곱해지기 전 기준으로 그 경기 1건만 센다.
+    "적중"은 그 경기에 담은 유형 중 가장 먼저 추가한 것(다리 id가 가장 작은 것)의
+    적중 여부만 본다 — 나중에 다른 유형을 더 담았다고 판정이 바뀌지 않는다.
+    스코프(공식/내 데이터) 구분 없이 이 계정의 전체 배팅 이력을 본다."""
+    name = (name or "").strip()
+    if not name:
+        return {"name": name, "hit": 0, "total": 0}
+    slips = BETSLIPS.list_slips_all(user["username"])
+    _attach_leg_hits(slips, user)
+
+    # (batch_id, S, R, No, HT, AT) 조합마다 다리 id가 가장 작은(=가장 먼저 추가한) 것만 남긴다.
+    first_leg: dict[tuple, dict] = {}
+    for slip in slips:
+        for leg in slip["legs"]:
+            if leg.get("HT") != name and leg.get("AT") != name:
+                continue
+            key = (slip["batch_id"], leg.get("S"), leg.get("R"), leg.get("No"), leg.get("HT"), leg.get("AT"))
+            cur = first_leg.get(key)
+            if cur is None or leg["leg_id"] < cur["leg_id"]:
+                first_leg[key] = leg
+
+    total = len(first_leg)
+    hit = sum(1 for leg in first_leg.values() if leg["hit"] == "적중")
+    return {"name": name, "hit": hit, "total": total}
 
 
 class SlipIdsBody(BaseModel):

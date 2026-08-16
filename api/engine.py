@@ -232,7 +232,9 @@ def _prep_db(db):
     cache = {}
     n = len(db)
     # 💡 [26지표] KHW(국내 핸디 정배배당) 추가 - 신규 K-W-HW 지표용
-    for c in ['FW', 'FD', 'FL', 'FHW', 'KW', 'KD', 'KL', 'KHW']:
+    # 💡 [27번] KHL(국내 핸디 원정배당) 추가 - K-PL(국)플핸) 지표용.
+    #    플핸측 배당은 홈이 언더독이면 KHW, 원정이 언더독이면 KHL이라 둘 다 필요하다.
+    for c in ['FW', 'FD', 'FL', 'FHW', 'KW', 'KD', 'KL', 'KHW', 'KHL']:
         if c in db.columns:
             cache[c] = pd.to_numeric(db[c], errors='coerce').round(2).to_numpy()
         else:
@@ -275,12 +277,15 @@ def get_samples_fast(cache, logic, row):
     except: kl = 0
     try: khw = round(float(row.get('KHW', 0)), 2)   # 💡 [26지표] 국내 핸디 정배배당
     except: khw = 0
+    try: khl = round(float(row.get('KHL', 0)), 2)   # 💡 [27번] 국내 핸디 원정배당
+    except: khl = 0
 
     ht = normalize_team_names(pd.Series([row.get('HT', '')]))[0]
     at = normalize_team_names(pd.Series([row.get('AT', '')]))[0]
 
     cFW = cache['FW']; cFD = cache['FD']; cFL = cache['FL']; cFHW = cache['FHW']
     cKW = cache['KW']; cKD = cache['KD']; cKL = cache['KL']; cKHW = cache['KHW']
+    cKHL = cache['KHL']
     cHT = cache['HT']; cAT = cache['AT']; cRT = cache['RT']
 
     try:
@@ -331,6 +336,25 @@ def get_samples_fast(cache, logic, row):
         elif logic == 'K-L': m = (cKL == kl)
         elif logic == 'K-WL': m = (cKW == kw) & (cKL == kl)
         elif logic == 'K-WDL': m = (cKW == kw) & (cKD == kd) & (cKL == kl)
+        # ── 27번: 국) 플핸 ──
+        # 플핸(언더독) 쪽 국내 핸디배당이 같고, 그 플핸측이 같은 편(홈/원정)인 경기만 센다.
+        # 기존 26개는 전부 "홈 칸이냐 원정 칸이냐"(자리 기준)인데, 이 지표만 "정배냐
+        # 언더독이냐"(역할 기준)로 찾는다 — 같은 1.53이라도 홈이 언더독일 때와 원정이
+        # 언더독일 때를 섞지 않는 게 이 지표의 핵심이라 두 조건을 반드시 함께 건다.
+        # 정배 판정은 min(KW, KL) 기준으로, 같은 파일 compute_domestic_nh_share()와 맞춘다.
+        elif logic == 'K-PL':
+            if kw <= 0 or kl <= 0 or kw == kl:
+                return [0, 0, 0, 0]          # 정배를 못 가리면(배당 없음/동률) 표본도 없다
+            home_dog = kw > kl               # 홈 배당이 더 높다 = 홈이 언더독
+            pl_odds = khw if home_dog else khl
+            if pl_odds <= 0:
+                return [0, 0, 0, 0]
+            # NaN은 비교가 전부 False라 자연히 빠지지만, KW==KL(동률)은 아래 valid에서 막는다
+            # (NaN != NaN 이 True라서 != 만으로는 못 거른다).
+            valid = ~np.isnan(cKW) & ~np.isnan(cKL) & (cKW != cKL)
+            db_home_dog = cKW > cKL
+            db_pl = np.where(db_home_dog, cKHW, cKHL)
+            m = valid & (db_home_dog == home_dog) & (db_pl == pl_odds)
         elif logic == 'K-W-HW': m = (cKW == kw) & (cKHW == khw)
         elif logic == 'K-W-HT': m = (cKW == kw) & (cHT == ht)
         elif logic == 'K-L-AT': m = (cKL == kl) & (cAT == at)
@@ -445,6 +469,7 @@ def analyze_row(row, db, total_db, db_cache=None, total_cache=None, dom_cache=No
         'F-W-HT', 'F-L-AT', 'F-WL-HT', 'F-WL-AT',
         'K-W', 'K-L', 'K-WL', 'K-WDL', 'K-W-HW',
         'K-W-HT', 'K-L-AT', 'K-WL-HT', 'K-WL-AT',
+        'K-PL',   # 27번: 국) 플핸 (플핸측 핸디배당 + 홈/원정 언더독 구분)
     ]
     for l in logics_new_individual:
         c = get_samples_fast(db_cache, l, rd)

@@ -53,6 +53,13 @@
   font-size: 20px;
 }
 
+/* 팀이름 옆 (적중/전체) — 제목 안에서도 보조 정보라 본문보다 작고 흐리게 */
+.team-bet-record {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
 .mypick-bar {
   display: flex;
   align-items: center;
@@ -230,6 +237,23 @@
   font-weight: 800;
 }
 
+/* 팀명 옆 (정)/(역) 글자색 — 정=파랑/역=빨강, 앱 전체 --chip-* 토큰과 같은 기준. */
+.odds-role-fav {
+  color: var(--chip-blue-fg);
+}
+
+.odds-role-dog {
+  color: var(--chip-red-fg);
+}
+
+/* 정배 쪽 컬럼(승/패 중 정배가 있는 칸) 전체에 아주 연한 파란 배경 — 숫자 글자색은
+   그대로 둬서(col-hs처럼 글자까지 파랗게 물들이지 않고) 배경만 옅게 표시한다.
+   --chip-blue-bg를 그대로 쓰면(뱃지용 색이라) 표 배경 위에서 너무 진해 보여서,
+   투명과 섞어 반투명하게 낮춘다. */
+.odds-fav-col {
+  background: color-mix(in srgb, var(--chip-blue-bg) 40%, transparent);
+}
+
 /* 핸승/핸무/무/역 컬럼 — RtBadge의 RT_CHIP(옅은 배경 틴트 + 진한 글씨)과 같은
    --chip-* 토큰을 써서, 표 색상과 배지 색상이 앱 전체에서 하나의 기준을 따르게 한다. */
 .detail-table .col-hs {
@@ -274,6 +298,30 @@
    붙여 특이도를 한 단계 높여서 로드 순서와 무관하게 항상 이기도록 한다. */
 .sample-table .sample-group-start td {
   border-top: 3px solid var(--accent);
+}
+
+/* 지표별 표본: 정배 쪽 지표 줄(국) 승/패, 해) 승/패 중 배당이 낮은 쪽) 강조.
+   시즌 지표 ③ '현재 시즌' 카드와 같은 강조색(--ddong-focus) 테두리로 줄 전체를 감싼다.
+   칸 안에는 이미 핸승/핸무/무/역 색이 칠해져 있어 배경은 건드리지 않고 테두리만 쓴다.
+   border-collapse:collapse 표라 tr에 테두리를 주면 브라우저마다 다르게 그려진다 —
+   줄 안 모든 칸에 위/아래를, 양 끝 칸에만 좌/우를 붙여서 한 줄을 감싼 것처럼 만든다.
+   (2px라 옆칸의 1px 기본 테두리를 이겨서 끊김 없이 이어진다.)
+
+   선택자에 tr을 붙여 특이도를 한 단계 올린 건 위 .sample-group-start 규칙과 겹치기
+   때문이다 — '해) 승'은 해외 블록의 첫 줄이라 그 줄이 정배일 때(약 절반의 경기)
+   두 규칙이 같은 칸의 border-top을 두고 부딪힌다. 소스 순서에 기대면 규칙을 옮길 때
+   깨지므로, 강조 테두리가 항상 이기도록 못박아 네 변이 끊기지 않은 상자로 보이게 한다. */
+.sample-table tr.sample-fav-row td {
+  border-top: 2px solid var(--ddong-focus);
+  border-bottom: 2px solid var(--ddong-focus);
+}
+
+.sample-table tr.sample-fav-row td:first-child {
+  border-left: 2px solid var(--ddong-focus);
+}
+
+.sample-table tr.sample-fav-row td:last-child {
+  border-right: 2px solid var(--ddong-focus);
 }
 
 /* ── 종합픽 — 팝업 헤더 바로 아래, 전체 폭 밴드로 배치해 결론을 스크롤 없이 먼저 보여준다 ── */
@@ -411,52 +459,6 @@
   color: var(--text-muted);
 }
 
-.pick-baseline-help-btn {
-  margin-top: 8px;
-  align-self: flex-start;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  font-size: 10px;
-  padding: 3px 8px;
-  cursor: pointer;
-}
-
-.pick-baseline-help-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--border-strong);
-}
-
-.baseline-help-card {
-  max-width: 560px;
-}
-
-.baseline-help-steps {
-  margin: 0 0 12px;
-  padding-left: 18px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.baseline-help-steps li + li {
-  margin-top: 6px;
-}
-
-.baseline-help-table {
-  margin-bottom: 12px;
-}
-
-.baseline-help-example {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-primary);
-  background: var(--bg-surface-2);
-  border-radius: 6px;
-  padding: 8px 10px;
-}
-
 /* 신호 카드 4장 — 해외지표 / 국내지표 / 상대전적 / 최근흐름.
    실제로 확률에 반영된(핸승 쪽·플핸 쪽) 신호만 테두리를 강조해 눈에 띄게 한다. */
 .pick-sig-card {
@@ -560,9 +562,10 @@
 }
 
 .pick-consensus {
-  margin: 0;
-  font-size: 12px;
+  margin: 6px 0 0;
+  font-size: 11px;
   font-weight: 600;
+  line-height: 1.4;
 }
 
 .pick-consensus-on { color: var(--text-primary); }

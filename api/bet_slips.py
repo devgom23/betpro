@@ -146,7 +146,37 @@ def list_slips(username: str, scope: str) -> list[dict]:
         for s in slips:
             legs = con.execute(
                 """
-                SELECT code, S, R, No, HT, AT, pick_type, odds, leg_order, scope
+                SELECT id AS leg_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope
+                FROM bet_slip_legs WHERE slip_id=? ORDER BY leg_order
+                """,
+                (s["id"],),
+            ).fetchall()
+            row = dict(s)
+            row["legs"] = [dict(l) for l in legs]
+            out.append(row)
+        return out
+    finally:
+        con.close()
+
+
+def list_slips_all(username: str) -> list[dict]:
+    """스코프(master/user) 구분 없이 이 계정의 모든 벳 슬립+다리를 등록 순서(id) 그대로 반환한다.
+    "이 팀을 지금까지 몇 번 벳 선택에 넣었는지"(team_bet_record)처럼 회차·스코프와 무관하게
+    전체 배팅 이력을 훑어야 할 때 쓴다 — list_slips와 달리 scope로 거르지 않는다."""
+    con = _connect(username)
+    try:
+        slips = con.execute(
+            """
+            SELECT id, batch_id, scope, round_start, round_end, odds, stake, memo, created_dt, settle_group_id
+            FROM bet_slips
+            ORDER BY id ASC
+            """
+        ).fetchall()
+        out = []
+        for s in slips:
+            legs = con.execute(
+                """
+                SELECT id AS leg_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope
                 FROM bet_slip_legs WHERE slip_id=? ORDER BY leg_order
                 """,
                 (s["id"],),

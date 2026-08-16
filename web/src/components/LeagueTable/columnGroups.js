@@ -34,11 +34,17 @@ const DDONG_COLS = [
 // 실측 적중률이 아니라 고정 보정표 값이었고(예: 78% 표시인데 실제 52.8%),
 // 여기 값은 전부 실측으로 검증했다(6대리그 13,410경기, columnGroups.js formatCell/
 // cellStyle 쪽과 api/ev_model.py 상단 주석 참고).
-// 배당 기반 값(핸승값/국정값/해정값/배당·AI) → 26개 지표 기반 값(K값/F값/KF·AI)
+// 배당 기반 값(국정값/국플값/해정값/배당·AI) → 26개 지표 기반 값(K값/F값/KF·AI)
 // 순서. LeagueTable.jsx riskSubDividerClass가 배당·AI 뒤에 구분선을 넣는다.
+//
+// 이름 규칙: 앞글자 = 배당 출처(국=국내/해=해외), 뒷글자 = 무엇이 나올 확률인가.
+//   국정값·해정값 = "정배가 그냥 이길 확률"(핸디캡 무관, 승무패 배당에서 산출)
+//   국플값        = "플핸이 나올 확률"(국내 핸디배당 KHW/KHD/KHL에서 산출)
+// 국플값의 원본 컬럼(RISK)은 백엔드에서 여전히 '핸승 확률'로 계산되어 내려온다 —
+// 화면에서만 100에서 빼서 플핸 확률로 보여준다(formatCell 참고). 계산식은 안 건드렸다.
 const RISK_COLS = [
-  ['RISK', '핸승값'],
   ['WIN_RISK', '국정값'],
+  ['RISK', '국플값'],
   ['WIN_RISK_F', '해정값'],
   ['AI_PICK', '배당·AI'],
   ['K_VALUE', 'K값'],
@@ -74,6 +80,10 @@ const GROUP_DEFS = [
   ['TK-L', '24. 국/통) 패 분석'],
   ['TK-WL', '25. 국/통) 승+패 분석'],
   ['TK-WDL', '26. 국/통) 승+무+패 분석'],
+  // 27번만 찾는 기준이 다르다 — 나머지 26개는 "홈 칸/원정 칸"(자리 기준)인데
+  // 이건 "정배/언더독"(역할 기준)으로, 플핸측 핸디배당이 같고 플핸측이 같은 편
+  // (홈/원정)인 과거 경기만 센다. api/engine.py get_samples_fast의 'K-PL' 참고.
+  ['K-PL', '27. 국) 플핸 분석'],
 ]
 
 const SUB4 = ['핸승', '핸무', '무', '역']
@@ -222,6 +232,9 @@ export function formatCell(group, col, value, row) {
   if (group.kind === 'risk') {
     const n = toNum(value)
     if (n === null) return ''
+    // 국플값은 백엔드가 '핸승 확률'로 내려주므로 100에서 빼서 플핸 확률로 보여준다.
+    // (칸 이름에 이미 '플'이 있어 배당·AI/KF·AI처럼 '플' 접두사는 붙이지 않는다.)
+    if (sub === '국플값') return `${(100 - n).toFixed(0)}%`
     if (sub === '배당·AI' || sub === 'KF·AI') return `플${(100 - n).toFixed(0)}%`
     return `${n.toFixed(0)}%`
   }
@@ -415,9 +428,11 @@ export function cellStyle(group, col, value, row) {
     return base
   }
 
-  // 핸승값(RISK)·배AI·K값·F값·KFAI 모두 "핸승 날 확률(%)" 값이라 같은 색 등급을 쓴다 —
+  // 국플값(RISK)·배AI·K값·F값·KFAI 모두 원본값이 "핸승 날 확률(%)"이라 같은 색 등급을 쓴다 —
   // 실측 검증(6대리그 13,410경기, api/ev_model.py 상단 주석 참고) 경계: 15/25/35/45%.
-  if (group.kind === 'risk' && ['핸승값', '배당·AI', 'K값', 'F값', 'KF·AI'].includes(sub)) {
+  // 국플값·배당·AI·KF·AI는 화면에 100에서 뺀 값을 보여주지만, 색은 원본값 기준 그대로
+  // 매긴다 — 핸승이 낮을수록(=플핸이 높을수록) 초록이 되어 표시값과 방향이 맞는다.
+  if (group.kind === 'risk' && ['국플값', '배당·AI', 'K값', 'F값', 'KF·AI'].includes(sub)) {
     const n = toNum(value)
     if (n === null) return { color: '#9E9E9E' }
     if (n < 15) return { background: '#1B5E20', color: '#fff', fontWeight: 700 }
@@ -427,7 +442,7 @@ export function cellStyle(group, col, value, row) {
     return { background: '#C62828', color: '#fff', fontWeight: 700 }
   }
 
-  // 국정값·해정값(WIN_RISK/WIN_RISK_F) — "정배가 실제로 이길 확률"이라 핸승값과는
+  // 국정값·해정값(WIN_RISK/WIN_RISK_F) — "정배가 실제로 이길 확률"이라 국플값과는
   // 분포 자체가 다르다(실측 6대리그 15,834경기 결과 대부분이 31~90% 구간에 몰려
   // 있다 — 핸승값 경계를 그대로 쓰면 거의 전부 '위험' 한 가지 색으로만 칠해진다).
   // 그래서 경계를 따로 잡았다: 31~40%→실제 37.8% / 41~50%→44.6% / 51~60%→57.0% /
