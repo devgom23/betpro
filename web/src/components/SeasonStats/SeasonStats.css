@@ -218,7 +218,6 @@
 
 .ss-card-cur {
   border-color: var(--ddong-focus);
-  background: var(--cell-highlight);
 }
 
 .ss-card-head {
@@ -288,6 +287,16 @@
 
 .ss-card-ratio .ss-ratio-pl {
   color: var(--chip-red-fg);
+}
+
+/* 그 라운드 똥배들의 결과를 핸승/핸무/무/역 순서로 센 숫자만(라벨 없이) 목록 위에
+   한 줄로 — 아래 목록을 한 줄씩 안 읽어도 그 라운드 똥배 결과를 바로 볼 수 있게. */
+.ss-picks-tally {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 3px;
 }
 
 .ss-picks {

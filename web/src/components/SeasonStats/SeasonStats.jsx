@@ -262,6 +262,11 @@ export default function SeasonStats({ code, scope, season, round }) {
                         <span className="ss-ratio-jung">{h.jung}</span> <span>vs</span>{' '}
                         <span className="ss-ratio-pl">{h.pl}</span>
                       </div>
+                      {h.picks.length > 0 && (
+                        <div className="ss-picks-tally">
+                          {RT_ROWS.map((rt) => h.picks.filter((p) => p.rt === rt).length).join('/')}
+                        </div>
+                      )}
                       <ul className="ss-picks">
                         {h.picks.length === 0 && <li className="ss-pick-none">똥배 없음</li>}
                         {h.picks.map((p) => (

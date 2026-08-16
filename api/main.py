@@ -109,6 +109,27 @@ def _startup():
     """부팅 시 폴더/DB 존재 보장 + 기본 관리자 생성."""
     PATHS.bootstrap()
     AUTH.ensure_default_admin(PATHS.get_auth_db())
+    _warm_master_cache_async()
+
+
+def _warm_master_cache_async():
+    """공식 데이터(6개 리그)를 서버 시작 직후 백그라운드에서 미리 읽어 캐시에 올려둔다.
+    data_access의 mtime 캐시는 "누군가 그 리그를 요청한 시점"에 처음 채워지는데,
+    베팅내역 화면은 여러 리그를 한꺼번에 훑어야 해서(다리마다 소속 리그가 다를 수 있음)
+    서버를 막 켰을 때 처음 열면 리그 6개를 그 자리에서 전부 디스크에서 읽느라
+    몇 초씩 걸렸다(실측 7초대) — 로그인·다른 화면 조회 중에는 이 지연이 안 보이게
+    별도 스레드로 미리 데워둔다. 실패해도(파일 없음 등) 서버 기동에는 영향 없다."""
+    import threading
+
+    def _warm():
+        try:
+            db_path = PATHS.get_master_db()
+            for lg in DATA.LEAGUES:
+                DATA.load_league_df(db_path, lg)
+        except Exception:
+            pass
+
+    threading.Thread(target=_warm, daemon=True).start()
 
 
 # ─────────────────────────── 스코프 해석 ───────────────────────────
@@ -857,9 +878,13 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
             df = df_for(sc, code)
             idx: dict = {}
             if not df.empty and {"S", "R", "No", "HT", "AT", "RT"}.issubset(df.columns):
-                sub = df[["S", "R", "No", "HT", "AT", "RT"]]
-                for s, r, no, ht, at, rt in sub.itertuples(index=False, name=None):
-                    idx[_my_pick_key(s, r, no, ht, at)] = _rt_label(rt)
+                has_dt = "DT" in df.columns
+                cols = ["S", "R", "No", "HT", "AT", "RT"] + (["DT"] if has_dt else [])
+                sub = df[cols]
+                for row in sub.itertuples(index=False, name=None):
+                    s, r, no, ht, at, rt = row[:6]
+                    dt = row[6] if has_dt else None
+                    idx[_my_pick_key(s, r, no, ht, at)] = (_rt_label(rt), dt)
             rt_index_cache[key] = idx
         return rt_index_cache[key]
 
@@ -873,11 +898,11 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
             idx = rt_index_for(sc, leg["code"])
             if key in idx:
                 return idx[key]
-        return None
+        return (None, None)
 
     for slip in slips:
         for leg in slip["legs"]:
-            leg["actual"] = rt_for(leg)
+            leg["actual"], leg["dt"] = rt_for(leg)
             leg["hit"] = BETSLIPS.judge_leg(leg["pick_type"], leg["actual"])
         slip["result"] = BETSLIPS.slip_result([l["hit"] for l in slip["legs"]])
         # 당첨금 = 뱃금액 × 배당(예상), 적중금 = 실제로 맞았을 때만 받는 금액
@@ -910,17 +935,22 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
             batch["subtotal"] = BETSLIPS.settle(batch["slips"])
 
         item = {"group_id": sec["group_id"], "batches": batches}
-        if sec["group_id"] is not None:
-            item["round_start"] = min(s["round_start"] for s in sec["slips"])
-            item["round_end"] = max(s["round_end"] for s in sec["slips"])
-            item["total"] = BETSLIPS.settle(sec["slips"])
-        else:
-            item["round_start"] = None
-            item["round_end"] = None
-            item["total"] = None
+        # 미확정 구간도 "지금까지 담은 벳" 기준으로 실시간 소계를 보여준다(회차 설정
+        # 전이라도 얼마 넣었고 지금까지 얼마 돌아왔는지 알 수 있게) — round_end만
+        # 아직 확정되지 않았다는 뜻으로 None으로 둔다(화면엔 "진행 중"으로 표시).
+        item["round_start"] = min((s["round_start"] for s in sec["slips"]), default=None)
+        item["round_end"] = (max(s["round_end"] for s in sec["slips"])
+                              if sec["group_id"] is not None else None)
+        item["total"] = BETSLIPS.settle(sec["slips"])
         sections.append(item)
 
-    return {"max_legs": max_legs, "sections": sections}
+    # 페이지 맨 위 전체 요약(총 투자/총 회수/수익/수익률/적중 N/M) — 회차 구분과 무관하게
+    # 지금까지 등록된 모든 벳을 통틀어 계산한다.
+    summary = BETSLIPS.settle(slips)
+    summary["hit_count"] = sum(1 for s in slips if s["result"] == "적중")
+    summary["total_count"] = len(slips)
+
+    return {"max_legs": max_legs, "sections": sections, "summary": summary}
 
 
 class SlipIdsBody(BaseModel):

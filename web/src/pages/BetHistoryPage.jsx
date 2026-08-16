@@ -2,26 +2,33 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api, apiFetch } from '../api/client'
 import './BetHistoryPage.css'
 
+// 유형(정/역/무/핸승/핸무/플핸) 배지 — LeagueTable columnGroups.js의 myPickStyle과
+// 정확히 같은 "정배 쪽/플핸 쪽" 2축 색상(파랑/빨강)을 그대로 쓴다. BetSlip.jsx의
+// PICK_TYPES 6종이 그 두 그룹(정·핸승·핸무=정배 쪽 / 역·무·플핸=플핸 쪽)과 정확히
+// 겹친다 — 새 색을 만들지 않고 이미 있는 픽 색상 기준을 그대로 재사용한다.
+const PICK_CHIP_FAV = { background: 'var(--chip-blue-bg)', color: 'var(--chip-blue-fg)' }
+const PICK_CHIP_DOG = { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' }
 const PICK_BADGE = {
-  핸승: { background: '#1565C0', color: '#fff' },
-  플핸: { background: '#7B1FA2', color: '#fff' },
-  핸무: { background: '#64B5F6', color: '#0D1B2A' },
-  무: { background: '#757575', color: '#fff' },
-  역: { background: '#C62828', color: '#fff' },
-  정: { background: '#00897B', color: '#fff' },
+  정: PICK_CHIP_FAV,
+  핸승: PICK_CHIP_FAV,
+  핸무: PICK_CHIP_FAV,
+  역: PICK_CHIP_DOG,
+  무: PICK_CHIP_DOG,
+  플핸: PICK_CHIP_DOG,
 }
-const PICK_BADGE_DEFAULT = { background: '#9E9E9E', color: '#fff' }
+const PICK_BADGE_DEFAULT = { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' }
 
-// 다리별 적중 · 조합 전체 결과 모두 같은 배색을 쓴다.
+// 다리별 적중 · 조합 전체 결과 모두 같은 배색을 쓴다. "적중"은 픽 결과 배지(pickVerdictStyle)와
+// 같은 노란색, "미적중"은 같은 빨간색 — 내 예측 칸에서 이미 쓰는 기준을 그대로 맞춘다.
 const HIT_BADGE = {
-  적중: { background: '#FDD835', color: '#0D1B2A' },
-  미적중: { background: '#C62828', color: '#fff' },
-  대기: { background: '#757575', color: '#fff' },
-  취소: { background: '#546E7A', color: '#fff' },
+  적중: { background: 'var(--chip-yellow-bg)', color: 'var(--chip-yellow-fg)' },
+  미적중: { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' },
+  대기: { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' },
+  취소: { background: 'var(--chip-teal-bg)', color: 'var(--chip-teal-fg)' },
 }
 const num = (v) => (v == null ? '-' : v.toLocaleString())
 const odds = (v) => (v == null ? '-' : v.toFixed(2))
-const pct = (v) => (v == null ? '-' : `${v}%`)
+const pct = (v) => (v == null ? '-' : `${v > 0 ? '+' : ''}${v}%`)
 const signClass = (v) => (v == null ? '' : v > 0 ? 'bh-pos' : v < 0 ? 'bh-neg' : '')
 
 // 벳 한 줄의 수익금·수익률 — 실제로 적중금이 찍힌 줄에만 보여준다(그 묶음에서
@@ -32,17 +39,113 @@ function rowProfitRoi(slip, batch) {
   return { profit: batch.subtotal.profit, roi: batch.subtotal.roi }
 }
 
-function formatCreatedDt(v) {
-  const m = /(\d{4})-(\d{2})-(\d{2})/.exec(v || '')
-  return m ? `${m[1]}-${m[2]}-${m[3]}` : v || '-'
+// 다리에 딸려 온 실제 경기일(leg.dt, 'YY-MM-DD (요일)')에서 월-일만 뽑아
+// 묶음 맨 위 경기 라벨 줄의 날짜 프리픽스로 쓴다.
+function shortDt(v) {
+  const m = /(\d{2})-(\d{2})-(\d{2})/.exec(v || '')
+  return m ? `${m[2]}-${m[3]}` : ''
+}
+
+// 회차 구간 표시 — 확정된 회차는 "시작일 ~ 종료일(월-일)", 아직 확정 전이면
+// "시작일 ~ 진행 중"으로 끝을 열어 둔다(종료일은 회차 설정 전까지 정해지지 않으니까).
+function rangeLabel(start, end) {
+  if (!start) return ''
+  if (!end) return `${start} ~ 진행 중`
+  return `${start} ~ ${end.slice(5)}`
 }
 
 function Badge({ value, map, fallback }) {
   return <span className="bh-badge" style={map[value] || fallback}>{value}</span>
 }
 
+function ProfitRoi({ profit, roi }) {
+  if (profit == null) return <span className="bh-muted">-</span>
+  return (
+    <span className={signClass(profit)}>
+      {num(profit)} <small>{pct(roi)}</small>
+    </span>
+  )
+}
+
+// 전체 요약 바 — 회차 구분과 무관하게 지금까지 등록된 모든 벳을 통틀어 계산한 값
+// (백엔드 /api/bet_slips의 summary)을 제목 줄 오른쪽에 한눈에 보여준다.
+function SummaryBar({ summary }) {
+  if (!summary) return null
+  return (
+    <div className="bh-summary-bar">
+      <div className="bh-summary-item">
+        <span className="bh-summary-label">총 투자</span>
+        <b>{num(summary.stake)}</b>
+      </div>
+      <div className="bh-summary-item">
+        <span className="bh-summary-label">총 회수</span>
+        <b>{num(summary.hit_amount)}</b>
+      </div>
+      <div className="bh-summary-item">
+        <span className="bh-summary-label">수익</span>
+        <b className={signClass(summary.profit)}>{num(summary.profit)}</b>
+      </div>
+      <div className="bh-summary-item">
+        <span className="bh-summary-label">수익률</span>
+        <b className={signClass(summary.roi)}>{pct(summary.roi)}</b>
+      </div>
+      <div className="bh-summary-item">
+        <span className="bh-summary-label">적중</span>
+        <b>{summary.hit_count}/{summary.total_count}</b>
+      </div>
+    </div>
+  )
+}
+
+// 회차(또는 미확정 구간) 헤더 — 예전엔 표 맨 아래에만 있던 "회차총계"를 구간 맨 위
+// 띠로 올려서, 그 구간이 시작하는 자리에서 바로 손익을 알 수 있게 한다. 미확정
+// 구간에는 "선택 삭제/회차 설정" 버튼도 여기로 옮겨, 그 구간 자체를 다루는
+// 조작이 전부 한 자리에 모이게 했다.
+function SectionHeader({ sec, index, locked, colSpan, selectedCount, busy, onDeleteSelected, onLockSelected }) {
+  const batchCount = sec.batches.length
+  const slipCount = sec.batches.reduce((n, b) => n + b.slips.length, 0)
+  return (
+    <tbody className="bh-section-head">
+      <tr className="bh-section-header-row bh-round-row bh-round-first">
+        <td colSpan={colSpan}>
+          <div className="bh-section-header">
+            <div className="bh-section-title">
+              <span className="bh-section-name">{locked ? `${index}회차` : '미확정'}</span>
+              <span className="bh-section-range">{rangeLabel(sec.round_start, sec.round_end)}</span>
+              {locked && <span className="bh-locked-badge">확정 · 잠김</span>}
+              <span className="bh-section-meta">
+                {batchCount}묶음 · {slipCount}벳
+                {!locked && selectedCount > 0 ? ` · ${selectedCount}개 선택됨` : ''}
+              </span>
+            </div>
+            <div className="bh-section-right">
+              {!locked && (
+                <div className="bh-section-actions">
+                  <button className="bh-action-btn" onClick={onDeleteSelected} disabled={busy || selectedCount === 0}>
+                    🗑 선택 삭제{selectedCount > 0 ? ` (${selectedCount})` : ''}
+                  </button>
+                  <button className="bh-action-btn bh-action-primary" onClick={onLockSelected} disabled={busy || selectedCount === 0}>
+                    🔒 회차 설정{selectedCount > 0 ? ` (${selectedCount})` : ''}
+                  </button>
+                </div>
+              )}
+              <div className="bh-section-stats">
+                <span>투자 {num(sec.total.stake)}</span>
+                <span>회수 {num(sec.total.hit_amount)}</span>
+                <span className={signClass(sec.total.profit)}>
+                  {num(sec.total.profit)} {pct(sec.total.roi)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  )
+}
+
 export default function BetHistoryPage({ scope }) {
-  const [data, setData] = useState({ max_legs: 0, sections: [] })
+  const [data, setData] = useState({ max_legs: 0, sections: [], summary: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -54,7 +157,7 @@ export default function BetHistoryPage({ scope }) {
     setError('')
     try {
       const res = await api.get(`/api/bet_slips?scope=${scope}`)
-      setData({ max_legs: res.max_legs || 0, sections: res.sections || [] })
+      setData({ max_legs: res.max_legs || 0, sections: res.sections || [], summary: res.summary || null })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -115,26 +218,24 @@ export default function BetHistoryPage({ scope }) {
   if (loading) return <div className="bh-empty">불러오는 중...</div>
   if (error) return <div className="bh-empty error-text">{error}</div>
 
-  const { max_legs: maxLegs, sections } = data
+  const { max_legs: maxLegs, sections, summary } = data
   const legCols = Array.from({ length: maxLegs }, (_, i) => i)
   // 경기 이름은 각 등록 묶음 위에 한 번(띠 형태)만 보여주고, 표 본문은 유형 배지만
   // 나열한다 — "이번주 벳"에서 조합을 만들 때 쓰는 화면과 같은 구조. 같은 묶음
   // 안에서는 항상 같은 경기 조합에 유형만 바꿔가며 등록하므로, 첫 슬립의 다리
   // 목록을 그 묶음의 경기 목록으로 그대로 써도 된다.
-  const matchStripSpan = 3 + maxLegs + 1 + 7   // 체크박스+#+등록일시 + 유형N + 배당 + (뱃금액~삭제 7칸)
+  const matchStripSpan = 2 + maxLegs + 7   // 체크박스+#(2) + 유형N + 배당·뱃금액·예상당첨금·결과·적중금·수익·삭제(7칸)
   // 소계·회차총계 라벨은 체크박스~배당 칸까지를 하나로 합쳐 쓴다.
-  const labelSpan = 4 + maxLegs
+  const labelSpan = 2 + maxLegs + 1
+
+  // 회차 번호(1회차, 2회차...)는 group_id가 있는 섹션 순서대로 매긴다.
+  let roundIdx = 0
 
   return (
     <div className="bh-page">
       <div className="bh-title-row">
         <h2 className="bh-title">📋 베팅내역</h2>
-        <button className="bh-action-btn" onClick={handleDeleteSelected} disabled={busy || selected.size === 0}>
-          🗑 선택 삭제{selected.size > 0 ? ` (${selected.size})` : ''}
-        </button>
-        <button className="bh-action-btn bh-action-primary" onClick={handleLockSelected} disabled={busy || selected.size === 0}>
-          🔒 회차 설정{selected.size > 0 ? ` (${selected.size})` : ''}
-        </button>
+        {sections.length > 0 && <SummaryBar summary={summary} />}
       </div>
       <p className="bh-desc">
         체크박스로 벳을 고른 뒤 "회차 설정"을 누르면 그 벳들만 묶여 회차총계가 계산됩니다. 확정 전에는 "선택 삭제"로 지울 수 있고, 확정되면 체크박스가 비활성화됩니다.
@@ -149,15 +250,13 @@ export default function BetHistoryPage({ scope }) {
               <tr>
                 <th className="bh-check-col" />
                 <th className="bh-no-col" />
-                <th>등록일시</th>
                 {legCols.map((i) => <th key={`t${i}`}>유형{i + 1}</th>)}
                 <th>배당</th>
                 <th>뱃금액</th>
-                <th>당첨금</th>
+                <th>예상 당첨금</th>
                 <th>결과</th>
                 <th>적중금</th>
-                <th>수익금</th>
-                <th>수익률</th>
+                <th>수익</th>
                 <th />
               </tr>
             </thead>
@@ -167,15 +266,34 @@ export default function BetHistoryPage({ scope }) {
               let rowNum = 0
               return sections.map((sec, si) => {
               const locked = sec.group_id != null
+              if (locked) roundIdx += 1
               return (
                 <Fragment key={sec.group_id ?? `pending-${si}`}>
-                  {sec.batches.map((batch) => (
+                  {si > 0 && (
+                    <tbody className="bh-round-gap">
+                      <tr><td colSpan={matchStripSpan} /></tr>
+                    </tbody>
+                  )}
+                  <SectionHeader
+                    sec={sec}
+                    index={roundIdx}
+                    locked={locked}
+                    colSpan={matchStripSpan}
+                    selectedCount={selected.size}
+                    busy={busy}
+                    onDeleteSelected={handleDeleteSelected}
+                    onLockSelected={handleLockSelected}
+                  />
+                  {sec.batches.map((batch, bi) => {
+                    const isLastBatch = bi === sec.batches.length - 1
+                    return (
                     // 등록 묶음마다 tr을 굵은 선으로 갈라 보여준다.
                     <tbody key={batch.batch_id} className="bh-batch">
                       {/* 같은 묶음은 항상 같은 경기 조합에 유형만 바꿔가며 등록한 것이라,
                           첫 슬립의 다리 목록을 그 묶음의 경기 목록으로 그대로 쓴다. */}
-                      <tr className="bh-match-strip">
+                      <tr className="bh-match-strip bh-round-row">
                         <td colSpan={matchStripSpan}>
+                          <span className="bh-match-date">{shortDt(batch.slips[0]?.legs?.[0]?.dt)}</span>
                           <div className="bh-match-chips">
                             {(batch.slips[0]?.legs || []).map((leg, i) => (
                               <span key={i} className="bh-match-chip">
@@ -185,8 +303,15 @@ export default function BetHistoryPage({ scope }) {
                           </div>
                         </td>
                       </tr>
-                      {batch.slips.map((slip) => (
-                        <tr key={slip.id} className={locked ? 'bh-row-locked' : undefined}>
+                      {batch.slips.map((slip) => {
+                        const rowClass = [
+                          'bh-round-row',
+                          locked && 'bh-row-locked',
+                          slip.result === '적중' && 'bh-row-hit',
+                          !locked && selected.has(slip.id) && 'bh-row-selected',
+                        ].filter(Boolean).join(' ')
+                        return (
+                        <tr key={slip.id} className={rowClass}>
                           <td className="bh-check-col">
                             <input
                               type="checkbox"
@@ -196,7 +321,6 @@ export default function BetHistoryPage({ scope }) {
                             />
                           </td>
                           <td className="bh-no-col bh-muted">{++rowNum}</td>
-                          <td className="bh-nowrap">{formatCreatedDt(slip.created_dt)}</td>
                           {legCols.map((i) => {
                             const leg = slip.legs[i]
                             return (
@@ -218,19 +342,14 @@ export default function BetHistoryPage({ scope }) {
                             <Badge value={slip.result} map={HIT_BADGE} fallback={HIT_BADGE['대기']} />
                           </td>
                           <td className="bh-nowrap">{num(slip.hit_amount)}</td>
-                          {(() => {
-                            const { profit, roi } = rowProfitRoi(slip, batch)
-                            return (
-                              <>
-                                <td className={`bh-nowrap ${signClass(profit)}`}>{num(profit)}</td>
-                                <td className={`bh-nowrap ${signClass(roi)}`}>{pct(roi)}</td>
-                              </>
-                            )
-                          })()}
+                          <td className="bh-nowrap">
+                            <ProfitRoi {...rowProfitRoi(slip, batch)} />
+                          </td>
                           <td />
                         </tr>
-                      ))}
-                      <tr className="bh-subtotal">
+                        )
+                      })}
+                      <tr className={`bh-subtotal bh-round-row${isLastBatch ? ' bh-round-last' : ''}`}>
                         <td colSpan={labelSpan} className="bh-subtotal-label">
                           └ 이 등록 묶음 소계
                         </td>
@@ -238,11 +357,8 @@ export default function BetHistoryPage({ scope }) {
                         <td />
                         <td />
                         <td className="bh-nowrap">{num(batch.subtotal.hit_amount)}</td>
-                        <td className={`bh-nowrap ${signClass(batch.subtotal.profit)}`}>
-                          {num(batch.subtotal.profit)}
-                        </td>
-                        <td className={`bh-nowrap ${signClass(batch.subtotal.roi)}`}>
-                          {pct(batch.subtotal.roi)}
+                        <td className="bh-nowrap">
+                          <ProfitRoi profit={batch.subtotal.profit} roi={batch.subtotal.roi} />
                         </td>
                         <td>
                           {!locked && (
@@ -257,23 +373,8 @@ export default function BetHistoryPage({ scope }) {
                         </td>
                       </tr>
                     </tbody>
-                  ))}
-                  {locked && (
-                    <tbody className="bh-total-body">
-                      <tr className="bh-total">
-                        <td colSpan={labelSpan} className="bh-total-label">
-                          회차총계 ({sec.round_start}~{sec.round_end})
-                        </td>
-                        <td className="bh-nowrap">{num(sec.total.stake)}</td>
-                        <td />
-                        <td />
-                        <td className="bh-nowrap">{num(sec.total.hit_amount)}</td>
-                        <td className={`bh-nowrap ${signClass(sec.total.profit)}`}>{num(sec.total.profit)}</td>
-                        <td className={`bh-nowrap ${signClass(sec.total.roi)}`}>{pct(sec.total.roi)}</td>
-                        <td />
-                      </tr>
-                    </tbody>
-                  )}
+                    )
+                  })}
                 </Fragment>
               )
             })
