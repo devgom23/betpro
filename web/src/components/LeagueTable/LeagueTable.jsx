@@ -32,6 +32,13 @@ function riskSubDividerClass(g, c) {
   return g.kind === 'risk' && c.key === 'AI_PICK' ? ' group-divider' : ''
 }
 
+// 일반정보를 접어도 라운드(R)·시간(TM)은 각각 칸을 유지해서 둘 다 보여준다 — 다른
+// 그룹은 접으면 칸 하나(···)로 뭉치지만, 조회 조건에 없는 라운드는 접힌 채로도
+// 알아볼 수 있어야 한다.
+function collapsedSpan(g) {
+  return g.label1 === '일반정보' ? 2 : 1
+}
+
 function matchKey(row) {
   return `${row.S}|${row.R}|${row.No}|${row.HT}|${row.AT}`
 }
@@ -98,7 +105,7 @@ export default function LeagueTable({
   // 접힌 그룹까지 반영한 실제 열 개수 (위아래 빈 행의 colSpan 용)
   const leafCount =
     (selectable ? 1 : 0) + 1 +
-    groups.reduce((n, g) => n + (collapsed.has(groupKey(g)) ? 1 : g.cols.length), 0)
+    groups.reduce((n, g) => n + (collapsed.has(groupKey(g)) ? collapsedSpan(g) : g.cols.length), 0)
 
   // 그려야 할 구간이 실제로 바뀔 때만 상태를 갱신한다.
   // (스크롤 이벤트마다 다시 그리면 오히려 버벅이므로, 시작 행이 달라질 때만 갱신)
@@ -243,7 +250,7 @@ export default function LeagueTable({
                 const dividerCls = dividerClass(g, isLastGroup)
                 if (isCollapsed) {
                   return (
-                    <th key={gi} colSpan={1} className={`group-header group-collapsed${dividerCls}`}>
+                    <th key={gi} colSpan={collapsedSpan(g)} className={`group-header group-collapsed${dividerCls}`}>
                       <button
                         className="fold-btn fold-btn-collapsed"
                         onClick={() => toggleGroup(key)}
@@ -278,6 +285,16 @@ export default function LeagueTable({
                 const key = groupKey(g)
                 const isLastGroup = gi === groups.length - 1
                 if (collapsed.has(key)) {
+                  if (g.label1 === '일반정보') {
+                    return [
+                      <th key={`${gi}-r`} className="sub-header collapsed-cell">
+                        R
+                      </th>,
+                      <th key={`${gi}-tm`} className={`sub-header collapsed-cell${dividerClass(g, isLastGroup)}`}>
+                        TM
+                      </th>,
+                    ]
+                  }
                   return [
                     <th key={`${gi}-c`} className={`sub-header collapsed-cell${dividerClass(g, isLastGroup)}`}>
                       ···
@@ -341,24 +358,30 @@ export default function LeagueTable({
                     const key = groupKey(g)
                     const isLastGroup = gi === groups.length - 1
                     if (collapsed.has(key)) {
-                      // 일반정보를 접어도 금/토/일 베팅일 색상 + 시간(TM)은 계속 보여야
-                      // 한다 — 접힌 채로도 몇 시 경기인지 바로 알 수 있게.
+                      // 일반정보를 접어도 금/토/일 베팅일 색상 + 라운드/시간은 계속 보여야
+                      // 한다 — 접힌 채로도 몇 라운드 몇 시 경기인지 바로 알 수 있게.
                       const isGenInfo = g.label1 === '일반정보'
                       // 똥배를 접어도 똥1/똥2 순번은 계속 보여야 한다 — 그게 이 그룹의
                       // 핵심 정보라 접혀서 안 보이면 의미가 없다.
                       const isDdong = g.label1 === '똥배'
                       const style = isGenInfo ? bettingDayStyle(row) : null
+                      if (isGenInfo) {
+                        return [
+                          <td key={`${gi}-r`} className="collapsed-cell">
+                            {row.R ?? ''}
+                          </td>,
+                          <td
+                            key={`${gi}-tm`}
+                            className={`collapsed-cell${dividerClass(g, isLastGroup)}`}
+                            style={style || undefined}
+                          >
+                            {formatCell(g, { sub: 'TM' }, row.TM)}
+                          </td>,
+                        ]
+                      }
                       return [
-                        <td
-                          key={`${gi}-c`}
-                          className={`collapsed-cell${dividerClass(g, isLastGroup)}`}
-                          style={style || undefined}
-                        >
-                          {isGenInfo
-                            ? formatCell(g, { sub: 'TM' }, row.TM)
-                            : isDdong
-                              ? row.DDONG || '·'
-                              : '·'}
+                        <td key={`${gi}-c`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
+                          {isDdong ? row.DDONG || '·' : '·'}
                         </td>,
                       ]
                     }
