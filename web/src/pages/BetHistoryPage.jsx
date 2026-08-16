@@ -91,7 +91,14 @@ function SummaryBar({ summary }) {
       </div>
       <div className="bh-summary-item">
         <span className="bh-summary-label">적중</span>
-        <b>{summary.hit_count}/{summary.total_count}</b>
+        <b>
+          {summary.hit_count}/{summary.total_count}{' '}
+          <small>
+            {summary.total_count
+              ? `${Math.round((summary.hit_count / summary.total_count) * 1000) / 10}%`
+              : '-'}
+          </small>
+        </b>
       </div>
     </div>
   )

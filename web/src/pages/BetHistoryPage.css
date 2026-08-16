@@ -23,8 +23,8 @@
 .bh-summary-bar {
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 6px 14px;
+  gap: 24px;
+  padding: 10px 20px;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--bg-surface);
@@ -34,14 +34,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
-  font-size: 13px;
+  gap: 2px;
+  font-size: 15px;
   white-space: nowrap;
   color: var(--text-primary);
 }
 
 .bh-summary-label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -50,7 +50,13 @@
    b태그에 직접 색을 주지 않는다(자세히 명시하면 .bh-pos/.bh-neg보다 우선순위가 높아져
    양수/음수 색이 안 먹는 문제가 있었다). */
 .bh-summary-item b {
+  font-size: 19px;
   font-weight: 700;
+}
+
+.bh-summary-item b small {
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .bh-action-btn {
