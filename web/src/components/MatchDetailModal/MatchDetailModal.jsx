@@ -105,12 +105,20 @@ function OddsTable({ row }) {
     return <span className={isFav ? 'odds-role-fav' : 'odds-role-dog'}> {isFav ? '(정)' : '(역)'}</span>
   }
   // 정배 쪽 컬럼(승=홈팀 칸 / 패=원정팀 칸) 전체에 아주 연한 파란 배경을 준다 —
-  // 홈이 정배면 '승' 컬럼(KW/KHW/FW/FHW), 원정이 정배면 '패' 컬럼(KL/KHL/FL/FHL).
+  // 홈이 정배면 '승' 컬럼(KW/FW/FHW), 원정이 정배면 '패' 컬럼(KL/FL/FHL).
   const favColClass = (col) => {
     if (homeFav === null) return undefined
     const favCol = homeFav ? 'w' : 'l'
     return col === favCol ? 'odds-fav-col' : undefined
   }
+  // 국내 핸디(KHW/KHL)만은 KW/KL로 정한 정배 컬럼을 그대로 따르지 않는다 — 핸디 라인이
+  // 후하게 잡히면 언더독 쪽 핸디 배당이 오히려 더 낮게(=더 유력하게) 나오는 경우가 있어,
+  // 정배 쪽을 그대로 칠하면 실제 핸디 배당의 유불리와 어긋난다. 이 줄만 KHW·KHL 값을
+  // 직접 비교해 배당이 더 작은(=더 유력한) 쪽을 표시한다.
+  const khw = numOrNull(row.KHW)
+  const khl = numOrNull(row.KHL)
+  const khFavCol = khw !== null && khl !== null && khw !== khl ? (khw < khl ? 'w' : 'l') : null
+  const khColClass = (col) => (khFavCol && col === khFavCol ? 'odds-fav-col' : undefined)
   return (
     <table className="detail-table odds-table">
       <thead>
@@ -144,14 +152,17 @@ function OddsTable({ row }) {
         </tr>
       </thead>
       <tbody>
-        {rows.map(([label, w, d, l]) => (
-          <tr key={label}>
-            <td className="row-label">{label}</td>
-            <td className={favColClass('w')}>{numOrDash(row[w])}</td>
-            <td>{numOrDash(row[d])}</td>
-            <td className={favColClass('l')}>{numOrDash(row[l])}</td>
-          </tr>
-        ))}
+        {rows.map(([label, w, d, l]) => {
+          const colClass = label === '국내 핸디' ? khColClass : favColClass
+          return (
+            <tr key={label}>
+              <td className="row-label">{label}</td>
+              <td className={colClass('w')}>{numOrDash(row[w])}</td>
+              <td>{numOrDash(row[d])}</td>
+              <td className={colClass('l')}>{numOrDash(row[l])}</td>
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )

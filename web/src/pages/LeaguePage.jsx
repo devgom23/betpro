@@ -268,14 +268,14 @@ export default function LeaguePage({ code, scope }) {
                 onClick={() => setShowCrawlModal(true)}
                 title="스코어맨 화면에서 경기·배당을 그대로 가져옵니다"
               >
-                Data 가져오기
+                해배 가져오기
               </button>
               <button
                 className="btn-reset"
                 onClick={() => setShowKrCrawlModal(true)}
                 title="젠토토 화면에서 국내배당(초기배당)을 가져와 기존 경기에 채웁니다"
               >
-                KR 국내배당 가져오기
+                국배 가져오기
               </button>
               <button
                 className="btn-reset"
@@ -385,7 +385,9 @@ export default function LeaguePage({ code, scope }) {
           <div className="league-summary">
             <span>조회 조건 {describeQuery(query)}</span>
             <span>
-              <strong>{data.total.toLocaleString()}</strong>경기
+              경기수 <strong>{data.total.toLocaleString()}</strong> · 국배 등록{' '}
+              <strong>{(data.odds_summary?.국배 ?? 0).toLocaleString()}</strong> · 해배 등록{' '}
+              <strong>{(data.odds_summary?.해배 ?? 0).toLocaleString()}</strong>
             </span>
             <RtSummaryBar summary={data.rt_summary} inline />
             <PickSummaryBar summary={data.hit_summary} />

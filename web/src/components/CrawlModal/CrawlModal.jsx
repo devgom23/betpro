@@ -132,7 +132,7 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
           ✕
         </button>
 
-        <h2 className="modal-title">🛰 Data 가져오기</h2>
+        <h2 className="modal-title">🛰 해배 가져오기</h2>
         <p className="modal-meta">
           {label || code} · 스코어맨 화면에 떠 있는 경기와 배당을 그대로 가져옵니다.
         </p>

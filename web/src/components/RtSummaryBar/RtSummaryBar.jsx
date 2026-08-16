@@ -36,15 +36,17 @@ export default function RtSummaryBar({ summary, inline = false }) {
   )
 }
 
-const PICK_ORDER = ['적중', '보험', '미적', '관망']
+// 관망(PICK이 '—')은 표에서 PICK 컬럼 자체가 없어져 어느 경기가 해당하는지 추적할
+// 수 없어 뺐다 — 적중/보험/미적만 보여준다(퍼센트 분모(summary.총)엔 관망 몫도 그대로
+// 들어있어 세 값을 더해도 100%가 안 될 수 있는데, 이건 정상이다).
+const PICK_ORDER = ['적중', '보험', '미적']
 const PICK_CHIP = {
   적중: { background: 'var(--chip-yellow-bg)', color: 'var(--chip-yellow-fg)' },
   보험: { background: 'var(--chip-teal-bg)', color: 'var(--chip-teal-fg)' },
   미적: { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' },
-  관망: { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' },
 }
 
-// PICK 결과(적중/보험/미적/관망) 분포 배지. 플핸예측 컬럼의 배경색과 동일한 색상을 쓴다.
+// PICK 결과(적중/보험/미적) 분포 배지. 플핸예측 컬럼의 배경색과 동일한 색상을 쓴다.
 // 보험 = 핸승 여부(큰 분류)는 맞혔지만 괄호 안 세부결과(핸무/무/역)는 다르게 나온 경우.
 export function PickSummaryBar({ summary }) {
   if (!summary) return null

@@ -340,6 +340,20 @@ def _hit_summary(df: pd.DataFrame):
     return counts
 
 
+def _odds_summary(df: pd.DataFrame):
+    """조회 조건 안에서 국배(KW)·해배(FW)가 실제로 채워진 경기 수 {국배,해배,총}.
+    엑셀 업로드·크롤링 모두 한 시장(국내/해외)의 승/무/패를 항상 함께 채우므로,
+    대표로 W값 하나만 봐도 그 시장 등록 여부를 알 수 있다. 시즌별로 배당 입력이
+    얼마나 진행됐는지 보려고 만든 것 — PICK 적중/보험/미적/관망 요약(PH_STATUS)은
+    표에서 PICK 컬럼 자체가 없어져 어느 경기가 해당하는지 추적할 수 없어 이걸로 대체."""
+    total = len(df)
+    if total == 0:
+        return None
+    kw = pd.to_numeric(df["KW"], errors="coerce") if "KW" in df.columns else pd.Series(dtype="float64")
+    fw = pd.to_numeric(df["FW"], errors="coerce") if "FW" in df.columns else pd.Series(dtype="float64")
+    return {"국배": int(kw.notna().sum()), "해배": int(fw.notna().sum()), "총": total}
+
+
 def _round_sort_key(v):
     # "9R"/"38R"처럼 숫자+문자 혼합 라벨은 float() 변환이 항상 실패해
     # 문자열 정렬로 빠지면 "9R" > "38R"가 되는 버그가 생긴다.
@@ -463,6 +477,7 @@ def league_rows(code: str,
         # 이게 빠지면 "비어 있는 리그에 업로드" UI가 사라져 첫 등록 자체가 막힌다.
         return {"columns": [], "rows": [], "total": 0,
                 "season": None, "round": None, "rt_summary": None, "hit_summary": None,
+                "odds_summary": None,
                 "can_write": PATHS.can_write(scope, user.get("role"))}
 
     sub, season, round = _apply_league_filters(
@@ -482,6 +497,7 @@ def league_rows(code: str,
         "round": round,
         "rt_summary": _rt_summary(sub),
         "hit_summary": _hit_summary(sub),
+        "odds_summary": _odds_summary(sub),
         "can_write": PATHS.can_write(scope, user.get("role")),
     }
 
