@@ -1185,7 +1185,12 @@ def pick_ai(body: PickAiBody, user: dict = Depends(get_current_user)):
             "home": _season_matches(src_df, ht, season),
             "away": _season_matches(src_df, at, season),
         }
-    return PICKAI.compute(body.row, h2h, scope=body.scope, season_matches=season_matches)
+    result = PICKAI.compute(body.row, h2h, scope=body.scope, season_matches=season_matches)
+    # 상세보기의 "상대전적" 카드가 여기서 이미 구한 h2h를 그대로 재사용하도록 함께
+    # 내려준다 — 예전엔 이 계산(리그 마스킹·정렬·WDL 집계)을 /api/head_to_head가
+    # 팝업을 열 때마다 통째로 한 번 더 했다(같은 두 팀, 같은 데이터를 두 번 계산).
+    result["h2h"] = h2h
+    return result
 
 
 @app.get("/api/leagues/{code}/match_excel")
@@ -1731,7 +1736,9 @@ def crawl_kr_config(scope: str = PATHS.SCOPE_MASTER, code: str = "",
         "aliases": CRAWL.list_aliases(udb, scope, code, source="kr"),
         "teams": _league_teams(db, code),
         "is_open": KRCRAWL.is_open(),
-        "default_league_name": KR_LEAGUE_NAME_GUESS.get(label, label),
+        # 사용자가 직접 입력해 저장해 둔 리그명이 있으면 그걸 우선 쓰고(젠토토가 시즌마다
+        # 표기를 바꿔도 다시 입력하기 전까지 유지), 없을 때만 자동 추정값을 쓴다.
+        "default_league_name": CRAWL.get_league_name(udb, scope, code) or KR_LEAGUE_NAME_GUESS.get(label, label),
         "latest_season": latest_season,
         "latest_round": latest_round,
     }
@@ -1760,10 +1767,14 @@ def crawl_kr_fetch(body: CrawlKrFetchBody, user: dict = Depends(get_current_user
     db = _resolve_scope_db(body.scope, user)
     udb = _user_db_of(user)
     label = _l_value(db, body.scope, body.code)
-    league_name = (body.league_name or KR_LEAGUE_NAME_GUESS.get(label, "")).strip()
+    saved_name = CRAWL.get_league_name(udb, body.scope, body.code)
+    league_name = (body.league_name or saved_name or KR_LEAGUE_NAME_GUESS.get(label, "")).strip()
     if not league_name:
         raise HTTPException(status_code=400,
                             detail="젠토토 리그명을 확인할 수 없습니다. 직접 입력해 주세요.")
+    # 사용자가 입력한(또는 화면에 채워져 있던) 리그명을 저장해 둔다 — 젠토토가 시즌마다
+    # 표기를 바꿔도, 다음에 이 리그 팝업을 열 때 자동 추정값 대신 이 값이 먼저 채워진다.
+    CRAWL.set_league_name(udb, body.scope, body.code, league_name)
     try:
         raw = KRCRAWL.fetch_domestic(league_name)
     except KRCRAWL.CrawlError as e:

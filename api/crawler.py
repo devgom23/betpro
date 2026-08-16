@@ -338,6 +338,7 @@ def crawl_current(league_code: str, wait: float = 2.0) -> dict:
 # master 리그 설정도 계정 DB에 "master:EPL" 같은 키로 넣어 두면 되기 때문.
 SOURCE_TABLE = "_crawl_sources"
 ALIAS_TABLE = "_team_aliases"
+LEAGUE_NAME_TABLE = "_kr_league_names"
 
 
 def _ensure_tables(con):
@@ -346,6 +347,8 @@ def _ensure_tables(con):
     con.execute(f'CREATE TABLE IF NOT EXISTS "{ALIAS_TABLE}" ('
                 " key TEXT NOT NULL, raw TEXT NOT NULL, mapped TEXT NOT NULL,"
                 " PRIMARY KEY (key, raw))")
+    con.execute(f'CREATE TABLE IF NOT EXISTS "{LEAGUE_NAME_TABLE}" ('
+                " key TEXT PRIMARY KEY, name TEXT NOT NULL)")
 
 
 def _key(scope: str, code: str, source: str = "") -> str:
@@ -389,6 +392,41 @@ def set_source(db_path: str, scope: str, code: str, url: str) -> str:
     finally:
         con.close()
     return url
+
+
+def get_league_name(db_path: str, scope: str, code: str) -> str:
+    """국내배당(젠토토) 가져오기 화면에서 사용자가 직접 입력해 저장해 둔 리그명.
+    젠토토가 시즌마다 표기를 바꿔서(예: 'K리그2' → 'K리그2 2026') 자동 추정값이 자주
+    어긋난다 — 없으면 빈 문자열을 돌려줘 자동 추정값으로 대체하게 한다."""
+    if db_path and os.path.exists(db_path):
+        con = sqlite3.connect(db_path)
+        try:
+            _ensure_tables(con)
+            hit = con.execute(f'SELECT name FROM "{LEAGUE_NAME_TABLE}" WHERE key = ?',
+                              (_key(scope, code),)).fetchone()
+            if hit and hit[0]:
+                return hit[0]
+        finally:
+            con.close()
+    return ""
+
+
+def set_league_name(db_path: str, scope: str, code: str, name: str) -> None:
+    """직접 입력한 리그명을 저장한다 — 다음에 이 리그의 팝업을 열어도(젠토토가 또
+    표기를 바꿔도) 사용자가 다시 고쳐 입력하기 전까지 이 값을 그대로 쓴다."""
+    name = (name or "").strip()
+    if not name:
+        return
+    con = sqlite3.connect(db_path)
+    try:
+        _ensure_tables(con)
+        con.execute(
+            f'INSERT INTO "{LEAGUE_NAME_TABLE}" (key, name) VALUES (?, ?) '
+            "ON CONFLICT(key) DO UPDATE SET name = excluded.name",
+            (_key(scope, code), name))
+        con.commit()
+    finally:
+        con.close()
 
 
 def list_aliases(db_path: str, scope: str, code: str, source: str = "") -> dict:

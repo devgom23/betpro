@@ -123,12 +123,23 @@ function WdlGrid({ wdl, wdlHome }) {
 // "상대전적 조회"가 공유하는 컴포넌트. 결과는 각 경기의 홈팀 기준으로 집계된다.
 // code: 내 데이터(scope=user)에서는 필수 — 통합DB가 없어 그 리그 하나만 찾으므로,
 // 어느 리그에서 조회하는 건지 알아야 한다. 공식 데이터는 6대리그를 합쳐서 찾으므로 안 써도 된다.
-export default function HeadToHeadResult({ scope, code, home, away, cross = true, limit = 200 }) {
+// preset을 넘기면(undefined가 아니면) 이 컴포넌트는 자체 fetch를 하지 않고 그 값만
+// 그려준다 — 상세보기 팝업은 종합분석(/api/pick_ai)이 상대전적을 이미 같은 조건
+// (두 팀·cross=true)으로 계산해 내려주므로, 여기서 /api/head_to_head를 한 번 더
+// 부르면 같은 계산을 두 번 하는 셈이라 팝업이 느려진다. preset이 아직 준비 전이면
+// null을, 로딩 중이면 presetLoading=true를 같이 넘긴다(리그탭 "상대전적 조회"처럼
+// preset 없이 쓰는 곳은 예전처럼 그대로 자체 fetch한다).
+export default function HeadToHeadResult({
+  scope, code, home, away, cross = true, limit = 200,
+  preset, presetLoading = false, presetError = '',
+}) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  const usePreset = preset !== undefined
 
   useEffect(() => {
-    if (!home || !away) return
+    if (usePreset) return undefined
+    if (!home || !away) return undefined
     let cancelled = false
     setData(null)
     setError('')
@@ -147,12 +158,17 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
     return () => {
       cancelled = true
     }
-  }, [scope, code, home, away, cross, limit])
+  }, [usePreset, scope, code, home, away, cross, limit])
 
   if (!home || !away) return null
-  if (error) return <p className="error-text">{error}</p>
-  if (!data) return <p className="loading-text">불러오는 중...</p>
-  if (!data.summary) {
+
+  const effData = usePreset ? preset : data
+  const effError = usePreset ? presetError : error
+  const effLoading = usePreset ? presetLoading : !data
+
+  if (effError) return <p className="error-text">{effError}</p>
+  if (effLoading) return <p className="loading-text">불러오는 중...</p>
+  if (!effData || !effData.summary) {
     return (
       <p className="detail-empty">
         {home} vs {away} 맞대결 기록 없음
@@ -160,8 +176,8 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
     )
   }
 
-  const wdl = data.wdl_summary
-  const wdlHome = data.wdl_summary_home
+  const wdl = effData.wdl_summary
+  const wdlHome = effData.wdl_summary_home
 
   return (
     <>
@@ -183,8 +199,8 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
             </tr>
           </thead>
           <tbody>
-            {data.matches.map((m, i) => {
-              const seasonStart = i > 0 && m.S !== data.matches[i - 1].S
+            {effData.matches.map((m, i) => {
+              const seasonStart = i > 0 && m.S !== effData.matches[i - 1].S
               return (
                 <tr key={i} className={seasonStart ? 'season-start' : undefined}>
                   <td>{m.S}</td>
@@ -206,9 +222,9 @@ export default function HeadToHeadResult({ scope, code, home, away, cross = true
           </tbody>
         </table>
       </div>
-      {data.total > data.matches.length && (
+      {effData.total > effData.matches.length && (
         <p className="h2h-more">
-          최근 {data.matches.length}경기만 표시 (총 {data.total}경기)
+          최근 {effData.matches.length}경기만 표시 (총 {effData.total}경기)
         </p>
       )}
     </>

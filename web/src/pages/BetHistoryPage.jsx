@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
-import { api, apiFetch } from '../api/client'
+import { api } from '../api/client'
 import './BetHistoryPage.css'
 
 // 유형(정/역/무/핸승/핸무/플핸) 배지 — LeagueTable columnGroups.js의 myPickStyle과
@@ -177,12 +177,6 @@ export default function BetHistoryPage({ scope }) {
     })
   }
 
-  async function handleDeleteBatch(batchId) {
-    if (!window.confirm('이 번에 등록한 벳 묶음을 통째로 삭제할까요?')) return
-    await apiFetch(`/api/bet_batches/${batchId}`, { method: 'DELETE' })
-    load()
-  }
-
   async function handleDeleteSelected() {
     if (selected.size === 0) return
     if (!window.confirm(`선택한 ${selected.size}개 벳을 삭제할까요?`)) return
@@ -224,7 +218,7 @@ export default function BetHistoryPage({ scope }) {
   // 나열한다 — "이번주 벳"에서 조합을 만들 때 쓰는 화면과 같은 구조. 같은 묶음
   // 안에서는 항상 같은 경기 조합에 유형만 바꿔가며 등록하므로, 첫 슬립의 다리
   // 목록을 그 묶음의 경기 목록으로 그대로 써도 된다.
-  const matchStripSpan = 2 + maxLegs + 7   // 체크박스+#(2) + 유형N + 배당·뱃금액·예상당첨금·결과·적중금·수익·삭제(7칸)
+  const matchStripSpan = 2 + maxLegs + 6   // 체크박스+#(2) + 유형N + 배당·뱃금액·예상당첨금·결과·적중금·수익(6칸)
   // 소계·회차총계 라벨은 체크박스~배당 칸까지를 하나로 합쳐 쓴다.
   const labelSpan = 2 + maxLegs + 1
 
@@ -257,7 +251,6 @@ export default function BetHistoryPage({ scope }) {
                 <th>결과</th>
                 <th>적중금</th>
                 <th>수익</th>
-                <th />
               </tr>
             </thead>
             {(() => {
@@ -345,7 +338,6 @@ export default function BetHistoryPage({ scope }) {
                           <td className="bh-nowrap">
                             <ProfitRoi {...rowProfitRoi(slip, batch)} />
                           </td>
-                          <td />
                         </tr>
                         )
                       })}
@@ -359,17 +351,6 @@ export default function BetHistoryPage({ scope }) {
                         <td className="bh-nowrap">{num(batch.subtotal.hit_amount)}</td>
                         <td className="bh-nowrap">
                           <ProfitRoi profit={batch.subtotal.profit} roi={batch.subtotal.roi} />
-                        </td>
-                        <td>
-                          {!locked && (
-                            <button
-                              className="bh-delete"
-                              title="이 등록 묶음 삭제"
-                              onClick={() => handleDeleteBatch(batch.batch_id)}
-                            >
-                              🗑️
-                            </button>
-                          )}
                         </td>
                       </tr>
                     </tbody>

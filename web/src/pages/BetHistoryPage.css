@@ -358,18 +358,6 @@
   opacity: 0.85;
 }
 
-.bh-delete {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 13px;
-  opacity: 0.55;
-}
-
-.bh-delete:hover {
-  opacity: 1;
-}
-
 /* ── 적중한 벳(슬립)은 왼쪽에 강조선 — 결과 배지("적중")와 같은 노란색 ── */
 .bh-row-hit td:first-child {
   box-shadow: inset 3px 0 0 0 var(--chip-yellow-fg);

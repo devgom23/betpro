@@ -595,30 +595,9 @@ function PickCards({ data }) {
   )
 }
 
-function PickBand({ code, row, scope }) {
-  const [data, setData] = useState(null)
-  const [error, setError] = useState('')
-
-  // row는 LeagueTable이 매 렌더마다 새로 만들어 넘기는 객체다(스프레드로 내픽을 얹어서
-  // 준다). 그래서 row 자체를 의존성에 걸면 표가 다시 그려질 때마다 계산을 새로 요청해
-  // 화면이 멈춘다 — 경기를 가리키는 값들만 문자열로 묶어 그것이 바뀔 때만 호출한다.
-  const rowRef = useRef(row)
-  rowRef.current = row
-  const matchKey = [row.S, row.R, row.No, row.HT, row.AT].join('|')
-
-  useEffect(() => {
-    let alive = true
-    setData(null)
-    setError('')
-    api
-      .post('/api/pick_ai', { scope, code, row: rowRef.current })
-      .then((res) => alive && setData(res))
-      .catch((err) => alive && setError(err.message))
-    return () => {
-      alive = false
-    }
-  }, [code, scope, matchKey])
-
+// 종합분석(pick_ai) 계산 결과는 이 아래 상대전적 카드도 함께 쓴다(모달 쪽에서 한
+// 번만 불러 내려준다) — 그래서 이 컴포넌트는 자체 fetch 없이 data/error를 그대로 받아 그린다.
+function PickBand({ row, data, error }) {
   return (
     <section className="pick-band">
       <div className="pick-band-head">
@@ -653,6 +632,31 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // 종합분석(4개 신호)과 상대전적을 팝업 하나당 한 번만 계산해서 두 카드가 같이
+  // 쓴다(예전엔 상대전적 카드가 /api/head_to_head를 따로 불러 같은 두 팀·같은 계산을
+  // 서버에서 한 번 더 했다 — 그래서 팝업을 처음 열 때 유독 느렸다).
+  // row는 LeagueTable이 매 렌더마다 새로 만들어 넘기는 객체다(스프레드로 내픽을 얹어서
+  // 준다). row 자체를 의존성에 걸면 표가 다시 그려질 때마다 재계산을 요청하게 되어,
+  // 경기를 가리키는 값들만 문자열로 묶어 그것이 바뀔 때만 호출한다.
+  const rowRef = useRef(row)
+  rowRef.current = row
+  const matchKey = [row.S, row.R, row.No, row.HT, row.AT].join('|')
+  const [pickData, setPickData] = useState(null)
+  const [pickError, setPickError] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    setPickData(null)
+    setPickError('')
+    api
+      .post('/api/pick_ai', { scope, code, row: rowRef.current })
+      .then((res) => alive && setPickData(res))
+      .catch((err) => alive && setPickError(err.message))
+    return () => {
+      alive = false
+    }
+  }, [code, scope, matchKey])
 
   // 지표별 표본은 그 경기 데이터양대로 자연스러운 높이 그대로 두고, 상대전적(히스토리가
   // 많을수록 길어짐) 쪽의 아래 테두리를 지표별 표본의 아래 테두리와 맞춘다.
@@ -737,7 +741,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
         </p>
         <MyPickBar row={row} onSavePick={onSavePick} />
 
-        <PickBand code={code} row={row} scope={scope} />
+        <PickBand row={row} data={pickData} error={pickError} />
 
         <div className="modal-columns" ref={columnsRef}>
           <div className="modal-col">
@@ -767,7 +771,12 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
               <h3>
                 상대전적 <span className="detail-section-note">승점은 홈팀 기준으로 작성되었습니다.</span>
               </h3>
-              <HeadToHeadResult scope={scope} code={code} home={ht} away={at} cross />
+              <HeadToHeadResult
+                scope={scope} code={code} home={ht} away={at} cross
+                preset={pickData ? pickData.h2h : null}
+                presetLoading={!pickData && !pickError}
+                presetError={pickError}
+              />
             </section>
           </div>
         </div>

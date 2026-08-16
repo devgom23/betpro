@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import './KrCrawlModal.css'
 
-const KEEP = '__KEEP__' // 셀렉트에서 '그대로 사용'을 고른 상태
+const MANUAL = '__MANUAL__' // 셀렉트에서 '직접입력'을 고른 상태 — 옆 입력창의 텍스트가 치환값이 된다
 
 // 젠토토에서 국내배당(초기배당)을 가져와 이미 있는 경기에 채워 넣는 창.
 //   ① 연도 + 젠토토 회차번호로 화면을 연다(로그인 필요 — 최초 1회만 직접 로그인)
@@ -20,6 +20,7 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
   const [notice, setNotice] = useState('')
   const [result, setResult] = useState(null)
   const [picks, setPicks] = useState({})
+  const [manualText, setManualText] = useState({}) // 크롤링팀명 -> 직접입력한 치환값
 
   const loadConfig = useCallback(async () => {
     try {
@@ -75,6 +76,7 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
       })
       setResult(res)
       setPicks({})
+      setManualText({})
       return res
     })
 
@@ -82,10 +84,16 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
     run('alias', async () => {
       const mapping = {}
       for (const [raw, val] of Object.entries(picks)) {
-        if (val && val !== KEEP) mapping[raw] = val
+        if (!val) continue
+        if (val === MANUAL) {
+          const typed = (manualText[raw] || '').trim()
+          if (typed) mapping[raw] = typed
+          continue
+        }
+        mapping[raw] = val
       }
       if (!Object.keys(mapping).length) {
-        setError('치환할 팀명을 하나 이상 선택해 주세요.')
+        setError('치환할 팀명을 하나 이상 선택하거나 입력해 주세요.')
         return null
       }
       await api.post('/api/crawl/kr/aliases', { scope, code, mapping })
@@ -97,6 +105,7 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
       })
       setResult(res)
       setPicks({})
+      setManualText({})
       setNotice('치환 규칙을 저장했습니다. 다음부터는 자동으로 적용됩니다.')
       return res
     })
@@ -224,11 +233,20 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
                         onChange={(e) => setPicks((p) => ({ ...p, [raw]: e.target.value }))}
                       >
                         <option value="">팀 선택...</option>
-                        <option value={KEEP}>그대로 사용</option>
+                        <option value={MANUAL}>직접입력</option>
                         {(result.teams || config?.teams || []).map((t) => (
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
+                      {picks[raw] === MANUAL && (
+                        <input
+                          type="text"
+                          className="kr-crawl-manual-input"
+                          placeholder="치환할 팀명 입력"
+                          value={manualText[raw] ?? ''}
+                          onChange={(e) => setManualText((m) => ({ ...m, [raw]: e.target.value }))}
+                        />
+                      )}
                     </li>
                   ))}
                 </ul>
