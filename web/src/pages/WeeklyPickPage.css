@@ -39,8 +39,15 @@
 
 .wp-title-bet {
   margin-top: 36px;
+  margin-bottom: 16px;
   padding-top: 24px;
   border-top: 1px solid var(--border-strong);
+}
+
+.wp-title-warn {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--chip-red-fg);
 }
 
 .wp-desc {

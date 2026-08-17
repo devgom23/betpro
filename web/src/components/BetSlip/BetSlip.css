@@ -133,12 +133,16 @@
   color: #ef4444;
 }
 
-/* 유형(플핸/핸무)이 두 줄로 쪼개지지 않게 최소 너비를 준다. */
-.slip-combo-table th:nth-child(1),
-.slip-combo-table th:nth-child(2),
-.slip-combo-table td:nth-child(1),
-.slip-combo-table td:nth-child(2) {
-  min-width: 46px;
+/* 선택을 4개까지 채우면(선택1~4 + 뱃배당·뱃금액·당첨금·수익금·수익률) 카드 폭(520px)
+   안에 다 안 들어가 칸 내용이 두 줄로 쪼개졌다 — 테이블은 카드 폭에 맞추지 말고
+   내용 그대로 한 줄로 두고, 넘치는 만큼은 위 slip-combo-wrap이 가로 스크롤하게 한다. */
+.slip-combo-table {
+  width: auto;
+  min-width: 100%;
+}
+
+.slip-combo-table th,
+.slip-combo-table td {
   white-space: nowrap;
 }
 

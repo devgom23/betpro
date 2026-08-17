@@ -126,10 +126,9 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
         />
       )}
 
-      <h2 className="wp-title wp-title-bet">🎲 이번주 벳</h2>
-      <p className="wp-desc">
-        경기 2개를 골라 유형을 담으면 가상 배당·수익 계산 · "저장"으로 슬립 추가, "벳등록"으로 베팅내역에 기록(시뮬레이션)
-      </p>
+      <h2 className="wp-title wp-title-bet">
+        🎲 이번주 벳 <span className="wp-title-warn">똥배는 3번 생각하고 가자</span>
+      </h2>
 
       <div className="wp-slips">
         {slipIds.map((id) => (

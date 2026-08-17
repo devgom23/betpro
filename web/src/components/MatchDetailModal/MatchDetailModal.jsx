@@ -318,10 +318,14 @@ function RecentTable({ row }) {
   )
 }
 
-// 한 행의 4칸(핸승/핸무/무/역) 중 최댓값 칸에 표시할 클래스. 전부 0이면 강조 안 함.
+// 한 행의 4칸(핸승/핸무/무/역) 중 최댓값 칸엔 cell-max, 그다음으로 큰(서로 다른 값) 칸엔
+// 톤다운된 cell-second를 준다. 전부 0이면 강조 안 하고, 2등이 0이어도 강조하지 않는다.
 function maxCellClass(vals, i) {
   const max = Math.max(...vals)
-  return max > 0 && vals[i] === max ? 'cell-max' : ''
+  if (max <= 0) return ''
+  if (vals[i] === max) return 'cell-max'
+  const second = Math.max(...vals.filter((v) => v < max))
+  return second > 0 && vals[i] === second ? 'cell-second' : ''
 }
 
 // TK-*/TF-* ("국/통", "해/통")는 그 리그를 통합DB(6대리그 등 여러 리그 합산)와
@@ -331,18 +335,22 @@ function maxCellClass(vals, i) {
 // 국내는 KW/KL, 해외는 FW/FL로 각각 따로 판정한다. 둘이 서로 다른 팀을 정배로 보는
 // 경기가 실측 4.25%(16,748경기 중 711건) 있는데, 그 엇갈림 자체가 "국내와 해외 시장이
 // 갈렸다"는 볼 만한 신호라 하나로 합치지 않는다.
-// 대상은 승/패 단일 지표 4줄뿐이다(승=홈팀·통합 같은 파생 지표는 제외 — 줄이 너무 많아지면
-// 테두리가 오히려 안 튄다).
+// 대상은 승/패 단일 지표 4줄, 그리고 승=홈팀·패=원정팀 2줄까지 총 6줄이다. 승=홈팀은
+// "홈팀이 정배일 때 승"만 모은 지표라 홈팀이 정배가 아니면 이 경기와 무관하고, 패=원정팀도
+// 마찬가지로 원정팀이 정배일 때만 이 경기와 관련 있다 — 그래서 정배 쪽 자동 강조가 아니라
+// 기준팀(홈/원정) 자체가 정배인지로 따로 판정한다.
 function favSampleCodes(row) {
   const out = new Set()
-  const pick = (winKey, loseKey, winCode, loseCode) => {
+  const pick = (winKey, loseKey, winCode, loseCode, homeWinCode, awayLoseCode) => {
     const w = numOrNull(row[winKey])
     const l = numOrNull(row[loseKey])
     if (w === null || l === null || w === l) return   // 배당이 없거나 같으면 정배가 없다
     out.add(w < l ? winCode : loseCode)
+    if (w < l) out.add(homeWinCode)
+    else out.add(awayLoseCode)
   }
-  pick('KW', 'KL', 'K-W', 'K-L')
-  pick('FW', 'FL', 'F-W', 'F-L')
+  pick('KW', 'KL', 'K-W', 'K-L', 'K-W-HT', 'K-L-AT')
+  pick('FW', 'FL', 'F-W', 'F-L', 'F-W-HT', 'F-L-AT')
   return out
 }
 
@@ -545,6 +553,42 @@ function SeasonRowsTable({ rows }) {
   )
 }
 
+// 해외지표 계단식 보정 근거 — 승/승+패/승+무+패/통합승 순서로, 단계마다 핸승/핸무/무/역이
+// 각각 몇 %였는지 보여준다(pick_ai.py _foreign_indicator 참고). 표본 수는 위 지표별
+// 표본 표에 이미 있어 여기선 뺐다. 맨 아래 '종합(가중평균)' 행은 이 단계들을 실제로
+// 계단식 보정에 반영한 그 비율 그대로다 — 표(SampleTable)의 '토탈' 행과 같은 역할.
+function IndLevelsTable({ levels }) {
+  return (
+    <table className="detail-table pick-ind-table">
+      <thead>
+        <tr>
+          <th className="row-label">지표</th>
+          <th>핸승</th>
+          <th>핸무</th>
+          <th>무</th>
+          <th>역</th>
+        </tr>
+      </thead>
+      <tbody>
+        {levels.map((lv) => {
+          const isSum = lv.code === 'SUM'
+          const vals = [lv.hs_pct, lv.hm_pct, lv.mu_pct, lv.yk_pct]
+          return (
+            <tr key={lv.code} className={isSum ? 'pick-ind-sum-row' : undefined}>
+              <td className="row-label">{lv.label}</td>
+              {vals.map((v, i) => (
+                <td key={i} className={isSum ? maxCellClass(vals, i) : undefined}>
+                  {v.toFixed(1)}
+                </td>
+              ))}
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+}
+
 function PickCards({ data }) {
   const { base, final, signals, warnings, consensus, consensus_text } = data
   return (
@@ -577,17 +621,31 @@ function PickCards({ data }) {
         </div>
         {signals.map((s) => {
           const badge = sigBadge(s)
+          const isInd = s.key === 'ind'
+          // 해외지표는 "-1.7% 보정된 핸승 예상 28%" 한 문장을 카드 중간에 따로 안 두고
+          // 아래 기준선 편차 줄에 그대로 붙여서 보여준다(value_text 자체가 이미 그 형태로
+          // pick_ai.py에서 만들어져 온다). 값을 실제로 계산한 근거(핸승/핸무/무/역)는
+          // IndLevelsTable의 '분석' 행에 풀어서 보여주니, 여기서 반복할 필요는 없다.
+          const mergeIntoFoot = isInd && s.state === 'ok'
           return (
             <div key={s.key} className={`pick-sig-card pick-sig-card-${badge.tone}`}>
               <div className="pick-sig-top">
                 <span className="pick-sig-label">{s.label}</span>
                 <span className={`pick-sig-badge pick-sig-badge-${badge.tone}`}>{badge.text}</span>
               </div>
-              {s.rows ? <SeasonRowsTable rows={s.rows} /> : <p className="pick-sig-desc">{s.value_text}</p>}
+              {!mergeIntoFoot &&
+                (s.rows ? (
+                  <SeasonRowsTable rows={s.rows} />
+                ) : (
+                  <p className="pick-sig-desc">{s.value_text}</p>
+                ))}
+              {s.levels && s.levels.length > 0 && <IndLevelsTable levels={s.levels} />}
               {s.warn && <p className="pick-sig-warn">주의 · {s.warn}</p>}
               <div className="pick-sig-foot">
                 <span className="pick-sig-foot-label">기준선 편차</span>
-                <span className={`pick-sig-foot-val ${sigFootClass(s)}`}>{sigFootText(s)}</span>
+                <span className={`pick-sig-foot-val ${sigFootClass(s)}`}>
+                  {mergeIntoFoot ? s.value_text : sigFootText(s)}
+                </span>
               </div>
             </div>
           )

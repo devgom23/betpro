@@ -357,9 +357,12 @@
   margin: 0;
 }
 
+/* 해외지표 카드(계단식 보정 근거 표)가 승/승+패/승+무+패/통합승 4줄을 한 줄씩
+   보여주다 보니 폭이 좁으면 답답하다 — 플핸 성공 확률 카드 몫을 줄여서 그만큼 넘긴다
+   (국내지표·상대전적·시즌전적은 그대로 유지). */
 .pick-cards {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 0.8fr 1.5fr 1fr 1fr 1fr;
   gap: 10px;
   align-items: stretch;
 }
@@ -530,6 +533,43 @@
   white-space: nowrap;
 }
 
+/* 해외지표 계단식 보정 근거 표 — 시즌전적 표와 같은 톤(작은 글씨·좁은 여백)으로
+   승/승+패/승+무+패/통합승 각 단계의 표본·적중률을 보여준다. */
+.pick-ind-table {
+  flex: 1;
+  font-size: 10px;
+}
+
+.pick-ind-table th,
+.pick-ind-table td {
+  padding: 2px 6px;
+}
+
+.pick-ind-table .row-label {
+  width: 1%;
+  white-space: nowrap;
+  text-align: left;
+}
+
+/* 종합(가중평균) 행 — 위 단계들을 계단식 보정에 실제로 반영한 결과라 지표별 표본 표의
+   '토탈' 행과 같은 방식(굵게+배경+윗줄)으로 구분한다. */
+.pick-ind-sum-row td {
+  font-weight: 700;
+  background: rgba(148, 163, 184, 0.12);
+  border-top: 2px solid var(--border-strong);
+}
+
+/* 그 행 안에서 제일 큰 칸은 지표별 표본 표와 같은 노란 강조를 얹는다 — 위 회색
+   배경(.pick-ind-sum-row td)보다 우선하도록 선택자를 더 구체적으로 준다. */
+.pick-ind-sum-row td.cell-max {
+  background: rgba(250, 204, 21, 0.22);
+  color: var(--highlight-text);
+}
+
+.pick-ind-sum-row td.cell-second {
+  background: rgba(250, 204, 21, 0.14);
+}
+
 .pick-sig-foot {
   display: flex;
   align-items: baseline;
@@ -643,6 +683,12 @@
   background: rgba(250, 204, 21, 0.22);
   color: var(--highlight-text);
   font-weight: 800;
+}
+
+/* 2번째로 많은 칸 — 1등(cell-max)과 같은 색조를 더 옅게 톤다운해서 구분한다. */
+.cell-second {
+  background: rgba(250, 204, 21, 0.1);
+  font-weight: 700;
 }
 
 .detail-table.match-list {

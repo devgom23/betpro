@@ -58,19 +58,26 @@ CAP_H2H = 4.0
 CAP_CONSENSUS = 2.0
 CAP_TOTAL = 10.0
 
-# 해외지표 후보 — 구체적인(조건이 빡빡한) 순서. 표본이 되는 것 중 가장 구체적인 걸 쓴다.
-# 구체적일수록 이 경기와 닮은 과거 경기만 세지만 그만큼 표본이 빨리 마른다.
-_IND_ORDER = [
-    ("F-WDL", "해) 승+무+패"),
-    ("F-WL", "해) 승+패"),
-    ("TF-WL", "해/통) 승+패"),
-    ("F-W", "해) 승"),
-    ("F-L", "해) 패"),
-    ("TF-W", "해/통) 승"),
-    ("TF-L", "해/통) 패"),
-]
-# 화면에 "치우친 지표"로 나열할 후보 (국내는 표본 부족 안내용으로 같이 넣는다)
-_IND_ALL = _IND_ORDER + [
+# 해외지표 계단식 보정 비율 — 각 단계 표본이 "기준(root) 표본" 대비 몇 %면 그 단계를
+# 절반쯤 반영할지(_blend의 k). 6대리그 실측: 리그마다 원래 표본 규모(에레디비지 vs EPL 등)는
+# 최대 2배 가까이 달라도, 이 비율 자체는 리그 상관없이 거의 같았다 —
+#   해)승·해)패 : 해/통)승·해/통)패 대비           14~18% (6개 리그 중앙값)
+#   해)승+패    : 해/통)승·해/통)패 대비            2.6~3.6%
+#   해)승+무+패 : 해/통)승·해/통)패 대비            1.0~1.5%
+#   해)승+패    : 해)승 대비 (scope='user', 통합 없음)  18~21%
+#   해)승+무+패 : 해)승 대비 (scope='user', 통합 없음)  6.8~9.5%
+# 절대 표본 수(예: "40경기") 대신 이 비율로 기준을 잡으면, 원래 표본이 적은 리그·시즌
+# 초반에도 자동으로 눈높이가 낮아져서 리그별로 따로 상수를 관리할 필요가 없다.
+IND_RATIO_SINGLE_OVER_TOTAL = 0.16
+IND_RATIO_WL_OVER_TOTAL = 0.03
+IND_RATIO_WDL_OVER_TOTAL = 0.012
+IND_RATIO_WL_OVER_SINGLE = 0.19
+IND_RATIO_WDL_OVER_SINGLE = 0.08
+
+# 국내지표는 계단식 보정에 안 넣고 "표본이 얼마나 쌓였는지"만 안내한다(모듈 상단 주석
+# 참고 — 실측에서 방향이 해외지표와 반대로 나와 계산엔 못 쓴다). 표본이 제일 큰 걸
+# 대표로 보여준다.
+_K_IND_CODES = [
     ("K-WL", "국) 승+패"), ("K-W", "국) 승"), ("K-L", "국) 패"),
     ("TK-WL", "국/통) 승+패"), ("TK-W", "국/통) 승"),
 ]
@@ -104,6 +111,155 @@ def _ind_counts(row, code):
         v = _num(row.get(f"{code} {i}"))
         vals.append(0.0 if v is None else v)
     return vals, sum(vals)
+
+
+# 지표 하나의 "핸승 예상 %"를 핸승 비율만으로 보지 않고, 핸무·무·역 비율까지 반영해서
+# 계산하는 회귀식 계수 — 6대리그 35,428경기를 leave-one-out(그 경기 자신은 표본에서
+# 뺀 채) 방식으로 "핸무·무·역 비율이 늘 때 실제 핸승률이 얼마나 떨어지는지" 선형회귀로
+# 실측했다(경기 자신이 자기 조건에 트리비얼하게 포함되는 걸 배제한 정직한 검증).
+#   해/통) 지표(표본 큰 광범위 지표): 절편 77.8, 핸무 -24.6, 무 -86.9, 역 -95.0
+#   해) 지표(단일 리그 지표):        절편 62.3, 핸무 -11.4, 무 -53.7, 역 -77.3
+# 핸무는 핸승에 가까운 결과라 약하게만 나쁜 신호지만, 무·역은 둘 다 "언더독이 진짜
+# 잘한 경기"라 거의 똑같이 강하게 나쁜 신호였다 — 감으로 정한 "역이 핸무의 2배"보다
+# 실제로는 4~7배 격차였고, 무와 역은 오히려 거의 동급(1.1~1.4배)이었다.
+# 해)승+패·해)승+무+패는 표본이 작아 따로 회귀를 낼 수 없어, 같은 "해당 리그" 소속인
+# 해)승·해)패와 같은 계수를 쓴다.
+_REG_TOTAL = {"intercept": 77.8, "hm": -24.6, "mu": -86.9, "yk": -95.0}   # 해/통)
+_REG_SINGLE = {"intercept": 62.3, "hm": -11.4, "mu": -53.7, "yk": -77.3}  # 해) 단일·승+패·승+무+패
+
+
+def _level_hit_pct(vals, total, reg):
+    """지표 하나의 표본(vals=[핸승,핸무,무,역], total)을 회귀식(reg)에 넣어
+    '핸승 예상 %'를 낸다 — 핸승 비율뿐 아니라 핸무·무·역 비율까지 반영한다."""
+    if total <= 0:
+        return 0.0
+    frac_hm, frac_mu, frac_yk = vals[1] / total, vals[2] / total, vals[3] / total
+    pred = reg["intercept"] + reg["hm"] * frac_hm + reg["mu"] * frac_mu + reg["yk"] * frac_yk
+    return _clamp(pred, 0.0, 100.0)
+
+
+def _blend_weight(level_total, k):
+    """레벨 표본(level_total)이 k(그 레벨의 '적당한 크기' 기준)만큼이면 0.5, 그보다
+    많으면 더 크게, 적으면 더 작게 — _blend와 _blend_vec이 같은 가중치를 쓰도록
+    한곳에 모아둔다."""
+    return level_total / (level_total + k) if level_total > 0 else 0.0
+
+
+def _blend(est, level_total, level_hit, k):
+    """레벨 표본(level_total)을 k에 비례해서 기존 추정치(est)에 섞는다. 원 표본 숫자를
+    그대로 더하지 않고 비율(적중률)만 섞기 때문에, 지표끼리 포함관계(예: 해)승+무+패
+    표본은 전부 해)승 표본에도 들어있음)여도 같은 경기를 중복으로 세지 않는다."""
+    w = _blend_weight(level_total, k)
+    return level_hit * w + est * (1 - w) if level_total > 0 else est
+
+
+def _blend_vec(prev_vec, level_total, level_vec, k):
+    """_blend와 같은 가중치로, [핸승,핸무,무,역] 네 값을 한꺼번에 섞는다 — 화면 표의
+    '종합' 행(각 단계를 실제로 얼마나 반영했는지 그대로 보여주는 가중평균)에 쓴다."""
+    if level_total <= 0:
+        return prev_vec
+    w = _blend_weight(level_total, k)
+    return [lv * w + pv * (1 - w) for pv, lv in zip(prev_vec, level_vec)]
+
+
+def _foreign_indicator(row, scope):
+    """해외지표 계단식 보정.
+
+    조건이 빡빡한(표본이 적지만 이 경기와 더 닮은) 지표일수록 '기준 표본 대비 얼마나
+    큰지'에 비례해서만 영향을 주고, 조건이 느슨한(표본이 많지만 덜 구체적인) 지표를
+    출발점으로 삼는다 — 그래서 표본이 딱 40개를 못 넘겨도 통째로 버려지지 않고, 있는
+    만큼은 결과에 스며든다.
+
+    정배 방향(오늘 W쪽이 정배인지 L쪽이 정배인지)에 맞는 지표 계열만 쓴다 — 승·패
+    지표는 서로 다른 배당 컬럼(FW/FL) 기준이라 정배가 반대쪽이면 표본 자체가 안 맞는다.
+    승+패·승+무+패는 두 컬럼을 동시에 맞추는 조건이라 정배 방향과 무관하게 고정이다.
+
+    반환: (ind_used, hit_pct, ind_levels)
+      ind_used   : (code, label, vals, total) — 출발점(root)으로 쓴 지표. None이면 판단 불가.
+      hit_pct    : 계단식으로 보정된 최종 핸승률(%).
+      ind_levels : 화면 근거표용 — [{code,label,sample,hs_pct,hm_pct,mu_pct,yk_pct}, ...],
+                   표시 순서(승/승+패/승+무+패/통합승)로 표본이 있는 단계만 담는다.
+    """
+    fw = _num(row.get("FW"))
+    fl = _num(row.get("FL"))
+    if fw is None or fl is None or fw == fl:
+        return None, None, []
+    fav_col = "W" if fw < fl else "L"
+    single_code, single_label = ("F-W", "해) 승") if fav_col == "W" else ("F-L", "해) 패")
+    total_code, total_label = ("TF-W", "해/통) 승") if fav_col == "W" else ("TF-L", "해/통) 패")
+
+    single_vals, single_total = _ind_counts(row, single_code)
+    wl_vals, wl_total = _ind_counts(row, "F-WL")
+    wdl_vals, wdl_total = _ind_counts(row, "F-WDL")
+    # scope='user'는 리그 하나뿐이라 통합(TF-*) 지표가 F-*와 항상 같은 값이라 안 쓴다
+    # (지표별 표본에서 TF-*/TK-* 행을 숨기는 것과 같은 이유 — compute() 문서 참고).
+    total_vals, total_total = (None, 0) if scope == "user" else _ind_counts(row, total_code)
+
+    def raw_pcts(vals, total):
+        return [v / total * 100.0 for v in vals]
+
+    if total_total > 0:
+        est = _level_hit_pct(total_vals, total_total, _REG_TOTAL)
+        raw = raw_pcts(total_vals, total_total)   # [핸승,핸무,무,역] 가중평균 — 화면 '종합' 행용
+        root_total = total_total
+        used = (total_code, total_label, total_vals, total_total)
+        if single_total > 0:
+            k = max(1.0, root_total * IND_RATIO_SINGLE_OVER_TOTAL)
+            est = _blend(est, single_total, _level_hit_pct(single_vals, single_total, _REG_SINGLE), k)
+            raw = _blend_vec(raw, single_total, raw_pcts(single_vals, single_total), k)
+        wl_k = max(1.0, root_total * IND_RATIO_WL_OVER_TOTAL)
+        wdl_k = max(1.0, root_total * IND_RATIO_WDL_OVER_TOTAL)
+    elif single_total > 0:
+        est = _level_hit_pct(single_vals, single_total, _REG_SINGLE)
+        raw = raw_pcts(single_vals, single_total)
+        root_total = single_total
+        used = (single_code, single_label, single_vals, single_total)
+        wl_k = max(1.0, root_total * IND_RATIO_WL_OVER_SINGLE)
+        wdl_k = max(1.0, root_total * IND_RATIO_WDL_OVER_SINGLE)
+    else:
+        return None, None, []
+
+    if wl_total > 0:
+        est = _blend(est, wl_total, _level_hit_pct(wl_vals, wl_total, _REG_SINGLE), wl_k)
+        raw = _blend_vec(raw, wl_total, raw_pcts(wl_vals, wl_total), wl_k)
+    if wdl_total > 0:
+        est = _blend(est, wdl_total, _level_hit_pct(wdl_vals, wdl_total, _REG_SINGLE), wdl_k)
+        raw = _blend_vec(raw, wdl_total, raw_pcts(wdl_vals, wdl_total), wdl_k)
+
+    levels = []
+    for code, label, vals, total in [
+        (single_code, single_label, single_vals, single_total),
+        ("F-WL", "해) 승+패", wl_vals, wl_total),
+        ("F-WDL", "해) 승+무+패", wdl_vals, wdl_total),
+        (total_code, total_label, total_vals, total_total),
+    ]:
+        if total > 0:
+            levels.append({
+                "code": code, "label": label, "sample": int(total),
+                "hs_pct": round(vals[0] / total * 100.0, 1),
+                "hm_pct": round(vals[1] / total * 100.0, 1),
+                "mu_pct": round(vals[2] / total * 100.0, 1),
+                "yk_pct": round(vals[3] / total * 100.0, 1),
+            })
+    # '분석' 행 — 핸승 칸은 위 단계들을 회귀식(_level_hit_pct)으로 보정하며 실제로 최종
+    # 계산(est, = 기준선 편차의 재료)에 쓴 그 값 그대로다. 핸무·무·역은 대응하는 회귀식이
+    # 따로 없어(핸승 여부만 실측 검증했다) 원본 비율을 같은 가중치로 섞은 값인데, 그걸
+    # 그대로 쓰면 네 칸 합이 100%에 안 맞으니 "핸승을 뺀 나머지(100−핸승)"를 그 셋의
+    # 원래 비율 그대로 나눠서 맞춘다 — 셋 사이의 상대적인 크기는 안 바뀌고, 총합만 맞아진다.
+    remaining = 100.0 - est
+    rest_sum = raw[1] + raw[2] + raw[3]
+    if rest_sum > 0:
+        scale = remaining / rest_sum
+        hm_pct, mu_pct, yk_pct = raw[1] * scale, raw[2] * scale, raw[3] * scale
+    else:
+        hm_pct = mu_pct = yk_pct = remaining / 3.0
+    levels.append({
+        "code": "SUM", "label": "분석", "sample": None,
+        "hs_pct": round(est, 1), "hm_pct": round(hm_pct, 1),
+        "mu_pct": round(mu_pct, 1), "yk_pct": round(yk_pct, 1),
+    })
+
+    return used, est, levels
 
 
 def _home_is_fav(row):
@@ -244,40 +400,41 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master",
             "signals": [], "warnings": [],
         }
 
-    # ── ② 해외지표: 표본이 되는 것 중 가장 구체적인 지표로 보정 ──
-    ind_used = None
-    for code, label in _IND_ORDER:
-        if scope == "user" and code.startswith("TF-"):
-            continue
-        vals, total = _ind_counts(row, code)
-        if total >= MIN_IND_SAMPLE:
-            ind_used = (code, label, vals, total, vals[0] / total * 100.0)
-            break
+    # ── ② 해외지표: 계단식 보정(_foreign_indicator 참고) ──
+    ind_used, ind_hit, ind_levels = _foreign_indicator(row, scope)
 
     adj_ind = 0.0
     ind_dir = 0
     if ind_used:
-        code, label, vals, total, ind_hit = ind_used
+        _, _, _, root_total = ind_used
         gap = ind_hit - ai
         adj_ind = _clamp(gap * 0.15, -CAP_IND, CAP_IND)   # 실측 격차(3.9~6.2%p)에 맞춘 축소 반영
         ind_dir = 1 if adj_ind >= 1.0 else (-1 if adj_ind <= -1.0 else 0)
+        # 화면에 큼직하게 보여줄 "핸승 예상 %"는 계단식 보정값(ind_hit)을 그대로 쓰지 않는다.
+        # 6대리그로 leave-one-out 실측해보니 ind_hit 단독은 예측 구간과 실제 핸승률이
+        # 거의 무관했다(Brier 0.243, 그냥 전체평균(0.211)보다 나쁨) — 지표 혼자서는 절대
+        # 확률을 못 맞힌다는 뜻. 반면 배당 기준선(base_hit)에 이 보정치(adj_ind)를 더한 값은
+        # 기준선 단독(Brier 0.2005)과 비슷하거나 살짝 더 나은 정확도(Brier 0.2003)를 보였다
+        # — 배당이 이미 대부분의 정보를 담고 있고, 해외지표는 거기 얹는 작은 힌트일 뿐이라는
+        # 모듈 상단 주석의 설계 의도와 일치한다. 그래서 표시용 숫자는 기준선+보정치로 만든다.
+        ind_hit_shown = _clamp(base_hit + adj_ind, 1.0, 99.0)
         signals.append({
             "key": "ind", "label": "해외지표", "state": "ok",
-            "used": label, "sample": int(total),
-            "value_text": f"{label} 표본 {int(total)}경기 중 핸승 {ind_hit:.0f}%",
-            "detail": {"핸승": vals[0], "핸무": vals[1], "무": vals[2], "역": vals[3]},
+            "sample": int(root_total),
+            "value_text": f"{adj_ind:+.1f}% 보정된 핸승 예상 {ind_hit_shown:.0f}%",
+            "levels": ind_levels,
             "dir": ind_dir, "adjust": round(adj_ind, 1),
         })
     else:
         signals.append({
             "key": "ind", "label": "해외지표", "state": "none",
-            "value_text": f"표본 {MIN_IND_SAMPLE}경기 미만 — 판단 제외",
+            "value_text": "표본이 없어 판단 제외",
             "dir": 0, "adjust": 0.0,
         })
 
     # 국내지표는 상태만 알리고 계산에는 넣지 않는다 — 표본이 쌓인 경기가 37%뿐인 데다
     # 그 표본에서 방향이 해외지표와 반대로 나와(모듈 상단 주석 참고) 믿을 수 없다.
-    k_codes = [c for c, _ in _IND_ALL
+    k_codes = [c for c, _ in _K_IND_CODES
                if c.startswith("K-") or (c.startswith("TK-") and scope != "user")]
     k_best = max(((c, _ind_counts(row, c)[1]) for c in k_codes),
                  key=lambda x: x[1], default=(None, 0))
