@@ -47,8 +47,6 @@ import numpy as np
 _CAL_X = [10.0, 22.5, 27.5, 32.5, 40.0, 55.0, 70.0]
 _CAL_Y = [16.5, 22.3, 26.8, 32.6, 39.3, 55.3, 70.0]
 
-# 지표 표본이 이 미만이면 판단에 쓰지 않는다. 국내지표(K-*)는 대부분 여기서 걸린다.
-MIN_IND_SAMPLE = 40
 MIN_H2H_SAMPLE = 3      # 이 미만이면 상대전적을 판단에서 뺀다
 H2H_FULL_WEIGHT = 10    # 맞대결 10경기면 상대전적 보정을 100% 반영
 
@@ -73,14 +71,6 @@ IND_RATIO_WL_OVER_TOTAL = 0.03
 IND_RATIO_WDL_OVER_TOTAL = 0.012
 IND_RATIO_WL_OVER_SINGLE = 0.19
 IND_RATIO_WDL_OVER_SINGLE = 0.08
-
-# 국내지표는 계단식 보정에 안 넣고 "표본이 얼마나 쌓였는지"만 안내한다(모듈 상단 주석
-# 참고 — 실측에서 방향이 해외지표와 반대로 나와 계산엔 못 쓴다). 표본이 제일 큰 걸
-# 대표로 보여준다.
-_K_IND_CODES = [
-    ("K-WL", "국) 승+패"), ("K-W", "국) 승"), ("K-L", "국) 패"),
-    ("TK-WL", "국/통) 승+패"), ("TK-W", "국/통) 승"),
-]
 
 
 def _num(v):
@@ -126,6 +116,23 @@ def _ind_counts(row, code):
 # 해)승·해)패와 같은 계수를 쓴다.
 _REG_TOTAL = {"intercept": 77.8, "hm": -24.6, "mu": -86.9, "yk": -95.0}   # 해/통)
 _REG_SINGLE = {"intercept": 62.3, "hm": -11.4, "mu": -53.7, "yk": -77.3}  # 해) 단일·승+패·승+무+패
+
+# 국내지표(국/통)승·패, TK-W/TK-L)는 해외지표와 달리 리그마다 회귀계수가 크게 다르다
+# (6대리그 실측 — 리그당 표본 1,287~4,626건, leave-one-out). "핸무" 계수 부호까지
+# 라리가(-19.3)와 세리에A(+34.6)에서 정반대로 나와서, 해외지표처럼 전 리그 공통 계수
+# 하나로 뭉뚱그리면 안 되고 리그별로 따로 쓴다. 국)승·패(리그 단일)·국)승+패·국)승+무+패는
+# 표본이 리그당 0~260건뿐이고 상관관계도 리그마다 들쭉날쭉(-0.57~+0.71)해서 회귀식을
+# 못 냈다 — 화면 표에는 그대로 보여주되(사장님이 직접 판단), 계산엔 통합(국/통) 리그별
+# 계수를 그대로 재사용한다.
+_REG_DOMESTIC_BY_LEAGUE = {
+    "LIGUE1":     {"intercept": 45.3, "hm": 11.3,  "mu": -3.8,  "yk": -81.4},
+    "BUNDES":     {"intercept": 50.2, "hm": 34.1,  "mu": -35.1, "yk": -78.5},
+    "SERIEA":     {"intercept": 43.6, "hm": 34.6,  "mu": -25.9, "yk": -78.4},
+    "EPL":        {"intercept": 49.8, "hm": 22.8,  "mu": -37.1, "yk": -71.7},
+    "LALIGA":     {"intercept": 66.8, "hm": -19.3, "mu": -61.9, "yk": -85.1},
+    "EREDIVISIE": {"intercept": 64.1, "hm": 1.8,   "mu": -50.1, "yk": -93.0},
+}
+_REG_DOMESTIC_DEFAULT = {"intercept": 53.3, "hm": 14.2, "mu": -35.7, "yk": -81.4}  # 6개 리그 평균(리그 코드 모를 때)
 
 
 def _level_hit_pct(vals, total, reg):
@@ -178,15 +185,16 @@ def _foreign_indicator(row, scope):
       ind_used   : (code, label, vals, total) — 출발점(root)으로 쓴 지표. None이면 판단 불가.
       hit_pct    : 계단식으로 보정된 최종 핸승률(%).
       ind_levels : 화면 근거표용 — [{code,label,sample,hs_pct,hm_pct,mu_pct,yk_pct}, ...],
-                   표시 순서(승/승+패/승+무+패/통합승)로 표본이 있는 단계만 담는다.
+                   표시 순서(승/승+패/승+무+패/통합승)로 4단계 전부 담는다 — 표본이
+                   0인 단계는 0/0/0/0으로 그대로 담는다.
     """
     fw = _num(row.get("FW"))
     fl = _num(row.get("FL"))
     if fw is None or fl is None or fw == fl:
         return None, None, []
     fav_col = "W" if fw < fl else "L"
-    single_code, single_label = ("F-W", "해) 승") if fav_col == "W" else ("F-L", "해) 패")
-    total_code, total_label = ("TF-W", "해/통) 승") if fav_col == "W" else ("TF-L", "해/통) 패")
+    single_code, single_label = ("F-W", "승") if fav_col == "W" else ("F-L", "패")
+    total_code, total_label = ("TF-W", "통) 승") if fav_col == "W" else ("TF-L", "통) 패")
 
     single_vals, single_total = _ind_counts(row, single_code)
     wl_vals, wl_total = _ind_counts(row, "F-WL")
@@ -226,11 +234,13 @@ def _foreign_indicator(row, scope):
         est = _blend(est, wdl_total, _level_hit_pct(wdl_vals, wdl_total, _REG_SINGLE), wdl_k)
         raw = _blend_vec(raw, wdl_total, raw_pcts(wdl_vals, wdl_total), wdl_k)
 
+    # 표본이 0인 단계도 국내지표와 똑같이 0/0/0/0으로 그대로 보여준다 — 표에서 아예
+    # 빠지면 "이 단계 자체가 없나 보다"로 헷갈릴 수 있다.
     levels = []
     for code, label, vals, total in [
         (single_code, single_label, single_vals, single_total),
-        ("F-WL", "해) 승+패", wl_vals, wl_total),
-        ("F-WDL", "해) 승+무+패", wdl_vals, wdl_total),
+        ("F-WL", "승+패", wl_vals, wl_total),
+        ("F-WDL", "승+무+패", wdl_vals, wdl_total),
         (total_code, total_label, total_vals, total_total),
     ]:
         if total > 0:
@@ -241,11 +251,111 @@ def _foreign_indicator(row, scope):
                 "mu_pct": round(vals[2] / total * 100.0, 1),
                 "yk_pct": round(vals[3] / total * 100.0, 1),
             })
+        else:
+            levels.append({
+                "code": code, "label": label, "sample": 0,
+                "hs_pct": 0.0, "hm_pct": 0.0, "mu_pct": 0.0, "yk_pct": 0.0,
+            })
     # '분석' 행 — 핸승 칸은 위 단계들을 회귀식(_level_hit_pct)으로 보정하며 실제로 최종
     # 계산(est, = 기준선 편차의 재료)에 쓴 그 값 그대로다. 핸무·무·역은 대응하는 회귀식이
     # 따로 없어(핸승 여부만 실측 검증했다) 원본 비율을 같은 가중치로 섞은 값인데, 그걸
     # 그대로 쓰면 네 칸 합이 100%에 안 맞으니 "핸승을 뺀 나머지(100−핸승)"를 그 셋의
     # 원래 비율 그대로 나눠서 맞춘다 — 셋 사이의 상대적인 크기는 안 바뀌고, 총합만 맞아진다.
+    remaining = 100.0 - est
+    rest_sum = raw[1] + raw[2] + raw[3]
+    if rest_sum > 0:
+        scale = remaining / rest_sum
+        hm_pct, mu_pct, yk_pct = raw[1] * scale, raw[2] * scale, raw[3] * scale
+    else:
+        hm_pct = mu_pct = yk_pct = remaining / 3.0
+    levels.append({
+        "code": "SUM", "label": "분석", "sample": None,
+        "hs_pct": round(est, 1), "hm_pct": round(hm_pct, 1),
+        "mu_pct": round(mu_pct, 1), "yk_pct": round(yk_pct, 1),
+    })
+
+    return used, est, levels
+
+
+def _domestic_indicator(row, scope, code):
+    """국내지표 계단식 보정 — 구조는 _foreign_indicator와 같지만(정배 방향에 맞는 지표
+    선택 → 느슨한 지표(국/통)에서 빡빡한 지표(국)승+무+패)로 표본 비례 가중 반영), 계산에
+    쓰는 회귀식이 다르다. 국)승·패(리그 단일)·국)승+패·국)승+무+패는 리그별로도 신호가
+    없거나 표본이 너무 적어(모듈 상단 _REG_DOMESTIC_BY_LEAGUE 주석 참고) 통합(국/통)의
+    리그별 회귀식을 그대로 재사용한다. 이 함수의 결과(est)는 최종 확률 계산에는 넣지
+    않고 화면에 참고용으로만 보여준다 — compute()의 '국내지표' 신호 참고.
+
+    반환 형태는 _foreign_indicator와 동일: (ind_used, hit_pct, ind_levels).
+    """
+    kw = _num(row.get("KW"))
+    kl = _num(row.get("KL"))
+    if kw is None or kl is None or kw == kl:
+        return None, None, []
+    fav_col = "W" if kw < kl else "L"
+    single_code, single_label = ("K-W", "승") if fav_col == "W" else ("K-L", "패")
+    total_code, total_label = ("TK-W", "통) 승") if fav_col == "W" else ("TK-L", "통) 패")
+    reg = _REG_DOMESTIC_BY_LEAGUE.get(code, _REG_DOMESTIC_DEFAULT)
+
+    single_vals, single_total = _ind_counts(row, single_code)
+    wl_vals, wl_total = _ind_counts(row, "K-WL")
+    wdl_vals, wdl_total = _ind_counts(row, "K-WDL")
+    total_vals, total_total = (None, 0) if scope == "user" else _ind_counts(row, total_code)
+
+    def raw_pcts(vals, total):
+        return [v / total * 100.0 for v in vals]
+
+    if total_total > 0:
+        est = _level_hit_pct(total_vals, total_total, reg)
+        raw = raw_pcts(total_vals, total_total)
+        root_total = total_total
+        used = (total_code, total_label, total_vals, total_total)
+        if single_total > 0:
+            k = max(1.0, root_total * IND_RATIO_SINGLE_OVER_TOTAL)
+            est = _blend(est, single_total, _level_hit_pct(single_vals, single_total, reg), k)
+            raw = _blend_vec(raw, single_total, raw_pcts(single_vals, single_total), k)
+        wl_k = max(1.0, root_total * IND_RATIO_WL_OVER_TOTAL)
+        wdl_k = max(1.0, root_total * IND_RATIO_WDL_OVER_TOTAL)
+    elif single_total > 0:
+        est = _level_hit_pct(single_vals, single_total, reg)
+        raw = raw_pcts(single_vals, single_total)
+        root_total = single_total
+        used = (single_code, single_label, single_vals, single_total)
+        wl_k = max(1.0, root_total * IND_RATIO_WL_OVER_SINGLE)
+        wdl_k = max(1.0, root_total * IND_RATIO_WDL_OVER_SINGLE)
+    else:
+        return None, None, []
+
+    if wl_total > 0:
+        est = _blend(est, wl_total, _level_hit_pct(wl_vals, wl_total, reg), wl_k)
+        raw = _blend_vec(raw, wl_total, raw_pcts(wl_vals, wl_total), wl_k)
+    if wdl_total > 0:
+        est = _blend(est, wdl_total, _level_hit_pct(wdl_vals, wdl_total, reg), wdl_k)
+        raw = _blend_vec(raw, wdl_total, raw_pcts(wdl_vals, wdl_total), wdl_k)
+
+    # 국내지표는 승+패·승+무+패 표본이 아예 없는 경기가 흔하다(모듈 상단
+    # _REG_DOMESTIC_BY_LEAGUE 주석 참고 — 리그당 0~260건뿐). 해외지표처럼 표본 있는
+    # 줄만 골라 보여주면 "이 단계는 아예 없나 보다"로 헷갈릴 수 있어, 국내지표는 표본이
+    # 0이어도 4단계(단일·승+패·승+무+패·통합) 줄을 전부 0/0/0/0으로 보여준다.
+    levels = []
+    for lv_code, label, vals, total in [
+        (single_code, single_label, single_vals, single_total),
+        ("K-WL", "승+패", wl_vals, wl_total),
+        ("K-WDL", "승+무+패", wdl_vals, wdl_total),
+        (total_code, total_label, total_vals, total_total),
+    ]:
+        if total > 0:
+            levels.append({
+                "code": lv_code, "label": label, "sample": int(total),
+                "hs_pct": round(vals[0] / total * 100.0, 1),
+                "hm_pct": round(vals[1] / total * 100.0, 1),
+                "mu_pct": round(vals[2] / total * 100.0, 1),
+                "yk_pct": round(vals[3] / total * 100.0, 1),
+            })
+        else:
+            levels.append({
+                "code": lv_code, "label": label, "sample": 0,
+                "hs_pct": 0.0, "hm_pct": 0.0, "mu_pct": 0.0, "yk_pct": 0.0,
+            })
     remaining = 100.0 - est
     rest_sum = raw[1] + raw[2] + raw[3]
     if rest_sum > 0:
@@ -372,7 +482,7 @@ def _h2h_fav_signal(today_row: dict, h2h: dict | None):
 
 
 def compute(row: dict, h2h: dict | None = None, scope: str = "master",
-           season_matches: dict | None = None) -> dict:
+           season_matches: dict | None = None, code: str = "") -> dict:
     """경기 한 건의 종합픽을 계산한다.
 
     row            : 상세보기가 이미 들고 있는 경기 한 줄(배AI·지표표본 전부 포함)
@@ -382,6 +492,8 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master",
                      같은 이유로 TK-*/TF-* 행을 숨기고 있다).
     season_matches : {"home": [...], "away": [...]} — 홈팀/원정팀이 이번 시즌 치른 경기
                      원본 목록(main.py._season_matches). '시즌전적' 신호에 쓴다.
+    code           : 리그 코드(EPL 등). 국내지표 회귀식이 리그마다 달라 _domestic_indicator에
+                     그대로 넘긴다 — 없으면(내 데이터 등) 6개 리그 평균 계수로 대신한다.
     """
     signals = []
     warnings = []
@@ -432,19 +544,26 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master",
             "dir": 0, "adjust": 0.0,
         })
 
-    # 국내지표는 상태만 알리고 계산에는 넣지 않는다 — 표본이 쌓인 경기가 37%뿐인 데다
-    # 그 표본에서 방향이 해외지표와 반대로 나와(모듈 상단 주석 참고) 믿을 수 없다.
-    k_codes = [c for c, _ in _K_IND_CODES
-               if c.startswith("K-") or (c.startswith("TK-") and scope != "user")]
-    k_best = max(((c, _ind_counts(row, c)[1]) for c in k_codes),
-                 key=lambda x: x[1], default=(None, 0))
-    signals.append({
-        "key": "ind_k", "label": "국내지표", "state": "info",
-        "value_text": (f"최대 표본 {int(k_best[1])}경기" if k_best[1] >= MIN_IND_SAMPLE
-                       else f"최대 표본 {int(k_best[1])}경기 — 표본 부족"),
-        "note": "실측에서 방향이 해외지표와 반대로 나와 확률 계산에는 넣지 않습니다",
-        "dir": 0, "adjust": 0.0,
-    })
+    # 국내지표: 해외지표와 같은 방식(_domestic_indicator)으로 계단식 보정을 계산은
+    # 하지만, 리그 단일(국)승·패)·국)승+패·국)승+무+패는 리그별로 확인해도 신호가
+    # 없거나 표본이 너무 적어(모듈 상단 _REG_DOMESTIC_BY_LEAGUE 주석 참고) 최종
+    # 확률 계산(adj_total)에는 아직 넣지 않는다 — state를 'info'로 둬서 배지도
+    # "참고용"으로만 뜨게 한다. 화면 표(핸승/핸무/무/역 + 분석 행)는 그대로 보여줘서
+    # 사장님이 국배를 더 채워 넣어가며 직접 판단할 수 있게 한다.
+    dom_used, dom_hit, dom_levels = _domestic_indicator(row, scope, code)
+    if dom_used:
+        signals.append({
+            "key": "ind_k", "label": "국내지표", "state": "info",
+            "value_text": f"핸승 예상 {dom_hit:.0f}%(전체 계산 반영 안 함)",
+            "levels": dom_levels,
+            "dir": 0, "adjust": 0.0,
+        })
+    else:
+        signals.append({
+            "key": "ind_k", "label": "국내지표", "state": "info",
+            "value_text": "표본 부족 — 판정 불가",
+            "dir": 0, "adjust": 0.0,
+        })
 
     # ── ③ 상대전적: 오늘과 같은 정배/역배 구도였던 맞대결만 추려 커버율을 본다 ──
     adj_h2h = 0.0
@@ -493,7 +612,7 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master",
     signals.append({
         "key": "season", "label": "시즌전적", "state": "info",
         "value_text": season_text,
-        "rows": [_season_row("홈", home_rec), _season_row("원정", away_rec)],
+        "rows": [_season_row("홈", home_rec), _season_row("원", away_rec)],
         "note": "오늘과 같은 정배/역배 구도였던 이번 시즌 경기만 모은 값 — 확률 계산에는 반영하지 않습니다",
         "dir": 0, "adjust": 0.0,
     })

@@ -621,12 +621,13 @@ function PickCards({ data }) {
         </div>
         {signals.map((s) => {
           const badge = sigBadge(s)
-          const isInd = s.key === 'ind'
-          // 해외지표는 "-1.7% 보정된 핸승 예상 28%" 한 문장을 카드 중간에 따로 안 두고
-          // 아래 기준선 편차 줄에 그대로 붙여서 보여준다(value_text 자체가 이미 그 형태로
-          // pick_ai.py에서 만들어져 온다). 값을 실제로 계산한 근거(핸승/핸무/무/역)는
-          // IndLevelsTable의 '분석' 행에 풀어서 보여주니, 여기서 반복할 필요는 없다.
-          const mergeIntoFoot = isInd && s.state === 'ok'
+          // 해외지표·국내지표는 "-1.7% 보정된 핸승 예상 28%"/"핸승 예상 9%(전체 계산
+          // 반영 안 함)" 한 문장을 카드 중간에 따로 안 두고 아래 기준선 편차 줄에 그대로
+          // 붙여서 보여준다(value_text 자체가 이미 그 형태로 pick_ai.py에서 만들어져
+          // 온다). 값을 실제로 계산한 근거(핸승/핸무/무/역)는 IndLevelsTable의 '분석'
+          // 행에 풀어서 보여주니, 여기서 반복할 필요는 없다.
+          const isIndicator = s.key === 'ind' || s.key === 'ind_k'
+          const mergeIntoFoot = isIndicator && s.levels && s.levels.length > 0
           return (
             <div key={s.key} className={`pick-sig-card pick-sig-card-${badge.tone}`}>
               <div className="pick-sig-top">

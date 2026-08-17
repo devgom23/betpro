@@ -1201,7 +1201,7 @@ def pick_ai(body: PickAiBody, user: dict = Depends(get_current_user)):
             "home": _season_matches(src_df, ht, season),
             "away": _season_matches(src_df, at, season),
         }
-    result = PICKAI.compute(body.row, h2h, scope=body.scope, season_matches=season_matches)
+    result = PICKAI.compute(body.row, h2h, scope=body.scope, season_matches=season_matches, code=body.code)
     # 상세보기의 "상대전적" 카드가 여기서 이미 구한 h2h를 그대로 재사용하도록 함께
     # 내려준다 — 예전엔 이 계산(리그 마스킹·정렬·WDL 집계)을 /api/head_to_head가
     # 팝업을 열 때마다 통째로 한 번 더 했다(같은 두 팀, 같은 데이터를 두 번 계산).

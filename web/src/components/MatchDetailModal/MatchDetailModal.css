@@ -357,12 +357,15 @@
   margin: 0;
 }
 
-/* 해외지표 카드(계단식 보정 근거 표)가 승/승+패/승+무+패/통합승 4줄을 한 줄씩
-   보여주다 보니 폭이 좁으면 답답하다 — 플핸 성공 확률 카드 몫을 줄여서 그만큼 넘긴다
-   (국내지표·상대전적·시즌전적은 그대로 유지). */
+/* 해외지표·국내지표 카드는 둘 다 승/승+패/승+무+패/통합승+분석 표를 담다 보니 폭이
+   좁으면 답답하다 — 상대전적·시즌전적 카드 몫을 줄여서 그만큼 넘긴다. 플핸 성공 확률
+   카드는 제목·배지·큰 글씨 확률·막대·문구까지 담아 너무 좁히면 찌그러져 보여서
+   0.8fr로 되돌리고, 그 몫은 여유가 있던 상대전적에서만 뺐다. 해외·국내지표는 표의
+   지표명 칸을 승+무+패에 딱 맞게(.pick-ind-table .row-label 22%) 줄인 만큼 카드
+   자체 몫도 살짝 줄여서(1.35→1.25) 시즌전적(0.85→1.05)이 한 줄로 보이게 넘긴다. */
 .pick-cards {
   display: grid;
-  grid-template-columns: 0.8fr 1.5fr 1fr 1fr 1fr;
+  grid-template-columns: 0.8fr 1.25fr 1.25fr 0.65fr 1.05fr;
   gap: 10px;
   align-items: stretch;
 }
@@ -517,9 +520,11 @@
 
 /* 시즌전적 — 홈/원정 두 줄을 문장 대신 표로 그려서 라벨(홈/원정) 폭을 맞추고
    숫자 칸 사이에 구분선이 서게 한다. .detail-table을 그대로 재사용해 다른
-   표들과 톤을 맞추고, 카드 안에 들어가는 크기라 여백/글자만 줄인다. */
+   표들과 톤을 맞추고, 카드 안에 들어가는 크기라 여백/글자만 줄인다. flex:1을 주면
+   옆 카드(해외·국내지표, 5줄 표) 높이에 맞춰 억지로 늘어나 셀이 붕 뜬다 — 늘어나지
+   않고 국내지표 표와 같은 자연스러운 높이만큼만 차지하게 둔다. */
 .pick-season-table {
-  flex: 1;
+  flex: 0 0 auto;
   font-size: 10px;
 }
 
@@ -533,20 +538,27 @@
   white-space: nowrap;
 }
 
-/* 해외지표 계단식 보정 근거 표 — 시즌전적 표와 같은 톤(작은 글씨·좁은 여백)으로
-   승/승+패/승+무+패/통합승 각 단계의 표본·적중률을 보여준다. */
+/* 해외지표·국내지표 계단식 보정 근거 표 — 시즌전적 표와 같은 톤(작은 글씨·좁은 여백)으로
+   승/승+패/승+무+패/통합승 각 단계의 핸승/핸무/무/역을 보여준다. 두 카드가 같은 클래스를
+   쓰지만 표본 행 수·글자 길이가 서로 달라서 table-layout:auto면 칸 너비가 카드마다
+   다르게 잡혔다 — table-layout:fixed로 고정해서 두 카드가 항상 같은 비율로 보이게 한다. */
 .pick-ind-table {
   flex: 1;
+  width: 100%;
   font-size: 10px;
+  table-layout: fixed;
 }
 
 .pick-ind-table th,
 .pick-ind-table td {
   padding: 2px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pick-ind-table .row-label {
-  width: 1%;
+  width: 28%;
   white-space: nowrap;
   text-align: left;
 }
@@ -578,6 +590,9 @@
   color: var(--text-muted);
   border-top: 1px solid var(--border);
   padding-top: 6px;
+  /* 위 내용(표 등)이 카드 높이를 다 안 채워도, 이 줄은 항상 카드 맨 아래에 붙는다
+     — margin-top:auto가 남는 세로 공간을 전부 이 줄 위쪽으로 밀어 넣는다. */
+  margin-top: auto;
 }
 
 .pick-sig-foot-val {
