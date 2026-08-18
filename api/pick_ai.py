@@ -13,11 +13,11 @@
     · 배당(배AI)  — 거의 그대로 맞는다. 배AI 20/30/40/55% 구간의 실제 핸승률이
                     19.9/29.3/39.3/55.3%로, 배AI 값 자체가 이미 확률로 읽힌다.
     · 해외지표    — 배AI를 통제해도 3.9~6.2%p 격차가 남는다. 약하지만 실재한다.
-    · 상대전적    — 맞대결 RT를 그대로 세면(과거 각 경기의 정배가 커버했는지) 애매하다.
-                    맞대결마다 정배가 다른 팀일 수 있어서(어느 시즌엔 A팀이 정배, 다음
-                    시즌엔 B팀이 정배), "핸승이 잘 나온다"가 어느 팀 얘기인지 불분명하다.
-                    그래서 오늘 정배인 그 팀이 과거 맞대결에서도 정배였던 경기만 추려
-                    그때 커버했는지로 본다(_h2h_fav_signal 참고) — 극단값에서만 신호가 있다.
+    · 상대전적    — 핸승 예측에는 못 쓴다. 승/무/패든 홈기준 승/무/패든 '같은 정배였던
+                    맞대결의 커버율'이든, 배당 위에 얹어주는 값이 전부 0에 가깝다
+                    (_h2h_goal_profile 주석에 신호별 실측 수치). 상대전적이 하는 말을
+                    배당이 이미 다 알고 있기 때문이다. 남는 건 '맞대결 평균 총득점'
+                    하나뿐이고 그것도 무(RT=3) 쪽에만 작게 듣는다 — 화면에만 보여준다.
     · 연승/연패   — 방향이 구간마다 뒤집힌다(정배 3연패가 어떤 구간은 16.8%,
                     다른 구간은 30.1%). 배당에 이미 반영돼 있어 추가 정보가 없다.
     · 국내지표    — 표본이 쌓인 경기가 37%뿐인 데다, 그 표본에서는 방향이 해외지표와
@@ -25,10 +25,12 @@
                     실제 36.7%, '높음'이 27.1%). 해외지표와 상관 0.774로 같은 것을
                     보는데도 방향이 어긋난다 — 표본 편향으로 보이며 신뢰할 수 없어
                     계산에서 뺀다(화면에는 표본 수만 알린다).
-    · 핸무        — 어떤 신호로 나눠도 격차가 0.2~4.2%p뿐. 예측 대상에서 뺀다.
+    · 핸무        — 어떤 신호로 나눠도 격차가 0.2~4.2%p뿐. 예측 대상에서 뺀다. 배당이
+                    보는 무 확률이 17%에서 33%로 두 배가 되는 동안에도 핸무는 22.7~24.3%
+                    사이에서 꼼짝하지 않는다(35,852경기). 사실상 상수다.
 
-  그래서 이 모듈은 배당을 기준선으로 고정하고, 검증된 두 신호(해외지표·상대전적)
-  로만 작게 보정한다. 연승/연패는 화면에 보여주되 숫자에는 넣지 않는다.
+  그래서 이 모듈은 배당을 기준선으로 고정하고, 해외지표 하나로만 작게 보정한다.
+  국내지표·상대전적·시즌전적은 화면에 보여주되 숫자에는 넣지 않는다.
 
 [건드리지 않는 것]
   engine.py의 26개 지표, ev_model.py의 핸승 위험도는 전혀 수정하지 않는다.
@@ -49,6 +51,18 @@ _CAL_Y = [16.5, 22.3, 26.8, 32.6, 39.3, 55.3, 70.0]
 
 MIN_H2H_SAMPLE = 3      # 이 미만이면 상대전적을 판단에서 뺀다
 H2H_FULL_WEIGHT = 10    # 맞대결 10경기면 상대전적 보정을 100% 반영
+
+# 리그별 평균 총득점 — 상대전적 카드가 "이 맞대결은 골이 많이 나는 편인가"를 판정할 때
+# 쓰는 기준선(AV). 6대리그 35,867경기 실측. 리그마다 0.5골 가까이 차이가 나서(리그1 2.62골
+# vs 에레디비지 3.10골) 하나의 상수로는 못 쓴다.
+_LEAGUE_AVG_GOALS = {
+    "EPL": 2.80, "LALIGA": 2.67, "SERIEA": 2.69,
+    "BUNDES": 3.02, "EREDIVISIE": 3.10, "LIGUE1": 2.62,
+}
+_AVG_GOALS_DEFAULT = 2.80   # 6대리그 전체 평균 — 내 데이터 등 리그를 모를 때
+# 리그 평균에서 이만큼 벗어나면 저득점/다득점으로 본다. 맞대결 2,530쌍 기준 이 폭이면
+# 저득점 26.9% / 보통 51.9% / 다득점 21.2%로 갈려서 세 칸이 고르게 찬다.
+H2H_GOAL_BAND = 0.4
 
 # 보정 상한 — 실측 격차(지표 3.9~6.2%p, 상대전적 극단값 7~11%p)를 넘지 않게 묶는다.
 CAP_IND = 4.0
@@ -481,6 +495,47 @@ def _h2h_fav_signal(today_row: dict, h2h: dict | None):
     return {"fav_name": today_fav_name, "rt": kept_rt}, None
 
 
+def _h2h_goal_profile(h2h: dict | None, code: str):
+    """맞대결이 평소 골이 많이 나는 대결인지를 리그 평균과 비교해 본다.
+
+    [왜 승/무/패가 아니라 득점인가 — 6대리그 실측]
+      상대전적으로 핸승을 맞히려는 시도는 전부 실패했다. 배당 기준선 위에 얹어주는
+      값(Brier 순개선)을 재보면 전체기준 승률 +0.006‰, 홈기준 승률 +0.031‰,
+      홈기준-전체기준 차이 +0.013‰, 오늘과 같은 홈/원정 입장의 승률 +0.000‰,
+      그리고 여기서 쓰던 '같은 정배였던 맞대결 커버율'조차 +0.015‰였다. 의미가
+      있으려면 +0.5‰는 넘어야 하니 전부 사실상 0이다(게다가 정답을 보고 맞춘
+      in-sample 값이라 실전은 더 낮다). 이유는 단순하다 — 맞대결 승률이 좋을수록
+      실제 핸승률도 23%→37%로 오르지만, 배당도 25%→38%로 똑같이 따라 오른다.
+      상대전적이 하는 말을 배당이 이미 다 알고 있다.
+
+      유일하게 남은 것이 맞대결 평균 총득점이다. 정배 강도를 통제해도 총득점이 1골
+      적어질 때마다 '무'가 +1.99%p 늘고(t=2.89) 핸승이 -1.74%p 준다(t=2.47).
+      최근 3경기만 봐도 같은 크기로 나온다(무 t=2.91). 반면 '역'은 -0.70%p(t=1.10)로
+      효과가 없다 — 저득점 맞대결에 약한 정배가 많이 섞여 있어서 역이 늘어 보일 뿐,
+      정배 강도를 맞춰놓으면 사라진다.
+
+      핸무는 어떤 값으로 갈라도 24% 근처에 고정이라 아예 예측 대상이 아니다.
+      저득점 맞대결에선 정배가 이기는 횟수 자체가 줄지만(59.9%→49.5%) 이기더라도
+      1골 차로 겨우 이기는 비율이 늘어(41.7%→48.7%) 둘이 정확히 상쇄되기 때문이다.
+
+      다만 이 효과도 1골당 2%p 수준이라 크지 않다. 그래서 계산에는 넣지 않고
+      화면에 표시만 한다(국내지표와 같은 취급).
+    """
+    goals = []
+    for m in (h2h or {}).get("matches") or []:
+        hs, a_s = _num(m.get("HS")), _num(m.get("AS"))
+        if hs is None or a_s is None:
+            continue
+        goals.append(hs + a_s)
+    if len(goals) < MIN_H2H_SAMPLE:
+        return None
+    avg = sum(goals) / len(goals)
+    league_avg = _LEAGUE_AVG_GOALS.get(code, _AVG_GOALS_DEFAULT)
+    gap = avg - league_avg
+    label = "저득점" if gap <= -H2H_GOAL_BAND else ("다득점" if gap >= H2H_GOAL_BAND else "보통")
+    return {"n": len(goals), "avg": avg, "league_avg": league_avg, "label": label}
+
+
 def compute(row: dict, h2h: dict | None = None, scope: str = "master",
            season_matches: dict | None = None, code: str = "") -> dict:
     """경기 한 건의 종합픽을 계산한다.
@@ -565,38 +620,37 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master",
             "dir": 0, "adjust": 0.0,
         })
 
-    # ── ③ 상대전적: 오늘과 같은 정배/역배 구도였던 맞대결만 추려 커버율을 본다 ──
+    # ── ③ 상대전적: 참고 카드(확률 계산에는 반영하지 않음) ──
+    # 예전에는 '오늘과 같은 정배였던 맞대결의 커버율'로 핸승 확률을 ±4%까지 움직였는데,
+    # 실측에서 그 보정이 배당 위에 얹어주는 값이 사실상 0이라 뺐다(_h2h_goal_profile
+    # 주석에 6대리그 수치 전부 있음). 대신 유일하게 신호가 남은 '맞대결 평균 총득점'을
+    # 리그 평균과 비교해 보여만 준다.
     adj_h2h = 0.0
     h2h_dir = 0
-    h2h_fav, h2h_skip_reason = _h2h_fav_signal(row, h2h)
+    h2h_fav, _h2h_skip = _h2h_fav_signal(row, h2h)
     h2h_total = len(h2h_fav["rt"]) if h2h_fav else 0
     if h2h_fav and h2h_total >= MIN_H2H_SAMPLE:
+        # 보정값(adj_h2h)은 0으로 뺐지만, ⑤ 합치 보너스가 아직 이 방향을 쓰고 있어
+        # 방향만 예전 계산 그대로 남겨 둔다.
         cover_n = sum(1 for rt in h2h_fav["rt"] if rt == 1)
-        h2h_hit = cover_n / h2h_total * 100.0
         weight = min(h2h_total, H2H_FULL_WEIGHT) / H2H_FULL_WEIGHT
-        adj_h2h = _clamp((h2h_hit - ai) * 0.10 * weight, -CAP_H2H, CAP_H2H)
-        h2h_dir = 1 if adj_h2h >= 1.0 else (-1 if adj_h2h <= -1.0 else 0)
+        lean = _clamp((cover_n / h2h_total * 100.0 - ai) * 0.10 * weight, -CAP_H2H, CAP_H2H)
+        h2h_dir = 1 if lean >= 1.0 else (-1 if lean <= -1.0 else 0)
+
+    goal_prof = _h2h_goal_profile(h2h, code)
+    if goal_prof:
         signals.append({
-            "key": "h2h", "label": "상대전적", "state": "ok",
-            "sample": h2h_total,
-            "value_text": (f"'{h2h_fav['fav_name']}' 정배였던 맞대결 {h2h_total}경기 중 "
-                           f"핸승 {cover_n}회 ({h2h_hit:.0f}%)"),
-            "dir": h2h_dir, "adjust": round(adj_h2h, 1),
-            # 그 카드에만 해당하는 주의사항이라, 전체 카드 아래 공용 warnings 줄이
-            # 아니라 이 신호 카드 안에 붙인다(화면 쪽 sigWarn 참고).
-            "warn": f"표본이 {h2h_total}경기로 적어 참고 수준." if h2h_total < 5 else None,
-        })
-    elif h2h_skip_reason:
-        signals.append({
-            "key": "h2h", "label": "상대전적", "state": "none",
-            "sample": 0, "value_text": h2h_skip_reason,
+            "key": "h2h", "label": "상대전적", "state": "info",
+            "sample": goal_prof["n"],
+            "value_text": (f"평균 득점 {goal_prof['avg']:.1f}골 · {goal_prof['label']}"
+                           f" (AV {goal_prof['league_avg']:.1f}골)"),
             "dir": 0, "adjust": 0.0,
         })
     else:
         signals.append({
             "key": "h2h", "label": "상대전적", "state": "none",
-            "sample": h2h_total,
-            "value_text": f"같은 정배 구도였던 맞대결 {h2h_total}경기 — {MIN_H2H_SAMPLE}경기 미만이라 판단 제외",
+            "sample": 0,
+            "value_text": f"맞대결 기록이 {MIN_H2H_SAMPLE}경기 미만이라 표시할 수 없습니다",
             "dir": 0, "adjust": 0.0,
         })
 

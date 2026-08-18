@@ -12,7 +12,7 @@ function rtLabel(v) {
   if (v === null || v === undefined || v === '') return ''
   const n = Number(v)
   if (Number.isNaN(n)) return ''
-  return { 1: '핸승', 2: '핸무', 3: '무', 4: '역', 5: '취소' }[Math.trunc(n)] || ''
+  return { 1: '핸승', 2: '핸무', 3: '무', 4: '역', 5: '취소', 6: '연기' }[Math.trunc(n)] || ''
 }
 
 function numOrDash(v, digits = 2) {
@@ -628,6 +628,9 @@ function PickCards({ data }) {
           // 행에 풀어서 보여주니, 여기서 반복할 필요는 없다.
           const isIndicator = s.key === 'ind' || s.key === 'ind_k'
           const mergeIntoFoot = isIndicator && s.levels && s.levels.length > 0
+          // 상대전적은 확률 계산에 아예 안 들어가므로(pick_ai.py ③ 참고) 항상 '—'만
+          // 찍히는 기준선 편차 줄을 아예 빼고 문장 하나만 남긴다.
+          const showFoot = s.key !== 'h2h'
           return (
             <div key={s.key} className={`pick-sig-card pick-sig-card-${badge.tone}`}>
               <div className="pick-sig-top">
@@ -642,12 +645,14 @@ function PickCards({ data }) {
                 ))}
               {s.levels && s.levels.length > 0 && <IndLevelsTable levels={s.levels} />}
               {s.warn && <p className="pick-sig-warn">주의 · {s.warn}</p>}
-              <div className="pick-sig-foot">
-                <span className="pick-sig-foot-label">기준선 편차</span>
-                <span className={`pick-sig-foot-val ${sigFootClass(s)}`}>
-                  {mergeIntoFoot ? s.value_text : sigFootText(s)}
-                </span>
-              </div>
+              {showFoot && (
+                <div className="pick-sig-foot">
+                  <span className="pick-sig-foot-label">기준선 편차</span>
+                  <span className={`pick-sig-foot-val ${sigFootClass(s)}`}>
+                    {mergeIntoFoot ? s.value_text : sigFootText(s)}
+                  </span>
+                </div>
+              )}
             </div>
           )
         })}
