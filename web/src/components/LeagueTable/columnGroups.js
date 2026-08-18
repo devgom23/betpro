@@ -24,11 +24,17 @@ const MYPICK_COLS = [
 ]
 
 // 똥배 — 국내배당 KW/KL이 1.49 이하로 나온 "똥[안전]배당" 경기를 그 라운드 안에서
-// 낮은 순으로 똥1, 똥2...로 매긴 값(DDONG)과, 실제 결과가 무/역이면 붙는 똥사(DDONGSA).
+// 낮은 순으로 똥1, 똥2...로 매긴 값(DDONG), 그 경기가 무/역으로 뒤집힐 확률(DDONG_RISK),
+// 실제 결과가 무/역이면 붙는 똥사(DDONGSA).
 const DDONG_COLS = [
   ['DDONG', '똥'],
+  ['DDONG_RISK', '분석'],
   ['DDONGSA', '똥사'],
 ]
+
+// 똥사 위험도 등급 경계(%) — api/data_access.py의 _ddong_risk 주석에 실측 근거가 있다.
+// 6대리그 실측 똥사율: 안전 17.6% / 보통 27.7% / 주의 32.9% / 위험 39.3%
+const DDONG_RISK_CUTS = [22, 30, 37]
 
 // 핸승 위험도 — "플핸 예측"을 대체한다. 예전 PICK(플핸(무)/플핸(역)/...)은
 // 실측 적중률이 아니라 고정 보정표 값이었고(예: 78% 표시인데 실제 52.8%),
@@ -207,6 +213,10 @@ export function formatCell(group, col, value, row) {
   const g1 = group.label1
   const sub = col.sub
 
+  if (g1 === '똥배' && sub === '분석') {
+    const n = toNum(value)
+    return n === null ? '' : `${Math.round(n)}%`
+  }
   if (g1 === '경기정보' && sub === 'RT') return rtToText(value)
   if (g1 === '경기정보' && (sub === 'HS' || sub === 'AS')) {
     const n = toNum(value)
@@ -383,6 +393,21 @@ export function cellStyle(group, col, value, row) {
   // 똥사 — 똥배(강한 정배)인데 실제 결과가 무/역으로 뒤집힌 경우라 눈에 띄게 빨간 글씨로.
   if (g1 === '똥배' && sub === '똥사' && !isBlank(value)) {
     return { color: 'var(--danger-text)', fontWeight: 700 }
+  }
+
+  // 분석 — 똥사 위험도(%)를 4단계 옅은 배경 틴트로. 숫자만 두고 색으로 등급을 읽게 해
+  // 라운드 전체를 훑을 수 있게 한다(RT·PICK 배지와 같은 칩 톤).
+  if (g1 === '똥배' && sub === '분석') {
+    const n = toNum(value)
+    if (n === null) return undefined
+    const [safe, mid, warn] = DDONG_RISK_CUTS
+    const tone =
+      n < safe ? 'blue' : n < mid ? 'gray' : n < warn ? 'yellow' : 'red'
+    return {
+      background: `var(--chip-${tone}-bg)`,
+      color: `var(--chip-${tone}-fg)`,
+      fontWeight: 700,
+    }
   }
 
   // 배당 적중 표시 — '적중'(PH_STATUS) 칸과 같은 노란 배경으로 표시한다.

@@ -176,6 +176,35 @@
   color: var(--text-muted);
 }
 
+/* 배당 제목 옆 똥배 표시 — 똥1 · [안전 17%] · 똥사
+   리그 화면 상단 요약 바(등록된 시즌 18 · 경기수 5,229 …)와 같은 표기를 그대로 쓴다:
+   값은 <strong>으로 밝게, 사이는 가운뎃점, 등급은 RtSummaryBar와 같은 알약형 칩. */
+.detail-ddong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;              /* 순번 · 등급칩 · 똥사 사이 간격 */
+  margin-left: 6px;      /* '배당' 제목과 떨어뜨린다 */
+}
+
+.detail-ddong strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.detail-ddong-grade {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.detail-ddong-sa {
+  color: var(--danger-text) !important;
+}
+
 .detail-table {
   width: 100%;
   border-collapse: collapse;

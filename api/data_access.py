@@ -4,9 +4,11 @@ DB 읽기 + 엔진 호출 래퍼.
 - 파일 mtime 기준의 아주 단순한 메모리 캐시로 반복 로드를 피한다
   (Streamlit의 st.cache_data + (path, mtime) 키 아이디어를 그대로 이식).
 """
+import math
 import os
 import re
 import sqlite3
+import numpy as np
 import pandas as pd
 
 from deps import PATHS
@@ -67,8 +69,31 @@ def _pick_status(df: pd.DataFrame) -> pd.Series:
     return pd.Series(out, index=df.index, dtype=object)
 
 
+# 똥사 위험도 — 똥배가 무/역으로 뒤집힐 확률(%). 6대리그 똥배 7,724건 실측 로지스틱 회귀.
+#
+# [왜 정배배당 하나만 쓰나 — 후보를 다 붙여보고 고른 결과]
+#   과거 절반 시즌으로 학습해 이후 시즌으로 검증한 Brier(낮을수록 정확):
+#     전체평균만 0.20618 / 정배배당만 0.20062 / +무배당 0.20099 / +라운드똥배수 0.20083
+#     / +핸디배당 0.20083 / +팀성향 0.20118
+#   가장 단순한 '정배배당만'이 가장 정확했다. 무배당은 정배배당과 상관 -0.888이라 같은
+#   말을 하고(정배 1.35 이상이면 무배당은 거의 다 4.5 미만), 라운드 똥배 개수도 배당에
+#   흡수된다. 팀 성향은 겉보기 차이의 23%만 진짜인 데다(나머지는 운) 실제로 붙여보니
+#   방향조차 안 맞아서 정확도가 떨어졌다. 리그별 차이는 운을 걷어내면 0.00%p라 공통이다.
+#
+# 검증: 예측 구간별 실제 똥사율 오차 -3.4 ~ +1.8%p. 예측 범위는 14.6% ~ 42.4%.
+DDONG_RISK_B0 = -4.8309
+DDONG_RISK_B1 = 3.0372
+
+
+def _ddong_risk(odds):
+    """정배배당 → 똥사(무/역) 확률 %."""
+    if odds is None or pd.isna(odds):
+        return np.nan
+    return 100.0 / (1.0 + math.exp(-(DDONG_RISK_B0 + DDONG_RISK_B1 * float(odds))))
+
+
 def _ddong_columns(df: pd.DataFrame):
-    """똥배(DDONG)/똥사(DDONGSA) — 국내배당 KW·KL 중 1.49 이하인 값을 "똥"으로 보고,
+    """똥배(DDONG)/똥사 위험도(DDONG_RISK)/똥사(DDONGSA) — 국내배당 KW·KL 중 1.49 이하인 값을 "똥"으로 보고,
     같은 라운드(시즌 S + 라운드 R) 안에서 낮은 배당 순으로 똥1, 똥2... 번호를 매긴다.
     KW·KL이 동시에 1.49 이하로 나오는 경우는 없다고 보고, 있어도 더 낮은 쪽 하나만 쓴다.
     똥사는 "똥배로 체크된"(DDONG 값이 있는) 경기 중에서만, 실제 결과(RT)가 무(3) 또는
@@ -76,8 +101,9 @@ def _ddong_columns(df: pd.DataFrame):
     n = len(df)
     ddong = pd.Series([""] * n, index=df.index, dtype=object)
     ddongsa = pd.Series([""] * n, index=df.index, dtype=object)
+    risk = pd.Series([np.nan] * n, index=df.index, dtype=float)
     if df.empty:
-        return ddong, ddongsa
+        return ddong, risk, ddongsa
 
     if "KW" in df.columns and "KL" in df.columns and "S" in df.columns and "R" in df.columns:
         kw = pd.to_numeric(df["KW"], errors="coerce")
@@ -90,6 +116,7 @@ def _ddong_columns(df: pd.DataFrame):
                 continue
             cand = min(v for v, ok in ((w, w_ok), (l, l_ok)) if ok)
             groups.setdefault((s, r), []).append((idx, cand))
+            risk.loc[idx] = _ddong_risk(cand)
         for items in groups.values():
             items.sort(key=lambda t: t[1])
             for rank, (idx, _) in enumerate(items, start=1):
@@ -99,7 +126,7 @@ def _ddong_columns(df: pd.DataFrame):
         rt_num = pd.to_numeric(df["RT"], errors="coerce")
         ddongsa[(ddong != "") & rt_num.isin([3, 4])] = "똥사"
 
-    return ddong, ddongsa
+    return ddong, risk, ddongsa
 
 
 def _read_table(db_path: str, table: str) -> pd.DataFrame:
@@ -146,7 +173,7 @@ def load_league_df_ranked(db_path: str, league: str) -> pd.DataFrame:
     # 오염되어 표시용 컬럼이 업로드/삭제 쪽으로 새어 들어가는 사고를 막는다.
     df = standings.attach_rank_and_form(load_league_df(db_path, league)).copy()
     df[PH_STATUS_COL] = _pick_status(df)
-    df["DDONG"], df["DDONGSA"] = _ddong_columns(df)
+    df["DDONG"], df["DDONG_RISK"], df["DDONGSA"] = _ddong_columns(df)
     _CACHE[key] = (mt, df)
     return df
 

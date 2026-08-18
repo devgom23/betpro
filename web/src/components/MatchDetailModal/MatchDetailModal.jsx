@@ -85,6 +85,47 @@ function homeIsFav(row) {
   return null
 }
 
+// 똥배 표시 — 리그 표의 '똥배' 그룹(똥 / 분석 / 똥사)과 같은 값을 배당 제목 옆에 한 줄로.
+// 등급 경계와 색은 columnGroups.js의 DDONG_RISK_CUTS와 맞춰 둔다(계산 근거는
+// api/data_access.py의 _ddong_risk 주석에 6대리그 실측과 함께 있다).
+const DDONG_GRADES = [
+  [22, '안전', 'blue'],
+  [30, '보통', 'gray'],
+  [37, '주의', 'yellow'],
+  [Infinity, '위험', 'red'],
+]
+
+function DdongNote({ row }) {
+  const ddong = String(row.DDONG || '').trim()
+  if (!ddong) return null
+  const risk = numOrNull(row.DDONG_RISK)
+  const [, label, tone] = DDONG_GRADES.find(([cut]) => risk !== null && risk < cut) || []
+  // 리그 화면 상단 요약 바(등록된 시즌 18 · 경기수 5,229 …)와 같은 표기 —
+  // 값은 <strong>으로 밝게, 사이는 가운뎃점으로, 등급은 RtSummaryBar처럼 칩으로.
+  return (
+    <span className="detail-section-note detail-ddong">
+      <strong>{ddong}</strong>
+      {risk !== null && (
+        <>
+          {' · '}
+          <span
+            className="detail-ddong-grade"
+            style={{ background: `var(--chip-${tone}-bg)`, color: `var(--chip-${tone}-fg)` }}
+          >
+            {label} {Math.round(risk)}%
+          </span>
+        </>
+      )}
+      {String(row.DDONGSA || '').trim() && (
+        <>
+          {' · '}
+          <strong className="detail-ddong-sa">똥사</strong>
+        </>
+      )}
+    </span>
+  )
+}
+
 // 홈팀/점수/원정팀을 승(홈)·무·패(원정) 컬럼과 같은 자리에 맞춰 배당표 맨 위에 얹는다.
 // 경기 결과가 아직 없어도(예정 경기) 팀명은 항상 보이고, 점수만 '-'로 비워둔다.
 // 팀 이름 옆엔 오늘 그 팀이 정배(정)인지 역배(역)인지 표시한다.
@@ -821,7 +862,9 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
         <div className="modal-columns" ref={columnsRef}>
           <div className="modal-col">
             <section className="detail-section">
-              <h3>배당</h3>
+              <h3>
+                배당 <DdongNote row={row} />
+              </h3>
               <OddsTable row={row} />
             </section>
             <section className="detail-section" ref={sampleSectionRef}>
