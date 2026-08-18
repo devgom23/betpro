@@ -3,7 +3,7 @@ import { api } from '../../api/client'
 import './ResultEditModal.css'
 
 const ALL = 'ALL'
-const RT_OPTIONS = ['', '핸승', '핸무', '무', '역', '취소']
+const RT_OPTIONS = ['', '핸승', '핸무', '무', '역', '취소', '연기']
 const HANDICAP_OPTIONS = ['', '-1', '+1']
 // 국내(K)/해외(F) 배당 그룹 — 메인 분석표(경기정보 옆 국내배당/해외배당)와 같은 순서·코드.
 const ODDS_GROUPS = [

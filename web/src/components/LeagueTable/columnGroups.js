@@ -88,8 +88,8 @@ const GROUP_DEFS = [
 
 const SUB4 = ['핸승', '핸무', '무', '역']
 
-const RT_DISPLAY = { 1: '핸승', 2: '핸무', 3: '무', 4: '역', 5: '취소' }
-const RT_CODE_FROM_TEXT = { 핸승: 1, 핸무: 2, 무: 3, 역: 4, 취소: 5 }
+const RT_DISPLAY = { 1: '핸승', 2: '핸무', 3: '무', 4: '역', 5: '취소', 6: '연기' }
+const RT_CODE_FROM_TEXT = { 핸승: 1, 핸무: 2, 무: 3, 역: 4, 취소: 5, 연기: 6 }
 
 function isBlank(v) {
   return v === null || v === undefined || v === ''

@@ -311,7 +311,7 @@ def user_leagues_delete(code: str, body: UserLeagueDeleteBody,
 
 def _rt_summary(df: pd.DataFrame):
     """RT 결과분포 {핸승,핸무,무,역,총} 계산. RT 컬럼이 없거나 값이 없으면 None.
-    5(취소)는 실제 결과가 아니라서 제외 — 안 그러면 "총"이 4개 항목 합계보다 커진다."""
+    5(취소)·6(연기)는 실제 결과가 아니라서 제외 — 안 그러면 "총"이 4개 항목 합계보다 커진다."""
     if "RT" not in df.columns:
         return None
     rt = pd.to_numeric(df["RT"], errors="coerce")
@@ -506,7 +506,7 @@ def league_rows(code: str,
 # 조회 조건이 "시즌 1개 + 라운드 1개"로 좁혀졌을 때만 만든다(사용자 지정) — 전체 조회에서는
 # 라운드 축 자체가 의미가 없어 계산하지 않는다.
 DDONG_MAX = 1.49          # 똥배 기준: 국내배당(KW/KL) 중 낮은 쪽이 이 값 이하 (표 컬럼과 동일 규칙)
-_RT_MAIN = (1, 2, 3, 4)   # 취소(5)·결과없음은 어느 표에서도 세지 않는다
+_RT_MAIN = (1, 2, 3, 4)   # 취소(5)·연기(6)·결과없음은 어느 표에서도 세지 않는다
 
 
 def _num_col(df: pd.DataFrame, name: str) -> pd.Series:
@@ -685,10 +685,12 @@ def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_u
 
 
 # ─────────────────────────── 상대전적 (상세 팝업용) ───────────────────────────
-# 5="취소"는 실제로 열리지 않은 경기(우천취소·리그 자체 취소 등) 표시용 — engine.py의
-# 26개 지표 표본 카운트는 RT==1~4로만 매칭해서(get_samples_fast) 5는 자동으로 제외되므로
+# 5="취소"는 아예 열리지 않은 경기(리그 자체 취소 등), 6="연기"는 날짜만 미뤄져
+# 나중에 치러질 경기 표시용이다. 연기 경기는 실제로 열린 뒤 1~4로 고쳐 넣으면 된다.
+# 둘 다 실제 결과가 아니므로 어느 집계에도 안 들어간다 — engine.py의
+# 26개 지표 표본 카운트는 RT==1~4로만 매칭해서(get_samples_fast) 5·6은 자동으로 제외되므로
 # 계산 로직에는 영향이 없다.
-RT_LABELS = {1: "핸승", 2: "핸무", 3: "무", 4: "역", 5: "취소"}
+RT_LABELS = {1: "핸승", 2: "핸무", 3: "무", 4: "역", 5: "취소", 6: "연기"}
 
 
 def _rt_label(v):
@@ -1917,7 +1919,7 @@ def delete_matches(code: str, body: DeleteMatchesBody, user: dict = Depends(get_
 # 크롤링은 이 세 값을 못 채우므로(RT는 판정 기준이 사용자 재량, KH·FH도 방향을 사람이
 # 정해야 함) 여기서 직접 입력한다. 26개 지표·플핸예측 등 분석 컬럼은 절대 건드리지
 # 않는다 — 그 세 칸만 바뀌고, 표본 재계산은 기존 업로드/재계산 경로에서만 일어난다.
-RT_LABEL_TO_NUM = {"핸승": 1, "핸무": 2, "무": 3, "역": 4, "취소": 5}
+RT_LABEL_TO_NUM = {"핸승": 1, "핸무": 2, "무": 3, "역": 4, "취소": 5, "연기": 6}
 HANDICAP_CHOICES = {-1.0, 1.0}
 # RT/KH/FH를 뺀 나머지 직접입력 대상 — 전부 순수 숫자(스코어·배당)라 규칙이 동일하다.
 SCORE_FIELDS = ("HS", "AS")

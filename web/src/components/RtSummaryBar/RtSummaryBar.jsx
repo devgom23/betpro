@@ -1,6 +1,6 @@
 import { RT_CHIP } from '../RtBadge/RtBadge'
 
-// 여기서는 '취소'를 빼고 이 4개만 보여준다 — RT_COLOR 에 '취소'가 더 있어도
+// 여기서는 '취소'·'연기'를 빼고 이 4개만 보여준다 — RT_COLOR 에 그 둘이 더 있어도
 // 아래는 RT_ORDER 로만 순회하므로 조회되지 않는다.
 const RT_ORDER = ['핸승', '핸무', '무', '역']
 

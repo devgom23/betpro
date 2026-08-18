@@ -9,6 +9,7 @@ export const RT_COLOR = {
   무: '#757575',
   역: '#C62828',
   취소: '#546E7A',
+  연기: '#B7791F',
 }
 
 // RT 배지(칩) 배경·글자색 — 스샷 실측 기준 옅은 배경 틴트 + 진한 글씨 스타일.
@@ -19,6 +20,8 @@ export const RT_CHIP = {
   무: { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' },
   역: { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' },
   취소: { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' },
+  // 연기는 '아직 결과가 나올 경기'라 취소(회색)와 눈으로 구분되게 노랑을 쓴다.
+  연기: { background: 'var(--chip-yellow-bg)', color: 'var(--chip-yellow-fg)' },
 }
 
 // RT 라벨 배지. 값이 없으면 아무것도 그리지 않는다.

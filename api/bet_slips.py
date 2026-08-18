@@ -26,6 +26,10 @@ def judge_leg(pick_type: str, rt_label: str | None) -> str:
         return "대기"
     if rt_label == "취소":
         return "취소"
+    if rt_label == "연기":
+        # 취소와 달리 나중에 다시 열리는 경기다 — 결과가 아직 안 나온 것이므로 '대기'.
+        # 이 줄이 없으면 아래 픽 비교로 흘러가서 무조건 '미적중'이 되어 버린다.
+        return "대기"
     if pick_type not in HANDI_PICKS:
         return "대기"
     if pick_type == "정":
