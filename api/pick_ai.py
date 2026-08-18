@@ -13,6 +13,8 @@
     · 배당(배AI)  — 거의 그대로 맞는다. 배AI 20/30/40/55% 구간의 실제 핸승률이
                     19.9/29.3/39.3/55.3%로, 배AI 값 자체가 이미 확률로 읽힌다.
     · 해외지표    — 배AI를 통제해도 3.9~6.2%p 격차가 남는다. 약하지만 실재한다.
+                    단 쓰는 단계는 해/통)승·패(기준)와 해)승·패(리그 특성 보정) 둘뿐이다.
+                    승+패·승+무+패는 배당이 이미 아는 정보라 계산에서 뺐다(화면엔 표시).
     · 상대전적    — 핸승 예측에는 못 쓴다. 승/무/패든 홈기준 승/무/패든 '같은 정배였던
                     맞대결의 커버율'이든, 배당 위에 얹어주는 값이 전부 0에 가깝다
                     (_h2h_goal_profile 주석에 신호별 실측 수치). 상대전적이 하는 말을
@@ -50,7 +52,6 @@ _CAL_X = [10.0, 22.5, 27.5, 32.5, 40.0, 55.0, 70.0]
 _CAL_Y = [16.5, 22.3, 26.8, 32.6, 39.3, 55.3, 70.0]
 
 MIN_H2H_SAMPLE = 3      # 이 미만이면 상대전적을 판단에서 뺀다
-H2H_FULL_WEIGHT = 10    # 맞대결 10경기면 상대전적 보정을 100% 반영
 
 # 리그별 평균 총득점 — 상대전적 카드가 "이 맞대결은 골이 많이 나는 편인가"를 판정할 때
 # 쓰는 기준선(AV). 6대리그 35,867경기 실측. 리그마다 0.5골 가까이 차이가 나서(리그1 2.62골
@@ -64,27 +65,21 @@ _AVG_GOALS_DEFAULT = 2.80   # 6대리그 전체 평균 — 내 데이터 등 리
 # 저득점 26.9% / 보통 51.9% / 다득점 21.2%로 갈려서 세 칸이 고르게 찬다.
 H2H_GOAL_BAND = 0.4
 
-# 보정 상한 — 실측 격차(지표 3.9~6.2%p, 상대전적 극단값 7~11%p)를 넘지 않게 묶는다.
+# 보정 상한 — 실측 격차(지표 3.9~6.2%p)를 넘지 않게 묶는다.
+# 상대전적 보정(CAP_H2H)과 합치 보너스(CAP_CONSENSUS)는 실측 근거가 없어 계산에서
+# 빠졌고, 그에 딸린 상수·헬퍼도 같이 지웠다(compute()의 ③·⑤ 주석 참고).
 CAP_IND = 4.0
-CAP_H2H = 4.0
-CAP_CONSENSUS = 2.0
 CAP_TOTAL = 10.0
 
-# 해외지표 계단식 보정 비율 — 각 단계 표본이 "기준(root) 표본" 대비 몇 %면 그 단계를
-# 절반쯤 반영할지(_blend의 k). 6대리그 실측: 리그마다 원래 표본 규모(에레디비지 vs EPL 등)는
-# 최대 2배 가까이 달라도, 이 비율 자체는 리그 상관없이 거의 같았다 —
-#   해)승·해)패 : 해/통)승·해/통)패 대비           14~18% (6개 리그 중앙값)
-#   해)승+패    : 해/통)승·해/통)패 대비            2.6~3.6%
-#   해)승+무+패 : 해/통)승·해/통)패 대비            1.0~1.5%
-#   해)승+패    : 해)승 대비 (scope='user', 통합 없음)  18~21%
-#   해)승+무+패 : 해)승 대비 (scope='user', 통합 없음)  6.8~9.5%
+# 계단식 보정 비율 — 해)승·패 표본이 "기준(root)인 해/통)승·패 표본" 대비 몇 %면 그 단계를
+# 절반쯤 반영할지(_blend의 k). 6대리그 실측에서 리그마다 원래 표본 규모(에레디비지 vs EPL
+# 등)는 최대 2배 가까이 달라도 이 비율 자체는 거의 같았다(14~18%, 6개 리그 중앙값).
 # 절대 표본 수(예: "40경기") 대신 이 비율로 기준을 잡으면, 원래 표본이 적은 리그·시즌
 # 초반에도 자동으로 눈높이가 낮아져서 리그별로 따로 상수를 관리할 필요가 없다.
+#
+# 승+패·승+무+패 단계의 비율 상수는 뺐다 — 그 두 단계를 계산에서 제외했기 때문이다
+# (_foreign_indicator 안의 실측 주석 참고).
 IND_RATIO_SINGLE_OVER_TOTAL = 0.16
-IND_RATIO_WL_OVER_TOTAL = 0.03
-IND_RATIO_WDL_OVER_TOTAL = 0.012
-IND_RATIO_WL_OVER_SINGLE = 0.19
-IND_RATIO_WDL_OVER_SINGLE = 0.08
 
 
 def _num(v):
@@ -229,33 +224,39 @@ def _foreign_indicator(row, scope):
             k = max(1.0, root_total * IND_RATIO_SINGLE_OVER_TOTAL)
             est = _blend(est, single_total, _level_hit_pct(single_vals, single_total, _REG_SINGLE), k)
             raw = _blend_vec(raw, single_total, raw_pcts(single_vals, single_total), k)
-        wl_k = max(1.0, root_total * IND_RATIO_WL_OVER_TOTAL)
-        wdl_k = max(1.0, root_total * IND_RATIO_WDL_OVER_TOTAL)
     elif single_total > 0:
         est = _level_hit_pct(single_vals, single_total, _REG_SINGLE)
         raw = raw_pcts(single_vals, single_total)
         root_total = single_total
         used = (single_code, single_label, single_vals, single_total)
-        wl_k = max(1.0, root_total * IND_RATIO_WL_OVER_SINGLE)
-        wdl_k = max(1.0, root_total * IND_RATIO_WDL_OVER_SINGLE)
     else:
         return None, None, []
 
-    if wl_total > 0:
-        est = _blend(est, wl_total, _level_hit_pct(wl_vals, wl_total, _REG_SINGLE), wl_k)
-        raw = _blend_vec(raw, wl_total, raw_pcts(wl_vals, wl_total), wl_k)
-    if wdl_total > 0:
-        est = _blend(est, wdl_total, _level_hit_pct(wdl_vals, wdl_total, _REG_SINGLE), wdl_k)
-        raw = _blend_vec(raw, wdl_total, raw_pcts(wdl_vals, wdl_total), wdl_k)
+    # ⚠ 승+패(F-WL)·승+무+패(F-WDL)는 계산에 넣지 않는다 — 화면 표에는 그대로 보여준다.
+    #   [실측 근거] 저장된 지표 표본에는 그 경기 자신이 항상 들어 있어(자기 배당과 자기
+    #   배당은 같으니까) 그대로 봐도, 자기만 1건 빼도 편향이 생긴다. 그래서 35,570경기를
+    #   시즌·라운드 순으로 훑으며 "그 경기 이전 경기만"으로 표본을 다시 쌓아 검증했다.
+    #     · 표본이 너무 적다 — 그 시점까지 쌓인 중앙값이 승+패 6건, 승+무+패 2건뿐이고
+    #       10건이라도 모이는 경기가 각각 34.9%, 17.5%에 불과하다.
+    #     · 신호가 없다 — 배당을 통제한 회귀에서 t값이 전부 1.4 미만.
+    #     · 세게 줄수록 나빠진다 — 검증 시즌 Brier가 기준선 대비 안 씀 -0.29‰ /
+    #       현재값 -0.40‰ / 5배 세게 -0.48‰ / 완전반영 -0.55‰로 단조롭게 악화.
+    #       400개 조합 격자탐색에서도 상위 8개 중 7개가 "승+패 안 씀"이었다.
+    #     · 6대리그를 합친 해/통)승+패(중앙값 29건)·해/통)승+무+패(10건)로 표본을 5배
+    #       키워도 t값 1.4 미만으로 똑같았다. 표본이 적어서가 아니라 배당과 같은 정보라서
+    #       안 나온다 — 승+패는 '승·패 배당이 둘 다 같은 경기'라 배당 기준선도 같다.
+    #   남는 건 해/통)승·패(기준)와 해)승·패(리그 특성 보정, 넓은 단계 위에서 t=2.36)뿐이다.
 
     # 표본이 0인 단계도 국내지표와 똑같이 0/0/0/0으로 그대로 보여준다 — 표에서 아예
     # 빠지면 "이 단계 자체가 없나 보다"로 헷갈릴 수 있다.
+    # 순서는 넓은 단계 → 좁은 단계. 계산이 통합(root)에서 출발해 조건을 좁혀가며 섞는
+    # 순서와 같아서, 표를 위에서 아래로 읽으면 값이 어떻게 만들어졌는지 그대로 따라간다.
     levels = []
     for code, label, vals, total in [
+        (total_code, total_label, total_vals, total_total),
         (single_code, single_label, single_vals, single_total),
         ("F-WL", "승+패", wl_vals, wl_total),
         ("F-WDL", "승+무+패", wdl_vals, wdl_total),
-        (total_code, total_label, total_vals, total_total),
     ]:
         if total > 0:
             levels.append({
@@ -327,35 +328,28 @@ def _domestic_indicator(row, scope, code):
             k = max(1.0, root_total * IND_RATIO_SINGLE_OVER_TOTAL)
             est = _blend(est, single_total, _level_hit_pct(single_vals, single_total, reg), k)
             raw = _blend_vec(raw, single_total, raw_pcts(single_vals, single_total), k)
-        wl_k = max(1.0, root_total * IND_RATIO_WL_OVER_TOTAL)
-        wdl_k = max(1.0, root_total * IND_RATIO_WDL_OVER_TOTAL)
     elif single_total > 0:
         est = _level_hit_pct(single_vals, single_total, reg)
         raw = raw_pcts(single_vals, single_total)
         root_total = single_total
         used = (single_code, single_label, single_vals, single_total)
-        wl_k = max(1.0, root_total * IND_RATIO_WL_OVER_SINGLE)
-        wdl_k = max(1.0, root_total * IND_RATIO_WDL_OVER_SINGLE)
     else:
         return None, None, []
 
-    if wl_total > 0:
-        est = _blend(est, wl_total, _level_hit_pct(wl_vals, wl_total, reg), wl_k)
-        raw = _blend_vec(raw, wl_total, raw_pcts(wl_vals, wl_total), wl_k)
-    if wdl_total > 0:
-        est = _blend(est, wdl_total, _level_hit_pct(wdl_vals, wdl_total, reg), wdl_k)
-        raw = _blend_vec(raw, wdl_total, raw_pcts(wdl_vals, wdl_total), wdl_k)
+    # 승+패(K-WL)·승+무+패(K-WDL)는 해외지표와 같은 이유로 계산에 넣지 않는다
+    # (_foreign_indicator의 실측 주석 참고). 국내는 표본이 더 적어서 근거가 더 분명하다.
 
     # 국내지표는 승+패·승+무+패 표본이 아예 없는 경기가 흔하다(모듈 상단
     # _REG_DOMESTIC_BY_LEAGUE 주석 참고 — 리그당 0~260건뿐). 해외지표처럼 표본 있는
     # 줄만 골라 보여주면 "이 단계는 아예 없나 보다"로 헷갈릴 수 있어, 국내지표는 표본이
     # 0이어도 4단계(단일·승+패·승+무+패·통합) 줄을 전부 0/0/0/0으로 보여준다.
     levels = []
+    # 순서는 해외지표와 똑같이 넓은 단계 → 좁은 단계
     for lv_code, label, vals, total in [
+        (total_code, total_label, total_vals, total_total),
         (single_code, single_label, single_vals, single_total),
         ("K-WL", "승+패", wl_vals, wl_total),
         ("K-WDL", "승+무+패", wdl_vals, wdl_total),
-        (total_code, total_label, total_vals, total_total),
     ]:
         if total > 0:
             levels.append({
@@ -457,42 +451,6 @@ def _season_row(side_label, rec):
         "total": rec["total"],
         "counts": rec["counts"],
     }
-
-
-def _h2h_fav_signal(today_row: dict, h2h: dict | None):
-    """상대전적을 '오늘 정배인 그 팀' 기준으로 다시 센다.
-
-    맞대결 RT를 그냥 더하면(_head_to_head_calc의 summary) 애매하다 — RT는 '그 경기의
-    정배가 커버했는지'인데, 맞대결마다 정배가 다른 팀일 수 있다(배당이 바뀌거나 팀
-    전력이 바뀌면 정배가 뒤집힌다). 그래서 "핸승 70%"가 나와도 그게 오늘 정배인 팀
-    얘기인지 상대팀 얘기인지 알 수 없다.
-
-    여기서는 오늘 정배인 팀 이름을 먼저 정하고, 과거 맞대결 중 "그 팀이 그때도
-    정배였던" 경기만 추려 그중 몇 번 커버했는지를 본다 — 오늘과 같은 구도였던
-    경기만 보는 셈이라 해석이 분명해진다. 대신 표본이 raw summary보다 작아진다
-    (맞대결 자체가 적은 데다 그중 절반 정도만 정배가 오늘과 같다).
-    """
-    ht = str(today_row.get("HT") or "").strip()
-    today_home_fav = _home_is_fav(today_row)
-    if not ht or today_home_fav is None:
-        return None, "오늘 배당으로 정배를 판정할 수 없어 상대전적을 참고할 수 없습니다"
-    at = str(today_row.get("AT") or "").strip()
-    today_fav_name = ht if today_home_fav else at
-
-    matches = (h2h or {}).get("matches") or []
-    kept_rt = []
-    for m in matches:
-        m_home_fav = _home_is_fav(m)
-        if m_home_fav is None:
-            continue   # 그 경기는 배당이 없어 정배를 못 정함 — 표본에서 뺀다
-        m_fav_name = str(m.get("HT") or "").strip() if m_home_fav else str(m.get("AT") or "").strip()
-        if m_fav_name != today_fav_name:
-            continue   # 그때는 정배가 상대팀이었던 경기 — 오늘과 구도가 다르니 뺀다
-        rt = _num(m.get("RT"))
-        if rt is not None and int(rt) in (1, 2, 3, 4):
-            kept_rt.append(int(rt))
-
-    return {"fav_name": today_fav_name, "rt": kept_rt}, None
 
 
 def _h2h_goal_profile(h2h: dict | None, code: str):
@@ -625,18 +583,8 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master",
     # 실측에서 그 보정이 배당 위에 얹어주는 값이 사실상 0이라 뺐다(_h2h_goal_profile
     # 주석에 6대리그 수치 전부 있음). 대신 유일하게 신호가 남은 '맞대결 평균 총득점'을
     # 리그 평균과 비교해 보여만 준다.
+    # 합치 보너스가 쓰던 '커버율 방향(h2h_dir)' 계산도 그 보너스를 없애면서 같이 지웠다.
     adj_h2h = 0.0
-    h2h_dir = 0
-    h2h_fav, _h2h_skip = _h2h_fav_signal(row, h2h)
-    h2h_total = len(h2h_fav["rt"]) if h2h_fav else 0
-    if h2h_fav and h2h_total >= MIN_H2H_SAMPLE:
-        # 보정값(adj_h2h)은 0으로 뺐지만, ⑤ 합치 보너스가 아직 이 방향을 쓰고 있어
-        # 방향만 예전 계산 그대로 남겨 둔다.
-        cover_n = sum(1 for rt in h2h_fav["rt"] if rt == 1)
-        weight = min(h2h_total, H2H_FULL_WEIGHT) / H2H_FULL_WEIGHT
-        lean = _clamp((cover_n / h2h_total * 100.0 - ai) * 0.10 * weight, -CAP_H2H, CAP_H2H)
-        h2h_dir = 1 if lean >= 1.0 else (-1 if lean <= -1.0 else 0)
-
     goal_prof = _h2h_goal_profile(h2h, code)
     if goal_prof:
         signals.append({
@@ -671,26 +619,17 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master",
         "dir": 0, "adjust": 0.0,
     })
 
-    # ── ⑤ 합치 보너스: 두 신호가 같은 방향일 때만 (실측 12%p 격차의 잔여분) ──
-    # 두 신호가 '판단에 쓸 만큼 표본이 있는지'와 '어느 쪽으로 기울었는지'는 다른 문제라
-    # 메시지를 따로 구분한다(표본은 있는데 양쪽 다 밋밋한 경우가 흔하다).
-    ind_ok = ind_used is not None
-    h2h_ok = h2h_total >= MIN_H2H_SAMPLE
+    # ── ⑤ 합치 보너스: 제거됨 ──
+    # 예전에는 '해외지표와 상대전적이 같은 방향이면 ±2% 더 벌린다'는 항목이 있었다.
+    # 근거가 "두 신호가 일치할 때 실측 12%p 격차"였는데, 그 두 신호 중 하나인 상대전적이
+    # 실측에서 배당 위에 얹어주는 값이 0으로 나와 계산에서 빠졌다(_h2h_goal_profile 주석).
+    # 값이 없는 신호와의 일치는 의미가 없다. 짝을 국내지표로 바꿔도 봤지만, 두 지표가
+    # 동시에 방향을 가리키는 경기가 30,391건 중 77건(0.25%)뿐이라 성립하지 않았다.
+    # 그래서 보너스와 안내 문구를 함께 뺐다 — 카드에 안 보이는 값이 확률을 움직이는 게
+    # 제일 나쁘다. consensus/consensus_text는 화면이 아직 참조하므로 빈 값으로 유지한다.
     adj_con = 0.0
-    if not (ind_ok and h2h_ok):
-        missing = "해외지표" if not ind_ok else "상대전적"
-        consensus = "정보부족"
-        consensus_text = f"{missing} 표본이 부족해 두 신호의 합치 여부를 볼 수 없습니다"
-    elif ind_dir != 0 and h2h_dir != 0 and ind_dir == h2h_dir:
-        adj_con = CAP_CONSENSUS * ind_dir
-        consensus = "핸승" if ind_dir > 0 else "플핸"
-        consensus_text = f"지표·상대전적이 모두 {consensus} 쪽으로 일치 — 기준선에서 더 벌어질 수 있습니다"
-    elif ind_dir != 0 and h2h_dir != 0:
-        consensus = "불일치"
-        consensus_text = "지표와 상대전적이 서로 반대를 가리킴 — 배당 기준선을 따르는 편이 낫습니다"
-    else:
-        consensus = "중립"
-        consensus_text = "두 신호 모두 배당 기준선과 크게 다르지 않습니다"
+    consensus = ""
+    consensus_text = ""
 
     # ── ⑥ 최종 ──
     adj_total = _clamp(adj_ind + adj_h2h + adj_con, -CAP_TOTAL, CAP_TOTAL)

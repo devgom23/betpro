@@ -594,10 +594,13 @@ function SeasonRowsTable({ rows }) {
   )
 }
 
-// 해외지표 계단식 보정 근거 — 승/승+패/승+무+패/통합승 순서로, 단계마다 핸승/핸무/무/역이
-// 각각 몇 %였는지 보여준다(pick_ai.py _foreign_indicator 참고). 표본 수는 위 지표별
-// 표본 표에 이미 있어 여기선 뺐다. 맨 아래 '종합(가중평균)' 행은 이 단계들을 실제로
-// 계단식 보정에 반영한 그 비율 그대로다 — 표(SampleTable)의 '토탈' 행과 같은 역할.
+// 해외지표 계단식 보정 근거 — 통합승 / 승 / 승+패 / 승+무+패 순(넓은 단계 → 좁은 단계)으로,
+// 단계마다 핸승/핸무/무/역이 각각 몇 %였는지 보여준다(pick_ai.py _foreign_indicator 참고).
+// 계산이 통합에서 출발해 조건을 좁혀가며 섞는 순서와 같아서 위에서 아래로 읽으면 값이
+// 어떻게 만들어졌는지 따라갈 수 있다. 표본 수는 위 지표별 표본 표에 이미 있어 여기선 뺐다.
+// 맨 아래 '분석' 행은 그 단계들을 실제로 계단식 보정에 반영한 값 그대로다.
+// 각 행마다 그 단계에서 가장 많이 나온 결과를 하이라이트해서, 단계별로 어디에 몰려
+// 있는지가 색으로 바로 보이게 한다(분석 행만 칠하면 단계 간 비교가 안 된다).
 function IndLevelsTable({ levels }) {
   return (
     <table className="detail-table pick-ind-table">
@@ -614,11 +617,13 @@ function IndLevelsTable({ levels }) {
         {levels.map((lv) => {
           const isSum = lv.code === 'SUM'
           const vals = [lv.hs_pct, lv.hm_pct, lv.mu_pct, lv.yk_pct]
+          // 표본이 0인 단계(0/0/0/0)는 최댓값이란 게 없으므로 칠하지 않는다.
+          const hasData = vals.some((v) => v > 0)
           return (
             <tr key={lv.code} className={isSum ? 'pick-ind-sum-row' : undefined}>
               <td className="row-label">{lv.label}</td>
               {vals.map((v, i) => (
-                <td key={i} className={isSum ? maxCellClass(vals, i) : undefined}>
+                <td key={i} className={hasData ? maxCellClass(vals, i) : undefined}>
                   {v.toFixed(1)}
                 </td>
               ))}
