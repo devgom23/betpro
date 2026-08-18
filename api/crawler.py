@@ -230,20 +230,30 @@ def _score(row):
 
 def _round_of(soup) -> str:
     """
-    화면에서 선택된 라운드. 라운드 막대(div.round)의 <span round="N" class="current on">.
+    화면에 지금 떠 있는 라운드. 라운드 막대(div.round)의 <span round="N">에서 읽는다.
+
+    ⚠ class가 두 종류인데 서로 따로 논다 — 스코어맨 라리가 화면에서 5R·12R·3R·38R로
+      직접 옮겨가며 실측한 결과:
+         class="current" : 사이트가 보는 '지금 진행 중인 라운드'. 페이지를 처음 열 때
+                           값이 박히고, 사용자가 라운드를 옮겨도 절대 안 움직인다.
+         class="on"      : 사용자가 방금 고른 라운드. 이게 실제로 화면에 뜬 목록이다.
+      페이지를 처음 열면 1라운드에 class="current on"이 같이 붙어 있어서, 둘을 구분하지
+      않고 '먼저 찾은 것'을 쓰면 처음엔 맞는 것처럼 보인다. 그런데 라운드를 옮기는 순간
+      'current'가 남아 있는 1R을 먼저 만나기 때문에 어느 라운드를 가져와도 전부 '1R'로
+      저장되어 버렸다. 그래서 'on'을 먼저 찾고, 없을 때만 'current'로 물러선다.
 
     ⚠ div.schedulis 의 page 속성은 라운드가 아니라 목록 페이지 번호다(항상 1).
-       그걸 라운드로 쓰면 어느 라운드를 봐도 전부 '1R'로 저장되므로 쓰면 안 된다.
+       그걸 라운드로 쓰면 마찬가지로 전부 '1R'이 되므로 쓰면 안 된다.
     """
     strip = soup.find("div", class_="round")
     if not strip:
         return ""
-    for sp in strip.find_all("span"):
-        cls = sp.get("class") or []
-        if "current" in cls or "on" in cls:
-            n = (sp.get("round") or sp.get_text(strip=True) or "").strip()
-            if n.isdigit():
-                return f"{n}R"
+    for want in ("on", "current"):
+        for sp in strip.find_all("span"):
+            if want in (sp.get("class") or []):
+                n = (sp.get("round") or sp.get_text(strip=True) or "").strip()
+                if n.isdigit():
+                    return f"{n}R"
     return ""
 
 

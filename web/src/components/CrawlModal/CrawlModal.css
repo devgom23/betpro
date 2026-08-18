@@ -87,6 +87,30 @@
   color: var(--text-primary);
 }
 
+/* 저장 직전 라운드 확인칸 — 화면에서 읽은 라운드가 틀렸을 때 여기서 바로잡는다 */
+.crawl-save-round {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.08);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.crawl-save-round strong {
+  color: var(--text-primary);
+}
+
+.crawl-save-round-warn {
+  color: #EF5350;
+  font-size: 12px;
+}
+
 /* 미등록 팀명 치환 영역 */
 .crawl-unknown {
   margin-bottom: 14px;

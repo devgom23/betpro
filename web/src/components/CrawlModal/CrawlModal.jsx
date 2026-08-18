@@ -4,6 +4,13 @@ import './CrawlModal.css'
 
 const MANUAL = '__MANUAL__' // 셀렉트에서 '직접입력'을 고른 상태 — 옆 입력창의 텍스트가 치환값이 된다
 
+// '17'처럼 숫자만 넣어도 '17R'로 맞춰 준다. DB의 라운드 표기가 '38R' 형식이라
+// 숫자만 저장되면 그 경기들만 다른 라운드로 떨어져 나간다(실제로 그런 데이터가 있었다).
+function normalizeRound(v) {
+  const s = String(v || '').trim().toUpperCase()
+  return /^\d+$/.test(s) ? `${s}R` : s
+}
+
 // 스코어맨에서 경기·배당을 가져오는 창.
 //   ① 리그별 주소를 한 번 등록해 두면 다음부터 바로 열린다
 //   ② 열린 크롬 창에서 시즌·라운드를 직접 고른 뒤 '가져오기'
@@ -18,6 +25,10 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
   const [picks, setPicks] = useState({}) // 크롤링팀명 -> 고른 등록팀명
   const [manualText, setManualText] = useState({}) // 크롤링팀명 -> 직접입력한 치환값
   const [round, setRound] = useState('')
+  // 저장할 라운드. 가져온 화면에서 읽은 값으로 자동으로 채우되, 저장 직전에 눈으로
+  // 확인하고 고칠 수 있게 입력칸으로 둔다 — 사이트 화면 구조가 또 바뀌어 라운드를
+  // 잘못 읽어도 엉뚱한 라운드로 통째로 저장되는 사고를 여기서 막는다.
+  const [saveRound, setSaveRound] = useState('')
 
   const loadConfig = useCallback(async () => {
     try {
@@ -74,6 +85,7 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
     run('fetch', async () => {
       const res = await api.post('/api/crawl/fetch', { scope, code })
       setResult(res)
+      setSaveRound(res.rounds?.length === 1 ? res.rounds[0] : '')
       setPicks({})
       setManualText({})
       return res
@@ -100,6 +112,7 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
       await loadConfig()
       const res = await api.post('/api/crawl/fetch', { scope, code })
       setResult(res)
+      setSaveRound(res.rounds?.length === 1 ? res.rounds[0] : '')
       setPicks({})
       setManualText({})
       setNotice('치환 규칙을 저장했습니다. 다음부터는 자동으로 적용됩니다.')
@@ -108,17 +121,24 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
 
   const handleSave = () =>
     run('save', async () => {
+      const r = normalizeRound(saveRound)
+      if (!r) {
+        setError('저장할 라운드를 입력해 주세요.')
+        return null
+      }
+      // 가져온 경기 전부를 이 라운드로 확정해서 보낸다.
       const res = await api.post('/api/crawl/save', {
         scope,
         code,
-        rows: result.rows,
+        rows: result.rows.map((row) => ({ ...row, R: r })),
         confirm: true,
       })
       setNotice(
-        `저장 완료: 총 ${res.rows.toLocaleString()}건` +
+        `${r} 저장 완료: 총 ${res.rows.toLocaleString()}건` +
           (res.duplicates_removed ? ` (중복 ${res.duplicates_removed}건 대체)` : '')
       )
       setResult(null)
+      setSaveRound('')
       onSaved?.()
       return res
     })
@@ -201,11 +221,31 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
         {result && (
           <div className="crawl-result">
             <p className="crawl-summary">
-              시즌 <strong>{result.season || '-'}</strong> · 라운드{' '}
+              시즌 <strong>{result.season || '-'}</strong> · 화면에서 읽은 라운드{' '}
               <strong>{result.rounds?.join(', ') || '-'}</strong> ·{' '}
               <strong>{result.count}</strong>경기
               {result.matched_handicap > 0 && ` · 핸디배당 ${result.matched_handicap}건`}
             </p>
+
+            {/* 저장될 라운드를 눈으로 확인하고 고칠 수 있게 — 잘못 읽었을 때 여기서 막는다 */}
+            <div className="crawl-save-round">
+              <label htmlFor="crawl-save-round-input">
+                이 <strong>{result.count}</strong>경기를 저장할 라운드
+              </label>
+              <input
+                id="crawl-save-round-input"
+                type="text"
+                className="crawl-round-input"
+                value={saveRound}
+                onChange={(e) => setSaveRound(e.target.value)}
+                placeholder="예: 17R"
+              />
+              {!result.rounds?.length && (
+                <span className="crawl-save-round-warn">
+                  화면에서 라운드를 읽지 못했습니다 — 직접 입력해 주세요.
+                </span>
+              )}
+            </div>
 
             {unknown.length > 0 && (
               <div className="crawl-unknown">
@@ -266,7 +306,8 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
               <tbody>
                 {result.rows.slice(0, 12).map((r, i) => (
                   <tr key={i}>
-                    <td>{r.R}</td>
+                    {/* 위 입력칸에서 고친 라운드가 실제로 저장되는 값이므로 미리보기도 그걸 보여준다 */}
+                    <td>{normalizeRound(saveRound) || r.R}</td>
                     <td>{r.DT}</td>
                     <td>{r.HT}</td>
                     <td>
@@ -296,7 +337,11 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
               <button className="btn-reset" onClick={() => setResult(null)}>
                 취소
               </button>
-              <button className="btn-primary" onClick={handleSave} disabled={busy === 'save'}>
+              <button
+                className="btn-primary"
+                onClick={handleSave}
+                disabled={busy === 'save' || !saveRound.trim()}
+              >
                 {busy === 'save' ? '저장 중...' : `💾 ${result.count}경기 등록`}
               </button>
             </div>
