@@ -83,6 +83,24 @@
   text-align: center;
 }
 
+.dt-input,
+.tm-input {
+  padding: 3px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.dt-input {
+  width: 116px;
+}
+
+.tm-input {
+  width: 76px;
+}
+
 .score-cell {
   display: flex;
   align-items: center;

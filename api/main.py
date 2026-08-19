@@ -406,6 +406,25 @@ ODDS_FILTER_COLS = ["KW", "KD", "KL", "KHW", "KHD", "KHL", "FW", "FD", "FL"]
 ODDS_TOLERANCE = 0.005   # 원본 조회 필터와 동일한 부동소수 오차 허용
 
 
+def _reorder_postponed_last(df: pd.DataFrame, rt_col: str = "RT", rt_is_label: bool = False) -> pd.DataFrame:
+    """연기(RT=6) 경기를 같은 시즌+라운드 안에서 맨 아래로 보낸다.
+    No 값 자체는 절대 안 건드린다 — my_picks/bet_slips가 (S,R,No,HT,AT)로 경기를 찾기
+    때문에 No를 바꾸면 이미 저장된 별표·메모·베팅내역이 조용히 끊어진다. 그래서 화면에
+    보여주는 '순서'만 바꾸고, 같은 라운드 안에서 연기가 아닌 경기끼리·연기끼리는
+    원래 순서(No 순서) 그대로 유지한다."""
+    if df.empty or "S" not in df.columns or "R" not in df.columns or rt_col not in df.columns:
+        return df
+    post = (df[rt_col] == "연기") if rt_is_label else (pd.to_numeric(df[rt_col], errors="coerce") == 6)
+    if not post.any():
+        return df
+    grp = df["S"].astype(str) + "\x00" + df["R"].astype(str)
+    grp_order = grp.map({g: i for i, g in enumerate(dict.fromkeys(grp))})
+    order = pd.DataFrame({
+        "grp_order": grp_order, "post": post.astype(int), "orig": np.arange(len(df)),
+    }, index=df.index).sort_values(["grp_order", "post", "orig"], kind="mergesort").index
+    return df.loc[order]
+
+
 def _apply_league_filters(df, season, round, odds_query):
     """
     분석표 조회 필터(시즌·라운드·배당 9종)를 적용한다.
@@ -441,6 +460,7 @@ def _apply_league_filters(df, season, round, odds_query):
         series = pd.to_numeric(sub[col], errors="coerce")
         sub = sub[(series - target).abs() < ODDS_TOLERANCE]
 
+    sub = _reorder_postponed_last(sub)
     return sub, season, round
 
 
@@ -1921,10 +1941,10 @@ def delete_matches(code: str, body: DeleteMatchesBody, user: dict = Depends(get_
 # 않는다 — 그 세 칸만 바뀌고, 표본 재계산은 기존 업로드/재계산 경로에서만 일어난다.
 RT_LABEL_TO_NUM = {"핸승": 1, "핸무": 2, "무": 3, "역": 4, "취소": 5, "연기": 6}
 HANDICAP_CHOICES = {-1.0, 1.0}
-# RT/KH/FH를 뺀 나머지 직접입력 대상 — 전부 순수 숫자(스코어·배당)라 규칙이 동일하다.
+# RT/KH/FH/DT를 뺀 나머지 직접입력 대상 — 전부 순수 숫자(시간·스코어·배당)라 규칙이 동일하다.
 SCORE_FIELDS = ("HS", "AS")
 ODDS_FIELDS_EDIT = ("KW", "KD", "KL", "KHW", "KHD", "KHL", "FW", "FD", "FL", "FHW", "FHD", "FHL")
-NUMERIC_EDIT_FIELDS = SCORE_FIELDS + ("KH", "FH") + ODDS_FIELDS_EDIT
+NUMERIC_EDIT_FIELDS = ("TM",) + SCORE_FIELDS + ("KH", "FH") + ODDS_FIELDS_EDIT
 
 
 @app.get("/api/leagues/{code}/edit_rows")
@@ -1944,7 +1964,7 @@ def edit_rows_list(code: str, scope: str = PATHS.SCOPE_MASTER,
 
     sub, season, round = _apply_league_filters(df, season, round, {})
 
-    cols = ["S", "R", "No", "DT", "HT", "AT", "HS", "AS", "RT",
+    cols = ["S", "R", "No", "DT", "TM", "HT", "AT", "HS", "AS", "RT",
             "KW", "KD", "KL", "KH", "KHW", "KHD", "KHL",
             "FW", "FD", "FL", "FH", "FHW", "FHD", "FHL"]
     cols = [c for c in cols if c in sub.columns]
@@ -1963,9 +1983,11 @@ def edit_rows_list(code: str, scope: str = PATHS.SCOPE_MASTER,
         sort_key = pd.DataFrame({
             "S": view["S"].astype(str),
             "R": view["R"].map(_round_sort_key),
+            # 연기(RT=6)는 같은 라운드 안에서 맨 아래로 — No 값은 안 바꾸고 표시 순서만.
+            "post": (view["RT_label"] == "연기").astype(int),
             "No": pd.to_numeric(view["No"], errors="coerce"),
         }, index=view.index)
-        view = view.loc[sort_key.sort_values(["S", "R", "No"]).index]
+        view = view.loc[sort_key.sort_values(["S", "R", "post", "No"]).index]
     return {"rows": DATA.df_to_records(view), "season": season, "round": round,
             "total": len(sub)}
 
@@ -1976,7 +1998,9 @@ class EditRowItem(BaseModel):
     No: float
     HT: str
     AT: str
-    RT: Optional[str] = None    # '핸승'/'핸무'/'무'/'역' 또는 None(지우기)
+    RT: Optional[str] = None    # '핸승'/'핸무'/'무'/'역'/'취소'/'연기' 또는 None(지우기)
+    DT: Optional[str] = None    # 'YY-MM-DD (요일)' — 프론트에서 완성된 문자열로 보낸다
+    TM: Optional[float] = None  # HHMM
     HS: Optional[float] = None
     AS: Optional[float] = None
     KW: Optional[float] = None
@@ -2073,6 +2097,11 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
             if val is not None and val not in HANDICAP_CHOICES:
                 raise HTTPException(status_code=400,
                                     detail=f"{label}는 -1 또는 +1이어야 합니다: {val!r}")
+        if item.TM is not None:
+            h, m = divmod(int(item.TM), 100)
+            if not (0 <= h <= 23 and 0 <= m <= 59):
+                raise HTTPException(status_code=400,
+                                    detail=f"TM은 0000~2359(HHMM) 사이여야 합니다: {item.TM!r}")
         for field in SCORE_FIELDS + ODDS_FIELDS_EDIT:
             val = getattr(item, field)
             if val is not None and val < 0:
@@ -2088,6 +2117,8 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
     # 잡아 -1.0 같은 값이 문자열 "-1.0"으로 들어가 버린다(엑셀에서 숫자로 안 읽힘).
     for c in ("RT",) + NUMERIC_EDIT_FIELDS:
         df[c] = pd.to_numeric(df[c], errors="coerce") if c in df.columns else np.nan
+    if "DT" not in df.columns:
+        df["DT"] = None   # DT는 'YY-MM-DD (요일)' 문자열이라 숫자로 강제하지 않는다.
 
     # No는 DB에 float으로 저장돼 있어 문자열 비교('1' vs '1.0')가 어긋날 수 있으므로
     # 숫자로 비교한다. S/R/HT/AT는 문자열로 비교한다.
@@ -2108,6 +2139,7 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
             not_found.append(f"{item.S} {item.R} No.{item.No} {item.HT} vs {item.AT}")
             continue
         df.loc[idx, "RT"] = RT_LABEL_TO_NUM.get(item.RT) if item.RT is not None else np.nan
+        df.loc[idx, "DT"] = item.DT
         for field in NUMERIC_EDIT_FIELDS:
             val = getattr(item, field)
             df.loc[idx, field] = val if val is not None else np.nan

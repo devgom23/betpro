@@ -30,6 +30,37 @@ function numOrNull(s) {
   return s === '' || s === null || s === undefined ? null : parseFloat(s)
 }
 
+// DT는 'YY-MM-DD (요일)' 문자열로 저장돼 있다 — <input type="date">는 'YYYY-MM-DD'가 필요해서
+// 서로 변환한다. 연도는 2000년대로 가정(이 앱이 다루는 시즌 범위 안에서는 항상 맞다).
+const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function dtToInputDate(v) {
+  const m = /^(\d{2})-(\d{2})-(\d{2})/.exec(String(v ?? ''))
+  return m ? `20${m[1]}-${m[2]}-${m[3]}` : ''
+}
+
+function inputDateToDt(v) {
+  if (!v) return null
+  const [y, mo, d] = v.split('-')
+  const day = WEEKDAY_ABBR[new Date(`${v}T00:00:00`).getDay()]
+  return `${y.slice(2)}-${mo}-${d} (${day})`
+}
+
+// TM은 'HHMM' 숫자(예: 1930)로 저장돼 있다 — <input type="time">은 'HH:MM'이 필요하다.
+function tmToInputTime(v) {
+  if (v === null || v === undefined || v === '') return ''
+  const n = Number(v)
+  if (Number.isNaN(n)) return ''
+  const s = String(Math.trunc(n)).padStart(4, '0')
+  return `${s.slice(0, 2)}:${s.slice(2)}`
+}
+
+function inputTimeToTm(v) {
+  if (!v) return null
+  const [h, m] = v.split(':')
+  return Number(h) * 100 + Number(m)
+}
+
 // 승(W)/패(L) 배당 기준 핸디 부호 — 배당이 낮은(유리한) 쪽이 핸디를 준다.
 // 홈이 유리하면 -1, 원정이 유리하면 +1, 배당이 같으면(동배) -1.
 function computeHandicap(wRaw, lRaw) {
@@ -159,6 +190,8 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
           (res.rows || []).map((r) => ({
             ...r,
             _RT: r.RT_label || '',
+            _DT: dtToInputDate(r.DT),
+            _TM: tmToInputTime(r.TM),
             _HS: scoreInit(r.HS),
             _AS: scoreInit(r.AS),
             _KW: oddsInit(r.KW),
@@ -233,6 +266,8 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
           HT: r.HT,
           AT: r.AT,
           RT: r._RT || null,
+          DT: inputDateToDt(r._DT),
+          TM: inputTimeToTm(r._TM),
           HS: numOrNull(r._HS),
           AS: numOrNull(r._AS),
         }
@@ -303,6 +338,8 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
                   <tr>
                     <th rowSpan={2}>R</th>
                     <th rowSpan={2}>No</th>
+                    <th rowSpan={2}>날짜</th>
+                    <th rowSpan={2}>시간</th>
                     <th rowSpan={2}>홈</th>
                     <th rowSpan={2}>스코어</th>
                     <th rowSpan={2}>원정</th>
@@ -330,6 +367,22 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
                     <tr key={`${r.S}-${r.R}-${r.No}-${r.HT}-${r.AT}`}>
                       <td>{r.R}</td>
                       <td>{r.No}</td>
+                      <td>
+                        <input
+                          type="date"
+                          className="dt-input"
+                          value={r._DT}
+                          onChange={(e) => updateRow(i, '_DT', e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="time"
+                          className="tm-input"
+                          value={r._TM}
+                          onChange={(e) => updateRow(i, '_TM', e.target.value)}
+                        />
+                      </td>
                       <td>{r.HT}</td>
                       <td className="score-cell">
                         <input
