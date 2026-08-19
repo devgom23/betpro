@@ -16,6 +16,14 @@ export function formatTime(v) {
   return `${s.slice(0, 2)}:${s.slice(2)}`
 }
 
+// DT는 'YY-MM-DD (Sun)'처럼 요일이 영어 3글자로 저장돼 있다(DB·크롤러·정렬 로직이 전부
+// 이 형식에 의존하므로 저장값은 그대로 두고, 화면에 보여줄 때만 한글 한 글자로 바꾼다).
+const WEEKDAY_KO = { Sun: '일', Mon: '월', Tue: '화', Wed: '수', Thu: '목', Fri: '금', Sat: '토' }
+export function formatDt(v) {
+  if (v === null || v === undefined || v === '') return ''
+  return String(v).replace(/\(([A-Za-z]{3})\)/, (m, d) => `(${WEEKDAY_KO[d] || d})`)
+}
+
 // 점수가 둘 다 있고 서로 다를 때만 이긴 쪽 점수를 강조한다(무승부·예정 경기는 강조 없음).
 // side 는 'home' | 'away'.
 //

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api/client'
+import { formatDt } from '../../utils/format'
 import './CrawlModal.css'
 
 const MANUAL = '__MANUAL__' // 셀렉트에서 '직접입력'을 고른 상태 — 옆 입력창의 텍스트가 치환값이 된다
@@ -308,7 +309,7 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
                   <tr key={i}>
                     {/* 위 입력칸에서 고친 라운드가 실제로 저장되는 값이므로 미리보기도 그걸 보여준다 */}
                     <td>{normalizeRound(saveRound) || r.R}</td>
-                    <td>{r.DT}</td>
+                    <td>{formatDt(r.DT)}</td>
                     <td>{r.HT}</td>
                     <td>
                       {r.HS !== '' && r.AS !== '' ? `${r.HS} : ${r.AS}` : '-'}

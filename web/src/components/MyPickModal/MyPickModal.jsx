@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { api } from '../../api/client'
-import { isStarred, formatTime } from '../../utils/format'
+import { isStarred, formatTime, formatDt } from '../../utils/format'
 // .modal-backdrop / .modal-card / .modal-close / .modal-title / .modal-meta 를 그대로 재사용한다.
 import './MyPickModal.css'
 
@@ -53,7 +53,7 @@ export default function MyPickModal({ code, scope, row, onClose, onSaved }) {
         <div className="mypick-info">
           <div>
             <span className="mypick-label">경기일</span>
-            {row.DT} {formatTime(row.TM)}
+            {formatDt(row.DT)} {formatTime(row.TM)}
           </div>
           <div>
             <span className="mypick-label">홈</span>

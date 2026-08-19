@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
-import { isStarred, formatTime, scoreClass } from '../../utils/format'
+import { isStarred, formatTime, formatDt, scoreClass } from '../../utils/format'
 import './MatchDetailModal.css'
 
 const PICK_OPTIONS = ['대기', '축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
@@ -855,7 +855,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
         </h2>
         <p className="modal-meta">
           {row.S} · {row.R}
-          {row.DT ? ` · ${row.DT}` : ''}
+          {row.DT ? ` · ${formatDt(row.DT)}` : ''}
           {formatTime(row.TM) ? ` ${formatTime(row.TM)}` : ''}
           &nbsp;&nbsp;
           {rt ? <RtBadge label={rt} /> : <span className="modal-scheduled">예정 경기</span>}

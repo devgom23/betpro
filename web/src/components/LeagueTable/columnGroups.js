@@ -2,6 +2,8 @@
 // WEB_BET_PRO.py의 apply_multi_index()/build_styler()(1422~1554줄)를 그대로 옮긴 것.
 // 산출 로직은 건드리지 않고, "표시 순서·라벨·색상"만 그대로 재현한다.
 
+import { formatDt } from '../../utils/format'
+
 const GEN_COLS = ['L', 'S', 'R', 'No', 'DT', 'TM']
 // 그 경기 '직전까지'의 시즌 성적. 백엔드가 조회 시 계산해 붙여준다.
 //   HP/AP  = 홈팀/원정팀 순위
@@ -226,6 +228,7 @@ export function formatCell(group, col, value, row) {
     const n = toNum(value)
     return n === null ? '' : String(Math.trunc(n))
   }
+  if (g1 === '일반정보' && sub === 'DT') return formatDt(value)
   if (g1 === '일반정보' && sub === 'TM') {
     const n = toNum(value)
     return n === null ? '' : String(Math.trunc(n)).padStart(4, '0')
@@ -388,7 +391,9 @@ export function cellStyle(group, col, value, row) {
   const g1 = group.label1
   const sub = col.sub
 
-  if (g1 === '일반정보' && (sub === 'DT' || sub === 'TM')) return bettingDayStyle(row)
+  // DT(날짜)는 자릿수가 일정하지 않아 가운데 정렬이면 들쑥날쑥해 보인다 — 왼쪽 정렬로 고정.
+  if (g1 === '일반정보' && sub === 'DT') return { ...(bettingDayStyle(row) || {}), textAlign: 'left' }
+  if (g1 === '일반정보' && sub === 'TM') return bettingDayStyle(row)
 
   // 똥사 — 똥배(강한 정배)인데 실제 결과가 무/역으로 뒤집힌 경우라 눈에 띄게 빨간 글씨로.
   if (g1 === '똥배' && sub === '똥사' && !isBlank(value)) {

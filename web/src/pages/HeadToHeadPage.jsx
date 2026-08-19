@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import RtBadge from '../components/RtBadge/RtBadge'
+import { formatDt } from '../utils/format'
 
 // 실제 스코어(HS/AS) 기준 승/무/패 집계 ("양날개" — 팀이 홈/원정 어느 쪽이었든 합산).
 // betpro_ui.py 상대전적 탭의 원본 로직과 동일한 규칙.
@@ -147,7 +148,7 @@ export default function HeadToHeadPage({ scope }) {
                   <tr key={i}>
                     <td>{m.S}</td>
                     <td>{m.R}</td>
-                    <td>{m.DT}</td>
+                    <td>{formatDt(m.DT)}</td>
                     <td>{m.HT}</td>
                     <td>{m.HS ?? ''}</td>
                     <td>{m.AS ?? ''}</td>
