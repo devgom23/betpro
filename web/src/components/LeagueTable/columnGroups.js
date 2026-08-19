@@ -17,12 +17,12 @@ const F_ODDS_COLS = ['FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL']
 // 내 예측(별표/실제 벳팅 픽) — 화면에서 직접 클릭·팝업으로 입력하는 칸이라
 // formatCell/cellStyle이 아니라 LeagueTable.jsx가 직접 렌더링한다.
 // PICK_VERDICT(적중)는 저장되는 값이 아니라 내픽+RT로 그때그때 자동 계산한다
-// (computeAutoVerdict 참고). MY_HIT은 '벳'으로 이름을 바꿔 배팅 비중 태그로 쓴다.
+// (computeAutoVerdict 참고). MY_HIT은 '의견'으로 이름을 바꿔 배팅 비중 태그로 쓴다.
 const MYPICK_COLS = [
   ['IMPORTANT', '중요'],
   ['PICK_VERDICT', '적중'],
   ['MY_PICK', '내픽'],
-  ['MY_HIT', '벳'],
+  ['MY_HIT', '의견'],
 ]
 
 // 똥배 — 국내배당 KW/KL이 1.49 이하로 나온 "똥[안전]배당" 경기를 그 라운드 안에서
@@ -309,14 +309,20 @@ function khHitSide(row) {
   return sideOf(hs + kh, as_)
 }
 
-// 내 예측의 "벳"(옛 적중칸을 재활용 — 배팅 비중 태그) 배지 색상.
+// 내 예측의 "의견"(옛 적중칸을 재활용 — 배팅 비중 태그, 옛 이름 '벳') 배지 색상.
+// 계열별로 색을 묶는다: Pass 계열(P-)은 회색~갈색, 벳 계열(B-)은 주황~파랑~보라, 축은 청록.
+// 이름이 두 번 바뀌었으므로(패스→Pass, 메인벳→B-메인→B-Ma) 옛 이름도 같이 봐준다 —
+// DB는 옮겼지만 혹시 남아 있는 값이 색 없이 뜨는 일을 막는 안전장치다.
 export function myHitStyle(value) {
-  if (value === '패스') return { background: '#757575', color: '#fff', fontWeight: 700 }
-  if (value === '패스고민') return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
-  if (value === '벳고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
+  if (value === 'Pass' || value === '패스') return { background: '#757575', color: '#fff', fontWeight: 700 }
+  if (value === 'P-고민' || value === '패스고민') return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
+  if (value === 'P-분산') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  if (value === 'P-어렵') return { background: '#5D4037', color: '#fff', fontWeight: 700 }
+  if (value === 'B-고민' || value === '벳고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
   if (value === '축') return { background: '#00897B', color: '#fff', fontWeight: 700 }
-  if (value === '메인벳') return { background: '#1565C0', color: '#fff', fontWeight: 700 }
-  if (value === 'S벳') return { background: '#6A1B9A', color: '#fff', fontWeight: 700 }
+  if (value === '축-Si' || value === '축-사이드') return { background: '#00695C', color: '#fff', fontWeight: 700 }
+  if (value === 'B-Ma' || value === 'B-메인' || value === '메인벳') return { background: '#1565C0', color: '#fff', fontWeight: 700 }
+  if (value === 'B-Si' || value === 'B-사이드' || value === 'S벳') return { background: '#6A1B9A', color: '#fff', fontWeight: 700 }
   return null
 }
 
