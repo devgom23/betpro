@@ -221,16 +221,22 @@ def _parse_lines(soup, target_league: str):
         handisign = d.get("handisign") or ""
 
         tr = d.find_parent("tr")
-        league, game_idx = "", ""
+        # .game-name에는 title 속성(예: "스페인 라리가")과 화면에 보이는 글자(예: "라리가")가
+        # 서로 다르게 들어있다. 예전엔 title만 봤는데, 사용자가 화면에서 본 대로("라리가")
+        # 저장해 두면 title과 달라서 매칭이 전부 실패했다 — 실측으로 확인한 버그. 이제 둘 중
+        # 하나만 맞아도 그 리그로 인정한다.
+        league_title, league_text, game_idx = "", "", ""
         if tr:
             gn = tr.select_one(".game-name")
             if gn:
-                league = (gn.get("title") or gn.get_text(strip=True)).strip()
+                league_title = (gn.get("title") or "").strip()
+                league_text = gn.get_text(strip=True)
             noti = tr.select_one(".game-noti")
             if noti and noti.get("game-idx"):
                 game_idx = noti.get("game-idx")
         if not game_idx:
             game_idx = d.get("game-idx") or ""
+        league = league_title or league_text
 
         cur = {"W": "", "D": "", "L": ""}
         for c in d.select(".slt-odds"):
@@ -238,7 +244,7 @@ def _parse_lines(soup, target_league: str):
             if w in cur:
                 cur[w] = (c.get("odds") or "").strip()
 
-        if target_league and league and league != target_league:
+        if target_league and league and target_league not in (league_title, league_text):
             continue
         if not pid or not home or not away:
             continue
