@@ -744,6 +744,46 @@
   font-size: 13px;
 }
 
+/* 최고 연속 기록 — 위 최근10경기 칸과 같은 좌/우 방향으로 붙인다.
+   홈팀은 왼쪽 끝, 원정팀은 오른쪽 끝에 붙어 각자 자기 셀 아래에 오게 한다. */
+.streak-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 6px 0 0;
+}
+
+.streak-line {
+  display: inline-flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.streak-right {
+  margin-left: auto;
+}
+
+/* 라벨과 숫자는 붙이고(2px), 항목 사이는 벌린다(위 gap 8px) */
+.streak-item {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.streak-item strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* 항목 사이 가운뎃점 — 텍스트 공백은 브라우저가 합쳐버리므로 가상요소로 넣는다 */
+.streak-item + .streak-item::before {
+  content: '·';
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
 .h2h-caption {
   font-size: 11px;
   color: var(--text-muted);

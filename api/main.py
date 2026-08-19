@@ -84,6 +84,7 @@ import my_picks as MYPICKS     # noqa: E402
 import bet_slips as BETSLIPS   # noqa: E402
 import ev_model as EVM         # noqa: E402
 import pick_ai as PICKAI       # noqa: E402
+import standings               # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -1228,7 +1229,25 @@ def pick_ai(body: PickAiBody, user: dict = Depends(get_current_user)):
     # 내려준다 — 예전엔 이 계산(리그 마스킹·정렬·WDL 집계)을 /api/head_to_head가
     # 팝업을 열 때마다 통째로 한 번 더 했다(같은 두 팀, 같은 데이터를 두 번 계산).
     result["h2h"] = h2h
+    # 최고 연속 기록(최다연승/무패/무승/연패). 상대전적은 통합DB를 뒤지지만 이 값은
+    # 사용자 지정대로 '그 리그 안에서만' 세므로 리그 하나만 따로 읽는다.
+    result["streaks"] = _team_streaks(db if ht and at else None, body.scope, body.code,
+                                      ht, at, body.row)
     return result
+
+
+def _team_streaks(db, scope, code, ht, at, row) -> dict:
+    """두 팀의 최고 연속 기록을 그 리그 데이터로만 구한다(없으면 None)."""
+    if not db or not code or not ht or not at:
+        return None
+    league_df = DATA.load_league_df(db, code)
+    if league_df.empty:
+        return None
+    args = (row.get("S"), row.get("R"), row.get("No"))
+    return {
+        "home": standings.max_streaks_before(league_df, ht, *args),
+        "away": standings.max_streaks_before(league_df, at, *args),
+    }
 
 
 @app.get("/api/leagues/{code}/match_excel")

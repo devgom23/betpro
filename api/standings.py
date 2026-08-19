@@ -273,6 +273,77 @@ def _attach_one_season(sdf, out):
             table.add(h, a, hs_i, as_i)
 
 
+# ─────────────────── 팀별 최고 연속 기록 (상세보기 팝업 전용) ───────────────────
+# 위의 순위·폼·최근10은 전부 '그 시즌 안에서만' 세지만, 이 기록은 시즌 경계를 넘어
+# 이어 센다 — 실제 축구 기록이 그렇게 매겨지기 때문이다(예: 아스널 49경기 무패).
+# 기준은 실제 스코어(HS/AS)다. 핸디 결과(RT)가 아니라 순수하게 이기고 졌는지만 본다.
+# 집계 범위는 '그 경기 직전까지' — 이 파일의 다른 지표들과 같은 원칙이라, 과거 경기를
+# 다시 열어봐도 그 당시 기준 숫자가 나온다(그 경기 이후 기록은 안 섞인다).
+
+def _chrono_key(s, r, no):
+    """시간순 정렬 키. DT는 70%가 비어 있어 못 쓰므로 시즌→라운드→경기번호로 세운다.
+    시즌 문자열은 '09-10'~'26-27'(유럽)이든 '2013'~'2026'(K리그)이든 그냥 문자열로
+    비교해도 연도순이 맞다."""
+    try:
+        n = float(no)
+    except (TypeError, ValueError):
+        n = 0.0
+    return (str(s), _round_num(r), n)
+
+
+def max_streaks_before(df, team, season, round_, no):
+    """team이 그 경기 '직전까지' 세운 최고 연속 기록 4종.
+
+    홈·원정을 섞어 시간순으로 이어 세고, 결과가 아직 없는 경기(예정·취소·연기)는
+    건너뛴다 — 연기된 경기 하나 때문에 연승이 끊기면 안 되기 때문이다.
+    반환: {"win": 최다연승, "unbeaten": 최다무패, "winless": 최다무승, "lose": 최다연패,
+           "played": 집계에 쓴 경기 수}
+    """
+    empty = {"win": 0, "unbeaten": 0, "winless": 0, "lose": 0, "played": 0}
+    t = str(team or "").strip()
+    if not t or df is None or df.empty:
+        return empty
+    if not all(c in df.columns for c in _REQUIRED):
+        return empty
+
+    ht = df["HT"].astype(str).str.strip()
+    at = df["AT"].astype(str).str.strip()
+    mine = df[(ht == t) | (at == t)]
+    if mine.empty:
+        return empty
+
+    cutoff = _chrono_key(season, round_, no)
+    rows = []
+    for s, r, n, h, hs, as_ in zip(mine["S"], mine["R"], mine["No"],
+                                   mine["HT"].astype(str).str.strip(),
+                                   mine["HS"], mine["AS"]):
+        key = _chrono_key(s, r, n)
+        if key >= cutoff:          # 그 경기 자신과 그 이후는 제외
+            continue
+        a, b = _score(hs), _score(as_)
+        if a is None or b is None:  # 아직 결과가 없는 경기는 건너뛴다(연속 안 끊음)
+            continue
+        mine_, theirs = (a, b) if h == t else (b, a)
+        rows.append((key, "W" if mine_ > theirs else "L" if mine_ < theirs else "D"))
+
+    if not rows:
+        return empty
+    rows.sort(key=lambda x: x[0])
+
+    run = {"win": 0, "unbeaten": 0, "winless": 0, "lose": 0}
+    best = {"win": 0, "unbeaten": 0, "winless": 0, "lose": 0}
+    for _, ch in rows:
+        run["win"] = run["win"] + 1 if ch == "W" else 0
+        run["lose"] = run["lose"] + 1 if ch == "L" else 0
+        run["unbeaten"] = run["unbeaten"] + 1 if ch in ("W", "D") else 0
+        run["winless"] = run["winless"] + 1 if ch in ("D", "L") else 0
+        for k in best:
+            if run[k] > best[k]:
+                best[k] = run[k]
+    best["played"] = len(rows)
+    return best
+
+
 ADDED_COLS = RANK_COLS + FORM_COLS + RECENT_COLS
 
 

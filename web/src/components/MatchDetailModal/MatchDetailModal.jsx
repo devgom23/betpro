@@ -6,7 +6,7 @@ import { isStarred, formatTime, formatDt, scoreClass } from '../../utils/format'
 import './MatchDetailModal.css'
 
 const PICK_OPTIONS = ['대기', '축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
-const HIT_OPTIONS = ['패스', '패스고민', '벳고민', '축', '메인벳', 'S벳']
+const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-어렵', 'B-고민', 'B-Ma', 'B-Si', '축', '축-Si']
 
 function rtLabel(v) {
   if (v === null || v === undefined || v === '') return ''
@@ -324,10 +324,34 @@ function recentCells(results, venues, alignEnd = false) {
   })
 }
 
-function RecentTable({ row }) {
+// 그 팀이 이 경기 '직전까지' 그 리그에서 세운 최고 연속 기록 4종.
+// 위 최근10경기 칸이 홈=왼쪽 / 원정=오른쪽으로 갈라져 있으므로 그 방향을 그대로 잇는다.
+// 표기는 CLAUDE.md 6-2 규칙(가운뎃점 나열, 값은 밝게, 간격은 flex gap).
+const STREAK_ITEMS = [
+  ['win', '연승'],
+  ['unbeaten', '무패'],
+  ['winless', '무승'],
+  ['lose', '연패'],
+]
+
+function StreakLine({ data, align }) {
+  if (!data || !data.played) return null
+  return (
+    <span className={`streak-line streak-${align}`}>
+      {STREAK_ITEMS.map(([key, label]) => (
+        <span key={key} className="streak-item">
+          {label} <strong>{data[key]}</strong>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function RecentTable({ row, streaks }) {
   // 시즌 첫 라운드면 아직 치른 경기가 없어 양쪽 다 비어 있다 — 폼 지표와 같이 '-'로 둔다.
   const homeCells = recentCells(String(row.HR10 || ''), String(row.HR10H || ''))
   const awayCells = recentCells(String(row.AR10 || ''), String(row.AR10H || ''), true)
+  const hasStreak = streaks && (streaks.home?.played || streaks.away?.played)
   return (
     <>
       <table className="detail-table recent-table">
@@ -352,9 +376,12 @@ function RecentTable({ row }) {
           </tr>
         </tbody>
       </table>
-      <p className="h2h-caption">
-        <span className="recent-home-swatch" /> 색칠된 칸 = 그 팀 기준 홈경기
-      </p>
+      {hasStreak && (
+        <div className="streak-row">
+          <StreakLine data={streaks.home} align="left" />
+          <StreakLine data={streaks.away} align="right" />
+        </div>
+      )}
     </>
   )
 }
@@ -506,7 +533,7 @@ function MyPickBar({ row, onSavePick }) {
         </select>
       </label>
       <label className="mypick-bar-field">
-        벳
+        의견
         <select value={hit} onChange={handleHitChange}>
           <option value="">선택 안함</option>
           {HIT_OPTIONS.map((o) => (
@@ -883,8 +910,13 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
               <FormTable row={row} />
             </section>
             <section className="detail-section">
-              <h3>최근10경기 전적</h3>
-              <RecentTable row={row} />
+              <h3>
+                최근10경기 전적{' '}
+                <span className="detail-section-note">
+                  <span className="recent-home-swatch" /> 홈경기 · 경기 직전까지 그 리그에서 세운 최다 기록
+                </span>
+              </h3>
+              <RecentTable row={row} streaks={pickData ? pickData.streaks : null} />
             </section>
             <section
               className="detail-section detail-section-grow"
