@@ -576,14 +576,13 @@ export function RiskLegendModal({ onClose }) {
         <button className="modal-close" onClick={onClose} aria-label="닫기">
           ✕
         </button>
-        <h2 className="modal-title">📖 핸승 위험도 색상 참고표</h2>
+        <h2 className="modal-title">📖 확률 칸 색상 참고표</h2>
         <p className="modal-meta">
-          실측(6대리그) 기준 구간입니다. 색은 셋 다 같은 뜻 — <b>초록이면 플핸에 유리</b>합니다.
-          <br />
-          칸 이름: 앞글자는 시장(국=국내 / 해=해외), 뒷글자는 재료(정=승무패 배당 / 플=핸디
-          배당 / 지=26개 지표).
-          <br />
-          <b>플핸무 − 플 = 핸무</b>입니다(대개 23~24%).
+          6대리그 실측 기준입니다. 세 묶음 모두 색이 뜻하는 바는 같아서{' '}
+          <b>초록이면 플핸에 유리</b>합니다. 칸 이름은 앞글자가 어느 시장에서 나온
+          값인지(국=국내, 해=해외), 뒷글자가 무엇으로 계산했는지(정=승무패 배당, 플=핸디
+          배당, 지=26개 지표)를 뜻합니다. 플핸무에서 플을 빼면 핸무 확률이 나오며 대개
+          23~24%입니다.
         </p>
 
         {RISK_LEGEND.map((g) => (

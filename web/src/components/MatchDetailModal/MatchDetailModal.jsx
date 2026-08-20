@@ -796,7 +796,7 @@ function PickBand({ row, data, error }) {
       {!error && data && data.available && <PickCards data={data} />}
       <div className="pick-band-risk">
         <h3>
-          핸승 위험도{' '}
+          확률 지표{' '}
           <span className="detail-section-note">
             앞글자 = 시장(국/해) · 뒷글자 = 재료(정 승무패배당 · 플 핸디배당 · 지 26지표)
           </span>
