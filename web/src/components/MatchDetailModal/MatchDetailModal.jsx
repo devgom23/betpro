@@ -209,60 +209,98 @@ function OddsTable({ row }) {
   )
 }
 
-// 국플값/배AI 경계(15/25/35/45%) — web/.../columnGroups.js cellStyle과 동일.
-// 국정값/해정값만 분포가 달라 따로 경계(40/55/70%)를 쓴다 — 그쪽 주석 참고.
+// 색 경계는 리그 표(web/.../columnGroups.js cellStyle)와 똑같이 맞춘다.
+// 규칙 한 문장: "초록이면 플핸에 유리". 정승만 낮을수록 초록이고 나머지는 높을수록 초록.
+const R_DEEP = { background: '#1B5E20', color: '#fff', fontWeight: 700 }
+const R_GOOD = { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 }
+const R_MID = { background: '#FBC02D', color: '#0D1B2A' }
+const R_WARN = { background: '#EF6C00', color: '#fff', fontWeight: 700 }
+const R_BAD = { background: '#C62828', color: '#fff', fontWeight: 700 }
+
 function riskCellStyle(kind, n) {
   if (n === null || Number.isNaN(n)) return { color: '#9E9E9E' }
-  if (kind === 'win') {
-    if (n < 40) return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 }
-    if (n < 55) return { background: '#FBC02D', color: '#0D1B2A' }
-    if (n < 70) return { background: '#EF6C00', color: '#fff', fontWeight: 700 }
-    return { background: '#C62828', color: '#fff', fontWeight: 700 }
+  if (kind === 'win') {          // 정승 — 정배가 셀수록 플핸에 불리
+    if (n < 40) return R_GOOD
+    if (n < 55) return R_MID
+    if (n < 70) return R_WARN
+    return R_BAD
   }
-  if (n < 15) return { background: '#1B5E20', color: '#fff', fontWeight: 700 }
-  if (n < 25) return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 }
-  if (n < 35) return { background: '#FBC02D', color: '#0D1B2A' }
-  if (n < 45) return { background: '#EF6C00', color: '#fff', fontWeight: 700 }
-  return { background: '#C62828', color: '#fff', fontWeight: 700 }
+  if (kind === 'nh') {           // 플핸무 — 실측 평균 68~70%, 5~95% 범위 44~85%
+    if (n >= 85) return R_DEEP
+    if (n >= 75) return R_GOOD
+    if (n >= 65) return R_MID
+    if (n >= 55) return R_WARN
+    return R_BAD
+  }
+  // 플 — 분포가 플핸무와 다르다(실측 평균 44~46%, 5~95% 범위 20~62%)
+  if (n >= 55) return R_DEEP
+  if (n >= 48) return R_GOOD
+  if (n >= 41) return R_MID
+  if (n >= 34) return R_WARN
+  return R_BAD
 }
 
 function RiskCard({ row }) {
   const toN = (v) => (v === null || v === undefined || v === '' ? null : Number(v))
-  // 국플값(RISK)은 백엔드가 '핸승 확률'로 내려주므로 화면에서만 100에서 빼서
-  // 플핸 확률로 보여준다(리그 표 columnGroups.js formatCell과 같은 방식). 색은
-  // 원본값 기준으로 매겨야 방향이 맞아서, 배당·AI/KF·AI와 같은 'std' 등급을 쓴다.
-  const items = [
-    ['국정값', toN(row.WIN_RISK), 'win'],
-    ['국플값', toN(row.RISK), 'std'],
-    ['해정값', toN(row.WIN_RISK_F), 'win'],
-    ['배당·AI', toN(row.AI_PICK), 'std'],
-    ['K값', toN(row.K_VALUE), 'std'],
-    ['F값', toN(row.F_VALUE), 'std'],
-    ['KF·AI', toN(row.KF_AI), 'std'],
+  // 리그 표(columnGroups.js RISK_GROUPS)와 같은 8칸을 같은 순서로 보여준다.
+  // 값은 전부 백엔드가 "그 일이 일어날 확률(%)"로 내려주므로 뒤집지 않는다.
+  // 핸무는 '플핸무 − 플'로 나오므로 칸을 따로 두지 않는다.
+  const groups = [
+    ['정승 %', 'win', [
+      ['국)정', toN(row.WIN_RISK)],
+      ['해)정', toN(row.WIN_RISK_F)],
+    ]],
+    ['플핸무 %', 'nh', [
+      ['국)플', toN(row.NH_KO)],
+      ['국)지', toN(row.NH_KI)],
+      ['해)지', toN(row.NH_FI)],
+    ]],
+    ['플 %', 'pl', [
+      ['국)플', toN(row.PL_KO)],
+      ['국)지', toN(row.PL_KI)],
+      ['해)지', toN(row.PL_FI)],
+    ]],
   ]
-  const FLIPPED = new Set(['국플값', '배당·AI', 'KF·AI'])
   return (
-    <table className="detail-table">
+    <table className="detail-table risk-table">
       <thead>
         <tr>
-          {items.map(([label]) => (
-            <th key={label}>{label}</th>
+          {groups.map(([title, , cols], gi) => (
+            <th
+              key={title}
+              colSpan={cols.length}
+              className={`risk-group${gi < groups.length - 1 ? ' risk-edge' : ''}`}
+            >
+              {title}
+            </th>
           ))}
+        </tr>
+        <tr>
+          {groups.flatMap(([title, , cols], gi) =>
+            cols.map(([label], ci) => (
+              <th
+                key={`${title}-${label}`}
+                className={ci === cols.length - 1 && gi < groups.length - 1 ? 'risk-edge' : ''}
+              >
+                {label}
+              </th>
+            ))
+          )}
         </tr>
       </thead>
       <tbody>
         <tr>
-          {items.map(([label, n, kind]) => (
-            <td key={label} style={riskCellStyle(kind, n)}>
-              {n === null
-                ? '-'
-                : label === '국플값'
-                  ? `${(100 - n).toFixed(0)}%`
-                  : FLIPPED.has(label)
-                    ? `플${(100 - n).toFixed(0)}%`
-                    : `${n.toFixed(0)}%`}
-            </td>
-          ))}
+          {groups.flatMap(([title, kind, cols], gi) =>
+            cols.map(([label, n], ci) => (
+              <td
+                key={`${title}-${label}`}
+                className={ci === cols.length - 1 && gi < groups.length - 1 ? 'risk-edge' : ''}
+                style={riskCellStyle(kind, n)}
+              >
+                {n === null ? '-' : `${n.toFixed(0)}%`}
+              </td>
+            ))
+          )}
         </tr>
       </tbody>
     </table>
@@ -758,7 +796,10 @@ function PickBand({ row, data, error }) {
       {!error && data && data.available && <PickCards data={data} />}
       <div className="pick-band-risk">
         <h3>
-          핸승 위험도 <span className="detail-section-note">국정값/해정값 : 정배승확률</span>
+          핸승 위험도{' '}
+          <span className="detail-section-note">
+            앞글자 = 시장(국/해) · 뒷글자 = 재료(정 승무패배당 · 플 핸디배당 · 지 26지표)
+          </span>
         </h3>
         <RiskCard row={row} />
       </div>

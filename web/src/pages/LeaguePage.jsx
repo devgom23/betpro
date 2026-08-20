@@ -50,7 +50,7 @@ export default function LeaguePage({ code, scope }) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [leagues, setLeagues] = useState([])
 
-  // 표의 "해외지표 접기/국내지표 접기/핸승 위험도 참고" — 조회 조건 줄에서 같이
+  // 표의 "해외지표 접기/국내지표 접기/플핸무 확률 참고" — 조회 조건 줄에서 같이
   // 보여주려고 표(LeagueTable) 대신 여기서 상태를 들고 있다가 props로 내려준다.
   // 일반정보(시즌/라운드 등 조회 조건에 이미 나와 있는 정보)는 기본으로 접어둔다.
   const [collapsed, setCollapsed] = useState(() => new Set(['일반정보']))
@@ -407,7 +407,7 @@ export default function LeaguePage({ code, scope }) {
                 onClick={() => setShowRiskLegend(true)}
                 title="색상별 구간 참고표"
               >
-                핸승 위험도 참고
+                플핸무 확률 참고
               </button>
             </div>
           </div>

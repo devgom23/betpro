@@ -23,6 +23,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+import engine   # 26지표 코드 목록(PH_F_CODES/PH_K_CODES)과 표본 하한만 빌려 쓴다
+
 # 정배배당(KW/KL 중 낮은 쪽) 구간. 실측상 이 경계에서 결과 분포가 뚜렷이 갈린다.
 ODDS_BINS = [0, 1.15, 1.25, 1.35, 1.50, 1.70, 2.00, 2.50, 99]
 ODDS_LABELS = ['~1.15', '1.15~1.25', '1.25~1.35', '1.35~1.49',
@@ -47,6 +49,28 @@ EV_COLS = ['EV_WIN', 'EV_DRAW', 'EV_PL', 'EV_COVER', 'EV_BEST', 'EV_N', 'ODD_FLA
 # — 5구간 전부 표시값과 실제 핸승률의 오차가 1.3%p 이내였다.
 RISK_COLS = ['RISK', 'WIN_RISK', 'WIN_RISK_F', 'AI_PICK', 'K_VALUE', 'F_VALUE', 'KF_AI']
 
+# ════════════════════════════════════════════════════════════
+# 값별 8칸 (2026-08 재편) — 리그 표는 이제 이쪽을 쓴다.
+#
+# 위 RISK_COLS는 pick_ai.py와 상세보기 팝업이 참조하므로 그대로 둔다.
+# 여기 6칸은 덧붙이는 것이고, 정배승 2칸은 WIN_RISK/WIN_RISK_F를 그대로 쓴다.
+#
+#   정배 승리확률(RT 1+2) : 국)정 = WIN_RISK   해)정 = WIN_RISK_F
+#   플핸무 확률(RT 2+3+4) : 국)플 = NH_KO   국)지 = NH_KI   해)지 = NH_FI
+#   플 확률(RT 3+4)       : 국)플 = PL_KO   국)지 = PL_KI   해)지 = PL_FI
+#
+# ⚠ 한 출처 안에서 '정배승'과 '플'은 정확한 여집합이다(실측 상관 -1.0000, 합 100.00%).
+#   그래서 승무패 배당은 정배승만 내고, 핸디배당·26지표는 플핸무와 플만 낸다.
+#   핸무는 '플핸무 − 플'로 나오므로 칸을 따로 두지 않는다 — 실측상 어느 출처로 보든
+#   23~24%에 붙어 있고(5~95% 폭이 5.8~14.3%p뿐) 구분력도 0.49~0.54로 거의 없다.
+#
+# 실측 보정 오차(가중평균, 6대리그):
+#   정배승  국)정 1.66p · 해)정 1.32p
+#   플핸무  국)플 1.07p · 국)지 1.32p · 해)지 0.38p
+#   플      국)플 1.69p · 국)지 1.45p · 해)지 0.27p   ← 해)지 두 칸이 가장 정확
+# ════════════════════════════════════════════════════════════
+NEW_RISK_COLS = ['NH_KO', 'NH_KI', 'NH_FI', 'PL_KO', 'PL_KI', 'PL_FI']
+
 # 국정값·해정값(정배가 그냥 이길 확률)을 배AI 평균에 넣기 전에 핸승값과 같은
 # 스케일(실제 핸승률 기준)로 맞추는 변환 곡선. 핸승값은 "핸디까지 커버해서 이길
 # 확률"이라 정배 승리 확률(국정값·해정값, 평균 52%대)보다 항상 낮게 나온다
@@ -69,6 +93,28 @@ def _num(df: pd.DataFrame, name: str) -> pd.Series:
     if name not in df.columns:
         return pd.Series(np.nan, index=df.index, dtype='float64')
     return pd.to_numeric(df[name], errors='coerce')
+
+
+def _idx_pl_share(df: pd.DataFrame, codes: list) -> pd.Series:
+    """26개 지표 블록에서 '무+역'(=순수 플핸)이 차지하는 비율(%).
+
+    engine.compute_plushandi()가 PH_F/PH_K를 만드는 방식과 똑같이 13개 지표의
+    4칸을 전부 더한 뒤, 3번(무)·4번(역) 칸만 분자로 쓴다. 표본 하한도 같은
+    PH_MIN_SAMPLE을 써야 PH_F/PH_K와 값이 나오는 경기가 서로 어긋나지 않는다.
+    """
+    tot = pd.Series(0.0, index=df.index)
+    pl = pd.Series(0.0, index=df.index)
+    for code in codes:
+        for i in range(4):
+            col = f'{code} {i + 1}'
+            if col not in df.columns:
+                continue
+            v = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+            tot = tot + v
+            if i >= 2:                     # 3=무, 4=역
+                pl = pl + v
+    share = pl / tot.where(tot > 0) * 100
+    return share.where(tot >= engine.PH_MIN_SAMPLE)
 
 
 def prepare(df: pd.DataFrame) -> pd.DataFrame:
@@ -144,7 +190,7 @@ def attach(df: pd.DataFrame, table: dict) -> pd.DataFrame:
     blank = pd.Series(np.nan, index=df.index, dtype='float64')
     res = {c: blank.copy() for c in ('EV_WIN', 'EV_DRAW', 'EV_PL', 'EV_COVER', 'EV_BEST', 'EV_N')}
     res['ODD_FLAG'] = pd.Series([''] * n, index=df.index, dtype=object)
-    for c in RISK_COLS:
+    for c in RISK_COLS + NEW_RISK_COLS:
         res[c] = blank.copy()
 
     o_win = _num(df, '_o_win').where(lambda s: s > 1)   # 배당 1 이하는 입력 오류(원금도 안 되는 배당은 없다)
@@ -232,8 +278,18 @@ def attach(df: pd.DataFrame, table: dict) -> pd.DataFrame:
     # 완전히 다른 신호원이라 따로 구분해 둔다. 화면 표시는 배AI와 동일하게 플핸%.
     res['KF_AI'] = pd.concat([k_value, f_value], axis=1).mean(axis=1, skipna=True)
 
+    # ── 값별 8칸 (모듈 상단 NEW_RISK_COLS 주석 참고) ──
+    # 전부 "그 일이 일어날 확률(%)"로 통일해 내려보낸다 — 화면에서 100에서 빼는
+    # 뒤집기를 하지 않도록. 정배승 2칸은 위 WIN_RISK/WIN_RISK_F를 그대로 쓴다.
+    res['NH_KO'] = 100 - risk                                  # 국)플 — 국내 핸디배당
+    res['PL_KO'] = ((1 / o_pl) / margin * 100).where(ok_risk)   # 국)플 — 같은 배당의 플핸 칸
+    res['NH_KI'] = ph_k                                        # 국)지 — 저장된 PH_K 그대로
+    res['NH_FI'] = ph_f                                        # 해)지 — 저장된 PH_F 그대로
+    res['PL_KI'] = _idx_pl_share(df, engine.PH_K_CODES)
+    res['PL_FI'] = _idx_pl_share(df, engine.PH_F_CODES)
+
     out = df.copy()
-    for c in EV_COLS + RISK_COLS:
+    for c in EV_COLS + RISK_COLS + NEW_RISK_COLS:
         out[c] = res[c]
     return out.drop(columns=[c for c in out.columns if c.startswith('_')])
 

@@ -76,6 +76,13 @@
   color: var(--text-muted);
 }
 
+/* 핸승 위험도 — 26지표에서 나온 칸(국)지·해)지)의 헤더에만 옅은 틴트를 깔아
+   배당에서 나온 칸과 구분한다. 셀 쪽은 등급 색이 인라인 style로 덮으므로
+   헤더에서만 보인다(columnGroups.js riskColClass 참고). */
+.league-table th.sub-header.risk-idx {
+  background: var(--risk-idx-bg);
+}
+
 /* 그룹(일반정보/경기정보/국내배당/해외배당/...) 경계 — 그 그룹의 마지막 칸에 굵은 구분선 */
 .league-table th.group-divider,
 .league-table td.group-divider {

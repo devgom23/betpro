@@ -31,6 +31,8 @@ body {
 
   --border: #2e3a4d;
   --border-strong: #47566d;
+  /* 핸승 위험도에서 26지표 기반 칸(국)지·해)지) 헤더 틴트 */
+  --risk-idx-bg: rgba(255, 255, 255, 0.06);
 
   --text-primary: #f4f7fb;
   --text-secondary: #d3dbe6;
@@ -83,6 +85,8 @@ body {
 
   --border: #cbd5e1;
   --border-strong: #94a3b8;
+  /* 핸승 위험도에서 26지표 기반 칸(국)지·해)지) 헤더 틴트 */
+  --risk-idx-bg: rgba(15, 23, 42, 0.06);
 
   --text-primary: #0b1220;
   --text-secondary: #2c3849;

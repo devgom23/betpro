@@ -38,27 +38,52 @@ const DDONG_COLS = [
 // 6대리그 실측 똥사율: 안전 17.6% / 보통 27.7% / 주의 32.9% / 위험 39.3%
 const DDONG_RISK_CUTS = [22, 30, 37]
 
-// 핸승 위험도 — "플핸 예측"을 대체한다. 예전 PICK(플핸(무)/플핸(역)/...)은
-// 실측 적중률이 아니라 고정 보정표 값이었고(예: 78% 표시인데 실제 52.8%),
-// 여기 값은 전부 실측으로 검증했다(6대리그 13,410경기, columnGroups.js formatCell/
-// cellStyle 쪽과 api/ev_model.py 상단 주석 참고).
-// 배당 기반 값(국정값/국플값/해정값/배당·AI) → 26개 지표 기반 값(K값/F값/KF·AI)
-// 순서. LeagueTable.jsx riskSubDividerClass가 배당·AI 뒤에 구분선을 넣는다.
+// 핸승 위험도 (2026-08 재편) — '무엇이 나올 확률인가'로 묶고, 각 묶음 안에서
+// '어디서 나온 값인가'로 나눈다. 예전 7칸(국정값/국플값/해정값/배당·AI/K값/F값/KF·AI)은
+// 숫자 방향이 뒤섞여 있었고(일부는 핸승%, 일부는 플핸%), AI 2칸은 부품의 단순 평균이라
+// 부품보다 구분력이 낮았다(배당AI -2.7/1000, 지표AI -0.9/1000, 부품과 상관 0.97~0.98).
 //
-// 이름 규칙: 앞글자 = 배당 출처(국=국내/해=해외), 뒷글자 = 무엇이 나올 확률인가.
-//   국정값·해정값 = "정배가 그냥 이길 확률"(핸디캡 무관, 승무패 배당에서 산출)
-//   국플값        = "플핸이 나올 확률"(국내 핸디배당 KHW/KHD/KHL에서 산출)
-// 국플값의 원본 컬럼(RISK)은 백엔드에서 여전히 '핸승 확률'로 계산되어 내려온다 —
-// 화면에서만 100에서 빼서 플핸 확률로 보여준다(formatCell 참고). 계산식은 안 건드렸다.
-const RISK_COLS = [
-  ['WIN_RISK', '국정값'],
-  ['RISK', '국플값'],
-  ['WIN_RISK_F', '해정값'],
-  ['AI_PICK', '배당·AI'],
-  ['K_VALUE', 'K값'],
-  ['F_VALUE', 'F값'],
-  ['KF_AI', 'KF·AI'],
+//   정승 확률(RT 1+2)     : 승무패 배당에서만 나온다 — 핸디를 몰라 핸승/핸무를 못 가른다
+//   플핸무 확률(RT 2+3+4) : 핸디배당·26지표. 보험 베팅(플핸+핸무)의 성공 확률 그 자체
+//   플 확률(RT 3+4)       : 같은 세 출처
+//
+// ⚠ 한 출처 안에서 '정승'과 '플'은 정확한 여집합이다(실측 상관 -1.0000).
+//   그래서 승무패 배당은 정승 묶음에만 넣었다.
+// 핸무 칸은 두지 않는다 — '플핸무 − 플'로 나오고, 어느 출처로 보든 23~24%에 붙어
+//   있어(폭 5.8~14.3%p) 구분력이 0.49~0.54로 거의 없다.
+//
+// 이름: 앞글자 = 출처 시장(국=국내/해=해외), 뒷글자 = 재료(플=핸디배당, 정=승무패배당,
+//       지=26개 지표). 값은 전부 백엔드가 "그 일이 일어날 확률(%)"로 내려주므로
+//       화면에서 100에서 빼는 뒤집기를 하지 않는다.
+// 실측 보정 오차는 api/ev_model.py 상단 NEW_RISK_COLS 주석 참고.
+const RISK_GROUPS = [
+  ['정승 %', '', [
+    ['WIN_RISK', '국)정'],
+    ['WIN_RISK_F', '해)정'],
+  ]],
+  ['플핸무 %', '', [
+    ['NH_KO', '국)플'],
+    ['NH_KI', '국)지'],
+    ['NH_FI', '해)지'],
+  ]],
+  ['플 %', '', [
+    ['PL_KO', '국)플'],
+    ['PL_KI', '국)지'],
+    ['PL_FI', '해)지'],
+  ]],
 ]
+
+// 26개 지표에서 나온 칸(국)지·해)지) — 배당에서 나온 칸과 성격이 달라 헤더에 표시한다.
+const RISK_IDX_KEYS = new Set(['NH_KI', 'NH_FI', 'PL_KI', 'PL_FI'])
+// 각 묶음에서 배당 기반 칸과 지표 기반 칸이 갈리는 자리(이 칸 뒤에 구분선).
+const RISK_DIVIDER_KEYS = new Set(['NH_KO', 'PL_KO'])
+
+// 핸승 위험도 5등급 색. 묶음마다 경계는 다르지만 색은 같은 것을 쓴다(cellStyle 참고).
+const RISK_DEEP = { background: '#1B5E20', color: '#fff', fontWeight: 700 }
+const RISK_GOOD = { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 }
+const RISK_MID = { background: '#FBC02D', color: '#0D1B2A' }
+const RISK_WARN = { background: '#EF6C00', color: '#fff', fontWeight: 700 }
+const RISK_BAD = { background: '#C62828', color: '#fff', fontWeight: 700 }
 
 // 26개 지표 그룹: [코드, 그룹제목]. 각 코드는 항상 4칸(핸승/핸무/무/역)으로 펼쳐진다.
 const GROUP_DEFS = [
@@ -155,14 +180,9 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
     groups.push({ label1: '내 예측', label2: '', kind: 'mypick', cols: myPickLeaves })
   }
 
-  const riskLeaves = RISK_COLS.filter(([k]) => available.has(k)).map(([k, sub]) => ({ key: k, sub }))
-  if (riskLeaves.length) {
-    groups.push({
-      label1: '핸승 위험도',
-      label2: '국/해배 배당률 분석 / 26개 지표분석',
-      kind: 'risk',
-      cols: riskLeaves,
-    })
+  for (const [label1, label2, cols] of RISK_GROUPS) {
+    const leaves = cols.filter(([k]) => available.has(k)).map(([k, sub]) => ({ key: k, sub }))
+    if (leaves.length) groups.push({ label1, label2, kind: 'risk', cols: leaves })
   }
 
   if (!hideIndicators) {
@@ -175,6 +195,18 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
   }
 
   return groups
+}
+
+// 핸승 위험도 칸에 붙는 추가 클래스. LeagueTable.jsx가 헤더(th)와 셀(td) 양쪽에 쓴다.
+//   group-divider — 배당 기반 칸과 지표 기반 칸 사이를 가른다
+//   risk-idx      — 26지표에서 나온 칸(국)지·해)지). 배당에서 나온 칸과 성격이 달라
+//                   헤더에 옅은 틴트를 깐다(셀은 등급 색이 인라인으로 덮는다).
+export function riskColClass(group, col) {
+  if (group.kind !== 'risk') return ''
+  let cls = ''
+  if (RISK_DIVIDER_KEYS.has(col.key)) cls += ' group-divider'
+  if (RISK_IDX_KEYS.has(col.key)) cls += ' risk-idx'
+  return cls
 }
 
 // 그룹을 접기/펼치기 상태(Set)에서 식별하는 키. LeagueTable.jsx와, 그 바깥(조회
@@ -245,10 +277,8 @@ export function formatCell(group, col, value, row) {
   if (group.kind === 'risk') {
     const n = toNum(value)
     if (n === null) return ''
-    // 국플값은 백엔드가 '핸승 확률'로 내려주므로 100에서 빼서 플핸 확률로 보여준다.
-    // (칸 이름에 이미 '플'이 있어 배당·AI/KF·AI처럼 '플' 접두사는 붙이지 않는다.)
-    if (sub === '국플값') return `${(100 - n).toFixed(0)}%`
-    if (sub === '배당·AI' || sub === 'KF·AI') return `플${(100 - n).toFixed(0)}%`
+    // 8칸 전부 백엔드가 "그 일이 일어날 확률(%)"로 내려준다 — 뒤집지 않는다.
+    // (예전엔 국플값·배당·AI·KF·AI만 100에서 빼서 보여줘 방향이 뒤섞여 있었다.)
     return `${n.toFixed(0)}%`
   }
   if (SUB4.includes(sub)) {
@@ -464,32 +494,42 @@ export function cellStyle(group, col, value, row) {
     return base
   }
 
-  // 국플값(RISK)·배AI·K값·F값·KFAI 모두 원본값이 "핸승 날 확률(%)"이라 같은 색 등급을 쓴다 —
-  // 실측 검증(6대리그 13,410경기, api/ev_model.py 상단 주석 참고) 경계: 15/25/35/45%.
-  // 국플값·배당·AI·KF·AI는 화면에 100에서 뺀 값을 보여주지만, 색은 원본값 기준 그대로
-  // 매긴다 — 핸승이 낮을수록(=플핸이 높을수록) 초록이 되어 표시값과 방향이 맞는다.
-  if (group.kind === 'risk' && ['국플값', '배당·AI', 'K값', 'F값', 'KF·AI'].includes(sub)) {
+  // 핸승 위험도 3묶음 — 색 규칙은 한 문장이다: "초록이면 플핸에 유리".
+  //   플핸무·플 확률 → 높을수록 초록 (그 일이 날 확률이니 클수록 좋다)
+  //   정배 승리확률  → 낮을수록 초록 (정배가 셀수록 플핸에 불리하다)
+  // 묶음마다 값의 분포가 완전히 달라 경계를 따로 잡았다. 같은 '국)플'이라도
+  // 어느 묶음에 있느냐로 갈리므로 sub가 아니라 group.label1로 판정한다.
+  if (group.kind === 'risk') {
     const n = toNum(value)
     if (n === null) return { color: '#9E9E9E' }
-    if (n < 15) return { background: '#1B5E20', color: '#fff', fontWeight: 700 }
-    if (n < 25) return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 }
-    if (n < 35) return { background: '#FBC02D', color: '#0D1B2A' }
-    if (n < 45) return { background: '#EF6C00', color: '#fff', fontWeight: 700 }
-    return { background: '#C62828', color: '#fff', fontWeight: 700 }
-  }
 
-  // 국정값·해정값(WIN_RISK/WIN_RISK_F) — "정배가 실제로 이길 확률"이라 국플값과는
-  // 분포 자체가 다르다(실측 6대리그 15,834경기 결과 대부분이 31~90% 구간에 몰려
-  // 있다 — 핸승값 경계를 그대로 쓰면 거의 전부 '위험' 한 가지 색으로만 칠해진다).
-  // 그래서 경계를 따로 잡았다: 31~40%→실제 37.8% / 41~50%→44.6% / 51~60%→57.0% /
-  // 61~70%→68.2% / 71~80%→75.3% / 81~90%→88.4%.
-  if (group.kind === 'risk' && (sub === '국정값' || sub === '해정값')) {
-    const n = toNum(value)
-    if (n === null) return { color: '#9E9E9E' }
-    if (n < 40) return { background: '#66BB6A', color: '#0D1B2A', fontWeight: 700 } // 양호
-    if (n < 55) return { background: '#FBC02D', color: '#0D1B2A' }                  // 보통
-    if (n < 70) return { background: '#EF6C00', color: '#fff', fontWeight: 700 }    // 주의
-    return { background: '#C62828', color: '#fff', fontWeight: 700 }                // 위험
+    // 플핸무 — 예전 핸승값 경계(15/25/35/45%)를 그대로 뒤집은 값.
+    // 실측 분포: 평균 68~70%, 5~95% 범위 44~85%.
+    if (group.label1 === '플핸무 %') {
+      if (n >= 85) return RISK_DEEP
+      if (n >= 75) return RISK_GOOD
+      if (n >= 65) return RISK_MID
+      if (n >= 55) return RISK_WARN
+      return RISK_BAD
+    }
+
+    // 플 — 분포가 플핸무와 완전히 다르다(실측 평균 44~46%, 5~95% 범위 20~62%).
+    // 플핸무 경계를 그대로 쓰면 거의 전부 빨강으로만 칠해진다.
+    if (group.label1 === '플 %') {
+      if (n >= 55) return RISK_DEEP
+      if (n >= 48) return RISK_GOOD
+      if (n >= 41) return RISK_MID
+      if (n >= 34) return RISK_WARN
+      return RISK_BAD
+    }
+
+    // 정승 확률(WIN_RISK/WIN_RISK_F) — 실측 6대리그 15,834경기 결과가 31~90%에
+    // 몰려 있다. 31~40%→실제 37.8% / 41~50%→44.6% / 51~60%→57.0% / 61~70%→68.2% /
+    // 71~80%→75.3% / 81~90%→88.4%.
+    if (n < 40) return RISK_GOOD    // 양호
+    if (n < 55) return RISK_MID     // 보통
+    if (n < 70) return RISK_WARN    // 주의
+    return RISK_BAD                 // 위험
   }
 
   return null

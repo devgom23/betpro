@@ -230,6 +230,19 @@
   color: var(--text-secondary);
 }
 
+/* 핸승 위험도 8칸 — 값(정승/플핸무/플)으로 묶은 2줄 헤더. 리그 표와 같은 구성이라
+   묶음 경계를 굵은 선으로 갈라 어느 칸이 어느 묶음인지 바로 보이게 한다. */
+.detail-table.risk-table thead th.risk-group {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.detail-table.risk-table th.risk-edge,
+.detail-table.risk-table td.risk-edge {
+  border-right: 2px solid var(--border-strong);
+}
+
 /* 구분/승(홈)/무/패(원정) 4칸 너비를 항상 똑같이 맞춘다(내용 길이에 안 흔들리게). */
 .odds-table {
   table-layout: fixed;
