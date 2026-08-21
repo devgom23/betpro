@@ -74,6 +74,25 @@ def _alive(drv) -> bool:
         return False
 
 
+def full_round_id(year, rnd) -> str:
+    """
+    젠토토 내부 회차번호는 '연도 뒤 2자리 + 4자리 회차'다(2026년 99회차 → 260099).
+    사용자가 화면에서 '99'처럼 짧게 입력하면 사이트가 그 회차를 못 찾고 조용히
+    '그 해의 최신 회차'를 대신 보여준다 — 원하는 회차가 최신이 아니면 엉뚱한 회차를
+    가져오게 되고, 초기배당 조회(/proto/history)도 전부 실패한다. 실측으로 확인한
+    버그라 여기서 6자리로 정규화한다. 이미 6자리로 넣었으면 그대로 쓴다.
+    """
+    year = str(year).strip()
+    rnd = str(rnd).strip()
+    yy = year[-2:] if len(year) >= 2 else year
+    digits = re.sub(r"[^0-9]", "", rnd)
+    if not digits:
+        return rnd
+    if len(digits) >= 5:
+        return digits                       # 이미 260099 같은 전체 번호
+    return f"{yy}{int(digits):04d}"
+
+
 def build_round_url(year, rnd) -> str:
     """
     사용자가 쓰던 데스크톱 크롤러와 같은 쿼리 구조를 그대로 쓴다 — order_by_data/
@@ -82,6 +101,7 @@ def build_round_url(year, rnd) -> str:
     game_name[] 필터(원본은 유럽 6대리그 전용)는 여기서 K리그를 걸러야 하므로 빼고,
     대신 _parse_lines()가 파싱 단계에서 target_league로 직접 걸러낸다.
     """
+    rnd = full_round_id(year, rnd)
     params = [
         ("order_by_data", "proto_uid"), ("order_by_type", "asc"),
         ("proto_year", str(year)), ("proto_round", str(rnd)),
@@ -280,10 +300,21 @@ def fetch_domestic(target_league: str, wait: float = 0.0) -> dict:
         raise CrawlError(f"'{target_league or '(전체)'}' 경기를 화면에서 찾지 못했습니다. "
                          "회차·리그명을 확인해 주세요.")
 
+    # 회차번호는 주소창이 아니라 화면 안에서 읽는다.
+    # 주소창의 proto_round는 '사용자가 입력한 값'이라, 짧게(예: 99) 넣으면 사이트가
+    # 최신 회차(260099)를 대신 보여주면서도 주소는 99인 채로 남는다. 그 99를 그대로
+    # /proto/history에 넘기면 경기명도 초기배당 행도 없는 빈 응답이 와서 초기배당
+    # 조회가 전부 실패하고, 조용히 '현재 배당'으로 대체돼 버린다(실측 확인한 버그).
+    # 반면 화면의 <p class="game-uid">에 붙은 proto-round는 지금 보고 있는 회차의
+    # 진짜 번호라 항상 맞다.
     round_id = ""
-    m = re.search(r"proto_round=(\d+)", cur_url)
-    if m:
-        round_id = m.group(1)
+    tag = soup.select_one("[proto-round]")
+    if tag:
+        round_id = (tag.get("proto-round") or "").strip()
+    if not round_id:
+        m = re.search(r"proto_round=(\d+)", cur_url)
+        if m:
+            round_id = m.group(1)
 
     matches = {}
     for ln in lines:

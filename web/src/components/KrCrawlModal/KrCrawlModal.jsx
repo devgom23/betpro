@@ -162,6 +162,7 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
               </button>
             </div>
             <p className="kr-crawl-hint">
+              회차는 <strong>99</strong>처럼 짧게 넣어도 됩니다(연도와 합쳐 260099로 자동 변환).
               최초 1회는 그 창에서 직접 로그인해야 할 수 있습니다 — 이후엔 로그인이 유지됩니다.
             </p>
           </div>
@@ -214,8 +215,18 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
             <p className="kr-crawl-summary">
               화면에서 <strong>{result.count}</strong>경기 확인 ·{' '}
               <strong>{result.matched}</strong>경기 매칭
-              {result.fail_cnt > 0 && ` · 초기배당 조회실패 ${result.fail_cnt}건(현재배당으로 대체)`}
             </p>
+
+            {/* 초기배당을 못 읽으면 '변경된 현재 배당'이 대신 들어간다 — 값이 조용히
+                섞여 들어가면 나중에 분석이 통째로 틀어지므로 요약 줄에 묻지 않고
+                따로 경고로 띄운다. */}
+            {result.fail_cnt > 0 && (
+              <p className="kr-crawl-warn">
+                ⚠ 초기배당을 못 읽은 경기가 <strong>{result.fail_cnt}건</strong> 있습니다 —
+                그 경기는 <strong>변경된 현재 배당</strong>이 들어갑니다. 아래 표의 비고를
+                확인하고, 그대로 저장하지 마세요.
+              </p>
+            )}
 
             {unknown.length > 0 && (
               <div className="kr-crawl-unknown">

@@ -18,6 +18,7 @@
   FH는 국내배당 기준으로 정해지는데 이 사이트엔 국내배당이 없고,
   RT는 사용자가 직접 넣는 값이기 때문(추후 표에서 직접 수정 예정).
 """
+import copy
 import os
 import re
 import sqlite3
@@ -141,6 +142,28 @@ def _clean_team(text: str) -> str:
     """팀명에 붙은 [순위] 같은 꼬리표 제거."""
     t = re.sub(r"[\[［]\s*\d+\s*[\]］]", "", text or "")
     return " ".join(t.split())
+
+
+def _team_of(cell) -> str:
+    """
+    팀명 칸(span.home / span.away)에서 팀 이름만 뽑는다.
+
+    이 칸에는 팀명 말고도 레드카드 개수가 <i class="redcard">2</i> 로 같이 들어 있다.
+    통째로 get_text 하면 '2첼시' · '선덜랜드2'처럼 숫자가 팀명에 달라붙어 매칭이 실패한다
+    (09-10 EPL 실측에서 5경기 발생). 숫자를 정규식으로 떼면 '샬케04' '마인츠05' '하노버96'
+    같은 정상 팀명이 망가지므로, 태그 구조로 걸러낸다.
+    실제 팀명은 <span onclick="toTeam('24')">첼시</span> 안에 들어 있다.
+    """
+    if cell is None:
+        return ""
+    inner = cell.find("span", onclick=lambda v: bool(v) and "toTeam" in v)
+    if inner is not None:
+        return _clean_team(inner.get_text(strip=True))
+    # 구조가 바뀐 경우를 대비한 대비책 — 레드카드 표시만 걷어내고 텍스트를 쓴다
+    clone = copy.copy(cell)
+    for junk in clone.find_all("i"):
+        junk.decompose()
+    return _clean_team(clone.get_text(strip=True))
 
 
 def _season_of(soup) -> str:
@@ -278,8 +301,8 @@ def _parse(html):
             "R": rnd,
             "DT": dt,
             "TM": tm,
-            "HT": _clean_team(home.get_text(strip=True)),
-            "AT": _clean_team(away.get_text(strip=True)),
+            "HT": _team_of(home),
+            "AT": _team_of(away),
             "HS": hs,
             "AS": as_,
             "_o1": o1, "_o2": o2, "_o3": o3,

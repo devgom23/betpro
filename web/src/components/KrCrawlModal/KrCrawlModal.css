@@ -86,6 +86,22 @@
   color: var(--text-primary);
 }
 
+/* 초기배당 조회 실패 경고 — 잘못된 값이 조용히 저장되는 걸 막는 안내라 눈에 띄게 둔다 */
+.kr-crawl-warn {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #EF6C00;
+  border-radius: 8px;
+  background: rgba(239, 108, 0, 0.1);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.kr-crawl-warn strong {
+  color: #EF6C00;
+}
+
 /* 미등록 팀명 치환 영역 */
 .kr-crawl-unknown {
   margin-bottom: 14px;
