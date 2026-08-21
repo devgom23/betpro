@@ -53,6 +53,11 @@ export default function LeagueTable({
   // true면 이 컴포넌트 자체의 해외지표/국내지표 접기·참고 버튼 줄을 그리지 않는다
   // (호출한 쪽이 같은 상태를 받아 자기 화면에 대신 그릴 때 쓴다).
   hideToolbar = false,
+  // true면 높이 제한(20행)과 가상 스크롤을 끄고 받은 행을 전부 그린다.
+  // 이번주 리스트처럼 표를 요일별로 잘게 쪼개 여러 개 세로로 늘어놓는 화면용 —
+  // 표마다 안쪽 스크롤이 또 생기면 페이지 스크롤과 겹쳐 아주 쓰기 불편해진다.
+  // 행이 수백~수천인 리그 표에서는 절대 켜지 말 것(가상 스크롤이 성능의 핵심).
+  fitContent = false,
 }) {
   // 이번주 픽처럼 여러 리그·스코프를 한 표에 모아 보여줄 때는 행마다 실제 소속
   // 리그(L)·스코프(scope)가 다를 수 있다 — LeagueTable에 준 code/scope prop은
@@ -90,8 +95,10 @@ export default function LeagueTable({
 
   const totalRows = rows ? rows.length : 0
   const effRowH = rowH || DEFAULT_ROW_H[fontSize] || DEFAULT_ROW_H.small
-  const startIndex = Math.max(0, Math.floor(scrollTop / effRowH) - OVERSCAN)
-  const endIndex = Math.min(totalRows, startIndex + VISIBLE_ROWS + OVERSCAN * 2)
+  const startIndex = fitContent ? 0 : Math.max(0, Math.floor(scrollTop / effRowH) - OVERSCAN)
+  const endIndex = fitContent
+    ? totalRows
+    : Math.min(totalRows, startIndex + VISIBLE_ROWS + OVERSCAN * 2)
   const windowRows = rows ? rows.slice(startIndex, endIndex) : []
   const padTop = startIndex * effRowH
   const padBottom = Math.max(0, (totalRows - endIndex) * effRowH)
@@ -175,7 +182,10 @@ export default function LeagueTable({
     if (!thead || !firstRow) return
     const h = firstRow.getBoundingClientRect().height
     if (h > 0 && Math.abs(h - rowH) > 0.5) setRowH(h)
-    if (h > 0) {
+    if (fitContent) {
+      // 높이 제한을 아예 풀어 행을 전부 보여준다(표 안쪽 세로 스크롤 없음).
+      el.style.maxHeight = 'none'
+    } else if (h > 0) {
       el.style.maxHeight = `${thead.getBoundingClientRect().height + h * VISIBLE_ROWS}px`
     }
     // 헤더 1번째 줄(그룹명) 높이를 재서 2번째 줄(L/S/R 등)이 스크롤 중 붙는 위치로 쓴다.
@@ -185,7 +195,7 @@ export default function LeagueTable({
       const row1H = headerRow1.getBoundingClientRect().height
       if (row1H > 0) el.style.setProperty('--header-row1-h', `${row1H}px`)
     }
-  }, [rows, fontSize, rowH, collapsed])
+  }, [rows, fontSize, rowH, collapsed, fitContent])
 
   function toggleGroup(key) {
     setCollapsed((prev) => {

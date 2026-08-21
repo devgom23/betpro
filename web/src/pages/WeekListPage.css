@@ -1,0 +1,89 @@
+.wl-page {
+  padding: 16px;
+  padding-bottom: 96px;
+}
+
+.wl-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.wl-title {
+  margin: 0;
+}
+
+/* 요약 바 — 6-2장 눈금(gap 8px) + 값만 밝게(6-3장 A · B 표기) */
+.wl-summary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.wl-summary strong {
+  color: var(--text-primary);
+}
+
+/* 지금 보고 있는 회차 구간(금~화 8/21 ~ 8/25) */
+.wl-period {
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.wl-desc {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 4px 0 16px;
+  line-height: 1.6;
+}
+
+.wl-empty {
+  color: var(--text-muted);
+  padding: 24px;
+  text-align: center;
+}
+
+/* ── 요일 구간 ── */
+.wl-day + .wl-day {
+  margin-top: 22px;
+}
+
+.wl-day-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* 요일 칩 — 색은 표 안 '일반정보' 칸의 베팅일 색(columnGroups.js bettingDayStyle)과
+   같은 값을 써서, 구간 제목과 표 안 색이 한눈에 이어지게 한다. */
+.wl-day-chip {
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  background: #F9E79F;
+  color: #7D6608;
+}
+
+.wl-day-Fri { background: #F5B7B1; color: #6E2C1E; }
+.wl-day-Sat { background: #A9DFBF; color: #1B4D3E; }
+.wl-day-Sun { background: #A2D9E8; color: #0B4F6C; }
+.wl-day-Mon { background: #D2B4DE; color: #4A235A; }
+
+.wl-day-none {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-strong);
+}
+
+.wl-day-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}

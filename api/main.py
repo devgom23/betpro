@@ -822,6 +822,86 @@ def weekly_picks(user: dict = Depends(get_current_user)):
     return {"columns": columns, "rows": rows, "total": len(rows)}
 
 
+# ─────────────────────────── 이번주 리스트 (요일별 전체 목록) ───────────────────────────
+# 국내 프로토는 한 주를 '금~화'와 '수~목' 두 회차로 끊는다. 이 화면도 같은 단위로 보여준다
+# — 오늘이 속한 묶음 하나만 띄우고, 수요일이 되면 자동으로 '수~목' 묶음으로 넘어간다.
+_BLOCK_FRI_TUE = (4, 5)   # (기준요일 Fri=4, 길이 5일: 금·토·일·월·화)
+_BLOCK_WED_THU = (2, 2)   # (기준요일 Wed=2, 길이 2일: 수·목)
+
+
+def _current_week_block(today: date) -> tuple:
+    """오늘이 속한 회차 묶음의 (시작일, 종료일, 라벨)."""
+    wd = today.weekday()          # 월=0 … 일=6
+    anchor, span = _BLOCK_WED_THU if wd in (2, 3) else _BLOCK_FRI_TUE
+    start = today - timedelta(days=(wd - anchor) % 7)
+    end = start + timedelta(days=span - 1)
+    label = "수~목" if (anchor, span) == _BLOCK_WED_THU else "금~화"
+    return start, end, label
+
+
+@app.get("/api/week_list")
+def week_list(start: Optional[str] = None, end: Optional[str] = None,
+              user: dict = Depends(get_current_user)):
+    """
+    이번 회차(금~화 또는 수~목)에 열리는 경기를 공식·내 데이터 가리지 않고 전부 모은다.
+    별표(★) 여부와 무관하게 그 기간의 모든 경기를 내려준다 — 이번주 픽(별표만)과 다른 점.
+    start/end(YYYY-MM-DD)를 주면 그 구간을, 안 주면 오늘이 속한 묶음을 쓴다.
+
+    기간 판정은 '베팅일' 기준이다(새벽 6시 이전 경기는 전날 묶음) — 화면에서 요일별로
+    나누는 규칙(columnGroups.js bettingDayOf)과 어긋나면 구간 경계 경기가 사라져 보인다.
+    """
+    today = date.today()
+    if start and end:
+        try:
+            d0 = date.fromisoformat(start)
+            d1 = date.fromisoformat(end)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="날짜는 YYYY-MM-DD 형식이어야 합니다.")
+        label = ""
+    else:
+        d0, d1, label = _current_week_block(today)
+
+    lo, hi = d0.isoformat(), d1.isoformat()
+    # 원본 DT는 베팅일과 최대 하루 어긋나므로(새벽 경기) 넉넉히 훑은 뒤 정확히 거른다.
+    raw_lo = (d0 - timedelta(days=1)).strftime("%y-%m-%d")
+    raw_hi = (d1 + timedelta(days=1)).strftime("%y-%m-%d")
+
+    rows: list[dict] = []
+    for scope in (PATHS.SCOPE_MASTER, PATHS.SCOPE_USER):
+        try:
+            db = _resolve_scope_db(scope, user)
+        except HTTPException:
+            continue
+        labels = _scope_league_labels(scope, user)
+        for code in _scope_league_codes(scope, user):
+            df = DATA.load_league_df_ranked(db, code)
+            if df.empty or "DT" not in df.columns:
+                continue
+            dt_str = df["DT"].astype(str).str.slice(0, 8)
+            rough = df[(dt_str >= raw_lo) & (dt_str <= raw_hi)]
+            if rough.empty:
+                continue
+            # EV/위험도는 리그 전체 이력이 있어야 계산되므로 df 전체에 붙인 뒤 해당 행만 쓴다.
+            full = EVM.attach_for_league(df)
+            keep = [i for i in rough.index
+                    if lo <= _betting_day_sort_key(df.at[i, "DT"], df.at[i, "TM"])[0] <= hi]
+            if not keep:
+                continue
+            records = DATA.df_to_records(full.loc[keep])
+            _attach_my_picks(records, user["username"], code, scope)
+            for rec in records:
+                rec["L"] = code
+                rec["L_LABEL"] = labels.get(code, code)
+                rec["scope"] = scope
+                rows.append(rec)
+
+    rows.sort(key=lambda r: _betting_day_sort_key(r.get("DT"), r.get("TM")))
+    columns = ["L"] + [c for c in (list(rows[0].keys()) if rows else [])
+                       if c not in ("L", "L_LABEL", "scope")]
+    return {"columns": columns, "rows": rows, "total": len(rows),
+            "start": lo, "end": hi, "label": label}
+
+
 class HideItem(BaseModel):
     code: str
     scope: str
