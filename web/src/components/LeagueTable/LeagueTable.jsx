@@ -28,9 +28,11 @@ function dividerClass(g, isLastGroup) {
 
 // 일반정보를 접어도 라운드(R)·시간(TM)은 각각 칸을 유지해서 둘 다 보여준다 — 다른
 // 그룹은 접으면 칸 하나(···)로 뭉치지만, 조회 조건에 없는 라운드는 접힌 채로도
-// 알아볼 수 있어야 한다.
-function collapsedSpan(g) {
-  return g.label1 === '일반정보' ? 2 : 1
+// 알아볼 수 있어야 한다. 이번주 리스트처럼 여러 리그를 한 표에 모아 보여줄 때는
+// (row.L_LABEL이 붙어 올 때) 리그명 칸도 하나 더 유지한다 — 안 그러면 접힌 채로는
+// 어느 리그 경기인지 구분이 안 된다.
+function collapsedSpan(g, hasLeagueLabel) {
+  return g.label1 === '일반정보' ? (hasLeagueLabel ? 3 : 2) : 1
 }
 
 function matchKey(row) {
@@ -103,10 +105,15 @@ export default function LeagueTable({
   const padTop = startIndex * effRowH
   const padBottom = Math.max(0, (totalRows - endIndex) * effRowH)
 
+  // 이번주 리스트처럼 여러 리그를 한 표에 모아 보여줄 때만 L_LABEL이 붙어 온다
+  // (LeagueTable.jsx 상단 rowCode/rowScope 주석 참고) — 그때만 일반정보를 접어도
+  // 리그명 칸을 유지한다.
+  const hasLeagueLabel = rows ? rows.some((r) => r.L_LABEL != null) : false
+
   // 접힌 그룹까지 반영한 실제 열 개수 (위아래 빈 행의 colSpan 용)
   const leafCount =
     (selectable ? 1 : 0) + 1 +
-    groups.reduce((n, g) => n + (collapsed.has(groupKey(g)) ? collapsedSpan(g) : g.cols.length), 0)
+    groups.reduce((n, g) => n + (collapsed.has(groupKey(g)) ? collapsedSpan(g, hasLeagueLabel) : g.cols.length), 0)
 
   // 그려야 할 구간이 실제로 바뀔 때만 상태를 갱신한다.
   // (스크롤 이벤트마다 다시 그리면 오히려 버벅이므로, 시작 행이 달라질 때만 갱신)
@@ -246,15 +253,15 @@ export default function LeagueTable({
           <thead>
             <tr>
               {selectable && <th className="select-col sticky-col" rowSpan={2}></th>}
-              <th className={`detail-col sticky-col${selectable ? ' sticky-col-2' : ''}`} rowSpan={2}></th>
-              {groups.map((g, gi) => {
+              {groups.flatMap((g, gi) => {
                 const key = groupKey(g)
                 const isCollapsed = collapsed.has(key)
                 const isLastGroup = gi === groups.length - 1
                 const dividerCls = dividerClass(g, isLastGroup)
+                let th
                 if (isCollapsed) {
-                  return (
-                    <th key={gi} colSpan={collapsedSpan(g)} className={`group-header group-collapsed${dividerCls}`}>
+                  th = (
+                    <th key={gi} colSpan={collapsedSpan(g, hasLeagueLabel)} className={`group-header group-collapsed${dividerCls}`}>
                       <button
                         className="fold-btn fold-btn-collapsed"
                         onClick={() => toggleGroup(key)}
@@ -264,24 +271,30 @@ export default function LeagueTable({
                       </button>
                     </th>
                   )
-                }
-                return (
-                  <th key={gi} colSpan={g.cols.length} className={`group-header${dividerCls}`}>
-                    <div className="group-header-row">
-                      <div className="group-text">
-                        <div className="group-title">{g.label1}</div>
-                        <div className="group-subtitle">{g.label2}</div>
+                } else {
+                  th = (
+                    <th key={gi} colSpan={g.cols.length} className={`group-header${dividerCls}`}>
+                      <div className="group-header-row">
+                        <div className="group-text">
+                          <div className="group-title">{g.label1}</div>
+                          <div className="group-subtitle">{g.label2}</div>
+                        </div>
+                        <button
+                          className="fold-btn fold-btn-expanded"
+                          onClick={() => toggleGroup(key)}
+                          title="접기"
+                        >
+                          ◂
+                        </button>
                       </div>
-                      <button
-                        className="fold-btn fold-btn-expanded"
-                        onClick={() => toggleGroup(key)}
-                        title="접기"
-                      >
-                        ◂
-                      </button>
-                    </div>
-                  </th>
-                )
+                    </th>
+                  )
+                }
+                // 돋보기(상세보기) 칸 — 해외배당 그룹 바로 다음, 내 예측 그룹 바로 앞에 둔다.
+                if (g.label1 === '해외배당') {
+                  return [th, <th key={`${gi}-detail`} className="detail-col group-divider" rowSpan={2}></th>]
+                }
+                return [th]
               })}
             </tr>
             <tr>
@@ -291,6 +304,13 @@ export default function LeagueTable({
                 if (collapsed.has(key)) {
                   if (g.label1 === '일반정보') {
                     return [
+                      ...(hasLeagueLabel
+                        ? [
+                            <th key={`${gi}-l`} className="sub-header collapsed-cell">
+                              리그
+                            </th>,
+                          ]
+                        : []),
                       <th key={`${gi}-r`} className="sub-header collapsed-cell">
                         R
                       </th>,
@@ -332,8 +352,10 @@ export default function LeagueTable({
               const pickState = effectivePick(row)
               // 전체 조회처럼 여러 라운드가 한 표에 섞여 있을 때 라운드가 바뀌는
               // 지점을 굵은 선으로 구분한다(직전 행과 시즌·라운드가 다르면 경계).
+              // 이번주 픽처럼 여러 리그가 섞일 때는 리그가 바뀌어도 시즌·라운드
+              // 문자열(예: 26-27·1R)이 같을 수 있어 L도 같이 비교한다.
               const prevRow = ri > 0 ? rows[ri - 1] : null
-              const isRoundStart = prevRow && (prevRow.S !== row.S || prevRow.R !== row.R)
+              const isRoundStart = prevRow && (prevRow.S !== row.S || prevRow.R !== row.R || prevRow.L !== row.L)
               const rowClass = [
                 pickState.important ? 'row-starred' : '',
                 isRoundStart ? 'round-start' : '',
@@ -349,18 +371,23 @@ export default function LeagueTable({
                       />
                     </td>
                   )}
-                  <td className={`detail-col sticky-col${selectable ? ' sticky-col-2' : ''}`}>
-                    <button
-                      className="detail-btn"
-                      title="상세 경기 정보"
-                      onClick={() => setDetailRow(row)}
-                    >
-                      🔍
-                    </button>
-                  </td>
                   {groups.flatMap((g, gi) => {
                     const key = groupKey(g)
                     const isLastGroup = gi === groups.length - 1
+                    // 돋보기(상세보기) 칸 — 해외배당 그룹의 셀들 바로 뒤에 붙여, 헤더의
+                    // 위치(해외배당↔내 예측 사이)와 맞춘다.
+                    const detailCell = (
+                      <td key={`${gi}-detail`} className="detail-col group-divider">
+                        <button
+                          className="detail-btn"
+                          title="상세 경기 정보"
+                          onClick={() => setDetailRow(row)}
+                        >
+                          🔍
+                        </button>
+                      </td>
+                    )
+                    let cells
                     if (collapsed.has(key)) {
                       // 일반정보를 접어도 금/토/일 베팅일 색상 + 라운드/시간은 계속 보여야
                       // 한다 — 접힌 채로도 몇 라운드 몇 시 경기인지 바로 알 수 있게.
@@ -370,7 +397,14 @@ export default function LeagueTable({
                       const isDdong = g.label1 === '똥배'
                       const style = isGenInfo ? bettingDayStyle(row) : null
                       if (isGenInfo) {
-                        return [
+                        cells = [
+                          ...(hasLeagueLabel
+                            ? [
+                                <td key={`${gi}-l`} className="collapsed-cell">
+                                  {row.L_LABEL ?? row.L ?? ''}
+                                </td>,
+                              ]
+                            : []),
                           <td key={`${gi}-r`} className="collapsed-cell">
                             {row.R ?? ''}
                           </td>,
@@ -382,15 +416,15 @@ export default function LeagueTable({
                             {formatCell(g, { sub: 'TM' }, row.TM)}
                           </td>,
                         ]
+                      } else {
+                        cells = [
+                          <td key={`${gi}-c`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
+                            {isDdong ? row.DDONG || '·' : '·'}
+                          </td>,
+                        ]
                       }
-                      return [
-                        <td key={`${gi}-c`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
-                          {isDdong ? row.DDONG || '·' : '·'}
-                        </td>,
-                      ]
-                    }
-                    if (g.kind === 'mypick') {
-                      return g.cols.map((c, ci) => {
+                    } else if (g.kind === 'mypick') {
+                      cells = g.cols.map((c, ci) => {
                         const isLastCol = !isLastGroup && ci === g.cols.length - 1
                         const className = isLastCol ? 'group-divider' : undefined
                         if (c.key === 'IMPORTANT') {
@@ -447,8 +481,8 @@ export default function LeagueTable({
                           </td>
                         )
                       })
-                    }
-                    return g.cols.map((c, ci) => {
+                    } else {
+                      cells = g.cols.map((c, ci) => {
                       // L(리그) 칸은 내부 매칭용 코드(ul_2 등)가 아니라 사용자가 지은 리그명을 보여준다
                       // (이번주 픽처럼 여러 스코프 리그를 한 표에 모아 보여줄 때만 L_LABEL이 붙어 온다).
                       const value = c.key === 'L' && row.L_LABEL != null ? row.L_LABEL : row[c.key]
@@ -494,7 +528,9 @@ export default function LeagueTable({
                           {text}
                         </td>
                       )
-                    })
+                      })
+                    }
+                    return g.label1 === '해외배당' ? [...cells, detailCell] : cells
                   })}
                 </tr>
               )

@@ -31,7 +31,10 @@ export default function WeekListPage() {
   const [error, setError] = useState('')
   // 접기 상태·색상 참고표는 요일 구간이 여러 개라도 하나로 묶어 제어한다 —
   // 구간마다 따로 접히면 같은 화면에서 표 모양이 제각각이 되어 읽기 힘들다.
-  const [collapsed, setCollapsed] = useState(() => new Set())
+  // 일반정보는 기본으로 접어 둔다 — 시즌/날짜는 요일 구간 헤더로 이미 알 수 있어
+  // 접힌 채로 리그명·라운드·시간만 보여도 충분하다(LeagueTable.jsx의 hasLeagueLabel
+  // 처리 덕에 접혀도 리그명은 계속 보인다).
+  const [collapsed, setCollapsed] = useState(() => new Set(['일반정보']))
   const [showRiskLegend, setShowRiskLegend] = useState(false)
 
   const load = useCallback(async () => {

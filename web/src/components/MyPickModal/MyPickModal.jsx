@@ -5,7 +5,7 @@ import { isStarred, formatTime, formatDt } from '../../utils/format'
 import './MyPickModal.css'
 
 const PICK_OPTIONS = ['대기', '축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
-const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-엇갈', 'P-상대', 'P-똥배', 'P-원정', 'P-관전', 'P-어렵',
+const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-엇갈', 'P-상대', 'P-똥배', 'P-원정', 'P-핸↑', 'P-관전', 'P-어렵',
                      'B-고민', 'B-Ma', 'B-Si', '축', '축-Si']
 
 // 실제로 벳팅한 픽을 기록하는 팝업. 경기 정보는 참고용으로만 보여주고, 내픽 값만 수정한다
