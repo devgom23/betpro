@@ -205,7 +205,13 @@ td.sticky-col {
 /* RT(핸승/핸무/무/역)·PICK 결과(적중/보험/미적) 뱃지 — RtBadge.css의 알약 모양과
    동일하게 맞춰 칸 전체가 아니라 값만 강조한다 */
 .cell-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  /* RT칸의 '무'(1글자)가 '핸승·핸무·역'(2글자)보다 좁아 보이지 않게 폭을 고정한다
+     (RtBadge.css와 같은 기준 — 상세보기 배지와 폭을 맞춘다). */
+  min-width: 44px;
   padding: 2px 10px;
   border-radius: 4px;
   font-weight: 700;
@@ -285,12 +291,19 @@ td.sticky-col {
 }
 
 .mypick-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 20px;
+  min-width: 46px;
   border: none;
   background: transparent;
   cursor: pointer;
   color: inherit;
   font-size: inherit;
-  padding: 2px 6px;
+  line-height: 1;
+  padding: 0 6px;
   border-radius: 4px;
 }
 

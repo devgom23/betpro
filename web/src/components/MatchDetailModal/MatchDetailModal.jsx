@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
@@ -6,7 +6,7 @@ import { isStarred, formatTime, formatDt, scoreClass } from '../../utils/format'
 import './MatchDetailModal.css'
 
 const PICK_OPTIONS = ['대기', '축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
-const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-어렵', 'B-고민', 'B-Ma', 'B-Si', '축', '축-Si']
+const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-상대', 'P-어렵', 'B-고민', 'B-Ma', 'B-Si', '축', '축-Si']
 
 function rtLabel(v) {
   if (v === null || v === undefined || v === '') return ''
@@ -58,9 +58,12 @@ function formStyle(v) {
 }
 
 const SAMPLE_INDICATORS = [
-  ['K-W', '국) 승'], ['K-L', '국) 패'], ['K-WL', '국) 승+패'], ['K-WDL', '국) 승+무+패'],
+  ['K-W', '국) 승'], ['K-L', '국) 패'],
   // 27번 — 플핸측(언더독) 핸디배당이 같고 플핸측이 같은 편(홈/원정)인 과거 경기만.
+  // 승·패 바로 아래에 둔다 — 셋 다 '이 경기 배당 하나'로 찾는 단일 조건 지표라
+  // 두 배당을 동시에 맞추는 승+패·승+무+패보다 먼저 읽는 게 순서가 맞다.
   ['K-PL', '국) 플핸'],
+  ['K-WL', '국) 승+패'], ['K-WDL', '국) 승+무+패'],
   ['K-W-HT', '국) 승=홈팀'], ['K-L-AT', '국) 패=원정팀'],
   ['TK-W', '국/통) 승'], ['TK-L', '국/통) 패'], ['TK-WL', '국/통) 승+패'], ['TK-WDL', '국/통) 승+무+패'],
   ['F-W', '해) 승'], ['F-L', '해) 패'], ['F-WL', '해) 승+패'], ['F-WDL', '해) 승+무+패'],
@@ -437,16 +440,29 @@ function maxCellClass(vals, i) {
 // TK-*/TF-* ("국/통", "해/통")는 그 리그를 통합DB(6대리그 등 여러 리그 합산)와
 // 섞은 지표다. 내 데이터는 리그 하나만 있어 통합 대상이 없으므로 항상 국내/해외
 // 지표와 값이 완전히 같아진다 — 의미 없는 중복이라 내 데이터에서는 아예 뺀다.
-// 지표별 표본에서 "정배 쪽" 지표 줄을 짚어준다 — 배당이 낮은 쪽이 정배다.
-// 국내는 KW/KL, 해외는 FW/FL로 각각 따로 판정한다. 둘이 서로 다른 팀을 정배로 보는
-// 경기가 실측 4.25%(16,748경기 중 711건) 있는데, 그 엇갈림 자체가 "국내와 해외 시장이
-// 갈렸다"는 볼 만한 신호라 하나로 합치지 않는다.
-// 대상은 승/패 단일 지표 4줄, 그리고 승=홈팀·패=원정팀 2줄까지 총 6줄이다. 승=홈팀은
-// "홈팀이 정배일 때 승"만 모은 지표라 홈팀이 정배가 아니면 이 경기와 무관하고, 패=원정팀도
-// 마찬가지로 원정팀이 정배일 때만 이 경기와 관련 있다 — 그래서 정배 쪽 자동 강조가 아니라
-// 기준팀(홈/원정) 자체가 정배인지로 따로 판정한다.
+// 지표별 표본에서 '판단에 쓰는 9줄'을 테두리로 짚어준다.
+// 통합(TF-*/TK-*)은 6대리그를 합쳐 표본은 크지만 그만큼 리그 특성이 뭉개져서 뺐고,
+// 리그 안에서만 센 지표만 남긴다. 한 경기에서 실제로 강조되는 건 아래 9줄이다.
+//
+//   방향에 따라 갈리는 4줄   해)승·패   해)정배팀   국)승·패   국)정배팀
+//   방향과 무관한 4줄        해)승+패   해)승+무+패   국)승+패   국)승+무+패
+//   역할 기준 1줄            국)플핸
+//
+// [방향에 따라 갈리는 줄] 배당이 낮은 쪽이 정배다. 국내는 KW/KL, 해외는 FW/FL로 각각
+// 따로 판정한다 — 둘이 서로 다른 팀을 정배로 보는 경기가 실측 4.25%(16,748경기 중
+// 711건) 있는데, 그 엇갈림 자체가 "국내와 해외 시장이 갈렸다"는 볼 만한 신호라
+// 하나로 합치지 않는다. 승=홈팀은 "홈팀이 정배일 때 승"만 모은 지표라 홈팀이 정배가
+// 아니면 이 경기와 무관하고, 패=원정팀도 마찬가지다 — 그래서 기준팀(홈/원정) 자체가
+// 정배인지로 따로 판정한다.
+//
+// [방향과 무관한 줄] 승+패·승+무+패는 승·패 배당을 동시에 맞추는 조건이라 정배가
+// 어느 쪽이든 표본이 그대로다. 그래서 조건 없이 항상 넣는다.
+//
+// [국)플핸] 나머지가 "홈 칸이냐 원정 칸이냐"(자리 기준)인 것과 달리 이것만 "정배냐
+// 언더독이냐"(역할 기준)로 찾는다 — 언더독 쪽 핸디배당이 같고 언더독이 같은 편인 경기.
+// 자리 기준이 아니라서 정배 방향과 무관하게 항상 대상이다.
 function favSampleCodes(row) {
-  const out = new Set()
+  const out = new Set(['F-WL', 'F-WDL', 'K-WL', 'K-WDL', 'K-PL'])
   const pick = (winKey, loseKey, winCode, loseCode, homeWinCode, awayLoseCode) => {
     const w = numOrNull(row[winKey])
     const l = numOrNull(row[loseKey])
@@ -460,12 +476,58 @@ function favSampleCodes(row) {
   return out
 }
 
-function SampleTable({ row, scope }) {
+// 표본이 이만큼이면 그 줄을 '절반쯤' 믿는다. 아래 SAMPLE_SHRINK 주석 참고.
+const SAMPLE_SHRINK = 10
+
+// 국내·해외 블록 끝에 붙는 '분석' 줄. 가중평균이라 건수가 없어 %만 보여준다.
+function AnalysisRow({ label, vals }) {
+  return (
+    <tr className="sample-analysis-row">
+      <td className="row-label">{label}</td>
+      {vals.map((v, i) => (
+        <td key={i} className={maxCellClass(vals, i)}>
+          {v.toFixed(1)}%
+        </td>
+      ))}
+      <td className="col-total">—</td>
+    </tr>
+  )
+}
+
+// 접힌 표의 국내·해외 블록 끝에 붙는 '분석' 줄을 만든다.
+//
+// 무게 = 단계 가중치 × 표본 신뢰도
+//   단계 가중치   위에서 아래로 1,2,3,4,5 — 아래로 갈수록 조건이 좁아(이 경기와 더 닮아)
+//                 무겁게 본다.
+//   표본 신뢰도   n / (n + 10) — 조건이 좁아질수록 표본도 같이 줄기 때문에 단계 가중치만
+//                 쓰면 1건짜리가 9건짜리보다 3~4배 무거워진다. 실제로 그렇게 계산해 보면
+//                 41건이 '무 39%'라고 말하는데 1건짜리 '역 100%' 두 줄에 밀려 결론이
+//                 '역'으로 뒤집혔다(시타르트 vs 알크마르 실측). 표본이 쌓이면 이 값이
+//                 1에 가까워져 단계 가중치가 원래대로 작동한다.
+//
+// 표본이 0인 줄은 무게가 0이라 자동으로 빠진다.
+function weightedAnalysis(lines) {
+  const acc = [0, 0, 0, 0]
+  let wSum = 0
+  lines.forEach((l, i) => {
+    if (l.total <= 0) return
+    const w = (i + 1) * (l.total / (l.total + SAMPLE_SHRINK))
+    wSum += w
+    for (let k = 0; k < 4; k += 1) acc[k] += (l.vals[k] / l.total) * 100 * w
+  })
+  if (wSum <= 0) return null
+  return acc.map((v) => v / wSum)
+}
+
+// expanded=false(기본)면 판단에 쓰는 9줄만 보여준다. 그때는 보이는 게 전부 대상이라
+// 테두리 강조를 걸지 않는다 — 다 강조하면 강조가 아니게 되기 때문. 펼쳐서 27줄을
+// 다 보여줄 때만 그 9줄에 테두리를 둘러 어느 것이 대상인지 구분해 준다.
+function SampleTable({ row, scope, expanded }) {
   const favCodes = favSampleCodes(row)
   const indicators = scope === 'user'
     ? SAMPLE_INDICATORS.filter(([code]) => !code.startsWith('TK-') && !code.startsWith('TF-'))
     : SAMPLE_INDICATORS
-  const lines = indicators.map(([code, label]) => {
+  const allLines = indicators.map(([code, label]) => {
     const vals = [1, 2, 3, 4].map((i) => {
       const v = row[`${code} ${i}`]
       const n = Number(v)
@@ -474,9 +536,23 @@ function SampleTable({ row, scope }) {
     const total = vals.reduce((a, b) => a + b, 0)
     return { code, label, vals, total }
   })
+  const lines = expanded ? allLines : allLines.filter((l) => favCodes.has(l.code))
 
+  // 토탈은 '지금 화면에 보이는 줄'의 합이다 — 접었을 때 안 보이는 줄까지 더하면
+  // 눈에 보이는 숫자와 합이 안 맞아 읽는 사람이 검산할 수 없다.
   const grandVals = [0, 1, 2, 3].map((i) => lines.reduce((sum, l) => sum + l.vals[i], 0))
   const grandTotal = grandVals.reduce((a, b) => a + b, 0)
+
+  // 접었을 때만 국내/해외 블록 끝에 '분석' 줄을 붙인다. 펼치면 통합지표까지 섞여
+  // 들어와 '리그 지표만 본다'는 전제가 깨지므로 그때는 계산하지 않는다.
+  const isForeignCode = (c) => /^(F|TF)-/.test(c)
+  const domAnalysis = expanded ? null : weightedAnalysis(lines.filter((l) => !isForeignCode(l.code)))
+  const forAnalysis = expanded ? null : weightedAnalysis(lines.filter((l) => isForeignCode(l.code)))
+  // 토탈 = 국내 분석과 해외 분석의 평균(한쪽만 있으면 그쪽만).
+  const bothAnalysis = [domAnalysis, forAnalysis].filter(Boolean)
+  const totalAnalysis = bothAnalysis.length
+    ? [0, 1, 2, 3].map((i) => bothAnalysis.reduce((s, a) => s + a[i], 0) / bothAnalysis.length)
+    : null
 
   return (
     <table className="detail-table sample-table">
@@ -492,40 +568,59 @@ function SampleTable({ row, scope }) {
       </thead>
       <tbody>
         {lines.map((l, li) => {
-          const isForeign = /^(F|TF)-/.test(l.code)
-          const groupStart = li > 0 && isForeign && !/^(F|TF)-/.test(lines[li - 1].code)
-          // 국)플핸(K-PL)은 경기마다 다른 정배 판정과 무관하게 항상 강조한다 —
-          // 다른 지표는 "이 경기의 정배 쪽이라서" 강조되지만, 이건 새로 만든 지표
-          // 자체를 표에서 놓치지 않게 눈에 띄우는 목적이라 매번 켜져 있어야 한다.
+          const isForeign = isForeignCode(l.code)
+          const prev = li > 0 ? lines[li - 1] : null
+          const groupStart = prev && isForeign && !isForeignCode(prev.code)
+          // 펼쳤을 때만 대상 9줄에 테두리를 두른다(위 컴포넌트 주석 참고).
           const cls = [
             groupStart && 'sample-group-start',
-            (favCodes.has(l.code) || l.code === 'K-PL') && 'sample-fav-row',
+            expanded && favCodes.has(l.code) && 'sample-fav-row',
           ].filter(Boolean).join(' ')
           return (
-            <tr key={l.code} className={cls || undefined}>
-              <td className="row-label">{l.label}</td>
-              {l.vals.map((v, i) => (
-                <td key={i} className={maxCellClass(l.vals, i)}>
-                  {v}
-                </td>
-              ))}
-              <td className="col-total">{l.total}</td>
-            </tr>
+            <Fragment key={l.code}>
+              {/* 국내 블록이 끝나는 자리(= 해외 첫 줄 직전)에 국내 분석을 끼운다 */}
+              {groupStart && domAnalysis && (
+                <AnalysisRow label="국) 분석" vals={domAnalysis} />
+              )}
+              <tr className={cls || undefined}>
+                <td className="row-label">{l.label}</td>
+                {/* 위=비율, 아래=건수. 개수만으로는 지표마다 표본 크기가 달라
+                    (해통 972건 vs 국통 136건) 어디로 쏠렸는지 비교가 안 된다. */}
+                {l.vals.map((v, i) => (
+                  <td key={i} className={maxCellClass(l.vals, i)}>
+                    {l.total > 0 ? `${Math.round((v / l.total) * 100)}%` : '-'}
+                    <span className="sample-n">{v}</span>
+                  </td>
+                ))}
+                <td className="col-total">{l.total}</td>
+              </tr>
+            </Fragment>
           )
         })}
-        <tr className="sample-grand-total">
-          <td className="row-label">토탈</td>
-          {grandVals.map((v, i) => (
-            <td key={i} className={maxCellClass(grandVals, i)}>
-              {v}
-              {/* 네 결과가 전체 표본에서 각각 몇 %인지 — 어느 쪽으로 쏠렸는지 한눈에 보이게 */}
-              {grandTotal > 0 && (
-                <span className="grand-pct">({((v / grandTotal) * 100).toFixed(1)}%)</span>
-              )}
-            </td>
-          ))}
-          <td className="col-total">{grandTotal}</td>
-        </tr>
+        {/* 해외 분석은 마지막 줄 뒤라 위 반복문 밖에서 붙인다 */}
+        {forAnalysis && <AnalysisRow label="해) 분석" vals={forAnalysis} />}
+        {totalAnalysis ? (
+          <tr className="sample-grand-total">
+            <td className="row-label">토탈</td>
+            {totalAnalysis.map((v, i) => (
+              <td key={i} className={maxCellClass(totalAnalysis, i)}>
+                {v.toFixed(1)}%
+              </td>
+            ))}
+            <td className="col-total">{grandTotal}</td>
+          </tr>
+        ) : (
+          <tr className="sample-grand-total">
+            <td className="row-label">토탈</td>
+            {grandVals.map((v, i) => (
+              <td key={i} className={maxCellClass(grandVals, i)}>
+                {grandTotal > 0 ? `${Math.round((v / grandTotal) * 100)}%` : '-'}
+                <span className="sample-n">{v}</span>
+              </td>
+            ))}
+            <td className="col-total">{grandTotal}</td>
+          </tr>
+        )}
       </tbody>
     </table>
   )
@@ -597,11 +692,18 @@ function MyPickBar({ row, onSavePick }) {
   )
 }
 
+/* ── 아래 4개는 지금 화면에서 쓰지 않는다(2026-08-22) ──
+   '종합 분석' 카드 4장(플핸무 확률·해외지표·국내지표·상대전적)을 화면에서 뺐다.
+   백엔드 계산(api/pick_ai.py, /api/pick_ai)은 그대로 살아 있고 응답도 그대로 오며,
+   UI를 다시 정의하기로 해서 그리는 쪽 코드도 지우지 않고 남겨 둔다.
+   ─────────────────────────────────────────────────── */
+
 // 종합픽 — 배당(기준선) 위에 지표·상대전적 보정을 얹어 플핸 확률 하나로 정리한 값.
 // 계산 근거와 각 신호를 왜 쓰거나 안 쓰는지는 api/pick_ai.py 상단 주석에 실측과 함께 있다.
 // 팝업을 열 때마다 백엔드에서 그 자리에서 계산한다(저장하지 않는 표시 전용 값).
 // 신호 카드의 뱃지 문구는 백엔드가 내려주는 state/dir/value_text만으로 화면에서 판단한다
 // (계산 로직은 그대로, 표시 방식만 바꾼 것 — pick_ai.py는 건드리지 않는다).
+// eslint-disable-next-line no-unused-vars
 function sigBadge(s) {
   if (s.state === 'ok') {
     if (s.dir > 0) return { text: '핸승 쪽', tone: 'up' }
@@ -617,10 +719,12 @@ function sigBadge(s) {
   return { text: '참고용', tone: 'none' }
 }
 
+// eslint-disable-next-line no-unused-vars
 function sigFootText(s) {
   return s.state === 'ok' && s.adjust !== 0 ? `${s.adjust > 0 ? '+' : ''}${s.adjust.toFixed(1)}%p` : '—'
 }
 
+// eslint-disable-next-line no-unused-vars
 function sigFootClass(s) {
   if (s.state !== 'ok') return ''
   if (s.adjust > 0) return 'pick-sig-foot-up'
@@ -662,10 +766,14 @@ function SeasonRowsTable({ rows }) {
 // 해외지표 계단식 보정 근거 — 통합승 / 승 / 승+패 / 승+무+패 순(넓은 단계 → 좁은 단계)으로,
 // 단계마다 핸승/핸무/무/역이 각각 몇 %였는지 보여준다(pick_ai.py _foreign_indicator 참고).
 // 계산이 통합에서 출발해 조건을 좁혀가며 섞는 순서와 같아서 위에서 아래로 읽으면 값이
-// 어떻게 만들어졌는지 따라갈 수 있다. 표본 수는 위 지표별 표본 표에 이미 있어 여기선 뺐다.
+// 어떻게 만들어졌는지 따라갈 수 있다.
 // 맨 아래 '분석' 행은 그 단계들을 실제로 계단식 보정에 반영한 값 그대로다.
 // 각 행마다 그 단계에서 가장 많이 나온 결과를 하이라이트해서, 단계별로 어디에 몰려
 // 있는지가 색으로 바로 보이게 한다(분석 행만 칠하면 단계 간 비교가 안 된다).
+// 표본 수를 같이 보여주는 이유 — %만 보면 3건 중 2건(66.7%)과 972건 중 649건(66.8%)이
+// 똑같아 보인다. 단계마다 표본 규모가 수십 배씩 차이 나서(해통 972건 vs 국통 136건),
+// 그 %를 얼마나 믿을지는 표본 수를 봐야 정해진다.
+// eslint-disable-next-line no-unused-vars
 function IndLevelsTable({ levels }) {
   return (
     <table className="detail-table pick-ind-table">
@@ -684,12 +792,22 @@ function IndLevelsTable({ levels }) {
           const vals = [lv.hs_pct, lv.hm_pct, lv.mu_pct, lv.yk_pct]
           // 표본이 0인 단계(0/0/0/0)는 최댓값이란 게 없으므로 칠하지 않는다.
           const hasData = vals.some((v) => v > 0)
+          // 통)승·패 / 승·패까지만 실제 계산(계단식 보정)에 쓰이고, 승+패부터는
+          // 화면 참고용일 뿐이라 그 경계에 구분선을 준다(pick_ai.py 실측 주석 참고).
+          const isRefStart = lv.code === 'F-WL' || lv.code === 'K-WL'
           return (
-            <tr key={lv.code} className={isSum ? 'pick-ind-sum-row' : undefined}>
+            <tr
+              key={lv.code}
+              className={[isSum && 'pick-ind-sum-row', isRefStart && 'pick-ind-ref-row']
+                .filter(Boolean).join(' ') || undefined}
+            >
               <td className="row-label">{lv.label}</td>
               {vals.map((v, i) => (
                 <td key={i} className={hasData ? maxCellClass(vals, i) : undefined}>
                   {v.toFixed(1)}
+                  {/* % 아래에 원래 경기 수 — 3건 중 2건(66.7%)과 972건 중 649건(66.8%)이
+                      %만 보면 똑같아 보인다. '분석' 행은 계산 결과라 counts가 없다. */}
+                  {lv.counts && <span className="ind-n">{lv.counts[i]}</span>}
                 </td>
               ))}
             </tr>
@@ -700,100 +818,19 @@ function IndLevelsTable({ levels }) {
   )
 }
 
-function PickCards({ data }) {
-  const { base, final, signals, warnings, consensus, consensus_text } = data
-  return (
-    <>
-      <div className="pick-cards">
-        <div className={`pick-verdict-card pick-grade-${final.grade_key}`}>
-          <div className="pick-verdict-top">
-            <span className="pick-verdict-label">플핸 성공 확률</span>
-            <span className="pick-verdict-badge">{final.grade}</span>
-          </div>
-          <div className="pick-verdict-value">{final.pl.toFixed(0)}%</div>
-          <div className="pick-bar">
-            <div className="pick-bar-fill" style={{ width: `${Math.min(100, Math.max(0, final.pl))}%` }} />
-            <div className="pick-bar-marker" style={{ left: `${Math.min(100, Math.max(0, base.pl))}%` }} />
-          </div>
-          <div className="pick-bar-scale">
-            <span>0%</span>
-            <span>기준선 {base.pl.toFixed(0)}%</span>
-            <span>100%</span>
-          </div>
-          {consensus_text && (
-            <p
-              className={`pick-consensus pick-consensus-${
-                consensus === '불일치' ? 'off' : consensus === '핸승' || consensus === '플핸' ? 'on' : 'none'
-              }`}
-            >
-              {consensus_text}
-            </p>
-          )}
-        </div>
-        {signals.map((s) => {
-          const badge = sigBadge(s)
-          // 해외지표·국내지표는 "-1.7% 보정된 핸승 예상 28%"/"핸승 예상 9%(전체 계산
-          // 반영 안 함)" 한 문장을 카드 중간에 따로 안 두고 아래 기준선 편차 줄에 그대로
-          // 붙여서 보여준다(value_text 자체가 이미 그 형태로 pick_ai.py에서 만들어져
-          // 온다). 값을 실제로 계산한 근거(핸승/핸무/무/역)는 IndLevelsTable의 '분석'
-          // 행에 풀어서 보여주니, 여기서 반복할 필요는 없다.
-          const isIndicator = s.key === 'ind' || s.key === 'ind_k'
-          const mergeIntoFoot = isIndicator && s.levels && s.levels.length > 0
-          // 상대전적은 확률 계산에 아예 안 들어가므로(pick_ai.py ③ 참고) 항상 '—'만
-          // 찍히는 기준선 편차 줄을 아예 빼고 문장 하나만 남긴다.
-          const showFoot = s.key !== 'h2h'
-          return (
-            <div key={s.key} className={`pick-sig-card pick-sig-card-${badge.tone}`}>
-              <div className="pick-sig-top">
-                <span className="pick-sig-label">{s.label}</span>
-                <span className={`pick-sig-badge pick-sig-badge-${badge.tone}`}>{badge.text}</span>
-              </div>
-              {!mergeIntoFoot &&
-                (s.rows ? (
-                  <SeasonRowsTable rows={s.rows} />
-                ) : (
-                  <p className="pick-sig-desc">{s.value_text}</p>
-                ))}
-              {s.levels && s.levels.length > 0 && <IndLevelsTable levels={s.levels} />}
-              {s.warn && <p className="pick-sig-warn">주의 · {s.warn}</p>}
-              {showFoot && (
-                <div className="pick-sig-foot">
-                  <span className="pick-sig-foot-label">기준선 편차</span>
-                  <span className={`pick-sig-foot-val ${sigFootClass(s)}`}>
-                    {mergeIntoFoot ? s.value_text : sigFootText(s)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-      {warnings.length > 0 && (
-        <div className="pick-notes">
-          {warnings.map((w) => (
-            <p key={w} className="pick-warn">
-              주의 | {w}
-            </p>
-          ))}
-        </div>
-      )}
-    </>
-  )
+// /api/pick_ai 응답에서 신호 하나를 꺼낸다. 종합분석 카드를 화면에서 뺀 뒤로는
+// 시즌전적(season)과 상대전적(h2h) 둘만 쓴다 — 나머지 신호는 계산만 되고 안 그린다.
+function findSignal(data, key) {
+  if (!data || !data.available || !Array.isArray(data.signals)) return null
+  return data.signals.find((s) => s.key === key) || null
 }
 
-// 종합분석(pick_ai) 계산 결과는 이 아래 상대전적 카드도 함께 쓴다(모달 쪽에서 한
-// 번만 불러 내려준다) — 그래서 이 컴포넌트는 자체 fetch 없이 data/error를 그대로 받아 그린다.
-function PickBand({ row, data, error }) {
+// 확률 지표 밴드. 예전에는 이 위에 '종합 분석' 카드 4장(플핸무 확률·해외지표·국내지표·
+// 상대전적)이 같이 있었는데 화면에서 뺐다 — 계산은 그대로 남아 있고(api/pick_ai.py,
+// /api/pick_ai), 시즌전적과 상대전적 문장만 아래 표 쪽으로 옮겨 붙였다.
+function PickBand({ row }) {
   return (
     <section className="pick-band">
-      <div className="pick-band-head">
-        <h3>종합 분석</h3>
-        <span className="pick-band-sub">4개 신호 · 배당 기준선 대비</span>
-      </div>
-      {error && <p className="error-text">{error}</p>}
-      {!error && !data && <p className="pick-loading">계산 중...</p>}
-      {!error && data && !data.available && <p className="pick-loading">{data.reason}</p>}
-      {!error && data && data.available && <PickCards data={data} />}
       <div className="pick-band-risk">
         <h3>
           확률 지표{' '}
@@ -831,8 +868,13 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
   const rowRef = useRef(row)
   rowRef.current = row
   const matchKey = [row.S, row.R, row.No, row.HT, row.AT].join('|')
+  // 지표별 표본은 기본이 '접힘' — 판단에 쓰는 9줄만 보여주고, 펼치면 27줄 전체가 나온다.
+  const [sampleExpanded, setSampleExpanded] = useState(false)
   const [pickData, setPickData] = useState(null)
   const [pickError, setPickError] = useState('')
+  // 종합분석 카드를 화면에서 뺀 뒤로 이 응답에서 실제로 쓰는 건 이 둘과 streaks뿐이다.
+  const seasonSig = findSignal(pickData, 'season')
+  const h2hSig = findSignal(pickData, 'h2h')
 
   useEffect(() => {
     let alive = true
@@ -930,7 +972,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
         </p>
         <MyPickBar row={row} onSavePick={onSavePick} />
 
-        <PickBand row={row} data={pickData} error={pickError} />
+        <PickBand row={row} />
 
         <div className="modal-columns" ref={columnsRef}>
           <div className="modal-col">
@@ -941,15 +983,51 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
               <OddsTable row={row} />
             </section>
             <section className="detail-section" ref={sampleSectionRef}>
-              <h3>지표별 표본</h3>
-              <SampleTable row={row} scope={scope} />
+              <h3>
+                <button
+                  className="sample-fold-btn"
+                  onClick={() => setSampleExpanded((v) => !v)}
+                  title={sampleExpanded ? '판단에 쓰는 지표만 보기' : '전체 지표 보기'}
+                  aria-expanded={sampleExpanded}
+                >
+                  {sampleExpanded ? '▾' : '▸'}
+                </button>
+                지표별 표본{' '}
+                <span className="detail-section-note">
+                  {sampleExpanded ? '전체' : '판단에 쓰는 지표만'}
+                </span>
+              </h3>
+              <SampleTable row={row} scope={scope} expanded={sampleExpanded} />
             </section>
           </div>
           <div className="modal-col">
-            <section className="detail-section">
-              <h3>폼 지표</h3>
-              <FormTable row={row} />
-            </section>
+            {/* 시즌전적 + 폼 지표를 한 줄에 나란히 — 둘 다 '이 팀이 요즘 어떤가'를
+                보는 값이라 붙여 두면 눈이 한 번에 읽는다(시즌전적이 왼쪽). */}
+            <div className="detail-pair">
+              <section className="detail-section">
+                {/* note 원문은 한 문장이 길어(‘오늘과 같은 정배/역배 구도였던 …’) 제목 줄이
+                    두 줄로 흘러 옆 폼 지표를 밀어낸다 — 짧게 줄이고 원문은 title로 남긴다. */}
+                <h3>
+                  시즌전적{' '}
+                  {seasonSig && seasonSig.note && (
+                    <span className="detail-section-note" title={seasonSig.note}>
+                      같은 정배 구도였던 이번 시즌 경기
+                    </span>
+                  )}
+                </h3>
+                {seasonSig && seasonSig.rows ? (
+                  <SeasonRowsTable rows={seasonSig.rows} />
+                ) : (
+                  <p className="pick-loading">
+                    {pickError || (!pickData ? '계산 중...' : (seasonSig ? seasonSig.value_text : '—'))}
+                  </p>
+                )}
+              </section>
+              <section className="detail-section">
+                <h3>폼 지표</h3>
+                <FormTable row={row} />
+              </section>
+            </div>
             <section className="detail-section">
               <h3>
                 최근10경기 전적{' '}
@@ -965,7 +1043,13 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
               style={h2hMaxHeight ? { maxHeight: `${h2hMaxHeight}px` } : undefined}
             >
               <h3>
-                상대전적 <span className="detail-section-note">승점은 홈팀 기준으로 작성되었습니다.</span>
+                상대전적{' '}
+                {/* 예전 종합분석 '상대전적' 카드에 있던 문장(맞대결 평균 총득점).
+                    확률 계산에는 안 들어가는 참고값이라 제목 옆에 붙여만 둔다. */}
+                {h2hSig && h2hSig.value_text && (
+                  <span className="detail-section-note">{h2hSig.value_text}</span>
+                )}{' '}
+                <span className="detail-section-note">승점은 홈팀 기준으로 작성되었습니다.</span>
               </h3>
               <HeadToHeadResult
                 scope={scope} code={code} home={ht} away={at} cross

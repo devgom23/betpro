@@ -15,3 +15,8 @@ data/access_log.db
 data/master/master.db
 data/master/master.tmp.db
 data/users/
+
+# 데이터를 크게 손대기 전에 그때그때 뜨는 수동 백업(master_before_*.db).
+# 하나에 60MB가 넘어서 실수로 커밋되면 저장소가 통째로 무거워진다.
+data/master/master_before_*.db
+data/master/*_backup_*.db

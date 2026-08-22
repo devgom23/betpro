@@ -261,6 +261,9 @@ def _foreign_indicator(row, scope):
         if total > 0:
             levels.append({
                 "code": code, "label": label, "sample": int(total),
+                # counts — 화면에서 % 아래에 원래 경기 수를 같이 보여준다. %만으로는
+                # 3건 중 2건(66.7%)과 972건 중 649건(66.8%)이 똑같아 보이기 때문이다.
+                "counts": [int(v) for v in vals],
                 "hs_pct": round(vals[0] / total * 100.0, 1),
                 "hm_pct": round(vals[1] / total * 100.0, 1),
                 "mu_pct": round(vals[2] / total * 100.0, 1),
@@ -269,6 +272,7 @@ def _foreign_indicator(row, scope):
         else:
             levels.append({
                 "code": code, "label": label, "sample": 0,
+                "counts": [0, 0, 0, 0],
                 "hs_pct": 0.0, "hm_pct": 0.0, "mu_pct": 0.0, "yk_pct": 0.0,
             })
     # '분석' 행 — 핸승 칸은 위 단계들을 회귀식(_level_hit_pct)으로 보정하며 실제로 최종
@@ -354,6 +358,7 @@ def _domestic_indicator(row, scope, code):
         if total > 0:
             levels.append({
                 "code": lv_code, "label": label, "sample": int(total),
+                "counts": [int(v) for v in vals],   # 해외지표와 같은 이유(위 주석 참고)
                 "hs_pct": round(vals[0] / total * 100.0, 1),
                 "hm_pct": round(vals[1] / total * 100.0, 1),
                 "mu_pct": round(vals[2] / total * 100.0, 1),
@@ -362,6 +367,7 @@ def _domestic_indicator(row, scope, code):
         else:
             levels.append({
                 "code": lv_code, "label": label, "sample": 0,
+                "counts": [0, 0, 0, 0],
                 "hs_pct": 0.0, "hm_pct": 0.0, "mu_pct": 0.0, "yk_pct": 0.0,
             })
     remaining = 100.0 - est

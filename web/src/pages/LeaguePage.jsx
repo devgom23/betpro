@@ -71,6 +71,8 @@ export default function LeaguePage({ code, scope }) {
   // 재계산('내 데이터' 리그 1개 전용 — RT 없는 예정 경기만, 이 리그 하나만 대상)
   const [busyRecomputePending, setBusyRecomputePending] = useState(false)
   const [recomputeNotice, setRecomputeNotice] = useState('')
+  // 통합 재분석(과거 경기 포함 전체) — 같은 엔드포인트를 include_historical=true로 호출
+  const [busyRecomputeAll, setBusyRecomputeAll] = useState(false)
 
   // 업로드 표본 생성 / 삭제 선택 모달의 "리그 선택" 옵션용.
   // 스코프마다 리그가 다르므로(공식=6대리그 / 내 데이터=내가 만든 리그) 스코프별로 불러온다.
@@ -201,6 +203,26 @@ export default function LeaguePage({ code, scope }) {
       setRecomputeNotice(`실패: ${err.message}`)
     } finally {
       setBusyRecomputePending(false)
+    }
+  }
+
+  async function runRecomputeAll() {
+    if (!window.confirm('과거 경기를 포함해 전체를 다시 계산합니다. 경기 수가 많으면 시간이 걸릴 수 있습니다. 계속할까요?')) {
+      return
+    }
+    setBusyRecomputeAll(true)
+    setRecomputeNotice('')
+    try {
+      const res = await api.post(`/api/leagues/${code}/recompute`, {
+        scope, include_historical: true, confirm: true,
+      })
+      const n = res.summary[code] ?? 0
+      setRecomputeNotice(n > 0 ? `통합 재분석 완료 → ${n}건` : '재계산할 데이터가 없습니다.')
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setRecomputeNotice(`실패: ${err.message}`)
+    } finally {
+      setBusyRecomputeAll(false)
     }
   }
 
@@ -431,7 +453,10 @@ export default function LeaguePage({ code, scope }) {
         <div style={{ marginTop: 10 }}>
           <div className="league-recompute-row">
             <button className="btn-primary" disabled={busyRecomputePending} onClick={runRecomputePending}>
-              {busyRecomputePending ? '재분석 중...' : '🔄 통합 및 예측 분석 실행'}
+              {busyRecomputePending ? '재분석 중...' : '🔄 예정경기 재분석'}
+            </button>
+            <button className="btn-danger" disabled={busyRecomputeAll} onClick={runRecomputeAll}>
+              {busyRecomputeAll ? '재계산 중...' : '🔧 통합 재분석'}
             </button>
             <div className="league-stat">
               <span className="league-stat-label">경기수</span>
@@ -453,6 +478,9 @@ export default function LeaguePage({ code, scope }) {
               <span className="league-stat-label">국내배당</span>
               <span className="league-stat-value">{filters.kw_count.toLocaleString()}</span>
             </div>
+            <button className="btn-reset" onClick={() => setShowDeleteModal(true)}>
+              🗑 경기 Data 삭제 선택
+            </button>
           </div>
           {recomputeNotice && <p className="recompute-notice">{recomputeNotice}</p>}
         </div>
@@ -468,6 +496,7 @@ export default function LeaguePage({ code, scope }) {
           </span>
         </div>
       )}
+
 
       {showEditModal && (
         <ResultEditModal

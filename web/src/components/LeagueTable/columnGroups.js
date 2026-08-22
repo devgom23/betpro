@@ -368,14 +368,15 @@ function khHitSide(row) {
 }
 
 // 내 예측의 "의견"(옛 적중칸을 재활용 — 배팅 비중 태그, 옛 이름 '벳') 배지 색상.
-// 계열별로 색을 묶는다: Pass 계열(P-)은 회색~갈색, 벳 계열(B-)은 주황~파랑~보라, 축은 청록.
+// 계열별로 색을 묶는다: Pass는 회색, 나머지 P- 계열은 전부 같은 청회색, 벳 계열(B-)은 주황~파랑~보라, 축은 청록.
 // 이름이 두 번 바뀌었으므로(패스→Pass, 메인벳→B-메인→B-Ma) 옛 이름도 같이 봐준다 —
 // DB는 옮겼지만 혹시 남아 있는 값이 색 없이 뜨는 일을 막는 안전장치다.
 export function myHitStyle(value) {
   if (value === 'Pass' || value === '패스') return { background: '#757575', color: '#fff', fontWeight: 700 }
-  if (value === 'P-고민' || value === '패스고민') return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
+  if (value === 'P-고민' || value === '패스고민') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-분산') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-어렵') return { background: '#5D4037', color: '#fff', fontWeight: 700 }
+  if (value === 'P-상대') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  if (value === 'P-어렵') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'B-고민' || value === '벳고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
   if (value === '축') return { background: '#00897B', color: '#fff', fontWeight: 700 }
   if (value === '축-Si' || value === '축-사이드') return { background: '#00695C', color: '#fff', fontWeight: 700 }

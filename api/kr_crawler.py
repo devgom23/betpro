@@ -1,357 +1,408 @@
 """
-젠토토(zentoto.com) 국내배당(초기배당) 가져오기.
+와이즈토토(wisetoto.com) 국내배당(초기배당) 가져오기.
+
+[왜 젠토토에서 갈아탔나]
+  젠토토는 로그인한 크롬 창을 띄워 두고 그 화면을 긁어야 해서, 로그인이 풀리거나
+  창을 닫으면 그때마다 실패했다. 와이즈토토는 로그인 없이 그냥 HTTP로 받아올 수
+  있어서 브라우저 자체가 필요 없다. 젠토토용 코드는 kr_crawler_zentoto_backup.py에
+  그대로 남겨 뒀다.
 
 [동작 방식]
-  화면에서 "화면 열기"를 누르면 크롬 창이 그 연도/회차의 프로토 목록 페이지로 열린다.
-  (Zentoto는 로그인이 필요하다 — 영속 크롬 프로필을 써서 한 번 로그인해 두면 다음부터
-   다시 로그인하지 않아도 된다. 사용자가 이미 쓰던 데스크톱 크롤러와 같은 프로필 폴더를
-   그대로 재사용한다.)
-  "가져오기"를 누르면 그 순간 화면에 떠 있는 경기들의 국내배당(초기배당 기준)을 읽어
-  BETPRO 국내배당 칸(KW/KD/KL/KH/KHW/KHD/KHL) 형식으로 돌려준다.
+  ① index.htm 에서 그 회차의 game_info_master_seq 를 뽑고
+  ② util/gameinfo/get_proto_list.htm 로 그 회차 경기 목록을 받아
+  ③ 원하는 리그(예: 'K리그1') 줄만 골라 승무패/핸디 배당을 읽는다.
+  회차는 '연도 + 그 해의 회차번호'로 지정한다(예: 2026년 99회차).
 
-[초기배당인 이유]
-  배당은 경기 전까지 계속 바뀐다. 분석은 '최초 발표 배당' 기준이 원칙이라, 화면에 배당
-  변경 이력이 있는 경기는 /proto/history에서 '초기배당' 행을 다시 조회해 그 값을 쓴다.
-  변경이 없었던 경기는 화면에 보이는 값 그대로가 이미 초기배당이라 그대로 쓴다.
+[초기배당 복원 — 젠토토와 같은 원리]
+  배당이 바뀐 경기는 비고에 변경 이력이 툴팁으로 붙어 있다:
+      msgset_list('승 (기존) 2.10 배 → (변경) 2.05 배 ...')
+  여기서 '(기존)' 값을 읽어 현재배당을 초기배당으로 되돌린다. 이력이 없으면 지금
+  배당이 곧 초기배당이다.
 
-[채우지 않는 값]
-  RT(경기결과)·HS/AS(스코어)·해외배당은 이 사이트에 없으므로 비워서 내려보낸다.
-  이미 있는 경기에 병합될 때 빈 칸은 기존 값을 지우지 않는다(main.py의
-  _keep_existing_where_blank 규칙).
+[반드시 지켜야 하는 두 가지 — 실측으로 잡은 버그]
+  · 인코딩을 UTF-8로 못박는다. 응답 Content-Type 에 charset 이 없어서 requests 가
+    요청마다 다르게 추측하고, 가끔 EUC-KR 로 잘못 읽어 팀명이 통째로 깨졌다.
+  · <li class="hm"> 이 아예 없는 줄(언더오버 'un', 합계마켓 'd5')은 건너뛴다.
+    이걸 '핸디 표기가 빈 줄 = 일반 승무패'로 오인해서 U/O 배당을 승무패 자리에
+    덮어썼던 적이 있다.
 """
-import os
 import re
 import threading
 import time
-from urllib.parse import quote
+from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
 
-BASE = "https://www.zentoto.com"
+BASE = "https://www.wisetoto.com"
+HDR = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Referer": f"{BASE}/index.htm",
+    "X-Requested-With": "XMLHttpRequest",
+}
+
+_lock = threading.Lock()
+_session = None
+
+# 배당 3칸의 순서(승/무/패) — 초기배당 복원 때 어느 칸을 되돌릴지 짚는 데 쓴다.
+_WDL_INDEX = {"승": 0, "무": 1, "패": 2}
 
 
 class CrawlError(RuntimeError):
     """크롤링 중 사용자에게 그대로 보여줄 오류."""
 
 
-def _get_output_dir() -> str:
-    """사용자가 기존 데스크톱 크롤러에서 쓰던 것과 같은 폴더 — 로그인 세션을 그대로 재사용한다."""
-    home = os.path.expanduser("~")
-    desktops = [
-        os.path.join(home, "Desktop"),
-        os.path.join(home, "OneDrive", "Desktop"),
-        os.path.join(home, "OneDrive", "바탕 화면"),
-        os.path.join(home, "바탕 화면"),
-    ]
-    for d in desktops:
-        z = os.path.join(d, "zentoto")
-        if os.path.isdir(z):
-            return z
-    for d in desktops:
-        if os.path.isdir(d):
-            z = os.path.join(d, "zentoto")
-            os.makedirs(z, exist_ok=True)
-            return z
-    z = os.path.join(home, "zentoto")
-    os.makedirs(z, exist_ok=True)
-    return z
-
-
-OUTPUT_DIR = _get_output_dir()
-PROFILE_DIR = os.path.join(OUTPUT_DIR, "zentoto_chrome_profile")
-
-_driver = None
-_lock = threading.Lock()   # 크롬 창은 하나뿐이라 요청이 겹치지 않게 직렬화
-
-
-# ─────────────────────────── 브라우저 제어 ───────────────────────────
-def _alive(drv) -> bool:
-    try:
-        _ = drv.current_url
-        return True
-    except Exception:
-        return False
-
-
-def full_round_id(year, rnd) -> str:
-    """
-    젠토토 내부 회차번호는 '연도 뒤 2자리 + 4자리 회차'다(2026년 99회차 → 260099).
-    사용자가 화면에서 '99'처럼 짧게 입력하면 사이트가 그 회차를 못 찾고 조용히
-    '그 해의 최신 회차'를 대신 보여준다 — 원하는 회차가 최신이 아니면 엉뚱한 회차를
-    가져오게 되고, 초기배당 조회(/proto/history)도 전부 실패한다. 실측으로 확인한
-    버그라 여기서 6자리로 정규화한다. 이미 6자리로 넣었으면 그대로 쓴다.
-    """
-    year = str(year).strip()
-    rnd = str(rnd).strip()
-    yy = year[-2:] if len(year) >= 2 else year
-    digits = re.sub(r"[^0-9]", "", rnd)
-    if not digits:
-        return rnd
-    if len(digits) >= 5:
-        return digits                       # 이미 260099 같은 전체 번호
-    return f"{yy}{int(digits):04d}"
-
-
-def build_round_url(year, rnd) -> str:
-    """
-    사용자가 쓰던 데스크톱 크롤러와 같은 쿼리 구조를 그대로 쓴다 — order_by_data/
-    order_by_type/bet_type[] 파라미터가 빠지면 사이트가 요청한 회차를 무시하고
-    최신 회차로 리다이렉트하며 회차 선택 UI도 정상적으로 뜨지 않는 것을 확인했다.
-    game_name[] 필터(원본은 유럽 6대리그 전용)는 여기서 K리그를 걸러야 하므로 빼고,
-    대신 _parse_lines()가 파싱 단계에서 target_league로 직접 걸러낸다.
-    """
-    rnd = full_round_id(year, rnd)
-    params = [
-        ("order_by_data", "proto_uid"), ("order_by_type", "asc"),
-        ("proto_year", str(year)), ("proto_round", str(rnd)),
-        ("bet_type[]", "N"), ("bet_type[]", "H"),
-    ]
-    qs = "&".join(f"{k}={quote(str(v))}" for k, v in params)
-    return f"{BASE}/proto/{rnd}?{qs}"
-
-
-def open_round(year, rnd) -> str:
-    """크롬 창을 그 연도/회차의 프로토 화면으로 연다. 이미 열려 있으면 재사용."""
-    global _driver
-    year = str(year).strip()
-    rnd = str(rnd).strip()
-    if not year or not rnd:
-        raise CrawlError("연도와 회차를 입력해 주세요.")
-    url = build_round_url(year, rnd)
+def _sess():
+    global _session
     with _lock:
-        if _driver is not None and not _alive(_driver):
-            _driver = None                      # 사용자가 창을 닫은 경우
-        if _driver is None:
-            try:
-                from selenium import webdriver
-                from selenium.webdriver.chrome.service import Service
-                from webdriver_manager.chrome import ChromeDriverManager
-            except ImportError as e:
-                raise CrawlError(f"크롤링 모듈이 설치되어 있지 않습니다: {e}")
-            try:
-                opts = webdriver.ChromeOptions()
-                opts.add_argument(f"--user-data-dir={PROFILE_DIR}")
-                opts.add_argument("--disable-blink-features=AutomationControlled")
-                opts.add_experimental_option("excludeSwitches", ["enable-automation"])
-                opts.add_experimental_option("useAutomationExtension", False)
-                _driver = webdriver.Chrome(
-                    service=Service(ChromeDriverManager().install()), options=opts)
-            except Exception as e:
-                raise CrawlError(f"크롬을 열지 못했습니다: {e}")
+        if _session is None:
+            _session = requests.Session()
+            _session.headers.update(HDR)
+        return _session
+
+
+def _get_text(url, params=None, timeout=25):
+    """응답을 UTF-8로 못박아 읽는다(모듈 상단 주석 참고)."""
+    last = None
+    for _ in range(2):
         try:
-            _driver.get(url)
-        except Exception as e:
-            raise CrawlError(f"페이지 이동 실패: {e}")
-    return url
+            r = _sess().get(url, params=params, timeout=timeout)
+            return r.content.decode("utf-8", errors="replace")
+        except Exception as e:       # noqa: BLE001 — 네트워크 오류는 그대로 재시도
+            last = e
+            time.sleep(1)
+    raise CrawlError(f"와이즈토토에 연결하지 못했습니다: {last}")
+
+
+# ─────────────────────────── 회차 조회 ───────────────────────────
+def _game_seq(year, rnd):
+    """그 회차의 game_info_master_seq. 없는 회차면 None."""
+    html = _get_text(f"{BASE}/index.htm", params={
+        "tab_type": "proto", "game_type": "pt", "game_category": "pt1",
+        "game_year": year, "game_round": rnd,
+    })
+    m = re.search(
+        r"get_gameinfo_body\('proto',\s*'pt1',\s*'?" + str(year)
+        + r"'?,\s*'" + str(rnd) + r"',\s*'',\s*'',\s*'(\d+)'", html)
+    return m.group(1) if m else None
+
+
+def fetch_round_html(year, rnd):
+    """그 회차의 축구 경기 목록 HTML. 없는 회차면 None."""
+    seq = _game_seq(year, rnd)
+    if not seq:
+        return None
+    return _get_text(f"{BASE}/util/gameinfo/get_proto_list.htm", params={
+        "game_category": "pt1", "game_year": year, "game_round": rnd,
+        "game_month": "", "game_day": "", "game_info_master_seq": seq,
+        "sports": "sc", "sort": "", "tab_type": "proto",
+    })
+
+
+_dates_cache = {}
+
+
+def _round_dates(year, rnd):
+    """그 회차에 걸린 경기 날짜들. 없는 회차면 빈 목록.
+
+    회차 자동 탐색이 한 회차를 여러 번 들여다보므로 캐시해 둔다 — 캐시가 없으면
+    이분탐색 한 번에 HTTP 요청이 수십 번 나간다.
+    """
+    key = (str(year), str(rnd))
+    if key in _dates_cache:
+        return _dates_cache[key]
+    html = fetch_round_html(year, rnd)
+    out = []
+    if html:
+        for mo, dd in re.findall(r'<li class="a2">\s*(\d{2})\.(\d{2})', html):
+            try:
+                out.append(datetime(int(year), int(mo), int(dd)))
+            except ValueError:
+                pass
+    _dates_cache[key] = out
+    return out
+
+
+def _last_round(year, hi=175):
+    """그 해에 실제로 존재하는 마지막 회차. 위쪽은 통째로 비어 있으므로 경계를 먼저 찾는다."""
+    lo, best = 1, 0
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if _round_dates(year, mid):
+            best = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best
+
+
+def find_rounds_for_dates(year, d0, d1, hi=175):
+    """d0~d1(날짜) 사이 경기가 들어 있는 회차 번호들을 찾는다.
+
+    한 라운드가 여러 회차에 걸치는 일이 흔하다(프로토는 금~화 / 수~목으로 끊는데
+    리그 라운드는 그 경계를 안 지킨다) — 그래서 하나가 아니라 목록으로 돌려준다.
+
+    ⚠ 이분탐색을 그냥 돌리면 안 된다. 아직 안 열린 위쪽 회차(예: 2026년 120회차)가
+    비어 있는데, 빈 회차를 만났다고 위쪽을 버리면 그보다 앞에 있는 정답까지 같이
+    잘려 나간다(분데스 30R 실측 — 4월 경기인데 '회차를 못 찾음'이 났다).
+    그래서 먼저 '실제로 존재하는 마지막 회차'를 찾아 탐색 상한으로 삼는다.
+    """
+    top = _last_round(year, hi)
+    if not top:
+        return []
+
+    lo, start = 1, None
+    hi_bound = top
+    while lo <= hi_bound:
+        mid = (lo + hi_bound) // 2
+        ds = _round_dates(year, mid)
+        if not ds:                     # 중간에 빠진 회차 — 바로 아래를 이어서 본다
+            hi_bound = mid - 1
+            continue
+        if max(ds) >= d0:
+            start = mid
+            hi_bound = mid - 1
+        else:
+            lo = mid + 1
+    if start is None:
+        return []
+    hi = top
+
+    found, rnd, empty = [], start, 0
+    while rnd <= hi and empty < 5:
+        ds = _round_dates(year, rnd)
+        if not ds:
+            empty += 1
+            rnd += 1
+            continue
+        empty = 0
+        if min(ds) > d1:
+            break
+        if max(ds) >= d0:
+            found.append(rnd)
+        rnd += 1
+    return found
+
+
+def round_leagues(year, rnd):
+    """그 회차에 들어 있는 리그 이름 목록 — 리그명을 뭐라고 써야 하는지 화면에서 고르게."""
+    html = fetch_round_html(year, rnd)
+    if not html:
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    names = []
+    for u in soup.select("div.gameinfo ul"):
+        a4 = u.select_one("li.a4")
+        if not a4:
+            continue
+        nm = a4.get_text(strip=True)
+        if nm and nm not in names:
+            names.append(nm)
+    return sorted(names)
+
+
+# ─────────────────────────── 파싱 ───────────────────────────
+def _restore_initial(cur, tips):
+    """현재배당 [승,무,패]를 비고 툴팁의 '(기존)' 값으로 되돌린다."""
+    out = list(cur)
+    for tip in tips:
+        for m in re.finditer(r"([승무패])\s*\(기존\)\s*([\d.]+)\s*배\s*→\s*\(변경\)", tip):
+            i = _WDL_INDEX.get(m.group(1))
+            if i is not None and i < len(out):
+                out[i] = m.group(2)
+    return out
+
+
+def _parse_round(html, target_league):
+    """
+    한 회차 HTML에서 그 리그 경기만 뽑는다.
+    {matchkey: {HT, AT, date, N:[승무패], H:[핸승,핸무,플핸]}} 형태.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    out = {}
+    for u in soup.select("div.gameinfo ul"):
+        a4 = u.select_one("li.a4")
+        if not a4:
+            continue
+        league = a4.get_text(strip=True)
+        if target_league and league != target_league:
+            continue
+
+        # 승무패/핸디는 li.hm 이 있는 줄이다. 언더오버(un)·합계마켓(d5)은 이 요소 자체가
+        # 없다 — 그런 줄을 승무패로 오인하면 U/O 배당이 승무패 자리에 들어간다.
+        hm_el = u.select_one("li.hm")
+        if hm_el is None:
+            continue
+        hm = hm_el.get_text(" ", strip=True)
+
+        h_el = u.select_one("li.a6 span.tn, li.a6 span.tnb")
+        a_el = u.select_one("li.a8 span.tn, li.a8 span.tnb")
+        if not h_el or not a_el:
+            continue
+        mh = re.search(r"tr\('(\d+)','(\d+)','([^']+)'", h_el.get("onclick") or "")
+        if not mh:
+            continue
+        matchkey = f"{mh.group(1)}_{mh.group(2)}_{mh.group(3)}"
+
+        odds = []
+        for li in u.select("li.a9"):
+            txt = re.sub(r"[^\d.]", "", li.get_text(" ", strip=True))
+            odds.append(txt if txt else "")
+        if len(odds) < 3:
+            continue
+        odds = odds[:3]
+        tips = re.findall(r"msgset_list\('([^']*)'\)", str(u))
+        restored = _restore_initial(odds, tips)
+        changed = bool(tips) and restored != odds
+
+        rec = out.setdefault(matchkey, {
+            "HT": h_el.get_text(strip=True), "AT": a_el.get_text(strip=True),
+            "date": mh.group(3), "N": None, "H": None, "changed": False,
+        })
+        if changed:
+            rec["changed"] = True
+
+        if not hm:                       # 빈 문자열 = 일반 승무패
+            rec["N"] = restored
+        else:
+            m = re.match(r"H\s*([+-]?\d+(?:\.\d+)?)", hm)
+            # 지금 DB는 ±1 핸디만 다룬다 — 다른 라인(-2.0 등)은 담을 칸이 없어 건너뛴다.
+            if m and abs(abs(float(m.group(1))) - 1.0) < 1e-6:
+                rec["H"] = restored
+    return out
+
+
+def _num_or_none(v):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if f <= 0 else v
+
+
+# ─────────────────────────── 수집 ───────────────────────────
+def fetch_domestic(target_league: str, year, rnd) -> dict:
+    """
+    그 회차에서 target_league 경기들의 국내배당(초기배당 기준)을 가져온다.
+
+    KH(핸디 부호)는 채우지 않는다 — 와이즈토토의 'H -1.0' 표기는 "이 줄이 1점 핸디
+    마켓"이라는 뜻일 뿐 어느 팀이 핸디를 받았는지가 아니다(수집한 12,600건이 전부
+    -1.0으로 같았다). 방향은 저장 시점에 국내배당(KW/KL) 기준으로 정하므로 여기서
+    넘겨짚지 않는다.
+    """
+    html = fetch_round_html(year, rnd)
+    if html is None:
+        raise CrawlError(f"{year}년 {rnd}회차를 찾지 못했습니다. 연도·회차를 확인해 주세요.")
+
+    matches = _parse_round(html, target_league)
+    if not matches:
+        found = round_leagues(year, rnd)
+        hint = f" 이 회차에 있는 리그: {', '.join(found)}" if found else ""
+        raise CrawlError(
+            f"{year}년 {rnd}회차에서 '{target_league}' 경기를 찾지 못했습니다.{hint}")
+
+    rows = []
+    changed_cnt = 0
+    for rec in matches.values():
+        n = rec["N"] or ["", "", ""]
+        h = rec["H"] or ["", "", ""]
+        if rec["changed"]:
+            changed_cnt += 1
+        rows.append({
+            "HT": rec["HT"], "AT": rec["AT"],
+            "KW": _num_or_none(n[0]), "KD": _num_or_none(n[1]), "KL": _num_or_none(n[2]),
+            "KH": None,                       # 위 주석 참고 — 방향은 저장 때 배당으로 정한다
+            "KHW": _num_or_none(h[0]), "KHD": _num_or_none(h[1]), "KHL": _num_or_none(h[2]),
+            "_note": "",
+        })
+
+    return {
+        "round_id": f"{year}-{rnd}",
+        "count": len(rows),
+        "fail_cnt": 0,          # 초기배당을 툴팁에서 바로 복원하므로 조회 실패가 없다
+        "changed_cnt": changed_cnt,
+        "rows": rows,
+    }
+
+
+def fetch_by_dates(target_league: str, d0: datetime, d1: datetime) -> dict:
+    """날짜 범위로 회차를 스스로 찾아 그 리그 경기를 모아 온다.
+
+    사용자가 회차 번호를 알 필요가 없게 하려고 만든 입구다. 시즌이 해를 넘기면
+    (예: 26-27시즌의 8월과 이듬해 2월) 두 해를 다 뒤져야 해서 연도별로 나눠 찾는다.
+    """
+    years = sorted({d0.year, d1.year})
+    rounds = []
+    for y in years:
+        lo = d0 if d0.year == y else datetime(y, 1, 1)
+        hi = d1 if d1.year == y else datetime(y, 12, 31)
+        for rnd in find_rounds_for_dates(y, lo, hi):
+            rounds.append((y, rnd))
+    if not rounds:
+        # 그 주에 프로토 회차 자체가 없는 경우가 실제로 있다(2026년 4/13~4/21 공백 —
+        # 분데스 25-26 30R 실측). 경기는 열렸지만 국내배당이 아예 없는 것이라,
+        # 회차를 직접 넣어도 나오지 않는다는 걸 분명히 알려 준다.
+        raise CrawlError(
+            f"{d0:%Y-%m-%d}~{d1:%Y-%m-%d}에 열린 프로토 회차가 없습니다. "
+            "그 기간에는 국내배당 자체가 발행되지 않은 것으로 보입니다.")
+
+    merged, changed, used = {}, 0, []
+    for y, rnd in rounds:
+        html = fetch_round_html(y, rnd)
+        if not html:
+            continue
+        got = _parse_round(html, target_league)
+        if not got:
+            continue
+        used.append(f"{y}년 {rnd}회차")
+        for key, rec in got.items():
+            merged[key] = rec
+
+    if not merged:
+        # 그 날짜 회차는 찾았는데 그 리그가 없는 경우 — 리그명 표기를 알려준다
+        names = []
+        for y, rnd in rounds[:3]:
+            names += [n for n in round_leagues(y, rnd) if n not in names]
+        hint = f" 이 기간 회차에 있는 리그: {', '.join(names)}" if names else ""
+        raise CrawlError(f"'{target_league}' 경기를 찾지 못했습니다.{hint}")
+
+    rows = []
+    for rec in merged.values():
+        n = rec["N"] or ["", "", ""]
+        h = rec["H"] or ["", "", ""]
+        if rec["changed"]:
+            changed += 1
+        rows.append({
+            "HT": rec["HT"], "AT": rec["AT"],
+            "KW": _num_or_none(n[0]), "KD": _num_or_none(n[1]), "KL": _num_or_none(n[2]),
+            "KH": None,
+            "KHW": _num_or_none(h[0]), "KHD": _num_or_none(h[1]), "KHL": _num_or_none(h[2]),
+            "_note": "",
+        })
+
+    return {
+        "round_id": " + ".join(used),
+        "count": len(rows),
+        "fail_cnt": 0,
+        "changed_cnt": changed,
+        "rows": rows,
+    }
+
+
+# ─────────── 젠토토 시절 인터페이스 (브라우저를 안 쓰므로 전부 무동작) ───────────
+# main.py의 /api/crawl/kr/open·close 가 아직 이 이름들을 부른다. 와이즈토토는 창을
+# 열 필요가 없어 호출돼도 아무 일도 하지 않고, 화면에서도 '화면 열기' 단계를 없앴다.
+def is_open() -> bool:
+    return False
 
 
 def close_page():
-    """크롬 창을 닫는다. 안 열려 있어도 조용히 넘어간다."""
-    global _driver
-    with _lock:
-        if _driver is not None:
-            try:
-                _driver.quit()
-            except Exception:
-                pass
-            _driver = None
     return True
 
 
-def is_open() -> bool:
-    return _driver is not None and _alive(_driver)
-
-
-# ─────────────────────────── 세션/조회 ───────────────────────────
-def _make_session(driver):
-    s = requests.Session()
-    try:
-        ua = driver.execute_script("return navigator.userAgent;")
-    except Exception:
-        ua = "Mozilla/5.0"
-    s.headers.update({
-        "User-Agent": ua,
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": driver.current_url,
-        "Accept": "text/html, */*; q=0.01",
-    })
-    for c in driver.get_cookies():
-        try:
-            s.cookies.set(c["name"], c["value"], domain=c.get("domain"))
-        except Exception:
-            pass
-    return s
-
-
-def _fetch_initial_odds(session, round_id, proto_uid, game_idx):
-    """변경내역의 '초기배당' 행 → (승, 무, 패) 또는 None."""
-    url = (f"{BASE}/proto/history"
-           f"?proto_round={round_id}&proto_uid={proto_uid}&game_idx={game_idx}")
-    for _ in range(2):
-        try:
-            r = session.get(url, timeout=10)
-            if r.status_code != 200 or not r.text:
-                time.sleep(0.4)
-                continue
-            txt = BeautifulSoup(r.text, "html.parser").get_text(" ", strip=True)
-            idx = txt.find("초기배당")
-            if idx == -1:
-                return None
-            nums = re.findall(r"\d+\.\d{2}", txt[idx + len("초기배당"):])
-            if len(nums) >= 3:
-                return nums[0], nums[1], nums[2]
-            return None
-        except Exception:
-            time.sleep(0.4)
-    return None
-
-
-def _to_int(x):
-    try:
-        return int(re.sub(r"[^0-9]", "", str(x)) or 0)
-    except Exception:
-        return 0
-
-
-def _fmt_handi(handisign):
-    """'H+1.0' → 1.0 , 'H-1.0' → -1.0"""
-    if not handisign:
-        return None
-    m = re.search(r"([+-]?\d+(?:\.\d+)?)", handisign)
-    if not m:
-        return None
-    try:
-        v = float(m.group(1))
-    except Exception:
-        return None
-    return 1.0 if v > 0 else -1.0 if v < 0 else None
-
-
-def _parse_lines(soup, target_league: str):
-    lines = []
-    for d in soup.select(".dist-table"):
-        bet = (d.get("bet-type") or "").upper()
-        pid = d.get("proto-pid") or d.get("proto-uid")
-        uid = d.get("proto-uid") or ""
-        home = (d.get("tn-home") or "").strip()
-        away = (d.get("tn-away") or "").strip()
-        change_no = (d.get("change-no") or "0").strip()
-        changed = change_no not in ("", "0")
-        handisign = d.get("handisign") or ""
-
-        tr = d.find_parent("tr")
-        # .game-name에는 title 속성(예: "스페인 라리가")과 화면에 보이는 글자(예: "라리가")가
-        # 서로 다르게 들어있다. 예전엔 title만 봤는데, 사용자가 화면에서 본 대로("라리가")
-        # 저장해 두면 title과 달라서 매칭이 전부 실패했다 — 실측으로 확인한 버그. 이제 둘 중
-        # 하나만 맞아도 그 리그로 인정한다.
-        league_title, league_text, game_idx = "", "", ""
-        if tr:
-            gn = tr.select_one(".game-name")
-            if gn:
-                league_title = (gn.get("title") or "").strip()
-                league_text = gn.get_text(strip=True)
-            noti = tr.select_one(".game-noti")
-            if noti and noti.get("game-idx"):
-                game_idx = noti.get("game-idx")
-        if not game_idx:
-            game_idx = d.get("game-idx") or ""
-        league = league_title or league_text
-
-        cur = {"W": "", "D": "", "L": ""}
-        for c in d.select(".slt-odds"):
-            w = c.get("wdl")
-            if w in cur:
-                cur[w] = (c.get("odds") or "").strip()
-
-        if target_league and league and target_league not in (league_title, league_text):
-            continue
-        if not pid or not home or not away:
-            continue
-
-        lines.append({
-            "pid": pid, "uid": uid, "idx": game_idx, "bet": bet,
-            "league": league, "home": home, "away": away,
-            "changed": changed, "handi": handisign,
-            "W": cur["W"], "D": cur["D"], "L": cur["L"],
-        })
-    return lines
-
-
-def fetch_domestic(target_league: str, wait: float = 0.0) -> dict:
-    """
-    지금 화면에 떠 있는 경기들의 국내배당(초기배당 기준)을 가져온다.
-    target_league(예: 'K리그1')와 다른 리그명은 건너뛴다.
-    """
-    if not is_open():
-        raise CrawlError("먼저 '화면 열기'로 화면을 열어 주세요.")
-
-    with _lock:
-        html = _driver.page_source
-        cur_url = _driver.current_url
-        session = _make_session(_driver)
-
-    if "dist-table" not in html and "로그인" in BeautifulSoup(html, "html.parser").get_text()[:3000]:
-        raise CrawlError("로그인 안 된 화면 같습니다. 크롬 창에서 로그인 후 다시 시도하세요.")
-
-    soup = BeautifulSoup(html, "html.parser")
-    lines = _parse_lines(soup, target_league)
-    if not lines:
-        raise CrawlError(f"'{target_league or '(전체)'}' 경기를 화면에서 찾지 못했습니다. "
-                         "회차·리그명을 확인해 주세요.")
-
-    # 회차번호는 주소창이 아니라 화면 안에서 읽는다.
-    # 주소창의 proto_round는 '사용자가 입력한 값'이라, 짧게(예: 99) 넣으면 사이트가
-    # 최신 회차(260099)를 대신 보여주면서도 주소는 99인 채로 남는다. 그 99를 그대로
-    # /proto/history에 넘기면 경기명도 초기배당 행도 없는 빈 응답이 와서 초기배당
-    # 조회가 전부 실패하고, 조용히 '현재 배당'으로 대체돼 버린다(실측 확인한 버그).
-    # 반면 화면의 <p class="game-uid">에 붙은 proto-round는 지금 보고 있는 회차의
-    # 진짜 번호라 항상 맞다.
-    round_id = ""
-    tag = soup.select_one("[proto-round]")
-    if tag:
-        round_id = (tag.get("proto-round") or "").strip()
-    if not round_id:
-        m = re.search(r"proto_round=(\d+)", cur_url)
-        if m:
-            round_id = m.group(1)
-
-    matches = {}
-    for ln in lines:
-        rec = matches.setdefault(ln["pid"], {"N": None, "H": None})
-        if ln["bet"] == "N" and rec["N"] is None:
-            rec["N"] = ln
-        elif ln["bet"] == "H":
-            if rec["H"] is None or _to_int(ln["uid"]) < _to_int(rec["H"]["uid"]):
-                rec["H"] = ln
-
-    def resolve_initial(ln):
-        if ln is None:
-            return ("", "", "", "")
-        if not ln["changed"]:
-            return (ln["W"], ln["D"], ln["L"], "")
-        got = _fetch_initial_odds(session, round_id, ln["uid"], ln["idx"])
-        time.sleep(0.25)
-        if got:
-            return (got[0], got[1], got[2], "")
-        return (ln["W"], ln["D"], ln["L"], "초기배당조회실패(현재배당)")
-
-    rows = []
-    fail_cnt = 0
-    for pid, rec in matches.items():
-        meta = rec["N"] or rec["H"]
-        w, d, l, note1 = resolve_initial(rec["N"])
-        hw, hd, hl, note2 = resolve_initial(rec["H"])
-        note = " / ".join(x for x in (note1, note2) if x)
-        if note:
-            fail_cnt += 1
-        kh = _fmt_handi(rec["H"]["handi"]) if rec["H"] else None
-        rows.append({
-            "HT": meta["home"], "AT": meta["away"],
-            "KW": w or None, "KD": d or None, "KL": l or None,
-            "KH": kh,
-            "KHW": hw or None, "KHD": hd or None, "KHL": hl or None,
-            "_note": note,
-        })
-
-    return {"round_id": round_id, "count": len(rows), "fail_cnt": fail_cnt, "rows": rows}
+def open_round(year, rnd) -> str:
+    """열 창이 없다. 회차가 실제로 있는지만 확인해 준다."""
+    if not _game_seq(year, rnd):
+        raise CrawlError(f"{year}년 {rnd}회차를 찾지 못했습니다.")
+    return f"{BASE}/index.htm?tab_type=proto&game_type=pt&game_category=pt1&game_year={year}&game_round={rnd}"

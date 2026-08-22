@@ -53,7 +53,7 @@ import os
 import re
 import sqlite3
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import quote
 
 # 루트/‘api’ 를 import 경로에 등록 (betpro_paths, betpro_auth, engine)
@@ -1818,20 +1818,48 @@ def crawl_close(user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
-# ═══════════════════════ 국내배당(젠토토) 가져오기 ═══════════════════════
+# ═══════════════════════ 국내배당(와이즈토토) 가져오기 ═══════════════════════
 # 스코어맨(해외배당) 크롤과 흐름은 같지만 목적이 다르다 — 이미 있는 경기의
 # 국내배당 칸(KW~KHL)만 채우는 '백필 전용' 기능이라 새 경기를 만들지 않는다.
 # 저장은 새 엔드포인트 없이 기존 /api/crawl/save(= _merge_and_save)를 그대로 쓴다.
-#   젠토토 사이트의 '리그 선택' 검색 필터 값(game_name[])을 CDP로 직접 확인해 맞춘
-#   것들 — 화면 표시 텍스트(예: '라리가')와 실제 필터/game-name title 속성값(예:
-#   '스페인 라리가')이 다르면 _parse_lines()의 title 매칭이 걸러버려 아무 것도
-#   못 찾는다(에레디비시도 같은 이유로 이미 한 번 고쳤다). EP/BD/SA/L1은 아직
-#   실측 확인 전이라 원래 값 그대로 둔다 — 같은 증상(가져오기 실패)이 나면 그
-#   리그도 같은 방식(회차 화면 열고 리그 체크박스의 실제 value 확인)으로 맞춘다.
+#
+# 예전엔 젠토토를 긁었는데 로그인한 크롬 창이 필요해 자주 실패했다. 와이즈토토는
+# 로그인 없이 HTTP로 받아오므로 브라우저 자체가 없다(api/kr_crawler.py 상단 주석 참고).
+# 젠토토용 코드는 api/kr_crawler_zentoto_backup.py 에 그대로 남겨 뒀다.
+#
+# 아래 이름은 와이즈토토 화면에 실제로 찍히는 리그 표기다 — 2026년 99회차 응답에서
+# 직접 확인했다: EFL챔 / EPL / J1리그 / J2리그 / K리그1 / K리그2 / MLS / 독슈퍼컵 /
+# 라리가 / 세리에A / 에레디비 / 축ASEA챔 / 코파리베 / 프리그1.
+# 이 표기와 한 글자라도 다르면 그 리그 경기를 하나도 못 찾는다(회차마다 표기가
+# 바뀌면 화면에서 직접 고쳐 넣으면 그 값이 저장돼 다음부터 먼저 쓰인다).
 KR_LEAGUE_NAME_GUESS = {
     "K1": "K리그1", "K2": "K리그2", "EP": "EPL",
-    "La": "스페인 라리가", "BD": "분데스리", "SA": "세리에A", "Er": "네덜란드 에레디비시", "L1": "프리그1",
+    "La": "라리가", "BD": "분데스리", "SA": "세리에A", "Er": "에레디비", "L1": "프리그1",
 }
+
+
+def _season_round_date_range(db: str, code: str, season: str, round_: str):
+    """그 시즌·라운드 경기들의 첫 날짜와 마지막 날짜(datetime). 날짜가 없으면 (None, None).
+
+    DT는 '26-08-22 (Sat)' 꼴로 저장돼 있다. 회차 자동 탐색이 이 범위를 기준으로
+    와이즈토토 회차를 찾는다.
+    """
+    df = DATA.load_league_df(db, code)
+    if df.empty or not {"S", "R", "DT"}.issubset(df.columns):
+        return None, None
+
+    def _norm(v):
+        return re.sub(r"[Rr]$", "", str(v).strip())
+
+    sel = df[(df["S"].astype(str).str.strip() == str(season).strip())
+             & (df["R"].astype(str).apply(_norm) == _norm(round_))]
+    days = []
+    for v in sel.get("DT", pd.Series(dtype=object)).dropna():
+        try:
+            days.append(datetime.strptime(str(v)[:8], "%y-%m-%d"))
+        except ValueError:
+            continue
+    return (min(days), max(days)) if days else (None, None)
 
 
 class CrawlKrOpenBody(BaseModel):
@@ -1846,7 +1874,9 @@ class CrawlKrFetchBody(BaseModel):
     code: str
     season: str            # 이 리그의 시즌(S) — 매칭용
     round: str              # noqa: A003 — 이 리그의 라운드(R, 예: '21R') — 매칭용
-    league_name: Optional[str] = None   # 비우면 K1/K2 기본 추정값 사용
+    league_name: Optional[str] = None   # 비우면 기본 추정값 사용
+    year: str = ""          # 와이즈토토 회차의 연도(예: 2026)
+    kr_round: str = ""      # 와이즈토토 그 해의 회차번호(예: 99). 앱의 R과 무관.
 
 
 @app.get("/api/crawl/kr/config")
@@ -1883,7 +1913,11 @@ def crawl_kr_config(scope: str = PATHS.SCOPE_MASTER, code: str = "",
 
 @app.post("/api/crawl/kr/open")
 def crawl_kr_open(body: CrawlKrOpenBody, user: dict = Depends(get_current_user)):
-    """크롬 창을 젠토토의 해당 연도·회차 화면으로 연다(로그인 필요 — 최초 1회 직접 로그인)."""
+    """그 회차가 실제로 있는지만 확인해 준다.
+
+    젠토토 때는 로그인한 크롬 창을 띄우는 자리였는데, 와이즈토토는 로그인도 브라우저도
+    필요 없어 화면에서 이 단계를 없앴다. 엔드포인트는 회차 존재 확인용으로 남겨 둔다.
+    """
     _check_league_for(body.code, body.scope, user)
     try:
         url = KRCRAWL.open_round(body.year, body.round)
@@ -1908,12 +1942,25 @@ def crawl_kr_fetch(body: CrawlKrFetchBody, user: dict = Depends(get_current_user
     league_name = (body.league_name or saved_name or KR_LEAGUE_NAME_GUESS.get(label, "")).strip()
     if not league_name:
         raise HTTPException(status_code=400,
-                            detail="젠토토 리그명을 확인할 수 없습니다. 직접 입력해 주세요.")
-    # 사용자가 입력한(또는 화면에 채워져 있던) 리그명을 저장해 둔다 — 젠토토가 시즌마다
+                            detail="와이즈토토 리그명을 확인할 수 없습니다. 직접 입력해 주세요.")
+    # 사용자가 입력한(또는 화면에 채워져 있던) 리그명을 저장해 둔다 — 사이트가 시즌마다
     # 표기를 바꿔도, 다음에 이 리그 팝업을 열 때 자동 추정값 대신 이 값이 먼저 채워진다.
     CRAWL.set_league_name(udb, body.scope, body.code, league_name)
+
+    # 회차는 사용자가 알 필요가 없다 — 이 리그의 그 시즌·라운드 경기 날짜를 DB에서 읽어
+    # 그 날짜가 들어 있는 와이즈토토 회차를 스스로 찾는다. 회차를 직접 넣었을 때만
+    # 그 회차를 그대로 쓴다(특정 회차만 콕 집어 다시 받고 싶을 때).
     try:
-        raw = KRCRAWL.fetch_domestic(league_name)
+        if str(body.year).strip() and str(body.kr_round).strip():
+            raw = KRCRAWL.fetch_domestic(league_name, body.year.strip(), body.kr_round.strip())
+        else:
+            d0, d1 = _season_round_date_range(db, body.code, body.season, body.round)
+            if d0 is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"'{body.season} {body.round}' 경기의 날짜가 비어 있어 회차를 찾을 수 "
+                           "없습니다. 먼저 해배 가져오기로 날짜를 채우거나, 회차를 직접 넣어 주세요.")
+            raw = KRCRAWL.fetch_by_dates(league_name, d0, d1)
     except KRCRAWL.CrawlError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1967,6 +2014,8 @@ def crawl_kr_fetch(body: CrawlKrFetchBody, user: dict = Depends(get_current_user
 
     return {
         "count": raw["count"], "fail_cnt": raw["fail_cnt"],
+        # 배당이 바뀌어 초기배당으로 되돌린 경기 수 — 화면 요약에 같이 보여준다.
+        "changed_cnt": raw.get("changed_cnt", 0),
         "matched": len(matched_rows), "rows": matched_rows, "unmatched": unmatched,
         "teams": teams, "unknown_teams": unknown,
     }
