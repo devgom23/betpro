@@ -375,7 +375,11 @@ export function myHitStyle(value) {
   if (value === 'Pass' || value === '패스') return { background: '#757575', color: '#fff', fontWeight: 700 }
   if (value === 'P-고민' || value === '패스고민') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-분산') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  if (value === 'P-엇갈') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-상대') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  if (value === 'P-똥배') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  if (value === 'P-원정') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  if (value === 'P-관전') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-어렵') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'B-고민' || value === '벳고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
   if (value === '축') return { background: '#00897B', color: '#fff', fontWeight: 700 }

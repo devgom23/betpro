@@ -6,7 +6,8 @@ import { isStarred, formatTime, formatDt, scoreClass } from '../../utils/format'
 import './MatchDetailModal.css'
 
 const PICK_OPTIONS = ['대기', '축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
-const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-상대', 'P-어렵', 'B-고민', 'B-Ma', 'B-Si', '축', '축-Si']
+const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-엇갈', 'P-상대', 'P-똥배', 'P-원정', 'P-관전', 'P-어렵',
+                     'B-고민', 'B-Ma', 'B-Si', '축', '축-Si']
 
 function rtLabel(v) {
   if (v === null || v === undefined || v === '') return ''
