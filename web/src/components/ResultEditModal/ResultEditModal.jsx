@@ -30,6 +30,25 @@ function numOrNull(s) {
   return s === '' || s === null || s === undefined ? null : parseFloat(s)
 }
 
+// 스코어 + 핸디 부호(-1/+1)로 RT(핸승/핸무/무/역)를 판정한다. 이 앱의 핸디는 항상
+// ±1(한 골)이라 규칙이 단순하다 — 실제 스코어가 같으면 무조건 '무'(핸디와 무관하게
+// 실제 무승부), 다르면 정배 쪽이 이겼는지부터 보고 이겼으면 골차가 1이면 '핸무'(정확히
+// 핸디만큼만 이김=푸시), 2 이상이면 '핸승', 정배가 아닌 쪽이 이겼으면(언더독이 실제로
+// 이긴 경우) '역'. handicapSign은 '-1'(홈 정배)/'+1'(원정 정배) 문자열 — 없으면 못 정한다.
+function rtFromScore(hs, as_, handicapSign) {
+  if (hs === '' || as_ === '' || hs === null || as_ === null || !handicapSign) return null
+  const h = Number(hs)
+  const a = Number(as_)
+  if (Number.isNaN(h) || Number.isNaN(a)) return null
+  if (h === a) return '무'
+  const favoredIsHome = handicapSign === '-1'
+  const winnerIsHome = h > a
+  if (winnerIsHome === favoredIsHome) {
+    return Math.abs(h - a) > 1 ? '핸승' : '핸무'
+  }
+  return '역'
+}
+
 // DT는 'YY-MM-DD (요일)' 문자열로 저장돼 있다 — <input type="date">는 'YYYY-MM-DD'가 필요해서
 // 서로 변환한다. 연도는 2000년대로 가정(이 앱이 다루는 시즌 범위 안에서는 항상 맞다).
 const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -152,6 +171,7 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [fetchingResults, setFetchingResults] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
@@ -252,6 +272,49 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
     )
   }
 
+  // 와이즈토토에서 끝난 경기의 스코어를 가져와 이미 입력된 핸디 부호(_KH/_FH — 아직
+  // 저장 전이라도 지금 화면에 있는 값을 그대로 씀)로 RT까지 그 자리에서 판정해 채운다.
+  // 이미 스코어가 입력된 행은 손대지 않는다 — 수동 입력을 덮어쓰지 않기 위해서다.
+  async function handleFetchResults() {
+    if (season === ALL || round === ALL) {
+      setError('결과 불러오기는 시즌·라운드를 하나씩 골라야 합니다(전체 불가).')
+      return
+    }
+    setFetchingResults(true)
+    setError('')
+    setNotice('')
+    try {
+      const res = await api.post('/api/crawl/kr/fetch_results', { scope, code, season, round })
+      const byKey = new Map(res.rows.map((r) => [`${r.S}|${r.R}|${r.No}|${r.HT}|${r.AT}`, r]))
+      // setRows의 함수형 업데이트는 React가 나중에(비동기로) 실행하므로, 그 콜백
+      // 안에서 filled/rtSkipped를 세면 바로 아래에서 읽을 때 아직 0일 수 있다 —
+      // 그래서 지금 갖고 있는 rows(클로저)로 미리 다음 값을 만들고 개수도 여기서 센다.
+      let filled = 0
+      let rtSkipped = 0
+      const nextRows = rows.map((row) => {
+        const key = `${row.S}|${row.R}|${row.No}|${row.HT}|${row.AT}`
+        const hit = byKey.get(key)
+        if (!hit) return row
+        if (row._HS !== '' || row._AS !== '') return row
+        filled += 1
+        const hs = scoreInit(hit.HS)
+        const as_ = scoreInit(hit.AS)
+        const rt = rtFromScore(hs, as_, row._KH || row._FH || '')
+        if (!rt) rtSkipped += 1
+        return { ...row, _HS: hs, _AS: as_, _RT: rt || row._RT }
+      })
+      setRows(nextRows)
+      const parts = [`${filled}경기 스코어를 불러왔습니다`]
+      if (rtSkipped > 0) parts.push(`핸디 정보가 없어 RT는 못 채운 경기 ${rtSkipped}건(직접 골라주세요)`)
+      if (res.unmatched?.length) parts.push(`매칭 안 됨 ${res.unmatched.length}건`)
+      setNotice(parts.join(' · '))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setFetchingResults(false)
+    }
+  }
+
   async function handleSave() {
     setBusy(true)
     setError('')
@@ -321,6 +384,15 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
             />
             비어 있는 경기만 보기
           </label>
+          <button
+            type="button"
+            className="edit-fetch-btn"
+            onClick={handleFetchResults}
+            disabled={fetchingResults}
+            title="와이즈토토에서 끝난 경기의 스코어를 가져와 RT까지 채웁니다(이미 입력된 경기는 건드리지 않습니다)"
+          >
+            {fetchingResults ? '불러오는 중...' : '🔄 결과불러오기'}
+          </button>
         </div>
 
         {error && <p className="error-text">{error}</p>}

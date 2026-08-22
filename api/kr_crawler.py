@@ -25,6 +25,11 @@
   · <li class="hm"> 이 아예 없는 줄(언더오버 'un', 합계마켓 'd5')은 건너뛴다.
     이걸 '핸디 표기가 빈 줄 = 일반 승무패'로 오인해서 U/O 배당을 승무패 자리에
     덮어썼던 적이 있다.
+  · 경기결과(스코어) 수집(_parse_round_results)에서: 킥오프하면 그 순간부터 팀명
+    칸에 스코어 숫자가 채워진다 — "스코어 숫자가 있다 = 끝났다"로 오인해서 라이브
+    진행 중인 경기의 도중 스코어를 최종 스코어로 잘못 가져온 적이 있다. 결과 칸이
+    정확히 '홈승'/'홈패'/'무승부' 셋 중 하나일 때만 끝난 경기로 본다('경기전'도,
+    "4'" 같은 경과시간 표시도 전부 걸러진다).
 """
 import re
 import threading
@@ -388,6 +393,98 @@ def fetch_by_dates(target_league: str, d0: datetime, d1: datetime) -> dict:
         "changed_cnt": changed,
         "rows": rows,
     }
+
+
+# 일반 승무패 줄의 '결과' 칸(클래스 없는 li)에 나오는, 완전히 끝난 경기만 뜻하는 값.
+# ⚠ 실측으로 잡은 버그: 킥오프하면 그 순간부터 팀명 칸에 스코어 숫자가 채워진다.
+# "팀명 뒤에 숫자가 있으면 끝난 경기"로 오인해 라이브 중인 경기(0분~90분 진행 중,
+# 결과 칸이 "4'"처럼 경과 시간으로 표시됨)의 도중 스코어를 최종 스코어로 잘못
+# 가져온 적이 있다 — 그래서 숫자 유무가 아니라 이 화이트리스트로만 종료를 판정한다.
+_FINISHED_RESULTS = {"홈승", "홈패", "무승부"}
+
+
+def _parse_round_results(html, target_league):
+    """한 회차 HTML에서 그 리그의 '완전히 끝난' 경기 스코어만 뽑는다.
+
+    한 경기는 승무패/핸디/언더오버/홀짝 여러 줄로 반복되는데, 핸디 줄(H -1 등)의
+    스코어 칸은 핸디가 보정된 값이라 실제 스코어가 아니다(예: 0:7 실제 스코어가
+    핸디 -1 줄에서는 1:7로 나온다). 핸디 표기가 빈 '일반 승무패' 줄만 실제 스코어다.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    out = {}
+    for u in soup.select("div.gameinfo ul"):
+        a4 = u.select_one("li.a4")
+        if not a4:
+            continue
+        league = a4.get_text(strip=True)
+        if target_league and league != target_league:
+            continue
+
+        hm_el = u.select_one("li.hm")
+        if hm_el is None:                    # 언더오버·합계마켓 줄 — 팀 스코어 없음
+            continue
+        if hm_el.get_text(strip=True):        # 핸디 줄 — 스코어가 핸디 보정값이라 제외
+            continue
+
+        # 결과 칸(클래스 없는 li) — '경기전'(아직 시작 전)·"4'"같은 경과시간(진행 중)은
+        # 전부 건너뛰고, 확정 결과 3종일 때만 스코어를 가져온다.
+        result_el = next((li for li in u.find_all("li", recursive=False) if not li.get("class")), None)
+        if not result_el or result_el.get_text(strip=True) not in _FINISHED_RESULTS:
+            continue
+
+        a6 = u.select_one("li.a6")
+        a8 = u.select_one("li.a8")
+        if not a6 or not a8:
+            continue
+        m6 = re.match(r"^(.*?)\s*(\d+)$", a6.get_text(strip=True))
+        m8 = re.match(r"^(\d+)\s*(.*)$", a8.get_text(strip=True))
+        if not m6 or not m8:
+            continue
+        ht, hs = m6.group(1).strip(), m6.group(2)
+        as_, at = m8.group(1), m8.group(2).strip()
+        if not ht or not at:
+            continue
+        out[(ht, at)] = {"HT": ht, "AT": at, "HS": int(hs), "AS": int(as_)}
+    return out
+
+
+def fetch_results(target_league: str, year, rnd) -> dict:
+    """그 회차에서 target_league의 끝난 경기 스코어를 가져온다."""
+    html = fetch_round_html(year, rnd)
+    if html is None:
+        raise CrawlError(f"{year}년 {rnd}회차를 찾지 못했습니다. 연도·회차를 확인해 주세요.")
+    matches = _parse_round_results(html, target_league)
+    return {"round_id": f"{year}-{rnd}", "count": len(matches), "rows": list(matches.values())}
+
+
+def fetch_results_by_dates(target_league: str, d0: datetime, d1: datetime) -> dict:
+    """날짜 범위로 회차를 스스로 찾아 그 리그의 끝난 경기 스코어를 모아 온다.
+
+    fetch_by_dates(배당)와 회차 탐색 로직은 같다 — 다른 점은 매치가 하나도 안 끝났어도
+    (전부 예정 경기여도) 오류로 보지 않고 빈 목록을 그대로 돌려준다는 것뿐이다.
+    """
+    years = sorted({d0.year, d1.year})
+    rounds = []
+    for y in years:
+        lo = d0 if d0.year == y else datetime(y, 1, 1)
+        hi = d1 if d1.year == y else datetime(y, 12, 31)
+        for rnd in find_rounds_for_dates(y, lo, hi):
+            rounds.append((y, rnd))
+    if not rounds:
+        raise CrawlError(
+            f"{d0:%Y-%m-%d}~{d1:%Y-%m-%d}에 열린 프로토 회차가 없습니다.")
+
+    merged, used = {}, []
+    for y, rnd in rounds:
+        html = fetch_round_html(y, rnd)
+        if not html:
+            continue
+        got = _parse_round_results(html, target_league)
+        if got:
+            used.append(f"{y}년 {rnd}회차")
+            merged.update(got)
+
+    return {"round_id": " + ".join(used), "count": len(merged), "rows": list(merged.values())}
 
 
 # ─────────── 젠토토 시절 인터페이스 (브라우저를 안 쓰므로 전부 무동작) ───────────

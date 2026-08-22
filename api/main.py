@@ -2021,6 +2021,88 @@ def crawl_kr_fetch(body: CrawlKrFetchBody, user: dict = Depends(get_current_user
     }
 
 
+class CrawlKrResultsBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    code: str
+    season: str            # 이 리그의 시즌(S) — 매칭용
+    round: str              # noqa: A003 — 이 리그의 라운드(R) — 매칭용
+    league_name: Optional[str] = None   # 비우면 국배 가져오기에 저장된 값(또는 기본 추정값) 사용
+    year: str = ""          # 와이즈토토 회차 연도를 직접 지정할 때만
+    kr_round: str = ""      # 와이즈토토 회차번호를 직접 지정할 때만
+
+
+@app.post("/api/crawl/kr/fetch_results")
+def crawl_kr_fetch_results(body: CrawlKrResultsBody, user: dict = Depends(get_current_user)):
+    """
+    결과·핸디 입력 팝업의 '결과 불러오기' — 와이즈토토에서 끝난 경기 스코어(HS/AS)를
+    가져와 이 리그의 season/round에 이미 있는 경기와 (홈팀,원정팀)으로 매칭한다.
+    RT(핸승/핸무/무/역)는 여기서 계산하지 않는다 — 화면에 지금 입력돼 있는(또는 저장은
+    안 했지만 방금 고친) 핸디 부호로 그 자리에서 판정해야 해서, 그 계산은 프론트에서 한다.
+    """
+    _check_league_for(body.code, body.scope, user)
+    db = _resolve_scope_db(body.scope, user)
+    udb = _user_db_of(user)
+    label = _l_value(db, body.scope, body.code)
+    saved_name = CRAWL.get_league_name(udb, body.scope, body.code)
+    league_name = (body.league_name or saved_name or KR_LEAGUE_NAME_GUESS.get(label, "")).strip()
+    if not league_name:
+        raise HTTPException(status_code=400,
+                            detail="와이즈토토 리그명을 확인할 수 없습니다. '국배 가져오기'에서 먼저 리그명을 설정해 주세요.")
+
+    try:
+        if str(body.year).strip() and str(body.kr_round).strip():
+            raw = KRCRAWL.fetch_results(league_name, body.year.strip(), body.kr_round.strip())
+        else:
+            d0, d1 = _season_round_date_range(db, body.code, body.season, body.round)
+            if d0 is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"'{body.season} {body.round}' 경기의 날짜가 비어 있어 회차를 찾을 수 "
+                           "없습니다. 먼저 해배 가져오기로 날짜를 채우거나, 회차를 직접 넣어 주세요.")
+            raw = KRCRAWL.fetch_results_by_dates(league_name, d0, d1)
+    except KRCRAWL.CrawlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    aliases = CRAWL.list_aliases(udb, body.scope, body.code, source="kr")
+    rows = CRAWL.apply_aliases(raw["rows"], aliases)
+
+    df = DATA.load_league_df(db, body.code)
+    matched_rows, unmatched = [], []
+
+    def _round_norm(v):
+        return re.sub(r"[Rr]$", "", str(v).strip())
+
+    if df.empty or not {"S", "R", "HT", "AT", "No"}.issubset(df.columns):
+        unmatched = [f"{r['HT']} vs {r['AT']}" for r in rows]
+    else:
+        season_q = str(body.season).strip()
+        round_q = _round_norm(body.round)
+        season_round = df[(df["S"].astype(str).str.strip() == season_q) &
+                          (df["R"].astype(str).apply(_round_norm) == round_q)]
+        row_map = {}
+        for _, r in season_round.iterrows():
+            key = (str(r["HT"]).strip(), str(r["AT"]).strip())
+            row_map[key] = (r["S"], r["R"], float(r["No"]))
+
+        for r in rows:
+            pair = (str(r["HT"]).strip(), str(r["AT"]).strip())
+            hit = row_map.get(pair)
+            if hit is None:
+                unmatched.append(f"{r['HT']} vs {r['AT']}")
+                continue
+            s_val, r_val, no_val = hit
+            matched_rows.append({
+                "S": s_val, "R": r_val, "No": no_val,
+                "HT": r["HT"], "AT": r["AT"],
+                "HS": r["HS"], "AS": r["AS"],
+            })
+
+    return {
+        "count": raw["count"], "matched": len(matched_rows),
+        "rows": matched_rows, "unmatched": unmatched,
+    }
+
+
 @app.post("/api/crawl/kr/aliases")
 def crawl_kr_save_aliases(body: CrawlAliasBody, user: dict = Depends(get_current_user)):
     """국내배당(젠토토) 팀명 치환 규칙 저장 — 스코어맨 치환 규칙과는 별도로 저장된다."""

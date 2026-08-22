@@ -31,6 +31,29 @@
   color: var(--text-secondary);
 }
 
+.edit-fetch-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edit-fetch-btn:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+
+.edit-fetch-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .edit-empty {
   padding: 24px 0;
   text-align: center;
