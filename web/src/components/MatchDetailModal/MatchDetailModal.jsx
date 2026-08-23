@@ -6,6 +6,8 @@ import { isStarred, formatTime, formatDt, scoreClass } from '../../utils/format'
 import './MatchDetailModal.css'
 
 const PICK_OPTIONS = ['대기', '축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
+// P — 내픽과 별개로 "실제로 딱 찍었는지"만 남기는 참고용 태그. 결과 판정에는 안 쓰인다.
+const P_OPTIONS = ['핸승', '핸무', '무', '역']
 const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-엇갈', 'P-상대', 'P-똥배', 'P-원정', 'P-핸↑', 'P-관전', 'P-어렵',
                      'B-고민', 'B-Ma', 'B-Si', '축', '축-Si']
 
@@ -631,6 +633,7 @@ function SampleTable({ row, scope, expanded }) {
 // onSavePick(patch)가 실제 저장을 담당하고, 여기선 즉시(낙관적) 반영만 한다.
 function MyPickBar({ row, onSavePick }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
+  const [p, setP] = useState(row.MY_P || '')
   const [hit, setHit] = useState(row.MY_HIT || '')
   const [memo, setMemo] = useState(row.MEMO || '')
   const [savedMemo, setSavedMemo] = useState(row.MEMO || '')
@@ -639,6 +642,12 @@ function MyPickBar({ row, onSavePick }) {
     const next = e.target.value
     setPick(next)
     onSavePick({ pick: next || null })
+  }
+
+  function handlePChange(e) {
+    const next = e.target.value
+    setP(next)
+    onSavePick({ p: next || null })
   }
 
   function handleHitChange(e) {
@@ -660,6 +669,17 @@ function MyPickBar({ row, onSavePick }) {
         <select value={pick} onChange={handlePickChange}>
           <option value="">선택 안함</option>
           {PICK_OPTIONS.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mypick-bar-field">
+        P
+        <select value={p} onChange={handlePChange}>
+          <option value="">선택 안함</option>
+          {P_OPTIONS.map((o) => (
             <option key={o} value={o}>
               {o}
             </option>

@@ -48,7 +48,7 @@ VALID_LEAGUES = set(LEAGUES)
 LEAGUE_LABEL: Dict[str, str] = {
     "EPL": "EPL",
     "LALIGA": "라리가",
-    "SERIEA": "세리에A",
+    "SERIEA": "세리에",
     "BUNDES": "분데스",
     "EREDIVISIE": "에레디",
     "LIGUE1": "리그1",
@@ -274,6 +274,9 @@ CREATE TABLE IF NOT EXISTS my_picks (
     AT TEXT NOT NULL,
     starred INTEGER NOT NULL DEFAULT 0,
     pick TEXT,
+    -- 내픽(pick)과 별개로, "실제로 딱 찍었는지"만 따로 기록하는 참고용 태그.
+    -- 값은 핸승/핸무/무/역 중 하나이고 어떤 집계·판정에도 안 쓰인다.
+    p TEXT,
     hit TEXT,
     memo TEXT,
     -- 이번주 픽 화면에서만 숨긴다("선택 삭제"). starred는 그대로라 리그 표의 별표는 안 꺼진다.
@@ -375,6 +378,8 @@ def ensure_predlog_db(username: str) -> str:
             con.execute("ALTER TABLE my_picks ADD COLUMN hit TEXT")
         if "wp_hidden" not in cols:
             con.execute("ALTER TABLE my_picks ADD COLUMN wp_hidden INTEGER NOT NULL DEFAULT 0")
+        if "p" not in cols:
+            con.execute("ALTER TABLE my_picks ADD COLUMN p TEXT")
         con.execute("PRAGMA foreign_keys=ON;")
         con.execute(_SCHEMA_BET_SLIPS)
         con.execute(_SCHEMA_BET_SLIP_LEGS)

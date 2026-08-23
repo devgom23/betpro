@@ -6,6 +6,12 @@
 }
 
 .league-table {
+  /* width 지정이 없으면(기본 auto) 브라우저가 이 컨테이너 폭에 맞춰 각 컬럼을
+     비율대로 줄여버려서, 컬럼에 직접 지정한 width(columnWidth, columnGroups.js)가
+     표마다 다르게 눌린다 — 표 하나짜리든 여러 개(이번주 리스트의 요일별 표)든
+     항상 내용이 원하는 만큼 그대로 넓어지게(축소 없이) max-content로 고정한다.
+     실제 화면 폭보다 넓어지면 부모 .league-table-scroll의 가로 스크롤로 넘어간다. */
+  width: max-content;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 12px;

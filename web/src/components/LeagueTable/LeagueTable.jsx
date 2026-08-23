@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, formStyle, bettingDayStyle,
-  computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass,
+  computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
+  collapsedWidth,
 } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
+import RtBadge from '../RtBadge/RtBadge'
 import { api } from '../../api/client'
 import { useFontSize } from '../../context/FontSizeContext'
 import { isStarred } from '../../utils/format'
@@ -140,18 +142,20 @@ export default function LeagueTable({
     return {
       important: o?.important ?? isStarred(row.IMPORTANT),
       pick: o?.pick !== undefined ? o.pick : row.MY_PICK || '',
+      p: o?.p !== undefined ? o.p : row.MY_P || '',
       hit: o?.hit !== undefined ? o.hit : row.MY_HIT || '',
       memo: o?.memo !== undefined ? o.memo : row.MEMO || '',
     }
   }
 
-  // 별표/내픽/적중여부/메모 공용 저장 — patch에 준 필드만 바꾸고 나머지는 현재 값을 유지한 채
-  // 전체 상태를 다시 올린다(서버는 매번 값을 다 받아 upsert).
+  // 별표/내픽/P태그/적중여부/메모 공용 저장 — patch에 준 필드만 바꾸고 나머지는 현재 값을
+  // 유지한 채 전체 상태를 다시 올린다(서버는 매번 값을 다 받아 upsert).
   async function savePick(row, patch) {
     const key = matchKey(row)
     const prevValue = pickOverridesRef.current[key] ?? {
       important: isStarred(row.IMPORTANT),
       pick: row.MY_PICK || '',
+      p: row.MY_P || '',
       hit: row.MY_HIT || '',
       memo: row.MEMO || '',
     }
@@ -168,6 +172,7 @@ export default function LeagueTable({
         AT: row.AT,
         starred: next.important,
         pick: next.pick || null,
+        p: next.p || null,
         hit: next.hit || null,
         memo: next.memo || null,
       })
@@ -306,33 +311,43 @@ export default function LeagueTable({
                     return [
                       ...(hasLeagueLabel
                         ? [
-                            <th key={`${gi}-l`} className="sub-header collapsed-cell">
+                            <th key={`${gi}-l`} className="sub-header collapsed-cell" style={{ width: collapsedWidth('리그') }}>
                               리그
                             </th>,
                           ]
                         : []),
-                      <th key={`${gi}-r`} className="sub-header collapsed-cell">
+                      <th key={`${gi}-r`} className="sub-header collapsed-cell" style={{ width: collapsedWidth('R') }}>
                         R
                       </th>,
-                      <th key={`${gi}-tm`} className={`sub-header collapsed-cell${dividerClass(g, isLastGroup)}`}>
+                      <th
+                        key={`${gi}-tm`}
+                        className={`sub-header collapsed-cell${dividerClass(g, isLastGroup)}`}
+                        style={{ width: collapsedWidth('TM') }}
+                      >
                         TM
                       </th>,
                     ]
                   }
                   return [
-                    <th key={`${gi}-c`} className={`sub-header collapsed-cell${dividerClass(g, isLastGroup)}`}>
+                    <th
+                      key={`${gi}-c`}
+                      className={`sub-header collapsed-cell${dividerClass(g, isLastGroup)}`}
+                      style={{ width: collapsedWidth(null) }}
+                    >
                       ···
                     </th>,
                   ]
                 }
                 return g.cols.map((c, ci) => {
                   const isLastCol = !isLastGroup && ci === g.cols.length - 1
+                  const width = columnWidth(g, c)
                   return (
                     <th
                       key={`${gi}-${ci}`}
                       className={`sub-header ${highlightCols.includes(c.key) ? 'col-highlight' : ''}${
                         isLastCol ? dividerClass(g, isLastGroup) : ''
                       }${riskColClass(g, c)}`}
+                      style={width ? { width } : undefined}
                     >
                       {c.sub}
                     </th>
@@ -455,6 +470,19 @@ export default function LeagueTable({
                             </td>
                           )
                         }
+                        if (c.key === 'MY_P') {
+                          return (
+                            <td key={`${gi}-${ci}`} className={className}>
+                              <button className="mypick-btn" onClick={() => setPickRow(row)}>
+                                {pickState.p ? (
+                                  <RtBadge label={pickState.p} />
+                                ) : (
+                                  <span className="mypick-blank">－</span>
+                                )}
+                              </button>
+                            </td>
+                          )
+                        }
                         if (c.key === 'MY_HIT') {
                           return (
                             <td key={`${gi}-${ci}`} className={className}>
@@ -550,6 +578,7 @@ export default function LeagueTable({
               ...detailRow,
               IMPORTANT: effectivePick(detailRow).important,
               MY_PICK: effectivePick(detailRow).pick,
+              MY_P: effectivePick(detailRow).p,
               MY_HIT: effectivePick(detailRow).hit,
               MEMO: effectivePick(detailRow).memo,
             }}
@@ -566,6 +595,7 @@ export default function LeagueTable({
             row={{
               ...pickRow,
               MY_PICK: effectivePick(pickRow).pick,
+              MY_P: effectivePick(pickRow).p,
               MY_HIT: effectivePick(pickRow).hit,
               IMPORTANT: effectivePick(pickRow).important,
             }}

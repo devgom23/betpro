@@ -513,7 +513,7 @@ def league_rows(code: str,
     records = DATA.df_to_records(page)
     _attach_my_picks(records, user["username"], code, scope)
     return {
-        "columns": list(df.columns) + ["IMPORTANT", "MY_PICK", "MY_HIT"],
+        "columns": list(df.columns) + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT"],
         "rows": records,
         "total": total,
         "season": season,
@@ -670,13 +670,15 @@ def _my_pick_key(s, r, no, ht, at) -> tuple:
 
 
 def _attach_my_picks(records: list, username: str, code: str, scope: str) -> None:
-    """조회된 행마다 이 계정이 표시한 중요 별표(IMPORTANT)/내픽(MY_PICK)/적중여부(MY_HIT)/메모(MEMO)를 붙인다."""
+    """조회된 행마다 이 계정이 표시한 중요 별표(IMPORTANT)/내픽(MY_PICK)/P태그(MY_P)/
+    적중여부(MY_HIT)/메모(MEMO)를 붙인다."""
     picks = MYPICKS.list_my_picks(username, code, scope)
     by_key = {_my_pick_key(p["S"], p["R"], p["No"], p["HT"], p["AT"]): p for p in picks}
     for row in records:
         p = by_key.get(_my_pick_key(row.get("S"), row.get("R"), row.get("No"), row.get("HT"), row.get("AT")))
         row["IMPORTANT"] = bool(p["starred"]) if p else False
         row["MY_PICK"] = p["pick"] if p else None
+        row["MY_P"] = p["p"] if p else None
         row["MY_HIT"] = p["hit"] if p else None
         row["MEMO"] = p["memo"] if p else None
 
@@ -751,17 +753,18 @@ class MyPickBody(BaseModel):
     AT: Union[str, int, float]
     starred: bool = False
     pick: Optional[str] = None
+    p: Optional[str] = None
     hit: Optional[str] = None
     memo: Optional[str] = None
 
 
 @app.post("/api/leagues/{code}/my_picks")
 def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_user)):
-    """중요 별표/내픽/적중여부/메모 저장 — 계정 개인 기록이라 scope(공식/내 데이터)와 무관하게 본인만 본다."""
+    """중요 별표/내픽/P태그/적중여부/메모 저장 — 계정 개인 기록이라 scope(공식/내 데이터)와 무관하게 본인만 본다."""
     MYPICKS.upsert_my_pick(
         user["username"], code, body.scope,
         body.S, body.R, body.No, body.HT, body.AT,
-        body.starred, body.pick, body.hit, body.memo,
+        body.starred, body.pick, body.hit, body.memo, body.p,
     )
     return {"ok": True}
 
@@ -873,6 +876,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
                 rec["scope"] = scope
                 rec["IMPORTANT"] = True
                 rec["MY_PICK"] = p["pick"]
+                rec["MY_P"] = p["p"]
                 rec["MY_HIT"] = p["hit"]
                 rec["MEMO"] = p["memo"]
                 rows.append(rec)
@@ -1515,7 +1519,7 @@ def table_excel_download(code: str,
 
     shown = USERLG.label_of(db, code) if _is_user_scope(scope) else code
     buf = XLS.build_table_excel(
-        list(df.columns) + ["IMPORTANT", "MY_PICK", "MY_HIT", "MEMO"], records, title=shown)
+        list(df.columns) + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT", "MEMO"], records, title=shown)
     parts = [shown]
     if season:
         parts.append(str(season))

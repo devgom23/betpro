@@ -12,16 +12,23 @@ const MATCH_COLS = [
   'HTF', 'HF', 'HP', 'HT', 'HS', 'RT', 'AS', 'AT', 'AP', 'AF', 'ATF',
 ]
 const K_ODDS_COLS = ['KW', 'KD', 'KL', 'KH', 'KHW', 'KHD', 'KHL']
-const F_ODDS_COLS = ['FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL']
+// FHW/FHD/FHL(해외 핸디승/무/패 배당)은 화면에서 숨긴다 — FHD는 데이터 자체가 거의
+// 항상 공란이고(해외 핸디캡 시장엔 '무' 가격이 없음), FHW/FHL도 화면에 굳이 안 보여줘도
+// 되는 참고값이라 뺐다. FH(핸디기준점)만 남긴다. 데이터·26개 지표 계산(FW+FHW 조합 등)
+// 에는 전혀 영향 없다 — 여기서 빼도 백엔드는 그대로 갖고 있다가 계산에 쓴다.
+const F_ODDS_COLS = ['FW', 'FD', 'FL', 'FH']
 
 // 내 예측(별표/실제 벳팅 픽) — 화면에서 직접 클릭·팝업으로 입력하는 칸이라
 // formatCell/cellStyle이 아니라 LeagueTable.jsx가 직접 렌더링한다.
 // PICK_VERDICT(적중)는 저장되는 값이 아니라 내픽+RT로 그때그때 자동 계산한다
 // (computeAutoVerdict 참고). MY_HIT은 '의견'으로 이름을 바꿔 배팅 비중 태그로 쓴다.
+// MY_P('P')는 내픽과 별개로 "실제로 딱 찍었는지"만 남기는 참고용 태그(핸승/핸무/무/역)
+// — 결과 판정(적중/보험/미적)에는 전혀 반영되지 않는다.
 const MYPICK_COLS = [
   ['IMPORTANT', '중요'],
   ['PICK_VERDICT', '적중'],
   ['MY_PICK', '내픽'],
+  ['MY_P', 'P'],
   ['MY_HIT', '의견'],
 ]
 
@@ -172,8 +179,8 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
   addFlatGroup('해외배당', '승(W) / 무(D) / 패(L)', F_ODDS_COLS)
 
   // PICK_VERDICT(적중)는 저장된 컬럼이 아니라 내픽+RT로 그때그때 계산하는 값이라
-  // 백엔드가 내려준 컬럼 목록엔 절대 없다 — IMPORTANT/MY_PICK/MY_HIT 중 하나라도
-  // 있으면(=이 표에서 내 예측 기능 자체가 켜져 있으면) 무조건 같이 보여준다.
+  // 백엔드가 내려준 컬럼 목록엔 절대 없다 — IMPORTANT/MY_PICK/MY_P/MY_HIT 중
+  // 하나라도 있으면(=이 표에서 내 예측 기능 자체가 켜져 있으면) 무조건 같이 보여준다.
   const myPickActive = MYPICK_COLS.some(([k]) => k !== 'PICK_VERDICT' && available.has(k))
   if (myPickActive) {
     const myPickLeaves = MYPICK_COLS.map(([k, sub]) => ({ key: k, sub }))
@@ -195,6 +202,46 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
   }
 
   return groups
+}
+
+// ── 컬럼 폭 고정 ──
+// 표마다(요일별로 따로 그려지는 이번주 리스트, 리그 탭 등) table-layout:auto가 그
+// 표에 실제로 찍힌 값만 보고 각자 다시 폭을 계산해서, 같은 컬럼인데 표마다 폭이
+// 들쑥날쑥해지는 문제가 있었다. 지금 DB에 실제로 있는 값 중 가장 긴 것을 기준으로
+// (실측: 팀명 "천안시티FC" 등, api/main.py 응답을 canvas로 측정) 폭을 여기서
+// 한 번만 고정해 헤더(th)에 적용한다 — table-layout은 auto 그대로라 이 폭보다
+// 더 긴 값이 나오면 그 컬럼만 자연스럽게 넓어지고, 다른 컬럼은 안 흔들린다.
+// RT·중요·적중·내픽·P·의견은 이미 RtBadge.css/.cell-badge/.mypick-btn의 min-width로
+// 어느 표에서든 항상 같은 폭이 나와서 여기서 따로 안 잡는다.
+const COL_WIDTH = {
+  L: 64, S: 52, R: 42, No: 34, DT: 98, TM: 46,
+  HTF: 44, HF: 44, AF: 44, ATF: 44,
+  HP: 34, AP: 34,
+  HT: 82, AT: 82,
+  HS: 28, AS: 28,
+  KW: 50, KD: 50, KL: 50, KH: 36, KHW: 50, KHD: 50, KHL: 50,
+  FW: 50, FD: 50, FL: 50, FH: 36,
+  DDONG: 40, DDONG_RISK: 50, DDONGSA: 40,
+  WIN_RISK: 50, WIN_RISK_F: 50,
+  NH_KO: 50, NH_KI: 50, NH_FI: 50,
+  PL_KO: 50, PL_KI: 50, PL_FI: 50,
+}
+
+// 26개 지표 그룹(핸승/핸무/무/역 표본수 칸)은 코드가 26개×4칸=104개라 하나하나
+// 안 넣고 kind로 한 번에 잡는다(전부 같은 정수 표본수 형식).
+export function columnWidth(group, col) {
+  if (group.kind === 'indicator') return 40
+  return COL_WIDTH[col.key]
+}
+
+// 그룹을 접었을 때 보이는 자리표시 헤더(일반정보 접힘의 리그/R/TM, 다른 그룹 접힘의
+// '···')도 펼쳤을 때와 똑같이 폭을 고정한다 — 접었다 펼쳤다 해도 표가 안 흔들리게.
+const COLLAPSED_GENERIC_WIDTH = 36
+export function collapsedWidth(sub) {
+  if (sub === '리그') return COL_WIDTH.L
+  if (sub === 'R') return COL_WIDTH.R
+  if (sub === 'TM') return COL_WIDTH.TM
+  return COLLAPSED_GENERIC_WIDTH
 }
 
 // 핸승 위험도 칸에 붙는 추가 클래스. LeagueTable.jsx가 헤더(th)와 셀(td) 양쪽에 쓴다.

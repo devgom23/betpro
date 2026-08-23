@@ -28,11 +28,11 @@ def _connect(username: str) -> sqlite3.Connection:
 
 
 def list_my_picks(username: str, code: str, scope: str) -> list[dict]:
-    """해당 리그(code)+스코프에서 이 계정이 표시한 별표/내픽/적중여부/메모 전부."""
+    """해당 리그(code)+스코프에서 이 계정이 표시한 별표/내픽/P태그/적중여부/메모 전부."""
     con = _connect(username)
     try:
         rows = con.execute(
-            "SELECT S, R, No, HT, AT, starred, pick, hit, memo, wp_hidden FROM my_picks WHERE code=? AND scope=?",
+            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, wp_hidden FROM my_picks WHERE code=? AND scope=?",
             (code, scope),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -66,19 +66,21 @@ def hide_from_weekly_picks(username: str, items: list[dict]) -> int:
 
 def upsert_my_pick(username: str, code: str, scope: str,
                     s: str, r: str, no: str, ht: str, at: str,
-                    starred: bool, pick: str | None, hit: str | None, memo: str | None) -> None:
+                    starred: bool, pick: str | None, hit: str | None, memo: str | None,
+                    p: str | None = None) -> None:
     con = _connect(username)
     try:
         con.execute(
             """
-            INSERT INTO my_picks (code, scope, S, R, No, HT, AT, starred, pick, hit, memo, wp_hidden, updated_dt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
+            INSERT INTO my_picks (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, wp_hidden, updated_dt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
             ON CONFLICT(code, scope, S, R, No, HT, AT)
-            DO UPDATE SET starred = excluded.starred, pick = excluded.pick, hit = excluded.hit,
-                          memo = excluded.memo, wp_hidden = 0, updated_dt = excluded.updated_dt
+            DO UPDATE SET starred = excluded.starred, pick = excluded.pick, p = excluded.p,
+                          hit = excluded.hit, memo = excluded.memo, wp_hidden = 0,
+                          updated_dt = excluded.updated_dt
             """,
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),
-             1 if starred else 0, pick or None, hit or None, memo or None),
+             1 if starred else 0, pick or None, p or None, hit or None, memo or None),
         )
         con.commit()
     finally:

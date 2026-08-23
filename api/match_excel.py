@@ -568,7 +568,16 @@ _GROUP_DEFS = [
     ("TK-W", "23. 국/통) 승 분석"), ("TK-L", "24. 국/통) 패 분석"),
     ("TK-WL", "25. 국/통) 승+패 분석"), ("TK-WDL", "26. 국/통) 승+무+패 분석"),
 ]
-_MYPICK_COLS = [("IMPORTANT", "중요"), ("MY_PICK", "내픽"), ("MY_HIT", "적중"), ("MEMO", "메모")]
+_MYPICK_COLS = [
+    ("IMPORTANT", "중요"), ("MY_PICK", "내픽"), ("MY_P", "P"), ("MY_HIT", "적중"), ("MEMO", "메모"),
+]
+# "P" 태그 배지 색 — 경기정보 그룹의 RT 배지와 같은 색 규칙(핸승=파랑/핸무=연파랑/무=회색/역=빨강).
+_P_TAG_COLORS = {
+    "핸승": {"bg": "1565C0", "fg": "FFFFFF", "bold": True},
+    "핸무": {"bg": "64B5F6", "fg": "0D1B2A", "bold": True},
+    "무": {"bg": "757575", "fg": "FFFFFF", "bold": True},
+    "역": {"bg": "C62828", "fg": "FFFFFF", "bold": True},
+}
 _SUB4 = ["핸승", "핸무", "무", "역"]
 _RT_DISPLAY = {1: "핸승", 2: "핸무", 3: "무", 4: "역", 5: "취소", 6: "연기"}
 _RT_CODE_FROM_TEXT = {"핸승": 1, "핸무": 2, "무": 3, "역": 4, "취소": 5, "연기": 6}
@@ -710,6 +719,10 @@ def _cell_style(group, col, value, row=None):
             "미적": {"bg": "C62828", "fg": "FFFFFF", "bold": True},
             "패스": {"bg": "757575", "fg": "FFFFFF", "bold": True},
         }.get(s)
+
+    if group["kind"] == "mypick" and sub == "P":
+        s = "" if _blank(value) else str(value).strip()
+        return _P_TAG_COLORS.get(s)
 
     if (g1 == "해외배당" and sub == "FH") or (g1 == "국내배당" and sub == "KH"):
         n = _num(value)

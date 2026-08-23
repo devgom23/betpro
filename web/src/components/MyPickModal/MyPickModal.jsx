@@ -5,6 +5,8 @@ import { isStarred, formatTime, formatDt } from '../../utils/format'
 import './MyPickModal.css'
 
 const PICK_OPTIONS = ['대기', '축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
+// P — 내픽과 별개로 "실제로 딱 찍었는지"만 남기는 참고용 태그. 결과 판정에는 안 쓰인다.
+const P_OPTIONS = ['핸승', '핸무', '무', '역']
 const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-엇갈', 'P-상대', 'P-똥배', 'P-원정', 'P-핸↑', 'P-관전', 'P-어렵',
                      'B-고민', 'B-Ma', 'B-Si', '축', '축-Si']
 
@@ -12,6 +14,7 @@ const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-엇갈', 'P-상대', 'P-
 // (RT·핸디 등 분석 컬럼과 달리 이 값은 화면에서 직접 입력하는 순수 개인 기록).
 export default function MyPickModal({ code, scope, row, onClose, onSaved }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
+  const [p, setP] = useState(row.MY_P || '')
   const [hit, setHit] = useState(row.MY_HIT || '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -29,10 +32,11 @@ export default function MyPickModal({ code, scope, row, onClose, onSaved }) {
         AT: row.AT,
         starred: isStarred(row.IMPORTANT),
         pick: pick || null,
+        p: p || null,
         hit: hit || null,
         memo: row.MEMO || null,
       })
-      onSaved({ pick: pick || '', hit: hit || '' })
+      onSaved({ pick: pick || '', p: p || '', hit: hit || '' })
       onClose()
     } catch (err) {
       setError(err.message)
@@ -77,6 +81,18 @@ export default function MyPickModal({ code, scope, row, onClose, onSaved }) {
           <select value={pick} onChange={(e) => setPick(e.target.value)}>
             <option value="">선택 안함</option>
             {PICK_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="mypick-select-row">
+          P
+          <select value={p} onChange={(e) => setP(e.target.value)}>
+            <option value="">선택 안함</option>
+            {P_OPTIONS.map((o) => (
               <option key={o} value={o}>
                 {o}
               </option>
