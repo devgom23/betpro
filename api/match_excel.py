@@ -7,6 +7,7 @@
 모두 이미 계산·저장되어 있는 값을 옮겨 담을 뿐, 새로 계산하지 않는다.
 """
 import io
+import re
 
 from openpyxl import Workbook
 from openpyxl.cell.rich_text import CellRichText, TextBlock
@@ -57,10 +58,14 @@ UPLOAD_COL_HINTS = {
 }
 
 RT_LABELS = {1: "핸승", 2: "핸무", 3: "무", 4: "역", 5: "취소", 6: "연기"}
+# DT 안 영문 요일(3글자) → 한글 한 글자. web/src/utils/format.js formatDt와 동일.
+_WEEKDAY_KO = {"Sun": "일", "Mon": "월", "Tue": "화", "Wed": "수", "Thu": "목", "Fri": "금", "Sat": "토"}
 
-# MatchDetailModal.jsx SAMPLE_INDICATORS 와 동일한 순서·라벨
+# MatchDetailModal.jsx SAMPLE_INDICATORS와 정확히 같은 순서·라벨(K-PL="27. 국) 플핸
+# 분석" 포함 21개) — 예전엔 이 목록이 K-PL 없이 20개짜리로 뒤처져 있었다.
 SAMPLE_INDICATORS = [
-    ("K-W", "국) 승"), ("K-L", "국) 패"), ("K-WL", "국) 승+패"), ("K-WDL", "국) 승+무+패"),
+    ("K-W", "국) 승"), ("K-L", "국) 패"), ("K-PL", "국) 플핸"),
+    ("K-WL", "국) 승+패"), ("K-WDL", "국) 승+무+패"),
     ("K-W-HT", "국) 승=홈팀"), ("K-L-AT", "국) 패=원정팀"),
     ("TK-W", "국/통) 승"), ("TK-L", "국/통) 패"), ("TK-WL", "국/통) 승+패"), ("TK-WDL", "국/통) 승+무+패"),
     ("F-W", "해) 승"), ("F-L", "해) 패"), ("F-WL", "해) 승+패"), ("F-WDL", "해) 승+무+패"),
@@ -70,7 +75,6 @@ SAMPLE_INDICATORS = [
 
 _HEADER_FILL = PatternFill("solid", fgColor="1F2937")
 _HEADER_FONT = Font(bold=True, color="FFFFFF")
-_MAX_FILL = PatternFill("solid", fgColor="D4C97A")  # 표의 노란(khaki) 최댓값 강조와 동일 톤
 _CENTER = Alignment(horizontal="center", vertical="center")
 _THIN = Side(style="thin", color="D1D5DB")
 _THICK = Side(style="medium", color="6B7280")
@@ -187,14 +191,128 @@ def _points_for(m, reference_team):
     return 1
 
 
-_RIGHT_COL = 8  # 'H' — 팝업의 오른쪽 칼럼(상대전적)이 시작하는 위치.
+_RIGHT_COL = 8  # 'H' — 팝업의 오른쪽 칼럼(시즌전적 등)이 시작하는 위치.
 # 왼쪽(지표별 표본 등)이 F열까지 쓰므로, G열은 비워 두 블록 사이에 한 칸 여백을 둔다.
 
+# 화면(RiskCard riskCellStyle)과 같은 5단계 색 — "초록이면 플핸에 유리".
+_R_DEEP = {"bg": "1B5E20", "fg": "FFFFFF", "bold": True}
+_R_GOOD = {"bg": "66BB6A", "fg": "0D1B2A", "bold": True}
+_R_MID = {"bg": "FBC02D", "fg": "0D1B2A", "bold": False}
+_R_WARN = {"bg": "EF6C00", "fg": "FFFFFF", "bold": True}
+_R_BAD = {"bg": "C62828", "fg": "FFFFFF", "bold": True}
 
-def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
+
+def _risk_style(kind, n):
+    """확률 지표(정승%/플핸무%/플%) 칸 색 — MatchDetailModal.jsx riskCellStyle과 동일 경계."""
+    if n is None:
+        return None
+    if kind == "win":      # 정승 — 정배가 셀수록 플핸에 불리
+        if n < 40:
+            return _R_GOOD
+        if n < 55:
+            return _R_MID
+        if n < 70:
+            return _R_WARN
+        return _R_BAD
+    if kind == "nh":        # 플핸무 — 실측 평균 68~70%
+        if n >= 85:
+            return _R_DEEP
+        if n >= 75:
+            return _R_GOOD
+        if n >= 65:
+            return _R_MID
+        if n >= 55:
+            return _R_WARN
+        return _R_BAD
+    # pl — 플, 실측 평균 44~46%
+    if n >= 55:
+        return _R_DEEP
+    if n >= 48:
+        return _R_GOOD
+    if n >= 41:
+        return _R_MID
+    if n >= 34:
+        return _R_WARN
+    return _R_BAD
+
+
+_DDONG_GRADES = [(22, "안전"), (30, "보통"), (37, "주의")]
+
+
+def _ddong_grade(risk):
+    for cut, label in _DDONG_GRADES:
+        if risk < cut:
+            return label
+    return "위험"
+
+
+def _home_is_fav(row):
+    """정배(시장이 강하다고 본 쪽)가 홈인지 — MatchDetailModal.jsx homeIsFav와 동일
+    우선순위(국내배당 KW/KL 우선, 없으면 해외배당 FW/FL)."""
+    for wk, lk in (("KW", "KL"), ("FW", "FL")):
+        w, l = _num(row.get(wk)), _num(row.get(lk))
+        if w is not None and l is not None and w != l:
+            return w < l
+    return None
+
+
+def _fav_sample_codes(row):
+    """지표별 표본에서 '판단에 쓰는 지표' 코드 집합 — MatchDetailModal.jsx
+    favSampleCodes와 동일 규칙(정배 방향에 따라 갈리는 4줄 + 방향 무관 4줄 + K-PL)."""
+    out = {"F-WL", "F-WDL", "K-WL", "K-WDL", "K-PL"}
+
+    def pick(wk, lk, wcode, lcode, home_win_code, away_lose_code):
+        w, l = _num(row.get(wk)), _num(row.get(lk))
+        if w is None or l is None or w == l:
+            return
+        if w < l:
+            out.add(wcode)
+            out.add(home_win_code)
+        else:
+            out.add(lcode)
+            out.add(away_lose_code)
+
+    pick("KW", "KL", "K-W", "K-L", "K-W-HT", "K-L-AT")
+    pick("FW", "FL", "F-W", "F-L", "F-W-HT", "F-L-AT")
+    return out
+
+
+def _max_second(vals):
+    """각 값에 'max'/'second'/None — MatchDetailModal.jsx maxCellClass와 동일 규칙
+    (1등·2등이 서로 다른 값일 때만 2등도 표시, 전부 0이면 강조 없음)."""
+    m = max(vals) if vals else 0
+    if m <= 0:
+        return [None] * len(vals)
+    smaller = [v for v in vals if v < m]
+    second = max(smaller) if smaller else 0
+    out = []
+    for v in vals:
+        if v == m:
+            out.append("max")
+        elif second > 0 and v == second:
+            out.append("second")
+        else:
+            out.append(None)
+    return out
+
+
+_MAX_FILL2 = PatternFill("solid", fgColor="FDE68A")     # 화면 cell-max와 같은 계열(진하게)
+_SECOND_FILL = PatternFill("solid", fgColor="FEF3C7")    # 화면 cell-second(옅게)
+_FAV_SIDE = Side(style="medium", color="F59E0B")          # 화면 --ddong-focus 강조 테두리
+_FAV_BORDER = Border(left=_FAV_SIDE, right=_FAV_SIDE, top=_FAV_SIDE, bottom=_FAV_SIDE)
+_ODDS_FAV_FILL = PatternFill("solid", fgColor="DCE9FA")   # 화면 odds-fav-col과 같은 옅은 파랑
+
+
+def build_match_excel(row: dict, h2h: dict, scope: str = "master",
+                      season_rows: list | None = None, streaks: dict | None = None,
+                      ht_record: dict | None = None, at_record: dict | None = None) -> io.BytesIO:
     """
-    MatchDetailModal.jsx의 2단 레이아웃(왼쪽: 배당·플핸예측·지표별표본 /
-    오른쪽: 상대전적)을 그대로 옮긴다 — 왼쪽은 A열, 오른쪽은 G열에서 시작.
+    MatchDetailModal.jsx 현재 화면을 그대로 옮긴다.
+      확률 지표(정승%/플핸무%/플%, 전체 폭) → 왼쪽: 배당·지표별 표본(전체 21줄) /
+      오른쪽: 시즌전적·폼 지표·최근10경기+연속기록·상대전적.
+    row/h2h/season_rows/streaks/ht_record/at_record는 화면과 같은 계산 결과를 그대로
+    받는다(main.py가 /api/pick_ai·team_bet_record와 같은 함수를 불러 넘겨준다) — 여기서
+    새로 계산하지 않는다.
     """
     wb = Workbook()
     ws = wb.active
@@ -220,17 +338,59 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
     rt = _rt_label(row.get("RT"))
     hs, as_ = row.get("HS"), row.get("AS")
     has_score = hs is not None and as_ is not None and hs != "" and as_ != ""
+    home_fav = _home_is_fav(row)
+
+    def rank_suffix(v):
+        n = _num(v)
+        return f"({int(n)}위)" if n is not None else ""
+
+    def role_suffix(is_home):
+        if home_fav is None:
+            return ""
+        is_fav = home_fav if is_home else not home_fav
+        return " (정)" if is_fav else " (역)"
+
+    def bet_suffix(rec):
+        if not rec or not rec.get("total"):
+            return ""
+        return f" ({rec['hit']}/{rec['total']})"
 
     r = 1
-    ws.cell(row=r, column=1, value=f"{ht} vs {at}").font = _TITLE_FONT
+    star = "⭐ " if row.get("IMPORTANT") else ""
+    title = (f"{star}{ht}{rank_suffix(row.get('HP'))}{role_suffix(True)}{bet_suffix(ht_record)}"
+             f" vs {at}{rank_suffix(row.get('AP'))}{role_suffix(False)}{bet_suffix(at_record)}")
+    ws.cell(row=r, column=1, value=title).font = _TITLE_FONT
     r += 1
 
+    # DT는 'YY-MM-DD (Sat)'처럼 요일이 영문 3글자로 저장돼 있다 — 화면(formatDt)과 같은
+    # 한글 한 글자로 바꿔서 보여준다. TM(HHMM 숫자)도 화면(formatTime)처럼 'HH:MM'으로.
+    dt_txt = re.sub(r"\(([A-Za-z]{3})\)", lambda m: f"({_WEEKDAY_KO.get(m.group(1), m.group(1))})",
+                    str(row.get("DT")) if row.get("DT") else "")
+    tm_val = _num(row.get("TM"))
+    tm_txt = f"{int(tm_val):04d}"[:2] + ":" + f"{int(tm_val):04d}"[2:] if tm_val is not None else ""
     meta = f"{row.get('S', '')} · {row.get('R', '')}"
-    if row.get("DT"):
-        meta += f" · {row.get('DT')}"
+    if dt_txt:
+        meta += f" · {dt_txt}"
+    if tm_txt:
+        meta += f" {tm_txt}"
     meta += f" · {rt}" if rt else " · 예정 경기"
     ws.cell(row=r, column=1, value=meta)
     r += 1
+
+    # 내픽/P/의견/메모 — 화면 상단 MyPickBar와 같은 내용(계정 개인 기록).
+    pick_bits = []
+    if row.get("MY_PICK"):
+        pick_bits.append(f"내픽 {row['MY_PICK']}")
+    if row.get("MY_P"):
+        pick_bits.append(f"P {row['MY_P']}")
+    if row.get("MY_HIT"):
+        pick_bits.append(f"의견 {row['MY_HIT']}")
+    if pick_bits:
+        ws.cell(row=r, column=1, value=" · ".join(pick_bits))
+        r += 1
+    if row.get("MEMO"):
+        ws.cell(row=r, column=1, value=f"메모: {row['MEMO']}")
+        r += 1
 
     if has_score:
         hs_val, as_val = _int_or_blank(hs), _int_or_blank(as_)
@@ -243,36 +403,88 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
             elif as_val > hs_val:
                 ws.cell(row=r - 1, column=4).font = _WINNER_FONT
     r += 1
-    section_start = r  # 배당/상대전적이 나란히 시작하는 행
 
-    # ── 왼쪽: 배당 → 플핸 예측 → 지표별 표본 ──
+    # ── 확률 지표(RiskCard, 전체 폭) — 정승%/플핸무%/플% 8칸을 화면과 같은 순서로 ──
+    ws.cell(row=r, column=1, value="확률 지표").font = _BOLD
+    r += 1
+    risk_groups = [
+        ("정승 %", "win", [("국)정", row.get("WIN_RISK")), ("해)정", row.get("WIN_RISK_F"))]),
+        ("플핸무 %", "nh", [("국)플", row.get("NH_KO")), ("국)지", row.get("NH_KI")),
+                          ("해)지", row.get("NH_FI"))]),
+        ("플 %", "pl", [("국)플", row.get("PL_KO")), ("국)지", row.get("PL_KI")),
+                       ("해)지", row.get("PL_FI"))]),
+    ]
+    head1 = r
+    col = 1
+    for title_g, _kind, cols in risk_groups:
+        span = len(cols)
+        c = ws.cell(row=head1, column=col, value=title_g)
+        c.font, c.fill, c.alignment, c.border = _HEADER_FONT, _HEADER_FILL, _CENTER, _BORDER
+        if span > 1:
+            ws.merge_cells(start_row=head1, start_column=col, end_row=head1, end_column=col + span - 1)
+            for i in range(1, span):
+                ws.cell(row=head1, column=col + i).border = _BORDER
+        col += span
+    r += 1
+    head2 = r
+    col = 1
+    for _title_g, _kind, cols in risk_groups:
+        for label, _v in cols:
+            c = ws.cell(row=head2, column=col, value=label)
+            c.font, c.fill, c.alignment, c.border = _HEADER_FONT, _HEADER_FILL, _CENTER, _BORDER
+            col += 1
+    r += 1
+    data_row = r
+    col = 1
+    for _title_g, kind, cols in risk_groups:
+        for _label, val in cols:
+            n = _num(val)
+            c = ws.cell(row=data_row, column=col, value=f"{n:.0f}%" if n is not None else "-")
+            c.alignment, c.border = _CENTER, _BORDER
+            style = _risk_style(kind, n)
+            if style:
+                c.fill = PatternFill("solid", fgColor=style["bg"])
+                c.font = Font(bold=style["bold"], color=style["fg"])
+            col += 1
+    r += 2
+    section_start = r  # 배당/시즌전적이 나란히 시작하는 행
+
+    # ── 왼쪽: 배당 → 지표별 표본(전체 21줄) ──
     ws.cell(row=r, column=1, value="배당").font = _BOLD
+    ddong = str(row.get("DDONG") or "").strip()
+    if ddong:
+        ddong_risk = _num(row.get("DDONG_RISK"))
+        note = ddong
+        if ddong_risk is not None:
+            note += f" · {_ddong_grade(ddong_risk)} {ddong_risk:.0f}%"
+        if str(row.get("DDONGSA") or "").strip():
+            note += " · 똥사"
+        ws.cell(row=r, column=2, value=note)
     r += 1
     r = write_row(["구분", "승(홈)", "무", "패(원정)"], r, font=_HEADER_FONT,
                   fill=_HEADER_FILL, align=_CENTER)
-    for label, w, d, l in (
-        ("국내 배당", "KW", "KD", "KL"),
-        ("국내 핸디", "KHW", "KHD", "KHL"),
-        ("해외 배당", "FW", "FD", "FL"),
-        ("해외 핸디", "FHW", "FHD", "FHL"),
+    # 정배 쪽 칸(승=홈팀 칸 / 패=원정팀 칸)에 화면(odds-fav-col)과 같은 옅은 파랑 배경.
+    # 핸디 배당(국내 핸디·해외 핸디) 줄만은 정배가 아니라 핸디를 받은 언더독 쪽을
+    # 강조한다 — 핸디 시장에서 보는 값은 "언더독이 그 핸디를 커버하는가"이므로 늘
+    # 언더독 칸이 관심 대상이다(화면 OddsTable의 dogColClass와 동일 규칙).
+    fav_col = "w" if home_fav is True else ("l" if home_fav is False else None)
+    dog_col = "l" if home_fav is True else ("w" if home_fav is False else None)
+    for label, w, d, l, is_handi in (
+        ("국내 배당", "KW", "KD", "KL", False),
+        ("국내 핸디", "KHW", "KHD", "KHL", True),
+        ("해외 배당", "FW", "FD", "FL", False),
+        ("해외 핸디", "FHW", "FHD", "FHL", True),
     ):
+        this_fav = dog_col if is_handi else fav_col
+        row_idx = r
         # 숫자를 그대로 넣으면 4.80처럼 끝의 0이 엑셀 기본서식(General)에서 사라져 4.8로
         # 보인다 — 화면 팝업(toFixed(2))과 같은 자리수로 보이게 셀 서식을 소수 둘째자리로 고정.
         r = write_row([label, _num_or_dash(row.get(w)), _num_or_dash(row.get(d)),
                        _num_or_dash(row.get(l))], r, number_format="0.00")
-    r += 1
-
-    ws.cell(row=r, column=1, value="플핸 예측").font = _BOLD
-    r += 1
-    r = write_row(["해)플핸", "국)플핸", "PICK", "실측", "비중"], r, font=_HEADER_FONT,
-                  fill=_HEADER_FILL, align=_CENTER)
-    r = write_row([
-        _pct_or_dash(row.get("PH_F")),
-        _pct_or_dash(row.get("PH_K")),
-        row.get("PH_PICK") or "-",
-        _pct_or_dash(row.get("PH_HIT")),
-        _pct_or_dash(row.get("PH_DOM")),
-    ], r)
+        if this_fav == "w":
+            ws.cell(row=row_idx, column=2).fill = _ODDS_FAV_FILL
+        elif this_fav == "l":
+            ws.cell(row=row_idx, column=4).fill = _ODDS_FAV_FILL
     r += 1
 
     ws.cell(row=r, column=1, value="지표별 표본").font = _BOLD
@@ -281,9 +493,16 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
     r = write_row(["지표", "핸승", "핸무", "무", "역", "토탈"], r, font=_HEADER_FONT,
                   fill=_HEADER_FILL, align=_CENTER)
     ws.cell(row=r - 1, column=_SAMPLE_YK_COL).border = _with_right_divider(_BORDER)
+    # 내 데이터(scope=user)는 통합(TK-/TF-) 지표를 뺀다 — 화면(SampleTable)과 동일:
+    # 리그 하나만 있어 통합 대상이 없으므로 국내/해외 지표와 값이 완전히 같아지는
+    # 의미 없는 중복이기 때문이다.
+    indicators = SAMPLE_INDICATORS if scope != "user" else [
+        (c, lb) for c, lb in SAMPLE_INDICATORS if not c.startswith("TK-") and not c.startswith("TF-")
+    ]
+    fav_codes = _fav_sample_codes(row)
     grand = [0, 0, 0, 0]
     prev_code = None
-    for code, label in SAMPLE_INDICATORS:
+    for code, label in indicators:
         vals = []
         for i in (1, 2, 3, 4):
             try:
@@ -292,37 +511,59 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
                 vals.append(0)
         for i, v in enumerate(vals):
             grand[i] += v
+        total = sum(vals)
         row_idx = r
         # 국내(K-/TK-) 지표 블록 → 해외(F-/TF-) 지표 블록 경계에 화면과 같은 굵은 선
         is_foreign = code.startswith("F-") or code.startswith("TF-")
         was_foreign = prev_code is not None and (prev_code.startswith("F-") or prev_code.startswith("TF-"))
         group_border = _DIVIDER_BORDER if (is_foreign and not was_foreign) else None
-        r = write_row([label, *vals, sum(vals)], r, border=group_border)
+        # 위=비율, 아래=건수를 한 칸에 — 화면(sample-n)과 같은 정보를 한 칸으로 압축.
+        cells = [f"{round(v / total * 100)}% ({v})" if total > 0 else "-" for v in vals]
+        r = write_row([label, *cells, total], r, border=group_border)
         ws.cell(row=row_idx, column=_SAMPLE_YK_COL).border = _with_right_divider(group_border)
+        # 오늘 이 경기의 판단에 쓰는 지표(favSampleCodes)는 화면처럼 강조 테두리로 감싼다.
+        if code in fav_codes:
+            for cc in range(1, 7):
+                ws.cell(row=row_idx, column=cc).border = _FAV_BORDER
         prev_code = code
-        vmax = max(vals)
-        if vmax > 0:
-            for i, v in enumerate(vals):
-                if v == vmax:
-                    ws.cell(row=row_idx, column=2 + i).fill = _MAX_FILL
+        cls = _max_second(vals)
+        for i, c in enumerate(cls):
+            if c == "max":
+                ws.cell(row=row_idx, column=2 + i).fill = _MAX_FILL2
+            elif c == "second":
+                ws.cell(row=row_idx, column=2 + i).fill = _SECOND_FILL
 
     row_idx = r
-    r = write_row(["토탈", *grand, sum(grand)], r, font=_BOLD)
+    gtotal = sum(grand)
+    gcells = [f"{round(v / gtotal * 100)}% ({v})" if gtotal > 0 else "-" for v in grand]
+    r = write_row(["토탈", *gcells, gtotal], r, font=_BOLD)
     ws.cell(row=row_idx, column=_SAMPLE_YK_COL).border = _with_right_divider(_BORDER)
-    vmax = max(grand)
-    if vmax > 0:
-        for i, v in enumerate(grand):
-            if v == vmax:
-                ws.cell(row=row_idx, column=2 + i).fill = _MAX_FILL
+    gcls = _max_second(grand)
+    for i, c in enumerate(gcls):
+        if c == "max":
+            ws.cell(row=row_idx, column=2 + i).fill = _MAX_FILL2
+        elif c == "second":
+            ws.cell(row=row_idx, column=2 + i).fill = _SECOND_FILL
 
-    # 토탈 바로 아래 줄에 각 결과의 비율 — 화면 팝업의 (18.3%) 표기와 같은 자리
-    gsum = sum(grand)
-    pct_idx = r
-    r = write_row(["", *[f"({v / gsum * 100:.1f}%)" if gsum else "" for v in grand], ""], r)
-    ws.cell(row=pct_idx, column=_SAMPLE_YK_COL).border = _with_right_divider(_BORDER)
-
-    # ── 오른쪽(G열): 폼 지표 → 최근10경기 전적 → 상대전적 (화면 팝업과 같은 순서) ──
+    # ── 오른쪽(H열): 시즌전적 → 폼 지표 → 최근10경기 전적+연속기록 → 상대전적 ──
     rr = section_start
+    if season_rows:
+        ws.cell(row=rr, column=_RIGHT_COL, value="시즌전적").font = _BOLD
+        rr += 1
+        ws.cell(row=rr, column=_RIGHT_COL,
+               value="오늘과 같은 정배/역배 구도였던 이번 시즌 경기만 모은 값입니다.")
+        rr += 1
+        rr = write_row(["", "핸승", "핸무", "무", "역"], rr, start_col=_RIGHT_COL,
+                       font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
+        for sr in season_rows:
+            side_label = sr.get("side") or ""
+            role = sr.get("role")
+            label = f"{side_label}({role})" if role else side_label
+            counts = sr.get("counts") or {}
+            rr = write_row([label, counts.get("핸승", "-"), counts.get("핸무", "-"),
+                           counts.get("무", "-"), counts.get("역", "-")], rr, start_col=_RIGHT_COL)
+        rr += 1
+
     ws.cell(row=rr, column=_RIGHT_COL, value="폼 지표").font = _BOLD
     rr += 1
     _FORM_DIV_COL = _RIGHT_COL + 2   # 홈 3칸 / 원정 3칸 경계
@@ -371,6 +612,23 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
     rr += 1
     ws.cell(row=rr, column=_RIGHT_COL, value="밑줄 친 글자 = 그 팀 기준 홈경기")
     rr += 1
+
+    # 최고 연속 기록(연승/무패/무승/연패) — 그 리그 데이터로만, 이 경기 직전까지.
+    home_streak = (streaks or {}).get("home")
+    away_streak = (streaks or {}).get("away")
+
+    def streak_text(s):
+        if not s or not s.get("played"):
+            return ""
+        return f"연승{s.get('win', 0)} · 무패{s.get('unbeaten', 0)} · 무승{s.get('winless', 0)} · 연패{s.get('lose', 0)}"
+
+    home_txt, away_txt = streak_text(home_streak), streak_text(away_streak)
+    if home_txt or away_txt:
+        ws.cell(row=rr, column=_RIGHT_COL, value=home_txt)
+        ws.merge_cells(start_row=rr, start_column=_RIGHT_COL, end_row=rr, end_column=_RIGHT_COL + 2)
+        ws.cell(row=rr, column=_RIGHT_COL + 3, value=away_txt)
+        ws.merge_cells(start_row=rr, start_column=_RIGHT_COL + 3, end_row=rr, end_column=_RIGHT_COL + 5)
+        rr += 1
 
     ws.cell(row=rr, column=_RIGHT_COL, value="상대전적").font = _BOLD
     rr += 1
@@ -427,7 +685,7 @@ def build_match_excel(row: dict, h2h: dict) -> io.BytesIO:
         ws.cell(row=rr, column=_RIGHT_COL, value=f"{ht} vs {at} 맞대결 기록 없음")
         rr += 1
 
-    widths = {1: 18, 2: 12, 3: 12, 4: 12, 5: 12, 6: 10,
+    widths = {1: 18, 2: 13, 3: 13, 4: 13, 5: 13, 6: 10,
              7: 4, 8: 10, 9: 10, 10: 10, 11: 10, 12: 10, 13: 10, 14: 10, 15: 10, 16: 10}
     for col, width in widths.items():
         ws.column_dimensions[get_column_letter(col)].width = width

@@ -12,8 +12,8 @@ from datetime import date, timedelta
 import betpro_paths as PATHS
 from my_picks import normalize
 
-# RT 결과와 직접 비교 가능한 핸디캡 계열 픽만 자동판정한다. 축플/축정/정/정무 등
-# 다른 마켓은 RT(핸디 결과) 하나만으로는 승패를 알 수 없어 이번 범위에서 제외한다.
+# RT 결과와 직접 비교 가능한 핸디캡 계열 픽만 자동판정한다. 정무 등 다른 마켓은
+# RT(핸디 결과) 하나만으로는 승패를 알 수 없어 이번 범위에서 제외한다.
 HANDI_PICKS = {"핸승", "플핸", "핸무", "무", "역", "정"}
 
 _DT_RE = re.compile(r"(\d{2})-(\d{2})-(\d{2})")

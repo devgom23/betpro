@@ -154,14 +154,17 @@ function OddsTable({ row }) {
     const favCol = homeFav ? 'w' : 'l'
     return col === favCol ? 'odds-fav-col' : undefined
   }
-  // 국내 핸디(KHW/KHL)만은 KW/KL로 정한 정배 컬럼을 그대로 따르지 않는다 — 핸디 라인이
-  // 후하게 잡히면 언더독 쪽 핸디 배당이 오히려 더 낮게(=더 유력하게) 나오는 경우가 있어,
-  // 정배 쪽을 그대로 칠하면 실제 핸디 배당의 유불리와 어긋난다. 이 줄만 KHW·KHL 값을
-  // 직접 비교해 배당이 더 작은(=더 유력한) 쪽을 표시한다.
-  const khw = numOrNull(row.KHW)
-  const khl = numOrNull(row.KHL)
-  const khFavCol = khw !== null && khl !== null && khw !== khl ? (khw < khl ? 'w' : 'l') : null
-  const khColClass = (col) => (khFavCol && col === khFavCol ? 'odds-fav-col' : undefined)
+  // 핸디 배당(국내 핸디·해외 핸디) 줄은 정배 쪽이 아니라 핸디를 받은 언더독 쪽을
+  // 강조한다 — 핸디를 낀 시장에서 보는 값은 "언더독이 그 핸디를 커버하는가"이므로
+  // 늘 언더독 칸이 관심 대상이다. 핸디 적용 후 두 배당 중 어느 쪽이 숫자가 더
+  // 작은지는(정배가 여전히 근소 유리한 경우도 흔함) 이 강조와 무관하다 — 예전엔
+  // "핸디 적용 후 더 작은 값" 쪽을 칠했는데, 그러면 핸디를 크게 줘도 정배가 계속
+  // 강조되는 경우가 있어 실제로 보고 싶은 언더독 쪽과 어긋났다.
+  const dogColClass = (col) => {
+    if (homeFav === null) return undefined
+    const dogCol = homeFav ? 'l' : 'w'
+    return col === dogCol ? 'odds-fav-col' : undefined
+  }
   return (
     <table className="detail-table odds-table">
       <thead>
@@ -196,7 +199,8 @@ function OddsTable({ row }) {
       </thead>
       <tbody>
         {rows.map(([label, w, d, l]) => {
-          const colClass = label === '국내 핸디' ? khColClass : favColClass
+          const isHandi = label === '국내 핸디' || label === '해외 핸디'
+          const colClass = isHandi ? dogColClass : favColClass
           return (
             <tr key={label}>
               <td className="row-label">{label}</td>
@@ -871,11 +875,22 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="닫기">
-          ✕
-        </button>
+        <div className="detail-header-actions">
+          <button
+            className="detail-download-btn"
+            onClick={handleDownload}
+            disabled={downloading}
+            title="지금 화면 그대로 엑셀로 받기"
+          >
+            {downloading ? '다운로드 중...' : '⬇ 엑셀 다운로드'}
+          </button>
+          <button className="modal-close" onClick={onClose} aria-label="닫기">
+            ✕
+          </button>
+        </div>
+        {downloadError && <p className="detail-download-error">{downloadError}</p>}
 
-        <h2 className="modal-title">
+        <h2 className="modal-title detail-modal-title">
           <span>
             {ht}
             {rankSuffix(row.HP)}
@@ -989,13 +1004,6 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
               />
             </section>
           </div>
-        </div>
-
-        <div className="modal-footer">
-          {downloadError && <p className="error-text">{downloadError}</p>}
-          <button className="btn-primary" onClick={handleDownload} disabled={downloading}>
-            {downloading ? '다운로드 중...' : '엑셀 다운로드'}
-          </button>
         </div>
       </div>
     </div>

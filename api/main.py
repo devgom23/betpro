@@ -693,8 +693,6 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
 _MY_PICK_VERDICT_MAP = {
     "플핸무": ({3, 4}, {2}),
     "정무": ({1, 2}, {3}),
-    "축정": ({1, 2}, set()),
-    "축플": ({3, 4}, set()),
     "무핸무": ({2, 3}, set()),
     "플핸": ({3, 4}, set()),
     "정": ({1, 2}, set()),
@@ -1416,12 +1414,14 @@ def match_excel_download(code: str,
                          hlimit: int = 100000,   # 엑셀은 화면과 달리 자리 제약이 없어 사실상 전부 담는다
                          user: dict = Depends(get_current_user)):
     """
-    상세보기 팝업(배당·플핸예측·상대전적·지표별 표본)을 엑셀 한 시트로 내려받는다.
-    화면에 이미 계산되어 저장된 값만 그대로 옮겨 담을 뿐, 새로 계산하지 않는다.
+    상세보기 팝업을 지금 화면 그대로 엑셀 한 시트로 내려받는다 — 확률 지표·배당·
+    지표별 표본(전체)·시즌전적·폼 지표·최근10경기+연속기록·상대전적·내픽/의견/메모까지.
+    /api/pick_ai·team_bet_record와 같은 함수를 그대로 불러 쓰므로, 여기서 새로
+    계산하는 값은 없다(화면과 다시 어긋날 일이 없다).
     """
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
-    df = DATA.load_league_df_ev(db, code)   # 화면 팝업과 같은 폼/최근전적이 담기도록
+    df = DATA.load_league_df_ev(db, code)   # 화면 팝업과 같은 폼/최근전적/EV가 담기도록
     if df.empty or "S" not in df.columns or "R" not in df.columns:
         raise HTTPException(status_code=404, detail="데이터가 없습니다.")
 
@@ -1437,14 +1437,30 @@ def match_excel_download(code: str,
     if sub.empty:
         raise HTTPException(status_code=404, detail="해당 경기를 찾을 수 없습니다.")
 
-    row = DATA.df_to_records(sub.head(1))[0]
+    records = DATA.df_to_records(sub.head(1))
+    _attach_my_picks(records, user["username"], code, scope)   # 내픽/P/의견/메모/별표
+    row = records[0]
     ht = str(row.get("HT") or "").strip()
     at = str(row.get("AT") or "").strip()
 
     h2h_df = _h2h_source_df(db, scope, code)
     h2h = _head_to_head_calc(h2h_df, ht, at, cross=True, limit=hlimit)
 
-    buf = XLS.build_match_excel(row, h2h)
+    # 시즌전적 — /api/pick_ai가 계산하는 것과 완전히 같은 함수(PICKAI.compute)를
+    # 같은 입력으로 불러서 쓴다. h2h는 season 신호 계산에 안 쓰이지만 인터페이스가
+    # 같아 그대로 넘긴다.
+    season_matches = {"home": _season_matches(h2h_df, ht, row.get("S")),
+                      "away": _season_matches(h2h_df, at, row.get("S"))}
+    pick_result = PICKAI.compute(row, h2h, scope=scope, season_matches=season_matches, code=code)
+    season_signal = next((s for s in pick_result.get("signals", []) if s.get("key") == "season"), None)
+    season_rows = season_signal.get("rows") if season_signal else None
+
+    streaks = _team_streaks(db, scope, code, ht, at, row)
+    ht_record = team_bet_record(ht, user)
+    at_record = team_bet_record(at, user)
+
+    buf = XLS.build_match_excel(row, h2h, scope=scope, season_rows=season_rows, streaks=streaks,
+                                ht_record=ht_record, at_record=at_record)
     return _xlsx_response(
         buf, f"{ht}_vs_{at}_{row.get('S', '')}_{row.get('R', '')}.xlsx", "match_detail.xlsx")
 
