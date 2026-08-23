@@ -122,6 +122,15 @@
   padding: 10px;
 }
 
+/* 다리 목록의 "주력" 체크박스로 표시한 다리 — 아래 금액 입력 표에서 그 다리가 들어간
+   조합 줄의 픽 칸(정/플핸/역 등)에만 칠한다. 표 전체가 아니라 그 다리 칸만 강조해야
+   조합 여러 개 중 어느 다리 때문에 강조됐는지 헷갈리지 않는다. */
+.slip-pick-checked {
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}
+
 .slip-remove {
   border: none;
   background: transparent;

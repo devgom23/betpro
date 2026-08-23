@@ -57,7 +57,7 @@ const fmtLegOdds = (v) => (v == null ? '-' : (Math.round((v + Number.EPSILON) * 
 const fmtNum = (v) => (v == null ? '-' : Math.round(v).toLocaleString())
 
 // 한 경기 그룹(선택 1 / 선택 2): 경기를 고르고 유형을 담는다.
-function SideBox({ index, rows, legs, onAdd, onRemove }) {
+function SideBox({ index, rows, legs, onAdd, onRemove, onToggleCheck }) {
   const [matchIdx, setMatchIdx] = useState('')
   const [pick, setPick] = useState(PICK_TYPES[0])
 
@@ -85,7 +85,7 @@ function SideBox({ index, rows, legs, onAdd, onRemove }) {
 
       <table className="slip-side-table">
         <thead>
-          <tr><th>홈</th><th>원정</th><th>{index}</th><th>배당</th><th /></tr>
+          <tr><th>홈</th><th>원정</th><th>{index}</th><th>배당</th><th>주력</th><th /></tr>
         </thead>
         <tbody>
           {legs.map((l) => (
@@ -95,12 +95,20 @@ function SideBox({ index, rows, legs, onAdd, onRemove }) {
               <td>{l.pick}</td>
               <td>{fmtLegOdds(l.odds)}</td>
               <td>
+                <input
+                  type="checkbox"
+                  checked={!!l.checked}
+                  onChange={() => onToggleCheck(l)}
+                  aria-label="주력 다리로 표시"
+                />
+              </td>
+              <td>
                 <button className="slip-remove" onClick={() => onRemove(l)} aria-label="빼기">✕</button>
               </td>
             </tr>
           ))}
           {legs.length === 0 && (
-            <tr><td colSpan={5} className="slip-empty">아직 담은 경기가 없습니다</td></tr>
+            <tr><td colSpan={6} className="slip-empty">아직 담은 경기가 없습니다</td></tr>
           )}
         </tbody>
       </table>
@@ -299,6 +307,10 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
             updateSide(i, [...legs, leg])
           }}
           onRemove={(leg) => updateSide(i, legs.filter((l) => legKey(l) !== legKey(leg)))}
+          onToggleCheck={(leg) => updateSide(
+            i,
+            legs.map((l) => (legKey(l) === legKey(leg) ? { ...l, checked: !l.checked } : l))
+          )}
         />
       ))}
 
@@ -351,7 +363,9 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
               const roiValue = profit != null && stakeTotal ? (profit / stakeTotal * 100).toFixed(1) : null
               return (
                 <tr key={c.key}>
-                  {c.legs.map((l, i) => <td key={i}>{l.pick}</td>)}
+                  {c.legs.map((l, i) => (
+                    <td key={i} className={l.checked ? 'slip-pick-checked' : undefined}>{l.pick}</td>
+                  ))}
                   <td className="slip-strong">{fmtOdds(c.odds)}</td>
                   <td>
                     <input
