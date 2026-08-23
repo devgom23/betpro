@@ -326,15 +326,17 @@ def _rt_summary(df: pd.DataFrame):
     }
 
 
-def _hit_summary(df: pd.DataFrame):
-    """PICK 적중/보험/미적/관망 카운트 {적중,보험,미적,관망,총}.
-    PH_STATUS 컬럼 없거나 값이 하나도 없으면 None."""
-    if "PH_STATUS" not in df.columns:
+def _hit_summary(verdict: pd.Series):
+    """내픽 적중/보험/미적 카운트 {적중,보험,미적,총}. (2026-08~ 내픽 기준으로 변경 —
+    예전엔 모델의 사전예측(PH_PICK)이 실제와 맞았는지를 셌지만, "내가 찍은 픽이
+    맞았는지"를 보고 싶다는 요청으로 _my_pick_verdict_series() 결과를 대신 센다.)
+    유효한 판정이 하나도 없으면(내픽을 하나도 안 찍었으면) None."""
+    if verdict is None or verdict.empty:
         return None
-    s = df["PH_STATUS"].fillna("")
+    s = verdict.fillna("")
     counts = {"적중": int((s == "적중").sum()), "보험": int((s == "보험").sum()),
-              "미적": int((s == "미적").sum()), "관망": int((s == "관망").sum())}
-    total = counts["적중"] + counts["보험"] + counts["미적"] + counts["관망"]
+              "미적": int((s == "미적").sum())}
+    total = counts["적중"] + counts["보험"] + counts["미적"]
     if total == 0:
         return None
     counts["총"] = total
@@ -345,8 +347,8 @@ def _odds_summary(df: pd.DataFrame):
     """조회 조건 안에서 국배(KW)·해배(FW)가 실제로 채워진 경기 수 {국배,해배,총}.
     엑셀 업로드·크롤링 모두 한 시장(국내/해외)의 승/무/패를 항상 함께 채우므로,
     대표로 W값 하나만 봐도 그 시장 등록 여부를 알 수 있다. 시즌별로 배당 입력이
-    얼마나 진행됐는지 보려고 만든 것 — PICK 적중/보험/미적/관망 요약(PH_STATUS)은
-    표에서 PICK 컬럼 자체가 없어져 어느 경기가 해당하는지 추적할 수 없어 이걸로 대체."""
+    얼마나 진행됐는지 보려고 만든 것 — 내픽 적중/보험/미적 요약(_hit_summary)은 내픽을
+    안 찍은 경기가 많으면 표본이 작아지니 이걸로 대체."""
     total = len(df)
     if total == 0:
         return None
@@ -372,7 +374,7 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
     """
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
-    df = DATA.load_league_df_ranked(db, code)   # 적중/미적 집계에 PH_STATUS 필요
+    df = DATA.load_league_df_ranked(db, code)
     if df.empty or "S" not in df.columns:
         return {"seasons": [], "rounds_by_season": {}, "latest": None,
                 "total_rows": 0, "rt_summary": None, "hit_summary": None}
@@ -394,7 +396,7 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
         "latest": {"season": latest_season, "round": latest_round},
         "total_rows": len(df),
         "rt_summary": rt_summary,
-        "hit_summary": _hit_summary(df),
+        "hit_summary": _hit_summary(_my_pick_verdict_series(df, user["username"], code, scope)),
         # 리그 관리 박스(내 데이터 재계산 버튼 옆)에 쓰는 요약 — 통합DB 탭 대시보드 표와 같은 항목.
         "season_range": f"{seasons[-1]} ~ {seasons[0]}" if seasons else "-",
         "pending_count": len(df) - rt_total,
@@ -517,7 +519,7 @@ def league_rows(code: str,
         "season": season,
         "round": round,
         "rt_summary": _rt_summary(sub),
-        "hit_summary": _hit_summary(sub),
+        "hit_summary": _hit_summary(_my_pick_verdict_series(sub, user["username"], code, scope)),
         "odds_summary": _odds_summary(sub),
         "can_write": PATHS.can_write(scope, user.get("role")),
     }
@@ -677,6 +679,65 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
         row["MY_PICK"] = p["pick"] if p else None
         row["MY_HIT"] = p["hit"] if p else None
         row["MEMO"] = p["memo"] if p else None
+
+
+# 내픽(MY_PICK)+RT 대조 규칙 — web/src/components/LeagueTable/columnGroups.js의
+# PICK_VERDICT_MAP·computeAutoVerdict과 반드시 같은 값을 내야 한다(표 안 배지와
+# 상단 요약 뱃지가 서로 다른 기준이면 안 되므로 로직을 그대로 복제했다 — 한쪽만
+# 고치지 않도록 주의). 픽마다 "적중으로 치는 결과"·"보험(부분 환급)으로 치는
+# 결과"가 다르다. 값 형식: {픽: (적중 RT코드 집합, 보험 RT코드 집합)}.
+_MY_PICK_VERDICT_MAP = {
+    "플핸무": ({3, 4}, {2}),
+    "정무": ({1, 2}, {3}),
+    "축정": ({1, 2}, set()),
+    "축플": ({3, 4}, set()),
+    "무핸무": ({2, 3}, set()),
+    "플핸": ({3, 4}, set()),
+    "정": ({1, 2}, set()),
+    "핸승": ({1}, set()),
+    "핸무": ({2}, set()),
+    "무": ({3}, set()),
+    "역": ({4}, set()),
+}
+
+
+def _my_pick_verdict(pick, rt) -> str:
+    """내픽 하나 + RT 하나 → 적중/보험/미적. ''(빈 값)은 아직 판정 불가한 경우
+    (내픽 없음·'대기'·결과 미정)."""
+    if not pick or pd.isna(rt):
+        return ""
+    rule = _MY_PICK_VERDICT_MAP.get(pick)
+    if not rule:
+        return ""
+    code = int(rt)
+    if code not in (1, 2, 3, 4):
+        return ""
+    hit, insure = rule
+    if code in hit:
+        return "적중"
+    if code in insure:
+        return "보험"
+    return "미적"
+
+
+def _my_pick_verdict_series(df: pd.DataFrame, username: str, code: str, scope: str) -> pd.Series:
+    """조회된 경기 전부(페이지 단위가 아니라 조회 조건에 맞는 전체)에 내픽 적중/보험/
+    미적을 대조한다 — 상단 요약 뱃지가 표에 찍힌 낱개 배지와 항상 같은 기준을 쓰도록."""
+    if df.empty:
+        return pd.Series([], dtype=object)
+    picks = MYPICKS.list_my_picks(username, code, scope)
+    pick_map = {_my_pick_key(p["S"], p["R"], p["No"], p["HT"], p["AT"]): p["pick"] for p in picks}
+    rt_num = pd.to_numeric(df["RT"], errors="coerce") if "RT" in df.columns else pd.Series(np.nan, index=df.index)
+    s_col = df["S"] if "S" in df.columns else pd.Series(None, index=df.index)
+    r_col = df["R"] if "R" in df.columns else pd.Series(None, index=df.index)
+    no_col = df["No"] if "No" in df.columns else pd.Series(None, index=df.index)
+    ht_col = df["HT"] if "HT" in df.columns else pd.Series(None, index=df.index)
+    at_col = df["AT"] if "AT" in df.columns else pd.Series(None, index=df.index)
+    out = [
+        _my_pick_verdict(pick_map.get(_my_pick_key(s, r, no, ht, at)), rt)
+        for s, r, no, ht, at, rt in zip(s_col, r_col, no_col, ht_col, at_col, rt_num)
+    ]
+    return pd.Series(out, index=df.index, dtype=object)
 
 
 class MyPickBody(BaseModel):

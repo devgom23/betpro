@@ -6,7 +6,6 @@ DB 읽기 + 엔진 호출 래퍼.
 """
 import math
 import os
-import re
 import sqlite3
 import numpy as np
 import pandas as pd
@@ -19,55 +18,6 @@ LEAGUES = PATHS.LEAGUES
 
 # {(kind, db_path): (mtime, DataFrame)} 형태의 초경량 캐시
 _CACHE = {}
-
-PH_STATUS_COL = "PH_STATUS"
-_RT_TEXT = {1: "핸승", 2: "핸무", 3: "무", 4: "역"}
-
-
-_PH_PICK_SUB_RE = re.compile(r"^플핸\((.+)\)$")
-
-
-def _pick_status(df: pd.DataFrame) -> pd.Series:
-    """PICK(PH_PICK)과 실제 결과(RT)를 비교해 적중/보험/미적/관망 표시용 컬럼을 만든다.
-    PICK의 핵심 판단은 핸승 vs 비핸승(플핸)의 2분류다(engine.py compute_plushandi()
-    주석 참고, 이 2분류 기준으로 실측 적중률(PH_HIT)이 검증되어 있다 — 여긴 안 건드림).
-    '플핸(무)'처럼 괄호 안은 비핸승 표본 중 참고용 최다결과인데, 세부 구분을 화면에도
-    보여 달라는 요청으로 아래 4단계를 쓴다(무/역은 서로 호환되는 결과로 보고, 핸무만
-    따로 구분한다):
-      적중 = 핸승 예측이 핸승으로 맞음 / 비핸승 예측이고 실제 결과가 무 또는 역
-             / PICK이 플핸(핸무)이고 실제 결과도 핸무
-      보험 = PICK이 플핸(무)나 플핸(역)인데 실제 결과가 핸무로 나옴
-      미적 = 핸승 여부(큰 분류) 자체가 틀림
-      관망 = PICK이 '—'
-    아직 결과가 없거나(RT 공란) PICK이 없으면 공란."""
-    if "PH_PICK" not in df.columns or "RT" not in df.columns:
-        return pd.Series([""] * len(df), index=df.index, dtype=object)
-    rt_num = pd.to_numeric(df["RT"], errors="coerce")
-    out = []
-    for pick, rt in zip(df["PH_PICK"], rt_num):
-        pick = "" if pd.isna(pick) else str(pick).strip()
-        if not pick:
-            out.append("")
-        elif pick == "표본부족":
-            out.append("")
-        elif pick == "—":
-            out.append("관망")
-        elif pd.isna(rt) or int(rt) not in _RT_TEXT:
-            out.append("")
-        elif pick == "핸승":
-            out.append("적중" if _RT_TEXT[int(rt)] == "핸승" else "미적")
-        else:
-            actual = _RT_TEXT[int(rt)]
-            if actual == "핸승":
-                out.append("미적")
-            elif actual != "핸무":
-                out.append("적중")   # 실제 결과가 무/역이면 PICK의 세부와 무관하게 적중
-            else:
-                m = _PH_PICK_SUB_RE.match(pick)
-                sub_pick = m.group(1) if m else None
-                out.append("적중" if sub_pick == "핸무" else "보험")
-    return pd.Series(out, index=df.index, dtype=object)
-
 
 # 똥사 위험도 — 똥배가 무/역으로 뒤집힐 확률(%). 6대리그 똥배 7,724건 실측 로지스틱 회귀.
 #
@@ -172,7 +122,6 @@ def load_league_df_ranked(db_path: str, league: str) -> pd.DataFrame:
     # 아래서 컬럼을 더 붙이기 전에 반드시 .copy()로 떼어내야 원본(raw) 캐시가
     # 오염되어 표시용 컬럼이 업로드/삭제 쪽으로 새어 들어가는 사고를 막는다.
     df = standings.attach_rank_and_form(load_league_df(db_path, league)).copy()
-    df[PH_STATUS_COL] = _pick_status(df)
     df["DDONG"], df["DDONG_RISK"], df["DDONGSA"] = _ddong_columns(df)
     _CACHE[key] = (mt, df)
     return df

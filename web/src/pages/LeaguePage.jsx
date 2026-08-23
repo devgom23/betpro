@@ -412,6 +412,7 @@ export default function LeaguePage({ code, scope }) {
               <strong>{(data.odds_summary?.해배 ?? 0).toLocaleString()}</strong>
             </span>
             <RtSummaryBar summary={data.rt_summary} inline />
+            <span className="league-summary-divider" aria-hidden="true" />
             <PickSummaryBar summary={data.hit_summary} />
             <div className="league-summary-toolbar">
               {batch1Groups.length > 0 && (

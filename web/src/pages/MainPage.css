@@ -251,6 +251,14 @@
   color: var(--text-primary);
 }
 
+/* RT분포(핸승/핸무/무/역)와 내픽 적중요약(적중/보험/미적) 뱃지 영역 사이 구분선.
+   표의 그룹 구분과 같은 스타일(2px solid var(--border-strong))을 쓴다. */
+.league-summary-divider {
+  align-self: stretch;
+  width: 0;
+  border-left: 2px solid var(--border-strong);
+}
+
 /* 해외지표/국내지표 접기 · 핸승 위험도 참고 — 조회 조건 줄 맨 오른쪽에 붙는다 */
 .league-summary-toolbar {
   display: flex;

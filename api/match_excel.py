@@ -551,7 +551,6 @@ _MATCH_COLS = ["HTF", "HF", "HP", "HT", "HS", "RT", "AS", "AT", "AP", "AF", "ATF
 _K_ODDS_COLS = ["KW", "KD", "KL", "KH", "KHW", "KHD", "KHL"]
 _F_ODDS_COLS = ["FW", "FD", "FL", "FH", "FHW", "FHD", "FHL"]
 _PH_COLS = [
-    ("PH_STATUS", "적중"),
     ("PH_F", "해)플핸"), ("PH_K", "국)플핸"), ("PH_PICK", "PICK"),
     ("PH_HIT", "실측"), ("PH_DOM", "비중"),
 ]
@@ -667,7 +666,7 @@ def _format_cell(group, col, value):
             return f"{'+' if n >= 0 else ''}{n:.0f}"
         return f"{n:.2f}"
     if group["kind"] == "ph":
-        if sub in ("PICK", "적중"):
+        if sub == "PICK":
             return "" if _blank(value) else str(value)
         n = _num(value)
         return "" if n is None else f"{n:.0f}%"
@@ -721,16 +720,6 @@ def _cell_style(group, col, value, row=None):
         if n > 0:
             return {"fg": "C62828", "bold": True}
         return None
-
-    if group["kind"] == "ph" and sub == "적중":
-        s = "" if _blank(value) else str(value).strip()
-        return {
-            "적중": {"bg": "FDD835", "fg": "0D1B2A", "bold": True},
-            # 보험: 핸승 여부(큰 분류)는 맞혔지만 괄호 안 세부결과(핸무/무/역)는 다르게 나온 경우.
-            "보험": {"bg": "00897B", "fg": "FFFFFF", "bold": True},
-            "미적": {"bg": "C62828", "fg": "FFFFFF", "bold": True},
-            "관망": {"bg": "757575", "fg": "FFFFFF", "bold": True},
-        }.get(s)
 
     if group["kind"] == "ph" and sub == "PICK":
         s = "" if _blank(value) else str(value).strip()

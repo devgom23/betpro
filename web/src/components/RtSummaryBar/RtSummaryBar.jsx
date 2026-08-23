@@ -36,9 +36,9 @@ export default function RtSummaryBar({ summary, inline = false }) {
   )
 }
 
-// 관망(PICK이 '—')은 표에서 PICK 컬럼 자체가 없어져 어느 경기가 해당하는지 추적할
-// 수 없어 뺐다 — 적중/보험/미적만 보여준다(퍼센트 분모(summary.총)엔 관망 몫도 그대로
-// 들어있어 세 값을 더해도 100%가 안 될 수 있는데, 이건 정상이다).
+// 내픽(MY_PICK)+RT를 대조해 적중/보험/미적을 판정한다(api/main.py _my_pick_verdict와
+// 동일 규칙). 내픽을 아예 안 찍었거나 '대기'인 경기는 판정 대상이 아니라 summary.총에도
+// 안 들어가므로 세 값을 더하면 항상 100%가 된다.
 const PICK_ORDER = ['적중', '보험', '미적']
 const PICK_CHIP = {
   적중: { background: 'var(--chip-yellow-bg)', color: 'var(--chip-yellow-fg)' },
