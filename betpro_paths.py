@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-WEB_BET PRO V1.0 - 경로/DB 해석 단일 진입점
+WEB_BET PRO V2.0 - 경로/DB 해석 단일 진입점
 ================================================================================
 모든 DB 경로 결정은 이 모듈을 통해서만 이루어진다.
 본체(WEB_BET_PRO.py)는 절대 경로를 직접 조립하지 않는다.
@@ -39,7 +39,7 @@ from typing import List, Optional, Dict
 # =============================================================
 
 APP_NAME = "WEB_BET PRO"
-APP_VERSION = "V1.0"
+APP_VERSION = "V2.0"
 
 # 💡 [업데이트 내용] 리그 코드 = 테이블명 체계 (기존 본체 LEAGUES 와 동일)
 LEAGUES: List[str] = ['EPL', 'LALIGA', 'SERIEA', 'BUNDES', 'EREDIVISIE', 'LIGUE1']

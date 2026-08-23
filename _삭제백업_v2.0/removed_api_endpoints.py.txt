@@ -1,0 +1,78 @@
+BETPRO v2.0에서 삭제한 미사용 API 엔드포인트 5개 (삭제 전 원본)
+======================================================================
+
+### /api/bet_batches/{batch_id}  (main.py 1223~1228)
+@app.delete("/api/bet_batches/{batch_id}")
+def delete_bet_batch(batch_id: str, user: dict = Depends(get_current_user)):
+    """등록 묶음 통째로 삭제 — 잘못 등록한 벳등록 한 건을 되돌릴 때. 이미 회차로 묶인
+    벳은 남긴다(BETSLIPS.delete_batch가 걸러준다)."""
+    BETSLIPS.delete_batch(user["username"], batch_id)
+    return {"ok": True}
+
+
+### /api/crawl/close  (main.py 1901~1904)
+@app.post("/api/crawl/close")
+def crawl_close(user: dict = Depends(get_current_user)):
+    CRAWL.close_page()
+    return {"ok": True}
+
+
+### CrawlKrOpenBody + /api/crawl/kr/open  (main.py 1951~1959, 2000~2013)
+class CrawlKrOpenBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    code: str
+    year: str
+    round: str   # noqa: A003 — 젠토토 자체 회차번호(예: 260036). 앱의 R과 무관.
+
+
+class CrawlKrFetchBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+...
+@app.post("/api/crawl/kr/open")
+def crawl_kr_open(body: CrawlKrOpenBody, user: dict = Depends(get_current_user)):
+    """그 회차가 실제로 있는지만 확인해 준다.
+
+    젠토토 때는 로그인한 크롬 창을 띄우는 자리였는데, 와이즈토토는 로그인도 브라우저도
+    필요 없어 화면에서 이 단계를 없앴다. 엔드포인트는 회차 존재 확인용으로 남겨 둔다.
+    """
+    _check_league_for(body.code, body.scope, user)
+    try:
+        url = KRCRAWL.open_round(body.year, body.round)
+    except KRCRAWL.CrawlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True, "url": url}
+
+
+
+### /api/crawl/kr/close  (main.py 2202~2205)
+@app.post("/api/crawl/kr/close")
+def crawl_kr_close(user: dict = Depends(get_current_user)):
+    KRCRAWL.close_page()
+    return {"ok": True}
+
+
+### AnalyzeBody + /api/analyze  (main.py 2481~2504)
+class AnalyzeBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    league: str                       # 개별지표 기준 리그(EPL 등)
+    row: dict                         # {HT,AT,FW,FD,FL,FHW,KW,KD,KL,KHW,RT?...}
+
+
+@app.post("/api/analyze")
+def analyze(body: AnalyzeBody, user: dict = Depends(get_current_user)):
+    """
+    임의 배당 1경기를 엔진으로 즉시 분석 → 26개 지표 + 플핸 예측 반환.
+    개별지표는 해당 리그 DB 기준. 통합(TF-/TK-)지표는 master면 통합DB,
+    내 데이터면 그 리그 하나 기준(업로드 때와 같은 규칙).
+    """
+    _check_league_for(body.league, body.scope, user)
+    db = _resolve_scope_db(body.scope, user)
+    league_df = DATA.load_league_df(db, body.league)
+    total_df = league_df if _is_user_scope(body.scope) else DATA.load_total_df(db)
+    if league_df.empty:
+        raise HTTPException(status_code=400,
+                            detail=f"{body.league} 데이터가 비어 있습니다.")
+
+    row = pd.Series(body.row)
+    result = engine.analyze_row(row, league_df, total_df)  # 캐시는 내부 생성
+    return {"result": DATA.series_to_dict(result)}

@@ -1,14 +1,10 @@
 import { useState } from 'react'
 import { api } from '../../api/client'
 import { isStarred, formatTime, formatDt } from '../../utils/format'
+import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS } from '../../utils/pickOptions'
 // .modal-backdrop / .modal-card / .modal-close / .modal-title / .modal-meta 를 그대로 재사용한다.
 import './MyPickModal.css'
 
-const PICK_OPTIONS = ['대기', '축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
-// P — 내픽과 별개로 "실제로 딱 찍었는지"만 남기는 참고용 태그. 결과 판정에는 안 쓰인다.
-const P_OPTIONS = ['핸승', '핸무', '무', '역']
-const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-엇갈', 'P-상대', 'P-똥배', 'P-원정', 'P-핸↑', 'P-관전', 'P-어렵',
-                     'B-고민', 'B-Ma', 'B-Si', '축', '축-Si']
 
 // 실제로 벳팅한 픽을 기록하는 팝업. 경기 정보는 참고용으로만 보여주고, 내픽 값만 수정한다
 // (RT·핸디 등 분석 컬럼과 달리 이 값은 화면에서 직접 입력하는 순수 개인 기록).

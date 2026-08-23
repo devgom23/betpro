@@ -29,7 +29,6 @@ BETPRO API 서버 (FastAPI) - 골격
   GET  /api/total                      통합DB(6대 리그 합산) 조회
   POST /api/recompute/pending          예정 경기만 최신 통합DB 기준 재계산
   POST /api/recompute/all              전체(과거 포함) 재계산 — confirm 필수
-  POST /api/analyze                    엔진 실시간 분석(임의 배당 1경기)
 
   ── 관리자 전용 (role=admin) ──
   GET  /api/admin/master/status        master.db 현황 + 백업 목록
@@ -82,7 +81,6 @@ import crawler as CRAWL        # noqa: E402
 import kr_crawler as KRCRAWL   # noqa: E402
 import my_picks as MYPICKS     # noqa: E402
 import bet_slips as BETSLIPS   # noqa: E402
-import ev_model as EVM         # noqa: E402
 import pick_ai as PICKAI       # noqa: E402
 import standings               # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
@@ -93,7 +91,7 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000", "http://127.0.0.1:3000",
 ]
 
-app = FastAPI(title="BETPRO API", version="0.1.0",
+app = FastAPI(title="BETPRO API", version="2.0.0",
               description="BETPRO 분석 엔진을 노출하는 백엔드 API (골격)")
 
 app.add_middleware(
@@ -119,7 +117,10 @@ def _warm_master_cache_async():
     베팅내역 화면은 여러 리그를 한꺼번에 훑어야 해서(다리마다 소속 리그가 다를 수 있음)
     서버를 막 켰을 때 처음 열면 리그 6개를 그 자리에서 전부 디스크에서 읽느라
     몇 초씩 걸렸다(실측 7초대) — 로그인·다른 화면 조회 중에는 이 지연이 안 보이게
-    별도 스레드로 미리 데워둔다. 실패해도(파일 없음 등) 서버 기동에는 영향 없다."""
+    별도 스레드로 미리 데워둔다. 실패해도(파일 없음 등) 서버 기동에는 영향 없다.
+
+    통합DB(load_total_df)도 같이 데운다 — 상세보기 팝업이 상대전적을 뽑을 때 쓰는데,
+    리그 6개만 데워 놓으면 팝업을 처음 열 때 여기서 다시 합치느라 기다려야 했다."""
     import threading
 
     def _warm():
@@ -127,6 +128,7 @@ def _warm_master_cache_async():
             db_path = PATHS.get_master_db()
             for lg in DATA.LEAGUES:
                 DATA.load_league_df(db_path, lg)
+            DATA.load_total_df(db_path)   # 상세보기(상대전적)가 쓰는 통합DB
         except Exception:
             pass
 
@@ -374,7 +376,7 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
     """
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
-    df = DATA.load_league_df_ranked(db, code)
+    df = DATA.load_league_df_ev(db, code)
     if df.empty or "S" not in df.columns:
         return {"seasons": [], "rounds_by_season": {}, "latest": None,
                 "total_rows": 0, "rt_summary": None, "hit_summary": None}
@@ -491,10 +493,10 @@ def league_rows(code: str,
     """
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
-    df = DATA.load_league_df_ranked(db, code)   # 표시용 순위(HP/AP) 포함
-    # 베팅 기대수익률(EV) 컬럼을 붙인다. 저장하지 않고 조회할 때마다 계산한다 —
-    # 확률 추정에 그 리그의 과거 경기 전체를 쓰므로 경기가 쌓이면 값도 같이 갱신된다.
-    df = EVM.attach_for_league(df)
+    # 표시용 순위(HP/AP) + 베팅 기대수익률(EV) 컬럼까지 붙은 표.
+    # DB에 저장하지 않고 조회 때 계산하는 값이라, 경기가 쌓이면 값도 같이 갱신된다
+    # (DB가 바뀌면 캐시가 풀리므로 — data_access.load_league_df_ev 참고).
+    df = DATA.load_league_df_ev(db, code)
     if df.empty:
         # 데이터가 아직 없어도 can_write는 반드시 내려줘야 한다.
         # 이게 빠지면 "비어 있는 리그에 업로드" UI가 사라져 첫 등록 자체가 막힌다.
@@ -851,18 +853,18 @@ def weekly_picks(user: dict = Depends(get_current_user)):
             }
             if not starred:
                 continue
-            df = DATA.load_league_df_ranked(db, code)
+            # 핸승 위험도(RISK/WIN_RISK/WIN_RISK_F/AI_PICK/K_VALUE/F_VALUE/KF_AI)까지 붙은 표.
+            df = DATA.load_league_df_ev(db, code)
             if df.empty:
                 continue
-            df = EVM.attach_for_league(df)   # 핸승 위험도(RISK/WIN_RISK/WIN_RISK_F/AI_PICK/K_VALUE/F_VALUE/KF_AI) — 위험도
-            # 계산엔 리그 전체 이력이 필요해 df 자체는 그대로 두지만, 별표 몇 개 보자고
+            # 위험도 계산엔 리그 전체 이력이 필요해 df 자체는 그대로 두지만, 별표 몇 개 보자고
             # 수천 행×200개 컬럼을 전부 JSON 직렬화(df_to_records)할 필요는 없다 —
             # 여기서 별표 찍힌 행만 먼저 추려서 그만큼만 변환한다(리그당 실측 0.3~0.5초 절약).
-            sub = df[["S", "R", "No", "HT", "AT"]]
-            keep_idx = [
-                i for i, s, r, no, ht, at in sub.itertuples(name=None)
-                if _my_pick_key(s, r, no, ht, at) in starred
-            ]
+            # 찾는 방향도 뒤집었다 — 예전엔 별표 하나 찾자고 리그 전체(수천 행)를 훑으며
+            # 행마다 키를 새로 만들었다(실측 179ms/요청). 키→행번호 표를 캐시해 두고
+            # 별표 개수만큼만 조회한다.
+            key_index = _pick_key_index(db, code)
+            keep_idx = sorted(key_index[k] for k in starred if k in key_index)
             if not keep_idx:
                 continue
             for rec in DATA.df_to_records(df.loc[keep_idx]):
@@ -939,20 +941,20 @@ def week_list(start: Optional[str] = None, end: Optional[str] = None,
             continue
         labels = _scope_league_labels(scope, user)
         for code in _scope_league_codes(scope, user):
-            df = DATA.load_league_df_ranked(db, code)
+            # EV/위험도는 리그 전체 이력이 있어야 계산되므로 전체에 붙은 표를 받아
+            # 해당 날짜 행만 골라 쓴다(계산 자체는 DB가 바뀔 때만 다시 한다).
+            df = DATA.load_league_df_ev(db, code)
             if df.empty or "DT" not in df.columns:
                 continue
             dt_str = df["DT"].astype(str).str.slice(0, 8)
             rough = df[(dt_str >= raw_lo) & (dt_str <= raw_hi)]
             if rough.empty:
                 continue
-            # EV/위험도는 리그 전체 이력이 있어야 계산되므로 df 전체에 붙인 뒤 해당 행만 쓴다.
-            full = EVM.attach_for_league(df)
             keep = [i for i in rough.index
                     if lo <= _betting_day_sort_key(df.at[i, "DT"], df.at[i, "TM"])[0] <= hi]
             if not keep:
                 continue
-            records = DATA.df_to_records(full.loc[keep])
+            records = DATA.df_to_records(df.loc[keep])
             _attach_my_picks(records, user["username"], code, scope)
             for rec in records:
                 rec["L"] = code
@@ -1029,6 +1031,35 @@ def create_bet_batch(body: BetBatchBody, user: dict = Depends(get_current_user))
     return {"ok": True, "batch_id": batch_id}
 
 
+def _pick_key_index(db: str, code: str) -> dict:
+    """{(S,R,No,HT,AT) 정규화키: df 행번호}. 별표/내픽처럼 '경기 몇 개'를 리그 표에서
+    찾아야 할 때, 리그 전체를 훑는 대신 이 표로 바로 집는다. DB가 바뀔 때만 다시 만든다."""
+    def build():
+        df = DATA.load_league_df(db, code)
+        if df.empty or not {"S", "R", "No", "HT", "AT"}.issubset(df.columns):
+            return {}
+        sub = df[["S", "R", "No", "HT", "AT"]]
+        return {_my_pick_key(s, r, no, ht, at): i
+                for i, s, r, no, ht, at in sub.itertuples(name=None)}
+
+    return DATA.cached_derive(db, "pick_key_index:" + code, build)
+
+
+def _build_rt_index(df: pd.DataFrame) -> dict:
+    """리그 df → {(S,R,No,HT,AT): (RT라벨, DT)} 인덱스. 베팅내역이 다리마다 실제 결과를
+    찾을 때 쓴다. DB 내용에서만 나오는 값이라 DATA.cached_derive로 캐시해 둔다."""
+    idx: dict = {}
+    if df.empty or not {"S", "R", "No", "HT", "AT", "RT"}.issubset(df.columns):
+        return idx
+    has_dt = "DT" in df.columns
+    cols = ["S", "R", "No", "HT", "AT", "RT"] + (["DT"] if has_dt else [])
+    for row in df[cols].itertuples(index=False, name=None):
+        s, r, no, ht, at, rt = row[:6]
+        dt = row[6] if has_dt else None
+        idx[_my_pick_key(s, r, no, ht, at)] = (_rt_label(rt), dt)
+    return idx
+
+
 def _attach_leg_hits(slips: list[dict], user: dict) -> None:
     """슬립 목록(BETSLIPS.list_slips*)에 다리별 실제 결과(actual/dt/hit)와 슬립 전체
     결과(result/payout/hit_amount)를 붙인다. /api/bet_slips와 /api/team_bet_record가
@@ -1051,23 +1082,12 @@ def _attach_leg_hits(slips: list[dict], user: dict) -> None:
     # (S,R,No,HT,AT) -> RT라벨 인덱스. 예전엔 다리마다 리그 전체를 처음부터 한 줄씩
     # (iterrows) 다시 훑어서, 벳이 몇 개만 쌓여도 몇 초씩 걸렸다(12벳/28다리 실측
     # 6.8초). 리그당 인덱스를 딱 한 번만 만들어 이후 모든 다리가 그걸 재사용한다.
-    rt_index_cache: dict[tuple, dict] = {}
-
+    # 그 인덱스를 DATA의 mtime 캐시에 얹어 요청이 끝나도 남긴다 — 예전엔 이 함수
+    # 안의 지역 dict라 화면을 열 때마다 리그 전체를 다시 훑었다(실측 155ms/요청).
     def rt_index_for(sc: str, code: str) -> dict:
-        key = (sc, code)
-        if key not in rt_index_cache:
-            df = df_for(sc, code)
-            idx: dict = {}
-            if not df.empty and {"S", "R", "No", "HT", "AT", "RT"}.issubset(df.columns):
-                has_dt = "DT" in df.columns
-                cols = ["S", "R", "No", "HT", "AT", "RT"] + (["DT"] if has_dt else [])
-                sub = df[cols]
-                for row in sub.itertuples(index=False, name=None):
-                    s, r, no, ht, at, rt = row[:6]
-                    dt = row[6] if has_dt else None
-                    idx[_my_pick_key(s, r, no, ht, at)] = (_rt_label(rt), dt)
-            rt_index_cache[key] = idx
-        return rt_index_cache[key]
+        db = db_for(sc)
+        return DATA.cached_derive(db, f"rt_index:{code}",
+                                  lambda: _build_rt_index(df_for(sc, code)))
 
     def rt_for(leg: dict):
         # 다리에 스코프가 저장돼 있으면 그것만 본다. 옛날에 등록돼 스코프가 없는
@@ -1196,14 +1216,6 @@ def delete_selected_bet_slips(body: SlipIdsBody, user: dict = Depends(get_curren
 @app.delete("/api/bet_slips/{slip_id}")
 def delete_bet_slip(slip_id: int, user: dict = Depends(get_current_user)):
     BETSLIPS.delete_slip(user["username"], slip_id)
-    return {"ok": True}
-
-
-@app.delete("/api/bet_batches/{batch_id}")
-def delete_bet_batch(batch_id: str, user: dict = Depends(get_current_user)):
-    """등록 묶음 통째로 삭제 — 잘못 등록한 벳등록 한 건을 되돌릴 때. 이미 회차로 묶인
-    벳은 남긴다(BETSLIPS.delete_batch가 걸러준다)."""
-    BETSLIPS.delete_batch(user["username"], batch_id)
     return {"ok": True}
 
 
@@ -1409,7 +1421,7 @@ def match_excel_download(code: str,
     """
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
-    df = DATA.load_league_df_ranked(db, code)   # 화면 팝업과 같은 폼/최근전적이 담기도록
+    df = DATA.load_league_df_ev(db, code)   # 화면 팝업과 같은 폼/최근전적이 담기도록
     if df.empty or "S" not in df.columns or "R" not in df.columns:
         raise HTTPException(status_code=404, detail="데이터가 없습니다.")
 
@@ -1505,7 +1517,7 @@ def table_excel_download(code: str,
     """
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
-    df = DATA.load_league_df_ranked(db, code)   # 화면과 같은 순위(HP/AP)가 담기도록
+    df = DATA.load_league_df_ev(db, code)   # 화면과 같은 순위(HP/AP)가 담기도록
     if df.empty:
         raise HTTPException(status_code=404, detail="데이터가 없습니다.")
 
@@ -1877,12 +1889,6 @@ def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
     return _merge_and_save(db, body.code, body.scope, new, body.confirm)
 
 
-@app.post("/api/crawl/close")
-def crawl_close(user: dict = Depends(get_current_user)):
-    CRAWL.close_page()
-    return {"ok": True}
-
-
 # ═══════════════════════ 국내배당(와이즈토토) 가져오기 ═══════════════════════
 # 스코어맨(해외배당) 크롤과 흐름은 같지만 목적이 다르다 — 이미 있는 경기의
 # 국내배당 칸(KW~KHL)만 채우는 '백필 전용' 기능이라 새 경기를 만들지 않는다.
@@ -1890,7 +1896,7 @@ def crawl_close(user: dict = Depends(get_current_user)):
 #
 # 예전엔 젠토토를 긁었는데 로그인한 크롬 창이 필요해 자주 실패했다. 와이즈토토는
 # 로그인 없이 HTTP로 받아오므로 브라우저 자체가 없다(api/kr_crawler.py 상단 주석 참고).
-# 젠토토용 코드는 api/kr_crawler_zentoto_backup.py 에 그대로 남겨 뒀다.
+# 젠토토용 코드는 v2.0에서 지웠다(_삭제백업_v2.0/ 과 git 이력에 남아 있다).
 #
 # 아래 이름은 와이즈토토 화면에 실제로 찍히는 리그 표기다 — 2026년 99회차 응답에서
 # 직접 확인했다: EFL챔 / EPL / J1리그 / J2리그 / K리그1 / K리그2 / MLS / 독슈퍼컵 /
@@ -1925,13 +1931,6 @@ def _season_round_date_range(db: str, code: str, season: str, round_: str):
         except ValueError:
             continue
     return (min(days), max(days)) if days else (None, None)
-
-
-class CrawlKrOpenBody(BaseModel):
-    scope: str = PATHS.SCOPE_MASTER
-    code: str
-    year: str
-    round: str   # noqa: A003 — 젠토토 자체 회차번호(예: 260036). 앱의 R과 무관.
 
 
 class CrawlKrFetchBody(BaseModel):
@@ -1974,21 +1973,6 @@ def crawl_kr_config(scope: str = PATHS.SCOPE_MASTER, code: str = "",
         "latest_season": latest_season,
         "latest_round": latest_round,
     }
-
-
-@app.post("/api/crawl/kr/open")
-def crawl_kr_open(body: CrawlKrOpenBody, user: dict = Depends(get_current_user)):
-    """그 회차가 실제로 있는지만 확인해 준다.
-
-    젠토토 때는 로그인한 크롬 창을 띄우는 자리였는데, 와이즈토토는 로그인도 브라우저도
-    필요 없어 화면에서 이 단계를 없앴다. 엔드포인트는 회차 존재 확인용으로 남겨 둔다.
-    """
-    _check_league_for(body.code, body.scope, user)
-    try:
-        url = KRCRAWL.open_round(body.year, body.round)
-    except KRCRAWL.CrawlError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    return {"ok": True, "url": url}
 
 
 @app.post("/api/crawl/kr/fetch")
@@ -2176,12 +2160,6 @@ def crawl_kr_save_aliases(body: CrawlAliasBody, user: dict = Depends(get_current
     n = CRAWL.save_aliases(udb, body.scope, body.code, body.mapping, source="kr")
     return {"ok": True, "saved": n,
             "aliases": CRAWL.list_aliases(udb, body.scope, body.code, source="kr")}
-
-
-@app.post("/api/crawl/kr/close")
-def crawl_kr_close(user: dict = Depends(get_current_user)):
-    KRCRAWL.close_page()
-    return {"ok": True}
 
 
 class DeleteMatchesBody(BaseModel):
@@ -2454,33 +2432,6 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
     PATHS.stamp_updated(db)
 
     return {"ok": True, "updated": updated, "not_found": not_found, "filled_prediction": filled_sides}
-
-
-# ─────────────────────────── 엔진 실시간 분석 ───────────────────────────
-class AnalyzeBody(BaseModel):
-    scope: str = PATHS.SCOPE_MASTER
-    league: str                       # 개별지표 기준 리그(EPL 등)
-    row: dict                         # {HT,AT,FW,FD,FL,FHW,KW,KD,KL,KHW,RT?...}
-
-
-@app.post("/api/analyze")
-def analyze(body: AnalyzeBody, user: dict = Depends(get_current_user)):
-    """
-    임의 배당 1경기를 엔진으로 즉시 분석 → 26개 지표 + 플핸 예측 반환.
-    개별지표는 해당 리그 DB 기준. 통합(TF-/TK-)지표는 master면 통합DB,
-    내 데이터면 그 리그 하나 기준(업로드 때와 같은 규칙).
-    """
-    _check_league_for(body.league, body.scope, user)
-    db = _resolve_scope_db(body.scope, user)
-    league_df = DATA.load_league_df(db, body.league)
-    total_df = league_df if _is_user_scope(body.scope) else DATA.load_total_df(db)
-    if league_df.empty:
-        raise HTTPException(status_code=400,
-                            detail=f"{body.league} 데이터가 비어 있습니다.")
-
-    row = pd.Series(body.row)
-    result = engine.analyze_row(row, league_df, total_df)  # 캐시는 내부 생성
-    return {"result": DATA.series_to_dict(result)}
 
 
 # ─────────────────────────── 통합DB 탭 ───────────────────────────

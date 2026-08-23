@@ -3,13 +3,9 @@ import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
 import { isStarred, formatTime, formatDt, scoreClass } from '../../utils/format'
+import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS } from '../../utils/pickOptions'
 import './MatchDetailModal.css'
 
-const PICK_OPTIONS = ['대기', '축플', '축정', '플핸', '플핸무', '정', '정무', '핸승', '핸무', '무', '역', '무핸무']
-// P — 내픽과 별개로 "실제로 딱 찍었는지"만 남기는 참고용 태그. 결과 판정에는 안 쓰인다.
-const P_OPTIONS = ['핸승', '핸무', '무', '역']
-const HIT_OPTIONS = ['Pass', 'P-고민', 'P-분산', 'P-엇갈', 'P-상대', 'P-똥배', 'P-원정', 'P-핸↑', 'P-관전', 'P-어렵',
-                     'B-고민', 'B-Ma', 'B-Si', '축', '축-Si']
 
 function rtLabel(v) {
   if (v === null || v === undefined || v === '') return ''
@@ -713,46 +709,6 @@ function MyPickBar({ row, onSavePick }) {
   )
 }
 
-/* ── 아래 4개는 지금 화면에서 쓰지 않는다(2026-08-22) ──
-   '종합 분석' 카드 4장(플핸무 확률·해외지표·국내지표·상대전적)을 화면에서 뺐다.
-   백엔드 계산(api/pick_ai.py, /api/pick_ai)은 그대로 살아 있고 응답도 그대로 오며,
-   UI를 다시 정의하기로 해서 그리는 쪽 코드도 지우지 않고 남겨 둔다.
-   ─────────────────────────────────────────────────── */
-
-// 종합픽 — 배당(기준선) 위에 지표·상대전적 보정을 얹어 플핸 확률 하나로 정리한 값.
-// 계산 근거와 각 신호를 왜 쓰거나 안 쓰는지는 api/pick_ai.py 상단 주석에 실측과 함께 있다.
-// 팝업을 열 때마다 백엔드에서 그 자리에서 계산한다(저장하지 않는 표시 전용 값).
-// 신호 카드의 뱃지 문구는 백엔드가 내려주는 state/dir/value_text만으로 화면에서 판단한다
-// (계산 로직은 그대로, 표시 방식만 바꾼 것 — pick_ai.py는 건드리지 않는다).
-// eslint-disable-next-line no-unused-vars
-function sigBadge(s) {
-  if (s.state === 'ok') {
-    if (s.dir > 0) return { text: '핸승 쪽', tone: 'up' }
-    if (s.dir < 0) return { text: '플핸 쪽', tone: 'down' }
-    return { text: '기준선과 유사', tone: 'flat' }
-  }
-  if (s.state === 'none') return { text: '표본 부족', tone: 'none' }
-  // state === 'info' (참고용·계산 미반영 신호)
-  if (s.value_text.includes('판정 불가')) return { text: '데이터 없음', tone: 'none' }
-  if (s.value_text.includes('표본 부족') || s.value_text.includes('표본 없음')) {
-    return { text: '표본 부족', tone: 'none' }
-  }
-  return { text: '참고용', tone: 'none' }
-}
-
-// eslint-disable-next-line no-unused-vars
-function sigFootText(s) {
-  return s.state === 'ok' && s.adjust !== 0 ? `${s.adjust > 0 ? '+' : ''}${s.adjust.toFixed(1)}%p` : '—'
-}
-
-// eslint-disable-next-line no-unused-vars
-function sigFootClass(s) {
-  if (s.state !== 'ok') return ''
-  if (s.adjust > 0) return 'pick-sig-foot-up'
-  if (s.adjust < 0) return 'pick-sig-foot-down'
-  return ''
-}
-
 // 시즌전적처럼 '홈/원정 × 핸승/핸무/무/역' 숫자가 나열식 문장으로 나오면 자릿수가
 // 안 맞아 읽기 힘들다 — 표로 그려서 라벨(홈/원정) 폭을 맞추고 숫자 칸에 구분선을 준다.
 function SeasonRowsTable({ rows }) {
@@ -779,61 +735,6 @@ function SeasonRowsTable({ rows }) {
             ))}
           </tr>
         ))}
-      </tbody>
-    </table>
-  )
-}
-
-// 해외지표 계단식 보정 근거 — 통합승 / 승 / 승+패 / 승+무+패 순(넓은 단계 → 좁은 단계)으로,
-// 단계마다 핸승/핸무/무/역이 각각 몇 %였는지 보여준다(pick_ai.py _foreign_indicator 참고).
-// 계산이 통합에서 출발해 조건을 좁혀가며 섞는 순서와 같아서 위에서 아래로 읽으면 값이
-// 어떻게 만들어졌는지 따라갈 수 있다.
-// 맨 아래 '분석' 행은 그 단계들을 실제로 계단식 보정에 반영한 값 그대로다.
-// 각 행마다 그 단계에서 가장 많이 나온 결과를 하이라이트해서, 단계별로 어디에 몰려
-// 있는지가 색으로 바로 보이게 한다(분석 행만 칠하면 단계 간 비교가 안 된다).
-// 표본 수를 같이 보여주는 이유 — %만 보면 3건 중 2건(66.7%)과 972건 중 649건(66.8%)이
-// 똑같아 보인다. 단계마다 표본 규모가 수십 배씩 차이 나서(해통 972건 vs 국통 136건),
-// 그 %를 얼마나 믿을지는 표본 수를 봐야 정해진다.
-// eslint-disable-next-line no-unused-vars
-function IndLevelsTable({ levels }) {
-  return (
-    <table className="detail-table pick-ind-table">
-      <thead>
-        <tr>
-          <th className="row-label">지표</th>
-          <th>핸승</th>
-          <th>핸무</th>
-          <th>무</th>
-          <th>역</th>
-        </tr>
-      </thead>
-      <tbody>
-        {levels.map((lv) => {
-          const isSum = lv.code === 'SUM'
-          const vals = [lv.hs_pct, lv.hm_pct, lv.mu_pct, lv.yk_pct]
-          // 표본이 0인 단계(0/0/0/0)는 최댓값이란 게 없으므로 칠하지 않는다.
-          const hasData = vals.some((v) => v > 0)
-          // 통)승·패 / 승·패까지만 실제 계산(계단식 보정)에 쓰이고, 승+패부터는
-          // 화면 참고용일 뿐이라 그 경계에 구분선을 준다(pick_ai.py 실측 주석 참고).
-          const isRefStart = lv.code === 'F-WL' || lv.code === 'K-WL'
-          return (
-            <tr
-              key={lv.code}
-              className={[isSum && 'pick-ind-sum-row', isRefStart && 'pick-ind-ref-row']
-                .filter(Boolean).join(' ') || undefined}
-            >
-              <td className="row-label">{lv.label}</td>
-              {vals.map((v, i) => (
-                <td key={i} className={hasData ? maxCellClass(vals, i) : undefined}>
-                  {v.toFixed(1)}
-                  {/* % 아래에 원래 경기 수 — 3건 중 2건(66.7%)과 972건 중 649건(66.8%)이
-                      %만 보면 똑같아 보인다. '분석' 행은 계산 결과라 counts가 없다. */}
-                  {lv.counts && <span className="ind-n">{lv.counts[i]}</span>}
-                </td>
-              ))}
-            </tr>
-          )
-        })}
       </tbody>
     </table>
   )

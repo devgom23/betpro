@@ -82,7 +82,7 @@ export default function MainPage() {
       <header className="top-bar">
         <div className="top-bar-brand">
           <span className="app-name">⚽ BET PRO W</span>
-          <span className="app-version-chip">v1.0</span>
+          <span className="app-version-chip">v2.0</span>
         </div>
 
         <div className="scope-toggle">
