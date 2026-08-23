@@ -220,6 +220,24 @@
   color: var(--text-muted);
 }
 
+/* 상대전적 제목 줄 — 평균득점 문구는 왼쪽에 붙여 강조하고, 승점 기준 안내문은
+   같은 줄 오른쪽 끝으로 밀어낸다(공백만으로는 안 밀리므로 flex로 양끝 정렬). */
+.detail-h2h-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.detail-h2h-avg {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.detail-h2h-footnote {
+  white-space: nowrap;
+}
+
 /* 배당 제목 옆 똥배 표시 — 똥1 · [안전 17%] · 똥사
    리그 화면 상단 요약 바(등록된 시즌 18 · 경기수 5,229 …)와 같은 표기를 그대로 쓴다:
    값은 <strong>으로 밝게, 사이는 가운뎃점, 등급은 RtSummaryBar와 같은 알약형 칩. */

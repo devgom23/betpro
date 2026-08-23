@@ -987,14 +987,16 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
               ref={h2hSectionRef}
               style={h2hMaxHeight ? { maxHeight: `${h2hMaxHeight}px` } : undefined}
             >
-              <h3>
-                상대전적{' '}
-                {/* 예전 종합분석 '상대전적' 카드에 있던 문장(맞대결 평균 총득점).
-                    확률 계산에는 안 들어가는 참고값이라 제목 옆에 붙여만 둔다. */}
-                {h2hSig && h2hSig.value_text && (
-                  <span className="detail-section-note">{h2hSig.value_text}</span>
-                )}{' '}
-                <span className="detail-section-note">승점은 홈팀 기준으로 작성되었습니다.</span>
+              <h3 className="detail-h2h-title">
+                <span>
+                  상대전적{' '}
+                  {/* 예전 종합분석 '상대전적' 카드에 있던 문장(맞대결 평균 총득점).
+                      확률 계산에는 안 들어가는 참고값이라 제목 옆에 붙여만 두되, 눈에 띄게 강조한다. */}
+                  {h2hSig && h2hSig.value_text && (
+                    <span className="detail-section-note detail-h2h-avg">{h2hSig.value_text}</span>
+                  )}
+                </span>
+                <span className="detail-section-note detail-h2h-footnote">※ 승점은 홈팀 기준으로 작성되었습니다.</span>
               </h3>
               <HeadToHeadResult
                 scope={scope} code={code} home={ht} away={at} cross
