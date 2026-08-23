@@ -84,19 +84,6 @@ def open_page(url: str) -> str:
         return url
 
 
-def close_page():
-    """크롬 창을 닫는다. 안 열려 있어도 조용히 넘어간다."""
-    global _driver
-    with _lock:
-        if _driver is not None:
-            try:
-                _driver.quit()
-            except Exception:
-                pass
-            _driver = None
-    return True
-
-
 def is_open() -> bool:
     return _driver is not None and _alive(_driver)
 

@@ -487,19 +487,9 @@ def fetch_results_by_dates(target_league: str, d0: datetime, d1: datetime) -> di
     return {"round_id": " + ".join(used), "count": len(merged), "rows": list(merged.values())}
 
 
-# ─────────── 젠토토 시절 인터페이스 (브라우저를 안 쓰므로 전부 무동작) ───────────
-# main.py의 /api/crawl/kr/open·close 가 아직 이 이름들을 부른다. 와이즈토토는 창을
-# 열 필요가 없어 호출돼도 아무 일도 하지 않고, 화면에서도 '화면 열기' 단계를 없앴다.
+# ─────────── 젠토토 시절 인터페이스 (브라우저를 안 쓰므로 무동작) ───────────
+# 창을 열고 닫던 open_round/close_page 는 v2.0에서 지웠다(그걸 부르던 엔드포인트
+# /api/crawl/kr/open·close 가 화면에서 안 쓰여 같이 삭제됨).
+# is_open 만 남는다 — /api/crawl/kr/config 응답이 아직 이 값을 담아 내려준다.
 def is_open() -> bool:
     return False
-
-
-def close_page():
-    return True
-
-
-def open_round(year, rnd) -> str:
-    """열 창이 없다. 회차가 실제로 있는지만 확인해 준다."""
-    if not _game_seq(year, rnd):
-        raise CrawlError(f"{year}년 {rnd}회차를 찾지 못했습니다.")
-    return f"{BASE}/index.htm?tab_type=proto&game_type=pt&game_category=pt1&game_year={year}&game_round={rnd}"

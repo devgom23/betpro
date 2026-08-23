@@ -196,8 +196,3 @@ def df_to_records(df: pd.DataFrame):
                                  date_format="iso"))
 
 
-def series_to_dict(s: pd.Series):
-    """Series(엔진 결과) → JSON 안전한 dict."""
-    import json
-    return json.loads(pd.DataFrame([s]).to_json(orient="records",
-                                                force_ascii=False)) [0]
