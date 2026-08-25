@@ -52,6 +52,7 @@ import os
 import re
 import sqlite3
 import sys
+import time
 from datetime import date, datetime, timedelta
 from urllib.parse import quote
 
@@ -79,6 +80,7 @@ import match_excel as XLS     # noqa: E402
 import user_leagues as USERLG  # noqa: E402
 import crawler as CRAWL        # noqa: E402
 import kr_crawler as KRCRAWL   # noqa: E402
+import scoreman_odds as SCOREMAN  # noqa: E402
 import my_picks as MYPICKS     # noqa: E402
 import bet_slips as BETSLIPS   # noqa: E402
 import pick_ai as PICKAI       # noqa: E402
@@ -1910,12 +1912,19 @@ def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
     # 원정승배당보다 크면 홈이 약체라는 뜻이라 원정이 정배(+1), 아니면 홈이 정배(-1).
     # 스코어맨(해외배당) 저장은 국내배당 칸이 항상 빈 값이라 그대로 지나간다.
     # ⚠ 초기·최종을 각각 따로 판정한다 — 배당이 크게 움직이면 정배가 뒤집힐 수 있다.
-    for w_col, l_col, h_col in (("KW", "KL", "KH"), ("EKW", "EKL", "EKH")):
+    #   해외(EFH)도 같은 규칙으로 채운다. FH(해외 초기)는 예전부터 화면에서 사람이
+    #   넣거나 ResultEditModal이 계산해 주던 값이라 여기서 건드리지 않는다.
+    for w_col, l_col, h_col in (("KW", "KL", "KH"), ("EKW", "EKL", "EKH"),
+                                ("EFW", "EFL", "EFH")):
         if not {w_col, l_col}.issubset(raw.columns):
             continue
         w = pd.to_numeric(raw[w_col], errors="coerce")
         l = pd.to_numeric(raw[l_col], errors="coerce")
-        h_now = pd.to_numeric(raw.get(h_col), errors="coerce")
+        # ⚠ raw.get(없는칸)은 None을 주고, pd.to_numeric(None)은 Series가 아니라
+        #   스칼라 NaN을 준다 — 그대로 .isna()를 부르면 터진다. 칸이 없으면 빈
+        #   Series를 만들어 쓴다(스코어맨 크롤은 EKH 칸 자체가 없어 실제로 터졌다).
+        h_now = (pd.to_numeric(raw[h_col], errors="coerce") if h_col in raw.columns
+                 else pd.Series(np.nan, index=raw.index, dtype="float64"))
         need_fill = h_now.isna() & w.notna() & l.notna()
         if need_fill.any():
             raw[h_col] = h_now.where(~need_fill, np.where(w > l, 1.0, -1.0))
@@ -2204,6 +2213,174 @@ def crawl_kr_save_aliases(body: CrawlAliasBody, user: dict = Depends(get_current
     n = CRAWL.save_aliases(udb, body.scope, body.code, body.mapping, source="kr")
     return {"ok": True, "saved": n,
             "aliases": CRAWL.list_aliases(udb, body.scope, body.code, source="kr")}
+
+
+# ═══════════════════════ 최신배당(배변) 불러오기 ═══════════════════════
+# "결과·핸디 입력"·"국배 가져오기"와 달리 이미 저장돼 있는 경기의 최종배당(EK*/EF*)
+# 칸만 다시 받아 덮어쓴다. 초기배당(KW~KHL/FW~FHL)·26개 지표·플핸예측·RT는 절대
+# 건드리지 않는다 — 그 값들은 preprocess_data/_merge_and_save를 거치지 않고,
+# 이미 로드한 df에서 EK*/EF* 칸만 직접 바꿔 그대로 다시 쓴다.
+def _scoreman_season(season: str) -> str:
+    """DB 시즌 표기 -> 스코어맨 표기. '26-27' -> '2026-2027', '2026'(K리그) -> 그대로."""
+    s = str(season).strip()
+    m = re.match(r"^(\d{2})-(\d{2})$", s)
+    if not m:
+        return s
+
+    def full(y):
+        y = int(y)
+        return 2000 + y if y < 80 else 1900 + y
+    return f"{full(m.group(1))}-{full(m.group(2))}"
+
+
+def _dt_to_day(v) -> Optional[str]:
+    """DB DT('26-08-25 (Tue)') -> '2026-08-25'. 형식이 아니면 None."""
+    s = str(v).strip()
+    if len(s) < 8 or s[2] != "-":
+        return None
+    return "20" + s[:8]
+
+
+class RefreshFinalOddsBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    season: str
+    round: str   # noqa: A003
+
+
+@app.post("/api/leagues/{code}/refresh_final_odds")
+def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depends(get_current_user)):
+    """"최신배당 불러오기" — 이 시즌·라운드 경기들의 국내·해외 최종배당(배변 후)만
+    다시 받아 채운다. 국내는 와이즈토토, 해외는 스코어맨 Bet365 라이브 배당이다.
+    """
+    _check_league_for(code, body.scope, user)
+    db = _resolve_scope_db(body.scope, user)
+    if not PATHS.can_write(body.scope, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+    if str(body.season) == "ALL" or str(body.round) == "ALL":
+        raise HTTPException(status_code=400,
+                            detail="최신배당 불러오기는 시즌·라운드를 하나씩 골라야 합니다(전체 불가).")
+
+    df = DATA.load_league_df(db, code)
+    if df.empty or not {"S", "R", "HT", "AT", "DT"}.issubset(df.columns):
+        raise HTTPException(status_code=400, detail="이 리그에 저장된 경기가 없습니다.")
+
+    def _rnorm(v):
+        return re.sub(r"[Rr]$", "", str(v).strip())
+
+    mask = ((df["S"].astype(str).str.strip() == str(body.season).strip())
+            & (df["R"].astype(str).apply(_rnorm) == _rnorm(body.round)))
+    idxs = df.index[mask].tolist()
+    if not idxs:
+        raise HTTPException(status_code=400, detail="그 시즌·라운드에 저장된 경기가 없습니다.")
+
+    udb = _user_db_of(user)
+    label = _l_value(db, body.scope, code)
+
+    def _f(v):
+        try:
+            x = float(v)
+        except (TypeError, ValueError):
+            return None
+        return x if x > 0 else None
+
+    for c in ("EKW", "EKD", "EKL", "EKH", "EKHW", "EKHD", "EKHL",
+              "EFW", "EFD", "EFL", "EFH", "EFHW", "EFHD", "EFHL"):
+        if c not in df.columns:
+            df[c] = np.nan
+
+    # ── 국내(와이즈토토) ──
+    kr_updated = 0
+    kr_error = None
+    league_name = (CRAWL.get_league_name(udb, body.scope, code)
+                    or KR_LEAGUE_NAME_GUESS.get(label, ""))
+    if not league_name:
+        kr_error = "와이즈토토 리그명을 확인할 수 없습니다. '국배 가져오기'에서 먼저 설정해 주세요."
+    else:
+        try:
+            d0, d1 = _season_round_date_range(db, code, body.season, body.round)
+            if d0 is None:
+                kr_error = "경기 날짜가 비어 있어 회차를 찾을 수 없습니다."
+            else:
+                raw = KRCRAWL.fetch_by_dates(league_name, d0, d1)
+                aliases = CRAWL.list_aliases(udb, body.scope, code, source="kr")
+                rows = CRAWL.apply_aliases(raw["rows"], aliases)
+                kidx = {(r["HT"].strip(), r["AT"].strip()): r for r in rows}
+                for i in idxs:
+                    r = kidx.get((str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip()))
+                    if not r:
+                        continue
+                    ekw, ekl = _f(r.get("EKW")), _f(r.get("EKL"))
+                    if ekw is None:                 # 최종배당 자체가 없으면 건드리지 않는다
+                        continue
+                    for c, key in (("EKW", "EKW"), ("EKD", "EKD"), ("EKL", "EKL"),
+                                  ("EKHW", "EKHW"), ("EKHD", "EKHD"), ("EKHL", "EKHL")):
+                        v = _f(r.get(key))
+                        if v is not None:
+                            df.at[i, c] = v
+                    if ekl is not None:
+                        df.at[i, "EKH"] = 1.0 if ekw > ekl else -1.0
+                    kr_updated += 1
+        except KRCRAWL.CrawlError as e:
+            kr_error = str(e)
+
+    # ── 해외(스코어맨 Bet365) ──
+    ef_updated = 0
+    ef_error = None
+    source_url = CRAWL.get_source(udb, body.scope, code)
+    m = re.search(r"/league/(\d+)", source_url or "")
+    league_id = int(m.group(1)) if m else None
+    if not league_id:
+        ef_error = "스코어맨 리그 주소를 확인할 수 없습니다. '해배 가져오기'에서 먼저 설정해 주세요."
+    else:
+        try:
+            sched = SCOREMAN.season_schedule(league_id, _scoreman_season(body.season))
+            f_aliases = CRAWL.list_aliases(udb, body.scope, code)   # source="" — 스코어맨 치환규칙
+            sched = CRAWL.apply_aliases(sched, f_aliases)
+            sidx = {}
+            for g in sched:
+                day = (g.get("dt") or "")[:10]
+                sidx[(str(g.get("HT", "")).strip(), str(g.get("AT", "")).strip(), day)] = g
+            for i in idxs:
+                day = _dt_to_day(df.at[i, "DT"])
+                if not day:
+                    continue
+                g = sidx.get((str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip(), day))
+                if not g:
+                    continue
+                try:
+                    o = SCOREMAN.match_odds(g["mid"])
+                except SCOREMAN.OddsError:
+                    continue
+                # 경기당 한 번씩 남의 서버를 두드리는 것이라 살짝 텀을 둔다 — 짧은 시간에
+                # 몰아치면 사이트가 IP 단위로 한동안 막아 버린다(실측: 150건 연속 요청 후
+                # 차단, 시간이 지나도 안 풀리는 걸로 보아 쿨다운이 김. 버튼은 보통 한 라운드
+                # 6~10경기만 다루므로 이 정도 텀으로는 실사용에서 체감되지 않는다).
+                time.sleep(0.15)
+                efw, efl = o.get("EFW"), o.get("EFL")
+                if efw is None:                     # Bet365에 라이브 배당이 없으면 건드리지 않는다
+                    continue
+                for c in ("EFW", "EFD", "EFL", "EFHW", "EFHL"):
+                    if o.get(c) is not None:
+                        df.at[i, c] = o[c]
+                if efl is not None:
+                    df.at[i, "EFH"] = 1.0 if efw > efl else -1.0
+                ef_updated += 1
+        except SCOREMAN.OddsError as e:
+            ef_error = str(e)
+
+    if kr_updated or ef_updated:
+        con = sqlite3.connect(db)
+        try:
+            df.to_sql(code, con, if_exists="replace", index=False)
+        finally:
+            con.close()
+        PATHS.stamp_updated(db)
+
+    return {
+        "domestic_updated": kr_updated, "domestic_error": kr_error,
+        "overseas_updated": ef_updated, "overseas_error": ef_error,
+        "target_count": len(idxs),
+    }
 
 
 class DeleteMatchesBody(BaseModel):

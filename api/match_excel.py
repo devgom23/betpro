@@ -33,10 +33,14 @@ UPLOAD_TEMPLATE_COLS = [
     "FW", "FD", "FL", "FH", "FHW", "FHD", "FHL",
 ]
 
-# 국내 최종배당(배변이 다 반영된 값). KW~KHL(초기배당)과 짝을 이루는 같은 7칸이다.
-# 업로드 양식에는 일부러 넣지 않는다 — 와이즈토토 배당변경 이력에서만 나오는 값이라
-# 사람이 손으로 채울 일이 없고, 양식만 넓어져 헷갈리기 때문이다.
-FINAL_ODDS_COLS = ["EKW", "EKD", "EKL", "EKH", "EKHW", "EKHD", "EKHL"]
+# 최종배당(배변이 다 반영된 값) — 초기배당과 짝을 이루는 같은 칸을 E 접두사로 둔다.
+#   국내(EK*) : 와이즈토토 배당변경 이력의 '지금 값'
+#   해외(EF*) : 스코어맨 Bet365 '라이브' 배당
+# 업로드 양식에는 일부러 넣지 않는다 — 크롤링으로만 나오는 값이라 사람이 손으로 채울
+# 일이 없고, 양식만 넓어져 헷갈리기 때문이다.
+FINAL_ODDS_COLS_K = ["EKW", "EKD", "EKL", "EKH", "EKHW", "EKHD", "EKHL"]
+FINAL_ODDS_COLS_F = ["EFW", "EFD", "EFL", "EFH", "EFHW", "EFHD", "EFHL"]
+FINAL_ODDS_COLS = FINAL_ODDS_COLS_K + FINAL_ODDS_COLS_F
 
 # '계산해서 만든 값'이 아니라 원본으로 들어오는 칸 전부.
 # engine.preprocess_data()의 target_cols와 내용이 같아야 한다 — 저장 경로(엑셀 업로드·
@@ -56,6 +60,8 @@ UPLOAD_COL_KOREAN_LABEL = {
     # 최종배당(배변 후) — 업로드 양식에는 안 들어가고 분석표 다운로드에서만 쓰인다.
     "EKW": "국)승-최종", "EKD": "국)무-최종", "EKL": "국)패-최종", "EKH": "국핸디-최종",
     "EKHW": "국)H-승-최종", "EKHD": "국)H-무-최종", "EKHL": "국)H-패-최종",
+    "EFW": "해)승-최종", "EFD": "해)무-최종", "EFL": "해)패-최종", "EFH": "해핸디-최종",
+    "EFHW": "해)H-승-최종", "EFHD": "해)H-무-최종", "EFHL": "해)H-패-최종",
 }
 
 # 업로드 양식 각 컬럼의 뜻 — '작성안내' 시트 표에 함께 넣어 비개발자도 채울 수 있게 한다.

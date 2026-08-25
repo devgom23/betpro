@@ -295,15 +295,17 @@ def attach(df: pd.DataFrame, table: dict) -> pd.DataFrame:
 
 
 # 최종배당(배변 후)으로 다시 계산해서 화면에 두 번째 줄로 보여줄 값들.
-# 국내배당에서 직접 나오는 것만 넣는다 — 해)정·해)지는 해외배당 기반이라 배변이
-# 없고, 국)지(NH_KI/PL_KI)는 26개 지표 기반이라 지표를 최종배당으로 다시 계산해야
-# 나온다(그건 별도 작업). 그 칸들은 화면에서 위아래 셀을 합쳐 한 번만 보여준다.
-FINAL_ODDS_DERIVED = ['RISK', 'WIN_RISK', 'NH_KO', 'PL_KO', 'ODD_FLAG',
+# 배당에서 직접 나오는 것만 넣는다 — 국)지·해)지(NH_KI/PL_KI/NH_FI/PL_FI)는 26개
+# 지표 기반이라 지표를 최종배당으로 다시 계산해야 바뀐다(그건 별도 작업). 그 칸들은
+# 화면에서 위아래 셀을 합쳐 한 번만 보여준다.
+FINAL_ODDS_DERIVED = ['RISK', 'WIN_RISK', 'WIN_RISK_F', 'NH_KO', 'PL_KO', 'ODD_FLAG',
                       'EV_WIN', 'EV_DRAW', 'EV_PL', 'EV_COVER', 'EV_BEST', 'EV_N']
 
-# 최종배당 7칸 -> 계산 함수가 읽는 이름. 이름만 바꿔 끼우면 같은 계산식이 그대로 돈다.
+# 최종배당 -> 계산 함수가 읽는 이름. 이름만 바꿔 끼우면 같은 계산식이 그대로 돈다.
 _FINAL_ODDS_RENAME = {'EKW': 'KW', 'EKD': 'KD', 'EKL': 'KL', 'EKH': 'KH',
-                      'EKHW': 'KHW', 'EKHD': 'KHD', 'EKHL': 'KHL'}
+                      'EKHW': 'KHW', 'EKHD': 'KHD', 'EKHL': 'KHL',
+                      'EFW': 'FW', 'EFD': 'FD', 'EFL': 'FL', 'EFH': 'FH',
+                      'EFHW': 'FHW', 'EFHD': 'FHD', 'EFHL': 'FHL'}
 
 
 def attach_for_league(df: pd.DataFrame) -> pd.DataFrame:

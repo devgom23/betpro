@@ -68,6 +68,11 @@ export default function LeaguePage({ code, scope }) {
     })
   }
 
+  // 최신배당(배변) 불러오기 — 지금 조회된 시즌·라운드 경기들의 최종배당(EK*/EF*)만
+  // 다시 받는다. 초기배당·26개 지표는 절대 안 건드린다(api/main.py refresh_final_odds).
+  const [busyRefreshOdds, setBusyRefreshOdds] = useState(false)
+  const [refreshOddsNotice, setRefreshOddsNotice] = useState('')
+
   // 재계산('내 데이터' 리그 1개 전용 — RT 없는 예정 경기만, 이 리그 하나만 대상)
   const [busyRecomputePending, setBusyRecomputePending] = useState(false)
   const [recomputeNotice, setRecomputeNotice] = useState('')
@@ -187,6 +192,29 @@ export default function LeaguePage({ code, scope }) {
     setPreview(null)
     setPendingFile(null)
     setExcelNotice('')
+  }
+
+  async function runRefreshFinalOdds() {
+    if (!query || query.season === 'ALL' || query.round === 'ALL') {
+      setRefreshOddsNotice('시즌·라운드를 하나씩 골라야 합니다(전체 불가).')
+      return
+    }
+    setBusyRefreshOdds(true)
+    setRefreshOddsNotice('')
+    try {
+      const res = await api.post(`/api/leagues/${code}/refresh_final_odds`, {
+        scope, season: query.season, round: query.round,
+      })
+      const parts = [`국내 ${res.domestic_updated}건 · 해외 ${res.overseas_updated}건 갱신`]
+      if (res.domestic_error) parts.push(`국내 실패: ${res.domestic_error}`)
+      if (res.overseas_error) parts.push(`해외 실패: ${res.overseas_error}`)
+      setRefreshOddsNotice(parts.join(' · '))
+      if (res.domestic_updated || res.overseas_updated) setReloadKey((k) => k + 1)
+    } catch (err) {
+      setRefreshOddsNotice(`실패: ${err.message}`)
+    } finally {
+      setBusyRefreshOdds(false)
+    }
   }
 
   async function runRecomputePending() {
@@ -415,6 +443,14 @@ export default function LeaguePage({ code, scope }) {
             <span className="league-summary-divider" aria-hidden="true" />
             <PickSummaryBar summary={data.hit_summary} />
             <div className="league-summary-toolbar">
+              <button
+                className="batch-fold-btn"
+                onClick={runRefreshFinalOdds}
+                disabled={busyRefreshOdds}
+                title="이 시즌·라운드 경기들의 국내·해외 최종배당(배변 후)만 다시 받습니다. 초기배당은 그대로 둡니다."
+              >
+                {busyRefreshOdds ? '불러오는 중…' : '최신배당 불러오기'}
+              </button>
               {batch1Groups.length > 0 && (
                 <button className="batch-fold-btn" onClick={() => toggleBatch(batch1Groups)}>
                   해외지표 {batch1Groups.every((g) => collapsed.has(groupKey(g))) ? '펼치기' : '접기'}
@@ -434,6 +470,7 @@ export default function LeaguePage({ code, scope }) {
               </button>
             </div>
           </div>
+          {refreshOddsNotice && <p className="recompute-notice">{refreshOddsNotice}</p>}
           <LeagueTable
             code={code}
             columns={data.columns}

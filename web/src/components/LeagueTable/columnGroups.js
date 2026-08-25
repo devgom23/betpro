@@ -53,14 +53,18 @@ const DDONG_RISK_CUTS = [22, 30, 37]
 // 여기 없는 확률 칸에 주의: 해)정(WIN_RISK_F)·해)지(NH_FI/PL_FI)는 해외배당에서 나오는데
 // 해외는 아직 배변 데이터가 없고, 국)지(NH_KI/PL_KI)는 26개 지표에서 나오는 값이라
 // 지표를 최종배당으로 다시 계산해야 바뀐다(별도 작업). 그래서 지금은 합쳐서 보여준다.
-// 값은 "아랫줄에 넣을 값을 담고 있는 컬럼". null이면 아랫줄을 빈칸으로 둔다
-// (해외배당은 배변 데이터를 아직 안 받아와서, 자리는 두 줄로 잡되 아래는 비운다).
+// 값은 "아랫줄에 넣을 값을 담고 있는 컬럼". null이면 아랫줄을 빈칸으로 둔다.
 export const FINAL_FIELD = {
+  // 국내배당 — 와이즈토토 배당변경 이력의 '지금 값'
   KW: 'EKW', KD: 'EKD', KL: 'EKL', KH: 'EKH',
   KHW: 'EKHW', KHD: 'EKHD', KHL: 'EKHL',
+  // 해외배당 — 스코어맨 Bet365 '라이브' 배당
+  FW: 'EFW', FD: 'EFD', FL: 'EFL', FH: 'EFH',
+  FHW: 'EFHW', FHD: 'EFHD', FHL: 'EFHL',
+  // 배당에서 바로 나오는 파생값
   DDONG: 'E_DDONG', DDONG_RISK: 'E_DDONG_RISK', DDONGSA: 'E_DDONGSA',
-  WIN_RISK: 'E_WIN_RISK', NH_KO: 'E_NH_KO', PL_KO: 'E_PL_KO',
-  FW: null, FD: null, FL: null, FH: null,
+  WIN_RISK: 'E_WIN_RISK', WIN_RISK_F: 'E_WIN_RISK_F',
+  NH_KO: 'E_NH_KO', PL_KO: 'E_PL_KO',
 }
 
 /** 이 칸이 위/아래 두 줄로 갈리는가. (값이 null인 항목도 갈라지므로 in으로 본다) */
@@ -68,17 +72,26 @@ export function splitsOnFinal(colKey) {
   return Object.prototype.hasOwnProperty.call(FINAL_FIELD, colKey)
 }
 
-// 배변(배당변경)이 일어났는지 표시할 배당 칸. 핸디 부호(KH)는 배당이 아니라 방향이고,
+// 배변(배당변경)을 표시할 배당 칸. 핸디 부호(KH/FH)는 배당이 아니라 방향이고,
 // 똥배·확률 칸은 배당에서 파생된 값이라 여기에 넣지 않는다.
-const ODDS_MOVE_COLS = ['KW', 'KD', 'KL', 'KHW', 'KHD', 'KHL']
+const ODDS_MOVE_COLS = ['KW', 'KD', 'KL', 'KHW', 'KHD', 'KHL',
+                        'FW', 'FD', 'FL', 'FHW', 'FHD', 'FHL']
+
+/** 초기 → 최종으로 배당이 움직인 방향. 1=올랐다, -1=내렸다, 0=그대로/값없음.
+ *  배당이 내려간 쪽이 "돈이 몰린 쪽"이다. */
+export function oddsMoveDir(row, colKey) {
+  if (!row || !ODDS_MOVE_COLS.includes(colKey)) return 0
+  const a = Number(row[colKey])
+  const b = Number(row[FINAL_FIELD[colKey]])
+  const blank = (v) => v == null || v === ''
+  if (blank(row[colKey]) || blank(row[FINAL_FIELD[colKey]])) return 0
+  if (Number.isNaN(a) || Number.isNaN(b) || a === b) return 0
+  return b > a ? 1 : -1
+}
 
 /** 이 칸의 배당이 초기 → 최종으로 실제로 움직였는가. */
 export function isOddsMoved(row, colKey) {
-  if (!row || !ODDS_MOVE_COLS.includes(colKey)) return false
-  const a = row[colKey]
-  const b = row[FINAL_FIELD[colKey]]
-  if (a == null || a === '' || b == null || b === '') return false
-  return Number(a) !== Number(b)
+  return oddsMoveDir(row, colKey) !== 0
 }
 
 /** 이 경기에 최종배당이 있는가(= 두 줄로 보여줄 값이 있는가). */

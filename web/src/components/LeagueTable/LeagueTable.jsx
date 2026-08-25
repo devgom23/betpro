@@ -2,7 +2,7 @@ import { cloneElement, Fragment, useEffect, useMemo, useRef, useState } from 're
 import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
-  collapsedWidth, splitsOnFinal, isOddsMoved, toFinalRow,
+  collapsedWidth, splitsOnFinal, oddsMoveDir, toFinalRow,
 } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
@@ -399,15 +399,21 @@ export default function LeagueTable({
                   const splits = splitRows && splitsOnFinal(colKey)
                   // 배변이 일어난 배당 칸은 두 줄 모두 옅은 배경으로 표시해, 위아래를
                   // 눈으로 짚어 가며 비교하지 않아도 "여기가 움직였다"가 바로 보이게 한다.
-                  const moved = splits && isOddsMoved(baseRow, colKey)
-                  const mark = (c) => (moved
-                    ? cloneElement(c, {
-                        className: [c.props.className, 'odds-moved'].filter(Boolean).join(' '),
-                      })
-                    : c)
-                  if (isFinal) return splits ? mark(cell) : null
+                  // 아랫줄(최종)에는 방향 화살표까지 붙인다 — 와이즈토토·Bet365와 같은
+                  // 규칙으로 배당이 오르면 빨강 ↑, 내리면 파랑 ↓. 내려간 쪽이 돈이 몰린 쪽이다.
+                  const dir = splits ? oddsMoveDir(baseRow, colKey) : 0
+                  const mark = (c, withArrow) => {
+                    if (!dir) return c
+                    const cls = [c.props.className, 'odds-moved'].filter(Boolean).join(' ')
+                    if (!withArrow) return cloneElement(c, { className: cls })
+                    return cloneElement(c, { className: cls }, c.props.children,
+                      <span key="arw" className={`odds-arrow ${dir > 0 ? 'up' : 'down'}`}>
+                        {dir > 0 ? '↑' : '↓'}
+                      </span>)
+                  }
+                  if (isFinal) return splits ? mark(cell, true) : null
                   if (!splitRows) return cell
-                  if (splits) return mark(cell)
+                  if (splits) return mark(cell, false)
                   return cloneElement(cell, { rowSpan: 2 })
                 }
                 const row = srcRow      // 아래 기존 코드가 row를 그대로 읽는다

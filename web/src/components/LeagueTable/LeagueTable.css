@@ -365,17 +365,29 @@ td.sticky-col {
   --row-h: 31px;
 }
 
-/* 배변이 일어난 배당 칸 — 초기/최종 두 줄 모두 옅게 칠해서, 위아래를 짚어 가며
-   비교하지 않아도 "이 배당이 움직였다"가 한눈에 보이게 한다.
-   .row-final / .row-starred 배경보다 선택자가 구체적이어야 그 위에 얹힌다. */
-.league-table tbody tr td.odds-moved,
-.league-table tbody tr.row-final td.odds-moved,
-.league-table tbody tr.row-starred td.odds-moved {
-  background: var(--odds-moved-bg, rgba(245, 179, 1, 0.18));
+/* 배변이 일어난 칸은 배경을 칠하지 않는다 — 배당 칸이 워낙 촘촘해서 배경까지 깔면
+   RT·똥배 같은 기존 색 규칙과 섞여 오히려 읽기 나쁘다. 아래 화살표만으로 표시한다.
+   (.odds-moved 클래스 자체는 화살표를 붙이는 판정에 계속 쓰인다) */
+
+/* 배변 방향 화살표 — 최종배당 줄에만 붙는다.
+   와이즈토토·Bet365와 같은 규칙: 배당이 오르면 빨강 ↑, 내리면 파랑 ↓.
+   배당이 내려간 쪽이 돈이 몰린 쪽이라, 실제로 눈여겨볼 것은 ↓ 쪽이다.
+   숫자 자리를 밀지 않도록 작게 띄워 붙인다. */
+.odds-arrow {
+  margin-left: 2px;
+  font-size: 9px;
+  line-height: 1;
+  vertical-align: 1px;
+  font-weight: 700;
 }
 
-.league-table tbody tr:hover td.odds-moved {
-  background: var(--odds-moved-bg-hover, rgba(245, 179, 1, 0.28));
+/* 색은 RT 뱃지와 같은 축(--chip-*-fg)을 써서 라이트/다크 모두에서 읽힌다 */
+.odds-arrow.up {
+  color: var(--chip-red-fg);
+}
+
+.odds-arrow.down {
+  color: var(--chip-blue-fg);
 }
 
 /* 중요 표시된 행은 hover 음영과 다르게 항상 옅은 금색으로 구분되게 한다 */
