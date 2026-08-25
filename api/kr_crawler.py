@@ -209,20 +209,41 @@ def round_leagues(year, rnd):
 
 # ─────────────────────────── 파싱 ───────────────────────────
 def _restore_initial(cur, tips):
-    """현재배당 [승,무,패]를 비고 툴팁의 '(기존)' 값으로 되돌린다."""
+    """현재배당 [승,무,패]를 비고 툴팁의 '(기존)' 값으로 되돌린다.
+
+    ⚠ 각 항목(승/무/패)의 '첫' 기록만 쓴다 — 배당이 여러 번 바뀐 경기는 변경 이력이
+      여러 벌 쌓이는데, 툴팁은 오래된 것부터 최신 순으로 적혀 있어서 '진짜 초기값'은
+      맨 첫 기록의 (기존)이다. 예전엔 순서대로 덮어써서 마지막 기록의 (기존) —
+      즉 '끝에서 두 번째 값'을 초기배당으로 잘못 저장했다.
+        실측(2026년 100회차 FC서울 vs 부천FC 승):
+          이력  1.49 → 1.46 → 1.41 → 1.35 → 1.31 (현재)
+          진짜 초기값 1.49 / 예전 코드가 저장하던 값 1.35
+      1단계만 바뀐 경기는 우연히 맞아서 오래 안 드러났다(그 회차 배변 28건 중
+      2단계 이상이 6건).
+    """
     out = list(cur)
+    seen = set()
     for tip in tips:
         for m in re.finditer(r"([승무패])\s*\(기존\)\s*([\d.]+)\s*배\s*→\s*\(변경\)", tip):
-            i = _WDL_INDEX.get(m.group(1))
+            key = m.group(1)
+            if key in seen:
+                continue
+            i = _WDL_INDEX.get(key)
             if i is not None and i < len(out):
                 out[i] = m.group(2)
+                seen.add(key)
     return out
 
 
 def _parse_round(html, target_league):
     """
     한 회차 HTML에서 그 리그 경기만 뽑는다.
-    {matchkey: {HT, AT, date, N:[승무패], H:[핸승,핸무,플핸]}} 형태.
+    {matchkey: {HT, AT, date, N/H:초기배당, N2/H2:최종배당}} 형태.
+
+    [초기배당 / 최종배당]
+      화면에 찍혀 있는 배당이 곧 '최종배당'(배변이 다 반영된 지금 값)이고,
+      거기서 변경 이력을 거꾸로 되짚어 복원한 것이 '초기배당'이다.
+      배변이 없던 경기는 둘이 같은 값이 된다(이력이 없으니 복원할 것도 없다).
     """
     soup = BeautifulSoup(html, "html.parser")
     out = {}
@@ -234,9 +255,12 @@ def _parse_round(html, target_league):
         if target_league and league != target_league:
             continue
 
-        # 승무패/핸디는 li.hm 이 있는 줄이다. 언더오버(un)·합계마켓(d5)은 이 요소 자체가
-        # 없다 — 그런 줄을 승무패로 오인하면 U/O 배당이 승무패 자리에 들어간다.
-        hm_el = u.select_one("li.hm")
+        # 승무패/핸디는 li.hm(핸디 0·음수) 또는 li.hp(핸디 양수, 예: "H +1.0") 가 있는
+        # 줄이다. 언더오버(un)·합계마켓(d5)은 이 요소 자체가 없다 — 그런 줄을 승무패로
+        # 오인하면 U/O 배당이 승무패 자리에 들어간다.
+        # ⚠ li.hp를 안 넣으면 핸디가 "+"로 표기되는 경기(예: 강팀이 원정일 때)는
+        # 핸디 배당을 통째로 못 읽는다(2026년 100회차 풀럼/첼시 실측으로 발견).
+        hm_el = u.select_one("li.hm, li.hp")
         if hm_el is None:
             continue
         hm = hm_el.get_text(" ", strip=True)
@@ -261,20 +285,30 @@ def _parse_round(html, target_league):
         restored = _restore_initial(odds, tips)
         changed = bool(tips) and restored != odds
 
+        # target_league가 비어 있으면 이 회차의 모든 리그를 담는다(백필처럼 회차 하나를
+        # 읽어 8개 리그를 한꺼번에 처리할 때 쓴다 — 리그마다 다시 파싱하면 8배 느리다).
+        # 그때 어느 리그였는지 알아야 해서 rec에 league를 같이 넣어 둔다.
         rec = out.setdefault(matchkey, {
+            "league": league,
             "HT": h_el.get_text(strip=True), "AT": a_el.get_text(strip=True),
-            "date": mh.group(3), "N": None, "H": None, "changed": False,
+            "date": mh.group(3), "N": None, "H": None,
+            "N2": None, "H2": None, "changed": False,
         })
         if changed:
             rec["changed"] = True
 
+        # hm이 빈 문자열일 때만 '정규시간 승무패'다. 전반전 마켓은 앞에 h가 붙어
+        # ("h(전반)", "h H -1.0") 비어 있지 않으므로 여기서 자연히 걸러진다 —
+        # 아래 핸디 판정도 re.match라 "h H -1.0"은 H로 시작하지 않아 통과 못 한다.
         if not hm:                       # 빈 문자열 = 일반 승무패
             rec["N"] = restored
+            rec["N2"] = odds             # 화면 현재값 = 최종배당
         else:
             m = re.match(r"H\s*([+-]?\d+(?:\.\d+)?)", hm)
             # 지금 DB는 ±1 핸디만 다룬다 — 다른 라인(-2.0 등)은 담을 칸이 없어 건너뛴다.
             if m and abs(abs(float(m.group(1))) - 1.0) < 1e-6:
                 rec["H"] = restored
+                rec["H2"] = odds
     return out
 
 
@@ -286,16 +320,36 @@ def _num_or_none(v):
     return None if f <= 0 else v
 
 
+def _to_row(rec):
+    """_parse_round의 한 경기를 저장용 행(초기배당 + 최종배당)으로 편다.
+
+    KH/EKH(핸디 부호)는 채우지 않는다 — 와이즈토토의 'H -1.0' 표기는 "이 줄이 1점 핸디
+    마켓"이라는 뜻일 뿐 어느 팀이 핸디를 받았는지가 아니다(수집한 12,600건이 전부
+    -1.0으로 같았다). 방향은 저장 시점에 승/패 배당 중 싼 쪽으로 정하므로 여기서
+    넘겨짚지 않는다(main.py crawl_save 참고). 초기와 최종은 배당이 크게 움직이면
+    정배가 뒤집힐 수 있어 각각 따로 판정한다.
+    """
+    n = rec["N"] or ["", "", ""]
+    h = rec["H"] or ["", "", ""]
+    n2 = rec["N2"] or ["", "", ""]
+    h2 = rec["H2"] or ["", "", ""]
+    return {
+        "HT": rec["HT"], "AT": rec["AT"],
+        # 초기배당(배변 이력을 되짚어 복원한 값)
+        "KW": _num_or_none(n[0]), "KD": _num_or_none(n[1]), "KL": _num_or_none(n[2]),
+        "KH": None,
+        "KHW": _num_or_none(h[0]), "KHD": _num_or_none(h[1]), "KHL": _num_or_none(h[2]),
+        # 최종배당(지금 화면값 — 배변이 없었으면 초기배당과 같다)
+        "EKW": _num_or_none(n2[0]), "EKD": _num_or_none(n2[1]), "EKL": _num_or_none(n2[2]),
+        "EKH": None,
+        "EKHW": _num_or_none(h2[0]), "EKHD": _num_or_none(h2[1]), "EKHL": _num_or_none(h2[2]),
+        "_note": "",
+    }
+
+
 # ─────────────────────────── 수집 ───────────────────────────
 def fetch_domestic(target_league: str, year, rnd) -> dict:
-    """
-    그 회차에서 target_league 경기들의 국내배당(초기배당 기준)을 가져온다.
-
-    KH(핸디 부호)는 채우지 않는다 — 와이즈토토의 'H -1.0' 표기는 "이 줄이 1점 핸디
-    마켓"이라는 뜻일 뿐 어느 팀이 핸디를 받았는지가 아니다(수집한 12,600건이 전부
-    -1.0으로 같았다). 방향은 저장 시점에 국내배당(KW/KL) 기준으로 정하므로 여기서
-    넘겨짚지 않는다.
-    """
+    """그 회차에서 target_league 경기들의 국내배당(초기배당 + 최종배당)을 가져온다."""
     html = fetch_round_html(year, rnd)
     if html is None:
         raise CrawlError(f"{year}년 {rnd}회차를 찾지 못했습니다. 연도·회차를 확인해 주세요.")
@@ -310,17 +364,9 @@ def fetch_domestic(target_league: str, year, rnd) -> dict:
     rows = []
     changed_cnt = 0
     for rec in matches.values():
-        n = rec["N"] or ["", "", ""]
-        h = rec["H"] or ["", "", ""]
         if rec["changed"]:
             changed_cnt += 1
-        rows.append({
-            "HT": rec["HT"], "AT": rec["AT"],
-            "KW": _num_or_none(n[0]), "KD": _num_or_none(n[1]), "KL": _num_or_none(n[2]),
-            "KH": None,                       # 위 주석 참고 — 방향은 저장 때 배당으로 정한다
-            "KHW": _num_or_none(h[0]), "KHD": _num_or_none(h[1]), "KHL": _num_or_none(h[2]),
-            "_note": "",
-        })
+        rows.append(_to_row(rec))
 
     return {
         "round_id": f"{year}-{rnd}",
@@ -374,17 +420,9 @@ def fetch_by_dates(target_league: str, d0: datetime, d1: datetime) -> dict:
 
     rows = []
     for rec in merged.values():
-        n = rec["N"] or ["", "", ""]
-        h = rec["H"] or ["", "", ""]
         if rec["changed"]:
             changed += 1
-        rows.append({
-            "HT": rec["HT"], "AT": rec["AT"],
-            "KW": _num_or_none(n[0]), "KD": _num_or_none(n[1]), "KL": _num_or_none(n[2]),
-            "KH": None,
-            "KHW": _num_or_none(h[0]), "KHD": _num_or_none(h[1]), "KHL": _num_or_none(h[2]),
-            "_note": "",
-        })
+        rows.append(_to_row(rec))
 
     return {
         "round_id": " + ".join(used),

@@ -71,8 +71,13 @@ def preprocess_data(df_original):
     rename_map = {'NO': 'No', 'no': 'No', 'Num': 'No', 'NUMBER': 'No', 'Time': 'TM', 'tm': 'TM', 'TIME': 'TM'}
     df = df.rename(columns=rename_map)
     
-    cols_num = ['No', 'TM', 'HS', 'AS', 'FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL', 
-                'KW', 'KD', 'KL', 'KH', 'KHW', 'KHD', 'KHL']
+    # EKW~EKHL = 국내 '최종배당'(배변 후). E = End(최종).
+    #   KW~KHL(초기배당)과 짝을 이루는 같은 7칸이며, 와이즈토토 배당변경 이력에서
+    #   초기값을 복원하고 남은 '지금 화면값'이 최종배당이다.
+    #   ⚠ 'KW 1'~'KW 4'(공백 있음, 26개 지표)와 헷갈리지 않도록 'KW2' 같은 이름은 피했다.
+    cols_num = ['No', 'TM', 'HS', 'AS', 'FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL',
+                'KW', 'KD', 'KL', 'KH', 'KHW', 'KHD', 'KHL',
+                'EKW', 'EKD', 'EKL', 'EKH', 'EKHW', 'EKHD', 'EKHL']
     
     for c in cols_num: 
         if c in df.columns:
@@ -114,8 +119,9 @@ def preprocess_data(df_original):
         df['DT'] = df['DT'].where(df['match_date'].notna(), '')
     
     target_cols = [
-        'L', 'S', 'R', 'No', 'DT', 'TM', 'HT', 'HS', 'RT', 'AS', 'AT',  
+        'L', 'S', 'R', 'No', 'DT', 'TM', 'HT', 'HS', 'RT', 'AS', 'AT',
         'KW', 'KD', 'KL', 'KH', 'KHW', 'KHD', 'KHL',
+        'EKW', 'EKD', 'EKL', 'EKH', 'EKHW', 'EKHD', 'EKHL',
         'FW', 'FD', 'FL', 'FH', 'FHW', 'FHD', 'FHL'
     ]
     

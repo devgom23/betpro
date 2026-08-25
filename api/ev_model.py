@@ -294,11 +294,52 @@ def attach(df: pd.DataFrame, table: dict) -> pd.DataFrame:
     return out.drop(columns=[c for c in out.columns if c.startswith('_')])
 
 
+# 최종배당(배변 후)으로 다시 계산해서 화면에 두 번째 줄로 보여줄 값들.
+# 국내배당에서 직접 나오는 것만 넣는다 — 해)정·해)지는 해외배당 기반이라 배변이
+# 없고, 국)지(NH_KI/PL_KI)는 26개 지표 기반이라 지표를 최종배당으로 다시 계산해야
+# 나온다(그건 별도 작업). 그 칸들은 화면에서 위아래 셀을 합쳐 한 번만 보여준다.
+FINAL_ODDS_DERIVED = ['RISK', 'WIN_RISK', 'NH_KO', 'PL_KO', 'ODD_FLAG',
+                      'EV_WIN', 'EV_DRAW', 'EV_PL', 'EV_COVER', 'EV_BEST', 'EV_N']
+
+# 최종배당 7칸 -> 계산 함수가 읽는 이름. 이름만 바꿔 끼우면 같은 계산식이 그대로 돈다.
+_FINAL_ODDS_RENAME = {'EKW': 'KW', 'EKD': 'KD', 'EKL': 'KL', 'EKH': 'KH',
+                      'EKHW': 'KHW', 'EKHD': 'KHD', 'EKHL': 'KHL'}
+
+
 def attach_for_league(df: pd.DataFrame) -> pd.DataFrame:
     """리그 하나의 전체 표를 받아 EV 컬럼까지 붙여 돌려주는 편의 함수.
 
     확률 추정에 쓰는 표본은 "결과가 나온 과거 경기 전부"다. 예정 경기도 같은
     표를 참조해 EV가 계산되므로, 아직 안 열린 경기도 판정할 수 있다.
+
+    최종배당(EKW~EKHL)이 있으면 그 배당으로도 한 번 더 계산해 E_ 접두사를 붙여
+    같이 돌려준다 — 계산식은 건드리지 않고, 최종배당을 KW~KHL 자리에 넣은 사본을
+    만들어 같은 함수를 다시 부르는 방식이다.
     """
     p = prepare(df)
-    return attach(p, build_table(p))
+    table = build_table(p)          # 과거 확률표는 한 번만 만든다(초기·최종이 같이 쓴다)
+    out = attach(p, table)
+
+    if not any(c in df.columns for c in _FINAL_ODDS_RENAME):
+        return out
+
+    # 최종배당을 초기배당 자리에 끼운 '최소' 사본. df.copy()로 통째 복사하면 안 된다 —
+    # 이 표는 컬럼이 200개가 넘어서(26개 지표 104칸 등) 복사만으로 수백 ms가 든다.
+    # 아래서 뽑아 쓰는 값(FINAL_ODDS_DERIVED)에 필요한 칸만 만든다. 빠진 칸을 쓰는
+    # 계산(해)정·국)지 등)은 NaN이 되는데, 그 칸들은 애초에 최종배당으로 바뀌지 않아
+    # 가져다 쓰지 않는다.
+    fin = pd.DataFrame(index=df.index)
+    for src, dst in _FINAL_ODDS_RENAME.items():
+        fin[dst] = df[src] if src in df.columns else np.nan
+    for c in ('RT', 'S', 'R'):
+        if c in df.columns:
+            fin[c] = df[c]
+
+    # 확률표(table)는 초기배당으로 만든 것을 그대로 쓴다 — 표본이 되는 과거 경기는
+    # 같은 기준이어야 비교가 되고, 최종배당이 없는 과거 경기가 많아 따로 만들면
+    # 표본이 확 줄어든다(실측: 42,227경기 중 최종배당이 있는 것은 14,429건뿐).
+    fout = attach(prepare(fin), table)
+    for c in FINAL_ODDS_DERIVED:
+        if c in fout.columns:
+            out['E_' + c] = fout[c]
+    return out

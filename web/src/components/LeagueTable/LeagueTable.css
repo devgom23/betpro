@@ -324,6 +324,60 @@ td.sticky-col {
   border-top: 3px solid var(--accent);
 }
 
+/* ── 배변(배당변경) 두 줄 보기 ──
+   경기 하나가 위(초기배당)/아래(최종배당) 두 줄로 그려진다. 헤더에 칸을 새로 만들지
+   않으므로, 어느 줄이 최종배당인지는 아랫줄 배경을 아주 옅게 깔아 구분한다.
+   위아래를 한 경기로 묶어 보이게 하려고 둘 사이 가로선은 지우고(배당 칸만 남김),
+   경기와 경기 사이(=최종배당 줄 아래)에만 선을 남긴다. */
+.league-table tbody tr.row-final td {
+  background: var(--row-final-bg, rgba(127, 127, 127, 0.07));
+  border-top: 1px dashed var(--border-subtle, rgba(127, 127, 127, 0.35));
+}
+
+/* 위아래로 합쳐진 칸(rowSpan=2)은 세로 가운데에 놓아야 두 줄의 중간에 걸린다 */
+.league-table tbody td[rowspan] {
+  vertical-align: middle;
+}
+
+/* 모든 데이터 줄의 높이를 똑같이 고정한다.
+   ① 초기/최종 두 줄의 키가 달라 보이면 안 되고,
+   ② 가상 스크롤이 "한 줄 높이 × 줄 수"로 스크롤 위치를 계산하므로(LeagueTable.jsx
+      effRowH 참고) 줄마다 높이가 다르면 스크롤이 어긋난다.
+   칩(똥배·RT 뱃지)이 든 줄만 커지는 걸 막으려고 칸 자체에 높이를 준다. */
+.league-table tbody tr[data-row] > td,
+.league-table tbody tr[data-row-final] > td {
+  height: var(--row-h, 28px);
+  line-height: 1.15;
+  box-sizing: border-box;
+}
+
+/* 합쳐진 칸은 두 줄을 차지하므로 높이도 두 배로 잡아야 위아래가 안 밀린다 */
+.league-table tbody tr[data-row] > td[rowspan='2'] {
+  height: calc(var(--row-h, 28px) * 2);
+}
+
+.league-table.font-large tbody tr[data-row] > td,
+.league-table.font-large tbody tr[data-row-final] > td {
+  --row-h: 31px;
+}
+
+.league-table.font-large tbody tr[data-row] > td[rowspan='2'] {
+  --row-h: 31px;
+}
+
+/* 배변이 일어난 배당 칸 — 초기/최종 두 줄 모두 옅게 칠해서, 위아래를 짚어 가며
+   비교하지 않아도 "이 배당이 움직였다"가 한눈에 보이게 한다.
+   .row-final / .row-starred 배경보다 선택자가 구체적이어야 그 위에 얹힌다. */
+.league-table tbody tr td.odds-moved,
+.league-table tbody tr.row-final td.odds-moved,
+.league-table tbody tr.row-starred td.odds-moved {
+  background: var(--odds-moved-bg, rgba(245, 179, 1, 0.18));
+}
+
+.league-table tbody tr:hover td.odds-moved {
+  background: var(--odds-moved-bg-hover, rgba(245, 179, 1, 0.28));
+}
+
 /* 중요 표시된 행은 hover 음영과 다르게 항상 옅은 금색으로 구분되게 한다 */
 .league-table tbody tr.row-starred td,
 .league-table tbody tr.row-starred td.sticky-col {

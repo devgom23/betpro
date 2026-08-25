@@ -45,6 +45,63 @@ const DDONG_COLS = [
 // 6대리그 실측 똥사율: 안전 17.6% / 보통 27.7% / 주의 32.9% / 위험 39.3%
 const DDONG_RISK_CUTS = [22, 30, 37]
 
+// ── 배변(배당변경) 두 줄 보기 ──
+// 경기 하나를 위(초기배당)/아래(최종배당) 두 줄로 보여준다. 헤더에는 칸을 새로 만들지
+// 않는다 — 아래 목록에 있는 칸만 위아래로 값이 갈리고, 나머지(경기정보 등 값이 하나뿐인
+// 칸)는 위아래 셀을 합쳐(rowSpan) 한 번만 그린다.
+//
+// 여기 없는 확률 칸에 주의: 해)정(WIN_RISK_F)·해)지(NH_FI/PL_FI)는 해외배당에서 나오는데
+// 해외는 아직 배변 데이터가 없고, 국)지(NH_KI/PL_KI)는 26개 지표에서 나오는 값이라
+// 지표를 최종배당으로 다시 계산해야 바뀐다(별도 작업). 그래서 지금은 합쳐서 보여준다.
+// 값은 "아랫줄에 넣을 값을 담고 있는 컬럼". null이면 아랫줄을 빈칸으로 둔다
+// (해외배당은 배변 데이터를 아직 안 받아와서, 자리는 두 줄로 잡되 아래는 비운다).
+export const FINAL_FIELD = {
+  KW: 'EKW', KD: 'EKD', KL: 'EKL', KH: 'EKH',
+  KHW: 'EKHW', KHD: 'EKHD', KHL: 'EKHL',
+  DDONG: 'E_DDONG', DDONG_RISK: 'E_DDONG_RISK', DDONGSA: 'E_DDONGSA',
+  WIN_RISK: 'E_WIN_RISK', NH_KO: 'E_NH_KO', PL_KO: 'E_PL_KO',
+  FW: null, FD: null, FL: null, FH: null,
+}
+
+/** 이 칸이 위/아래 두 줄로 갈리는가. (값이 null인 항목도 갈라지므로 in으로 본다) */
+export function splitsOnFinal(colKey) {
+  return Object.prototype.hasOwnProperty.call(FINAL_FIELD, colKey)
+}
+
+// 배변(배당변경)이 일어났는지 표시할 배당 칸. 핸디 부호(KH)는 배당이 아니라 방향이고,
+// 똥배·확률 칸은 배당에서 파생된 값이라 여기에 넣지 않는다.
+const ODDS_MOVE_COLS = ['KW', 'KD', 'KL', 'KHW', 'KHD', 'KHL']
+
+/** 이 칸의 배당이 초기 → 최종으로 실제로 움직였는가. */
+export function isOddsMoved(row, colKey) {
+  if (!row || !ODDS_MOVE_COLS.includes(colKey)) return false
+  const a = row[colKey]
+  const b = row[FINAL_FIELD[colKey]]
+  if (a == null || a === '' || b == null || b === '') return false
+  return Number(a) !== Number(b)
+}
+
+/** 이 경기에 최종배당이 있는가(= 두 줄로 보여줄 값이 있는가). */
+export function hasFinalOdds(row) {
+  return row != null && row.EKW != null && row.EKW !== ''
+}
+
+/** 아랫줄(최종배당)용 행 — 갈라지는 칸의 값만 최종배당 값으로 바꿔 끼운다.
+ *  셀을 그리는 코드는 row[컬럼명]을 읽으므로, 값만 바꿔 끼우면 같은 코드가 그대로 돈다. */
+export function toFinalRow(row) {
+  const out = { ...row }
+  for (const k in FINAL_FIELD) {
+    const src = FINAL_FIELD[k]
+    if (src == null) {
+      out[k] = null                 // 해외배당 등 — 아랫줄은 빈칸
+    } else {
+      const v = row[src]
+      out[k] = v === undefined ? null : v
+    }
+  }
+  return out
+}
+
 // 핸승 위험도 (2026-08 재편) — '무엇이 나올 확률인가'로 묶고, 각 묶음 안에서
 // '어디서 나온 값인가'로 나눈다. 예전 7칸(국정값/국플값/해정값/배당·AI/K값/F값/KF·AI)은
 // 숫자 방향이 뒤섞여 있었고(일부는 핸승%, 일부는 플핸%), AI 2칸은 부품의 단순 평균이라

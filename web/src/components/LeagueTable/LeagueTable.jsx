@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { cloneElement, Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
-  collapsedWidth,
+  collapsedWidth, splitsOnFinal, isOddsMoved, toFinalRow,
 } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
@@ -98,7 +98,16 @@ export default function LeagueTable({
   const [scrollTop, setScrollTop] = useState(0)
 
   const totalRows = rows ? rows.length : 0
-  const effRowH = rowH || DEFAULT_ROW_H[fontSize] || DEFAULT_ROW_H.small
+
+  // ── 배변(배당변경) 두 줄 보기 ──
+  // 경기마다 항상 두 줄(위=초기배당 · 아래=최종배당)로 그린다.
+  // 최종배당을 아직 못 받아온 경기도 아랫줄을 빈칸으로 남긴다 — 줄 수가 조회 조건에
+  // 따라 들쭉날쭉하면 같은 화면인데 표 모양이 계속 바뀌어 눈이 피로하고, "빈칸이다"
+  // 자체가 "이 경기는 최종배당을 아직 안 받았다"는 정보이기도 하다.
+  const splitRows = true
+  // 가상 스크롤은 '경기 한 건'을 단위로 센다 — 두 줄로 그리면 한 건의 높이도 두 배다.
+  const oneRowH = rowH || DEFAULT_ROW_H[fontSize] || DEFAULT_ROW_H.small
+  const effRowH = oneRowH * (splitRows ? 2 : 1)
   const startIndex = fitContent ? 0 : Math.max(0, Math.floor(scrollTop / effRowH) - OVERSCAN)
   const endIndex = fitContent
     ? totalRows
@@ -375,18 +384,45 @@ export default function LeagueTable({
                 pickState.important ? 'row-starred' : '',
                 isRoundStart ? 'round-start' : '',
               ].filter(Boolean).join(' ')
-              return (
-                <tr key={ri} data-row="" className={rowClass || undefined}>
-                  {selectable && (
-                    <td className="select-col sticky-col">
-                      <input
-                        type="checkbox"
-                        checked={selectedKeys?.has(selectKey(row)) ?? false}
-                        onChange={() => onToggleRow?.(row)}
-                      />
-                    </td>
-                  )}
-                  {groups.flatMap((g, gi) => {
+
+              // 아랫줄에 쓸 행 — 갈라지는 칸만 최종배당 값으로 바꿔 끼운 사본.
+              const finalRow = splitRows ? toFinalRow(row) : null
+
+              // 한 경기치 셀을 만든다. isFinal=false면 윗줄(초기배당), true면 아랫줄(최종배당).
+              //   · 값이 갈리는 칸(FINAL_FIELD)   → 두 줄 모두 그린다
+              //   · 값이 하나뿐인 칸(경기정보 등) → 윗줄에서 rowSpan=2로 합치고 아랫줄은 안 그린다
+              // 셀을 만드는 코드는 그대로 두고, 만들어진 셀에 컬럼 이름을 붙여 fit()이
+              // 한 자리에서 판단한다 — 그래야 기존 서식·색상 규칙이 흔들리지 않는다.
+              const baseRow = row      // 배변 여부는 항상 원본(초기+최종이 다 있는) 행으로 본다
+              const renderCells = (srcRow, isFinal) => {
+                const fit = (cell, colKey) => {
+                  const splits = splitRows && splitsOnFinal(colKey)
+                  // 배변이 일어난 배당 칸은 두 줄 모두 옅은 배경으로 표시해, 위아래를
+                  // 눈으로 짚어 가며 비교하지 않아도 "여기가 움직였다"가 바로 보이게 한다.
+                  const moved = splits && isOddsMoved(baseRow, colKey)
+                  const mark = (c) => (moved
+                    ? cloneElement(c, {
+                        className: [c.props.className, 'odds-moved'].filter(Boolean).join(' '),
+                      })
+                    : c)
+                  if (isFinal) return splits ? mark(cell) : null
+                  if (!splitRows) return cell
+                  if (splits) return mark(cell)
+                  return cloneElement(cell, { rowSpan: 2 })
+                }
+                const row = srcRow      // 아래 기존 코드가 row를 그대로 읽는다
+                return [
+                  ...(selectable
+                    ? [fit(
+                        <td key="sel" className="select-col sticky-col">
+                          <input
+                            type="checkbox"
+                            checked={selectedKeys?.has(selectKey(row)) ?? false}
+                            onChange={() => onToggleRow?.(row)}
+                          />
+                        </td>, '__merge')]
+                    : []),
+                  ...groups.flatMap((g, gi) => {
                     const key = groupKey(g)
                     const isLastGroup = gi === groups.length - 1
                     // 돋보기(상세보기) 칸 — 해외배당 그룹의 셀들 바로 뒤에 붙여, 헤더의
@@ -402,7 +438,10 @@ export default function LeagueTable({
                         </button>
                       </td>
                     )
+                    // cells와 짝을 이루는 컬럼 이름 — fit()이 이 이름으로 합칠지 나눌지 정한다.
+                    // '__merge'는 "배당과 무관해서 위아래를 항상 합치는 칸"이라는 뜻.
                     let cells
+                    let cellKeys
                     if (collapsed.has(key)) {
                       // 일반정보를 접어도 금/토/일 베팅일 색상 + 라운드/시간은 계속 보여야
                       // 한다 — 접힌 채로도 몇 라운드 몇 시 경기인지 바로 알 수 있게.
@@ -431,14 +470,20 @@ export default function LeagueTable({
                             {formatCell(g, { sub: 'TM' }, row.TM)}
                           </td>,
                         ]
+                        cellKeys = hasLeagueLabel
+                          ? ['__merge', '__merge', '__merge']
+                          : ['__merge', '__merge']
                       } else {
                         cells = [
                           <td key={`${gi}-c`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
                             {isDdong ? row.DDONG || '·' : '·'}
                           </td>,
                         ]
+                        // 접힌 똥배 칸은 똥배 순번을 보여주므로 최종배당 기준으로 달라진다.
+                        cellKeys = [isDdong ? 'DDONG' : '__merge']
                       }
                     } else if (g.kind === 'mypick') {
+                      cellKeys = g.cols.map(() => '__merge')   // 내 예측은 경기당 하나뿐
                       cells = g.cols.map((c, ci) => {
                         const isLastCol = !isLastGroup && ci === g.cols.length - 1
                         const className = isLastCol ? 'group-divider' : undefined
@@ -510,6 +555,7 @@ export default function LeagueTable({
                         )
                       })
                     } else {
+                      cellKeys = g.cols.map((c) => c.key)
                       cells = g.cols.map((c, ci) => {
                       // L(리그) 칸은 내부 매칭용 코드(ul_2 등)가 아니라 사용자가 지은 리그명을 보여준다
                       // (이번주 픽처럼 여러 스코프 리그를 한 표에 모아 보여줄 때만 L_LABEL이 붙어 온다).
@@ -558,9 +604,28 @@ export default function LeagueTable({
                       )
                       })
                     }
-                    return g.label1 === '해외배당' ? [...cells, detailCell] : cells
-                  })}
-                </tr>
+                    const all = g.label1 === '해외배당' ? [...cells, detailCell] : cells
+                    const allKeys = g.label1 === '해외배당' ? [...cellKeys, '__merge'] : cellKeys
+                    // 아랫줄에서 빠지는 칸은 null이 되므로 걸러낸다.
+                    return all.map((cell, ci) => fit(cell, allKeys[ci])).filter(Boolean)
+                  }),
+                ]
+              }
+
+              return (
+                <Fragment key={ri}>
+                  <tr data-row="" className={rowClass || undefined}>
+                    {renderCells(row, false)}
+                  </tr>
+                  {splitRows && (
+                    <tr
+                      data-row-final=""
+                      className={['row-final', rowClass].filter(Boolean).join(' ')}
+                    >
+                      {renderCells(finalRow, true)}
+                    </tr>
+                  )}
+                </Fragment>
               )
             })}
             {padBottom > 0 && (

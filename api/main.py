@@ -1585,7 +1585,11 @@ def _keep_existing_where_blank(new: pd.DataFrame, old: pd.DataFrame) -> pd.DataF
         if oc not in joined.columns:
             continue
         blank = joined[c].isna() | (joined[c].astype(str).str.strip() == "")
-        joined.loc[blank, c] = joined.loc[blank, oc]
+        # .loc 대입이 아니라 .where를 쓴다 — 새 값이 통째로 비어 있는 칸(예: 국배만
+        # 긁어와 해외배당이 전부 None)에 .loc로 넣으면 float64 칸에 object를 꽂는 꼴이라
+        # pandas가 FutureWarning을 내고 다음 버전에서는 오류가 된다. .where는 필요한
+        # 형변환을 알아서 하고 결과도 같다.
+        joined[c] = joined[c].where(~blank, joined[oc])
     return joined[new.columns]
 
 
@@ -1640,7 +1644,9 @@ def _merge_and_save(db: str, code: str, scope: str, new: pd.DataFrame, confirm: 
     final = merged.copy()
 
     # ① 이미 있던 경기(dedup key가 old에도 있던 행)는 분석 컬럼을 최초 계산값 그대로 되살린다.
-    raw_cols = set(XLS.UPLOAD_TEMPLATE_COLS)
+    #    최종배당(EKW~EKHL)은 '계산값'이 아니라 원본 데이터라 여기서 얼리면 안 된다 —
+    #    경기 직전까지 계속 움직이므로 다시 받아올 때마다 갱신돼야 한다.
+    raw_cols = set(XLS.RAW_DATA_COLS)
     analysis_cols = [c for c in old.columns if c not in raw_cols] if not old.empty else []
 
     if key and old_count and analysis_cols:
@@ -1895,10 +1901,29 @@ def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
 
     # 업로드 양식과 같은 컬럼만 남긴다(_핸디기준 같은 참고용 필드는 저장하지 않는다)
     raw = pd.DataFrame(body.rows)
-    for c in XLS.UPLOAD_TEMPLATE_COLS:
+
+    # 국내 핸디 방향(KH/EKH) 자동 채움 — 국배를 불러와 저장할 때 핸디 방향까지
+    # 그 자리에서 정해 같이 저장한다. 예전엔 "결과·핸디 입력" 팝업을 열어 따로
+    # 저장해야만 KH가 채워졌는데, 그 전까지는 KH가 비어 있어 플핸 확률(ev_model의
+    # NH_KO 등)이 계산되지 않았다(2026-08-25 K1 25R 실측으로 발견). 프론트
+    # ResultEditModal.jsx의 computeHandicap()과 정확히 같은 규칙 — 홈승배당이
+    # 원정승배당보다 크면 홈이 약체라는 뜻이라 원정이 정배(+1), 아니면 홈이 정배(-1).
+    # 스코어맨(해외배당) 저장은 국내배당 칸이 항상 빈 값이라 그대로 지나간다.
+    # ⚠ 초기·최종을 각각 따로 판정한다 — 배당이 크게 움직이면 정배가 뒤집힐 수 있다.
+    for w_col, l_col, h_col in (("KW", "KL", "KH"), ("EKW", "EKL", "EKH")):
+        if not {w_col, l_col}.issubset(raw.columns):
+            continue
+        w = pd.to_numeric(raw[w_col], errors="coerce")
+        l = pd.to_numeric(raw[l_col], errors="coerce")
+        h_now = pd.to_numeric(raw.get(h_col), errors="coerce")
+        need_fill = h_now.isna() & w.notna() & l.notna()
+        if need_fill.any():
+            raw[h_col] = h_now.where(~need_fill, np.where(w > l, 1.0, -1.0))
+
+    for c in XLS.RAW_DATA_COLS:
         if c not in raw.columns:
             raw[c] = None
-    new = engine.preprocess_data(raw[XLS.UPLOAD_TEMPLATE_COLS])
+    new = engine.preprocess_data(raw[XLS.RAW_DATA_COLS])
     if new.empty:
         raise HTTPException(status_code=400,
                             detail="유효한 경기가 없습니다. 홈팀·원정팀이 채워져 있는지 확인하세요.")
@@ -2074,6 +2099,9 @@ def crawl_kr_fetch(body: CrawlKrFetchBody, user: dict = Depends(get_current_user
                 "HT": r["HT"], "AT": r["AT"],
                 "KW": r["KW"], "KD": r["KD"], "KL": r["KL"], "KH": r["KH"],
                 "KHW": r["KHW"], "KHD": r["KHD"], "KHL": r["KHL"],
+                # 최종배당(배변 후)도 같이 넘긴다 — 여기서 빠뜨리면 화면에서 저장할 때
+                # 초기배당만 반영되고 최종배당은 조용히 사라진다.
+                **{c: r.get(c) for c in XLS.FINAL_ODDS_COLS},
                 "_note": r.get("_note", ""),
             })
 

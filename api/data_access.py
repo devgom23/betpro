@@ -42,12 +42,16 @@ def _ddong_risk(odds):
     return 100.0 / (1.0 + math.exp(-(DDONG_RISK_B0 + DDONG_RISK_B1 * float(odds))))
 
 
-def _ddong_columns(df: pd.DataFrame):
+def _ddong_columns(df: pd.DataFrame, w_col: str = "KW", l_col: str = "KL"):
     """똥배(DDONG)/똥사 위험도(DDONG_RISK)/똥사(DDONGSA) — 국내배당 KW·KL 중 1.49 이하인 값을 "똥"으로 보고,
     같은 라운드(시즌 S + 라운드 R) 안에서 낮은 배당 순으로 똥1, 똥2... 번호를 매긴다.
     KW·KL이 동시에 1.49 이하로 나오는 경우는 없다고 보고, 있어도 더 낮은 쪽 하나만 쓴다.
     똥사는 "똥배로 체크된"(DDONG 값이 있는) 경기 중에서만, 실제 결과(RT)가 무(3) 또는
-    역(4)이면 붙는 표시다 — 똥배가 아닌 경기는 결과가 무/역이어도 똥사가 아니다."""
+    역(4)이면 붙는 표시다 — 똥배가 아닌 경기는 결과가 무/역이어도 똥사가 아니다.
+
+    w_col/l_col로 어느 배당을 볼지 고른다 — 초기배당(KW/KL)과 최종배당(EKW/EKL) 둘 다
+    같은 규칙으로 매기기 위해서다. 배당이 움직이면 똥배 순위 자체가 바뀔 수 있다
+    (실측: FC서울 초기 1.49 → 최종 1.31)."""
     n = len(df)
     ddong = pd.Series([""] * n, index=df.index, dtype=object)
     ddongsa = pd.Series([""] * n, index=df.index, dtype=object)
@@ -55,9 +59,9 @@ def _ddong_columns(df: pd.DataFrame):
     if df.empty:
         return ddong, risk, ddongsa
 
-    if "KW" in df.columns and "KL" in df.columns and "S" in df.columns and "R" in df.columns:
-        kw = pd.to_numeric(df["KW"], errors="coerce")
-        kl = pd.to_numeric(df["KL"], errors="coerce")
+    if w_col in df.columns and l_col in df.columns and "S" in df.columns and "R" in df.columns:
+        kw = pd.to_numeric(df[w_col], errors="coerce")
+        kl = pd.to_numeric(df[l_col], errors="coerce")
         groups: dict[tuple, list[tuple]] = {}
         for idx, s, r, w, l in zip(df.index, df["S"], df["R"], kw, kl):
             w_ok = pd.notna(w) and w <= 1.49
@@ -122,6 +126,9 @@ def load_league_df_ranked(db_path: str, league: str) -> pd.DataFrame:
     # 오염되어 표시용 컬럼이 업로드/삭제 쪽으로 새어 들어가는 사고를 막는다.
     df = standings.attach_rank_and_form(load_league_df(db_path, league)).copy()
     df["DDONG"], df["DDONG_RISK"], df["DDONGSA"] = _ddong_columns(df)
+    # 최종배당(배변 후) 기준 똥배 — 화면에서 초기/최종 두 줄로 나란히 보여준다.
+    # E_ 접두사 = 최종배당에서 나온 값(End). 저장되는 값이 아니라 조회할 때 만든다.
+    df["E_DDONG"], df["E_DDONG_RISK"], df["E_DDONGSA"] = _ddong_columns(df, "EKW", "EKL")
     return df
 
 
