@@ -406,6 +406,24 @@ td.sticky-col {
   color: var(--chip-blue-fg);
 }
 
+/* 확률 지표(정승%·플핸무%·플%) 배변 화살표 — 이 칸들은 배당 칸과 달리 가운데
+   정렬이라, 화살표를 글자 뒤에 그냥 붙이면(margin-left) 화살표 없는 줄과 숫자
+   자리가 어긋난다. 절대위치로 칸 오른쪽에 얹어서 숫자는 항상 가운데 그대로 두고,
+   그 칸의 위치 기준(relative)은 td에 준다. 오르내림에 좋다/나쁘다가 없어서
+   배당 화살표와 달리 색 구분 없이 흰색 하나로 통일한다. */
+.league-table td {
+  position: relative;
+}
+
+.league-table .risk-arrow {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  color: #fff;
+}
+
 /* 중요 표시된 행은 hover 음영과 다르게 항상 옅은 금색으로 구분되게 한다 */
 .league-table tbody tr.row-starred td,
 .league-table tbody tr.row-starred td.sticky-col {

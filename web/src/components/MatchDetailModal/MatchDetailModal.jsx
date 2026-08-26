@@ -167,6 +167,14 @@ function OddsTable({ row }) {
     const dogCol = homeFav ? 'l' : 'w'
     return col === dogCol ? 'odds-fav-col' : undefined
   }
+  // 초기 → 최종 배당이 움직인 방향 — 리그 표(columnGroups.js oddsMoveDir)와 같은
+  // 규칙: 배당이 오르면 빨강 ↑, 내리면(=돈이 몰린 쪽) 파랑 ↓.
+  const oddsDir = (initVal, finVal) => {
+    const a = numOrNull(initVal)
+    const b = numOrNull(finVal)
+    if (a === null || b === null || a === b) return 0
+    return b > a ? 1 : -1
+  }
   return (
     <table className="detail-table odds-table">
       <thead>
@@ -214,9 +222,20 @@ function OddsTable({ row }) {
               {final && (
                 <tr className="odds-final-row">
                   <td className="row-label">배변</td>
-                  <td className={colClass('w')}>{numOrDash(row[final[0]])}</td>
-                  <td>{numOrDash(row[final[1]])}</td>
-                  <td className={colClass('l')}>{numOrDash(row[final[2]])}</td>
+                  {[w, d, l].map((initKey, ci) => {
+                    const dir = oddsDir(row[initKey], row[final[ci]])
+                    const cls = ci === 0 ? colClass('w') : ci === 2 ? colClass('l') : undefined
+                    return (
+                      <td key={final[ci]} className={cls}>
+                        {numOrDash(row[final[ci]])}
+                        {dir !== 0 && (
+                          <span className={`odds-arrow ${dir > 0 ? 'up' : 'down'}`}>
+                            {dir > 0 ? '↑' : '↓'}
+                          </span>
+                        )}
+                      </td>
+                    )
+                  })}
                 </tr>
               )}
             </Fragment>
@@ -334,15 +353,22 @@ function RiskCard({ row }) {
             cols
               .map((col, ci) => ({ col, ci }))
               .filter(({ col }) => col[3])
-              .map(({ col: [label, , en], ci }) => (
-                <td
-                  key={`${title}-${label}-e`}
-                  className={ci === cols.length - 1 && gi < groups.length - 1 ? 'risk-edge' : ''}
-                  style={riskCellStyle(kind, en)}
-                >
-                  {en === null ? '-' : `${en.toFixed(0)}%`}
-                </td>
-              ))
+              .map(({ col: [label, n, en], ci }) => {
+                // 오르든 내리든(정배 확률이 오른 게 플핸 쪽엔 나쁠 수도 있어) 배당
+                // 화살표처럼 빨강/파랑으로 방향에 뜻을 담지 않는다 — 그냥 값이
+                // 움직였다는 표시로만, 배경색과 잘 보이도록 흰색으로 둔다.
+                const dir = n !== null && en !== null && en !== n ? (en > n ? 'up' : 'down') : null
+                return (
+                  <td
+                    key={`${title}-${label}-e`}
+                    className={ci === cols.length - 1 && gi < groups.length - 1 ? 'risk-edge' : ''}
+                    style={riskCellStyle(kind, en)}
+                  >
+                    {en === null ? '-' : `${en.toFixed(0)}%`}
+                    {dir && <span className="risk-arrow">{dir === 'up' ? '▲' : '▼'}</span>}
+                  </td>
+                )
+              })
           )}
         </tr>
       </tbody>
@@ -520,16 +546,35 @@ function favSampleCodes(row) {
 const SAMPLE_SHRINK = 10
 
 // 국내·해외 블록 끝에 붙는 '분석' 줄. 가중평균이라 건수가 없어 %만 보여준다.
+// vals가 null이면(그 블록에 표본이 하나도 없음 — 예: 내 데이터에서 국내배당이
+// 없는 리그) 줄 자체를 숨기지 않고 빈칸(-)으로 채워서, 있으나 없으나 표 모양이
+// 항상 같게 한다.
 function AnalysisRow({ label, vals }) {
   return (
     <tr className="sample-analysis-row">
       <td className="row-label">{label}</td>
-      {vals.map((v, i) => (
-        <td key={i} className={maxCellClass(vals, i)}>
-          {v.toFixed(1)}%
+      {(vals || [null, null, null, null]).map((v, i) => (
+        <td key={i} className={vals ? maxCellClass(vals, i) : undefined}>
+          {v === null ? '-' : `${v.toFixed(1)}%`}
         </td>
       ))}
       <td className="col-total">—</td>
+    </tr>
+  )
+}
+
+// 지표 줄·분석 줄·토탈 줄 밑에 붙는 배변(최종배당) 줄 자리 — 26개 지표 표본은
+// 아직 최종배당 조건으로 다시 뽑지 않아(engine.py를 건드리는 별도 작업) 값 없이
+// 빈칸만 둔다. 그래도 다른 두 섹션(확률 지표·배당 표)과 모양을 맞추려고 항상 그린다.
+function SampleFinalRow({ label = '배변' }) {
+  return (
+    <tr className="sample-final-row">
+      <td className="row-label">{label}</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td>-</td>
+      <td className="col-total">-</td>
     </tr>
   )
 }
@@ -584,7 +629,8 @@ function SampleTable({ row, scope, expanded }) {
   const grandTotal = grandVals.reduce((a, b) => a + b, 0)
 
   // 접었을 때만 국내/해외 블록 끝에 '분석' 줄을 붙인다. 펼치면 통합지표까지 섞여
-  // 들어와 '리그 지표만 본다'는 전제가 깨지므로 그때는 계산하지 않는다.
+  // 들어와 '리그 지표만 본다'는 전제가 깨지므로 그때는 계산하지 않는다(그때는 null).
+  // 접혔는데 표본 자체가 없어 null이 나온 경우는 AnalysisRow가 빈칸으로 그려준다.
   const isForeignCode = (c) => /^(F|TF)-/.test(c)
   const domAnalysis = expanded ? null : weightedAnalysis(lines.filter((l) => !isForeignCode(l.code)))
   const forAnalysis = expanded ? null : weightedAnalysis(lines.filter((l) => isForeignCode(l.code)))
@@ -618,27 +664,35 @@ function SampleTable({ row, scope, expanded }) {
           ].filter(Boolean).join(' ')
           return (
             <Fragment key={l.code}>
-              {/* 국내 블록이 끝나는 자리(= 해외 첫 줄 직전)에 국내 분석을 끼운다 */}
-              {groupStart && domAnalysis && (
-                <AnalysisRow label="국) 분석" vals={domAnalysis} />
+              {/* 국내 블록이 끝나는 자리(= 해외 첫 줄 직전)에 국내 분석을 끼운다.
+                  표본이 없어도(domAnalysis===null) AnalysisRow가 빈칸으로 그린다. */}
+              {groupStart && !expanded && (
+                <>
+                  <AnalysisRow label="국) 분석" vals={domAnalysis} />
+                  <SampleFinalRow />
+                </>
               )}
               <tr className={cls || undefined}>
                 <td className="row-label">{l.label}</td>
-                {/* 위=비율, 아래=건수. 개수만으로는 지표마다 표본 크기가 달라
-                    (해통 972건 vs 국통 136건) 어디로 쏠렸는지 비교가 안 된다. */}
+                {/* "비율 (건수)" 한 줄로 — 예: 45% (12) */}
                 {l.vals.map((v, i) => (
                   <td key={i} className={maxCellClass(l.vals, i)}>
-                    {l.total > 0 ? `${Math.round((v / l.total) * 100)}%` : '-'}
-                    <span className="sample-n">{v}</span>
+                    {l.total > 0 ? `${Math.round((v / l.total) * 100)}% (${v})` : '-'}
                   </td>
                 ))}
                 <td className="col-total">{l.total}</td>
               </tr>
+              <SampleFinalRow />
             </Fragment>
           )
         })}
         {/* 해외 분석은 마지막 줄 뒤라 위 반복문 밖에서 붙인다 */}
-        {forAnalysis && <AnalysisRow label="해) 분석" vals={forAnalysis} />}
+        {!expanded && (
+          <>
+            <AnalysisRow label="해) 분석" vals={forAnalysis} />
+            <SampleFinalRow />
+          </>
+        )}
         {totalAnalysis ? (
           <tr className="sample-grand-total">
             <td className="row-label">토탈</td>
@@ -654,13 +708,13 @@ function SampleTable({ row, scope, expanded }) {
             <td className="row-label">토탈</td>
             {grandVals.map((v, i) => (
               <td key={i} className={maxCellClass(grandVals, i)}>
-                {grandTotal > 0 ? `${Math.round((v / grandTotal) * 100)}%` : '-'}
-                <span className="sample-n">{v}</span>
+                {grandTotal > 0 ? `${Math.round((v / grandTotal) * 100)}% (${v})` : '-'}
               </td>
             ))}
             <td className="col-total">{grandTotal}</td>
           </tr>
         )}
+        <SampleFinalRow />
       </tbody>
     </table>
   )

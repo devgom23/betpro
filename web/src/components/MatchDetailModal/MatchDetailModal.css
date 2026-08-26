@@ -13,7 +13,10 @@
 .modal-card {
   position: relative;
   width: 100%;
-  max-width: 1320px;
+  /* 지표별 표본을 펼치면(27줄) "국/통) 승+무+패" 같은 긴 지표명이 한 줄로 고정되면서
+     (.sample-table .row-label 참고) 나머지 5칸이 눌려 "13.1%"처럼 짧은 값도 줄바꿈
+     되는 문제가 있었다 — 팝업 자체를 넓혀서 그 칸들도 넉넉해지게 한다. */
+  max-width: 1520px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -199,12 +202,17 @@
   overflow: hidden;
 }
 
-/* .match-list-scroll의 min-height:180px(HeadToHeadResult.css)는 상대전적 조회 탭처럼
-   flex 부모가 없는 곳의 바닥값이다 — 여기서는 지표별 표본 높이를 그대로 max-height로
-   씌우는데, 그 값이 180px보다 작으면 min-height가 이겨서 카드 밖으로 넘쳐버린다.
-   상세보기 팝업 안에서는 그 바닥값이 필요 없으니 0으로 풀어 남은 공간만큼만 차지하게 한다. */
+/* .match-list-scroll의 min-height:180px·max-height:520px(HeadToHeadResult.css)는
+   상대전적 조회 탭처럼 flex 부모가 없는 곳의 바닥값·상한이다 — 여기서는 지표별 표본
+   높이를 그대로 max-height로 씌우는데, 그 값이 180px보다 작으면 min-height가 이겨서
+   카드 밖으로 넘치고, 520px보다 크면(지표별 표본을 펼치거나 배변 줄이 늘어난 지금
+   흔한 경우) max-height 520이 이겨서 실제로는 더 들어갈 자리가 있는데도 일찍
+   스크롤이 생겨버린다. 상세보기 팝업 안에서는 둘 다 필요 없으니 풀고, 바깥
+   .detail-section-grow의 동적 max-height(JS가 지표별 표본 높이를 재서 넣어줌)만
+   기준으로 삼게 한다. */
 .detail-section-grow .match-list-scroll {
   min-height: 0;
+  max-height: none;
 }
 
 .modal-col h3,
@@ -292,6 +300,12 @@
   color: var(--text-secondary);
 }
 
+/* 지표별 표본 지표명 칸 — "국/통) 승+무+패" 같은 긴 이름이 줄바꿈되지 않고
+   한 줄로 나오게 한다(펼치기했을 때만 나오는 통합지표 줄에서 발생). */
+.sample-table .row-label {
+  white-space: nowrap;
+}
+
 /* 핸승 위험도 8칸 — 값(정승/플핸무/플)으로 묶은 2줄 헤더. 리그 표와 같은 구성이라
    묶음 경계를 굵은 선으로 갈라 어느 칸이 어느 묶음인지 바로 보이게 한다. */
 .detail-table.risk-table thead th.risk-group {
@@ -321,18 +335,62 @@
   text-align: center;
 }
 
+/* 배당 표·확률 지표의 배변 화살표 — 숫자 뒤에 그냥 붙이면 화살표 있는 칸만 내용이
+   길어져서, 화살표 없는 칸(위 초기값 줄, 또는 국)지·해)지처럼 아예 안 붙는 칸)과
+   숫자 자리가 서로 어긋나 보였다. 화살표를 절대위치로 칸 오른쪽에 얹어서 숫자는
+   항상 같은 자리(가운데)에 고정되게 한다 — 그래서 칸 자체가 기준점(relative)이
+   되어야 한다. */
+.detail-table.odds-table td,
+.detail-table.risk-table td {
+  position: relative;
+}
+
+.odds-arrow,
+.risk-arrow {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* 배당 화살표는 리그 표와 같은 규칙 — 오르면 빨강, 내리면(=돈이 몰린 쪽) 파랑. */
+.odds-arrow.up {
+  color: var(--chip-red-fg);
+}
+
+.odds-arrow.down {
+  color: var(--chip-blue-fg);
+}
+
+/* 확률 지표 배변 화살표는 배당과 달리 방향에 "좋다/나쁘다" 뜻을 안 담는다(정배
+   확률이 오른 게 플핸엔 오히려 나쁠 수도 있어서) — 색 구분 없이 흰색으로 통일한다.
+   셀 배경이 riskCellStyle의 진한 색(초록/노랑/주황/빨강)이라 흰색이 항상 잘 보인다. */
+.risk-arrow {
+  color: #fff;
+}
+
 /* 배변(최종배당) 행 — 리그 표의 .row-final과 같은 톤으로, 바로 위 초기값 행과
    구분되게 옅은 배경 + 점선 윗줄만 준다. */
 .detail-table.odds-table tr.odds-final-row td,
-.detail-table.risk-table tr.risk-final-row td {
+.detail-table.risk-table tr.risk-final-row td,
+.detail-table.sample-table tr.sample-final-row td {
   background: var(--row-final-bg, rgba(127, 127, 127, 0.07));
   border-top: 1px dashed var(--border-subtle, rgba(127, 127, 127, 0.35));
 }
 
 .detail-table tr.odds-final-row .row-label,
-.detail-table tr.risk-final-row .row-label {
+.detail-table tr.risk-final-row .row-label,
+.detail-table tr.sample-final-row .row-label {
   font-weight: 400;
   color: var(--text-muted);
+}
+
+/* 지표별 표본의 배변 줄은 값 자체가 없어(-) 다른 배변 줄보다 더 흐리게 —
+   "지금은 빈칸"이라는 게 눈에 바로 들어오게 한다. */
+.detail-table.sample-table tr.sample-final-row td {
+  color: var(--text-muted-2);
 }
 
 /* 배당표 맨 위 — 홈팀명/점수/원정팀명을 승(홈)·무·패(원정) 컬럼과 같은 자리에 맞춘 줄.
@@ -715,16 +773,6 @@
   outline-offset: 1px;
 }
 
-/* 지표별 표본: 위=비율, 아래=건수. 비율이 주인공이라 건수는 한 단계 작고 흐리게.
-   글자 크기는 표 기본(12px)을 그대로 두고 건수 줄만 줄인다. */
-.sample-table .sample-n {
-  display: block;
-  font-size: 10px;
-  font-weight: 400;
-  opacity: 0.7;
-  line-height: 1.25;
-  font-variant-numeric: tabular-nums;
-}
 
 /* 시즌전적 + 폼 지표를 한 줄에 나란히(왼쪽 시즌전적 / 오른쪽 폼 지표).
    폼 지표는 6칸 고정이라 폭이 덜 필요하고, 시즌전적은 팀명 라벨이 있어 조금 더 넓게 준다. */

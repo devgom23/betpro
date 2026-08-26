@@ -2,7 +2,7 @@ import { cloneElement, Fragment, useEffect, useMemo, useRef, useState } from 're
 import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
-  collapsedWidth, splitsOnFinal, oddsMoveDir, toFinalRow,
+  collapsedWidth, splitsOnFinal, oddsMoveDir, riskMoveDir, toFinalRow,
 } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
@@ -429,15 +429,19 @@ export default function LeagueTable({
                   // 눈으로 짚어 가며 비교하지 않아도 "여기가 움직였다"가 바로 보이게 한다.
                   // 아랫줄(최종)에는 방향 화살표까지 붙인다 — 와이즈토토·Bet365와 같은
                   // 규칙으로 배당이 오르면 빨강 ↑, 내리면 파랑 ↓. 내려간 쪽이 돈이 몰린 쪽이다.
+                  // 확률 지표(정승%·플핸무%·플%)는 오르내림에 좋다/나쁘다가 없어서
+                  // 색 구분 없이 흰색 ▲▼로 표시한다(riskMoveDir — 상세보기 팝업
+                  // MatchDetailModal.jsx RiskCard와 같은 규칙).
                   const dir = splits ? oddsMoveDir(baseRow, colKey) : 0
+                  const riskDir = splits ? riskMoveDir(baseRow, colKey) : 0
                   const mark = (c, withArrow) => {
-                    if (!dir) return c
+                    if (!dir && !riskDir) return c
                     const cls = [c.props.className, 'odds-moved'].filter(Boolean).join(' ')
                     if (!withArrow) return cloneElement(c, { className: cls })
-                    return cloneElement(c, { className: cls }, c.props.children,
-                      <span key="arw" className={`odds-arrow ${dir > 0 ? 'up' : 'down'}`}>
-                        {dir > 0 ? '↑' : '↓'}
-                      </span>)
+                    const arrowNode = dir
+                      ? <span key="arw" className={`odds-arrow ${dir > 0 ? 'up' : 'down'}`}>{dir > 0 ? '↑' : '↓'}</span>
+                      : <span key="arw" className="risk-arrow">{riskDir > 0 ? '▲' : '▼'}</span>
+                    return cloneElement(c, { className: cls }, c.props.children, arrowNode)
                   }
                   if (isFinal) return splits ? mark(cell, true) : null
                   if (!splitRows) return cell

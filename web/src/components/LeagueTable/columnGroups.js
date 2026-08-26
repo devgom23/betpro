@@ -97,6 +97,23 @@ export function isOddsMoved(row, colKey) {
   return oddsMoveDir(row, colKey) !== 0
 }
 
+// 확률 지표(정승%·플핸무%·플%) 중 배당에서 바로 재계산되는 4칸 — 배당처럼
+// "올랐다/내렸다"가 곧 "좋다/나쁘다"를 뜻하지 않아서(정배 확률이 오르면 플핸엔
+// 오히려 나쁠 수도 있다) 화살표는 오르든 내리든 색 구분 없이 흰색 ▲▼로만 표시한다
+// (상세보기 팝업의 .risk-arrow와 같은 규칙 — MatchDetailModal.jsx RiskCard 참고).
+const RISK_MOVE_COLS = ['WIN_RISK', 'WIN_RISK_F', 'NH_KO', 'PL_KO']
+
+/** 초기 → 최종으로 확률 지표가 움직인 방향. 1=올랐다, -1=내렸다, 0=그대로/값없음. */
+export function riskMoveDir(row, colKey) {
+  if (!row || !RISK_MOVE_COLS.includes(colKey)) return 0
+  const a = Number(row[colKey])
+  const b = Number(row[FINAL_FIELD[colKey]])
+  const blank = (v) => v == null || v === ''
+  if (blank(row[colKey]) || blank(row[FINAL_FIELD[colKey]])) return 0
+  if (Number.isNaN(a) || Number.isNaN(b) || a === b) return 0
+  return b > a ? 1 : -1
+}
+
 /** 이 경기에 최종배당이 있는가(= 두 줄로 보여줄 값이 있는가). */
 export function hasFinalOdds(row) {
   return row != null && row.EKW != null && row.EKW !== ''
