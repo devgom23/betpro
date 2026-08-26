@@ -36,6 +36,8 @@ export default function WeekListPage() {
   // 처리 덕에 접혀도 리그명은 계속 보인다).
   const [collapsed, setCollapsed] = useState(() => new Set(['일반정보']))
   const [showRiskLegend, setShowRiskLegend] = useState(false)
+  const [busyRefreshOdds, setBusyRefreshOdds] = useState(false)
+  const [refreshOddsNotice, setRefreshOddsNotice] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -57,6 +59,39 @@ export default function WeekListPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // 이번주 리스트는 여러 리그·라운드가 한 표에 섞여 있어(요일별로만 나뉨), 리그 화면의
+  // "최신배당 불러오기"(리그+시즌+라운드 하나만 대상)를 그대로 못 쓴다 — 지금 화면에
+  // 실제로 보이는 (스코프,리그,시즌,라운드) 조합을 전부 뽑아 하나씩 순서대로 호출한다.
+  async function runRefreshFinalOdds() {
+    if (!rows.length) return
+    const combos = new Map()
+    for (const r of rows) {
+      const key = `${r.scope}|${r.L}|${r.S}|${r.R}`
+      if (!combos.has(key)) combos.set(key, { scope: r.scope, code: r.L, season: r.S, round: r.R })
+    }
+    setBusyRefreshOdds(true)
+    setRefreshOddsNotice('')
+    let ek = 0
+    let ef = 0
+    const fails = []
+    for (const { scope, code, season, round } of combos.values()) {
+      try {
+        const res = await api.post(`/api/leagues/${code}/refresh_final_odds`, { scope, season, round })
+        ek += res.domestic_updated || 0
+        ef += res.overseas_updated || 0
+        if (res.domestic_error) fails.push(`${code} ${round} 국내: ${res.domestic_error}`)
+        if (res.overseas_error) fails.push(`${code} ${round} 해외: ${res.overseas_error}`)
+      } catch (err) {
+        fails.push(`${code} ${round}: ${err.message}`)
+      }
+    }
+    const parts = [`${combos.size}개 라운드 · 국내 ${ek}건 · 해외 ${ef}건 갱신`]
+    if (fails.length) parts.push(...fails)
+    setRefreshOddsNotice(parts.join(' · '))
+    if (ek || ef) load()
+    setBusyRefreshOdds(false)
+  }
 
   // data.rows가 없을 때 매번 새 배열([])을 만들면 아래 useMemo가 렌더마다 다시 돌아
   // 캐시 의미가 없어진다 — 같은 참조를 유지하려고 useMemo로 감싼다.
@@ -112,6 +147,20 @@ export default function WeekListPage() {
       {error && <div className="wl-empty error-text">{error}</div>}
       {!loading && !error && rows.length === 0 && (
         <div className="wl-empty">이번 회차 기간에 등록된 경기가 없습니다.</div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="wl-refresh-row">
+          <button
+            className="batch-fold-btn"
+            onClick={runRefreshFinalOdds}
+            disabled={busyRefreshOdds}
+            title="지금 보이는 이번주 리스트 전체(리그·라운드 조합별)의 국내·해외 최종배당(배변 후)만 다시 받습니다. 초기배당은 그대로 둡니다."
+          >
+            {busyRefreshOdds ? '불러오는 중…' : '최신배당 불러오기'}
+          </button>
+          {refreshOddsNotice && <p className="recompute-notice">{refreshOddsNotice}</p>}
+        </div>
       )}
 
       {daySections.map((sec) => (

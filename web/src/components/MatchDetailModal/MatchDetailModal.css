@@ -321,6 +321,20 @@
   text-align: center;
 }
 
+/* 배변(최종배당) 행 — 리그 표의 .row-final과 같은 톤으로, 바로 위 초기값 행과
+   구분되게 옅은 배경 + 점선 윗줄만 준다. */
+.detail-table.odds-table tr.odds-final-row td,
+.detail-table.risk-table tr.risk-final-row td {
+  background: var(--row-final-bg, rgba(127, 127, 127, 0.07));
+  border-top: 1px dashed var(--border-subtle, rgba(127, 127, 127, 0.35));
+}
+
+.detail-table tr.odds-final-row .row-label,
+.detail-table tr.risk-final-row .row-label {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
 /* 배당표 맨 위 — 홈팀명/점수/원정팀명을 승(홈)·무·패(원정) 컬럼과 같은 자리에 맞춘 줄.
    예정 경기라 점수가 없으면 odds-score-cell에 '-'만 뜬다. */
 .odds-teams-row th {

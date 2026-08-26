@@ -43,6 +43,13 @@
   line-height: 1.6;
 }
 
+.wl-refresh-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
 .wl-empty {
   color: var(--text-muted);
   padding: 24px;

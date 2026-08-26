@@ -34,7 +34,17 @@ function dividerClass(g, isLastGroup) {
 // (row.L_LABEL이 붙어 올 때) 리그명 칸도 하나 더 유지한다 — 안 그러면 접힌 채로는
 // 어느 리그 경기인지 구분이 안 된다.
 function collapsedSpan(g, hasLeagueLabel) {
-  return g.label1 === '일반정보' ? (hasLeagueLabel ? 3 : 2) : 1
+  if (g.label1 === '일반정보') return hasLeagueLabel ? 3 : 2
+  // 경기정보를 접어도 순위·팀명·스코어·결과(HP/HT/HS/RT/AS/AT/AP)는 계속 보여준다 —
+  // 접힌 채로도 어느 팀이 몇 위이고 결과가 어땠는지는 바로 알 수 있어야 한다.
+  if (g.label1 === '경기정보') return 7
+  return 1
+}
+
+// 경기정보 그룹의 col 목록에서 이 7개만, 이 순서대로 뽑는다.
+const MATCH_INFO_COLLAPSED_KEYS = ['HP', 'HT', 'HS', 'RT', 'AS', 'AT', 'AP']
+function matchInfoCollapsedCols(g) {
+  return MATCH_INFO_COLLAPSED_KEYS.map((k) => g.cols.find((c) => c.key === k)).filter(Boolean)
 }
 
 function matchKey(row) {
@@ -207,7 +217,11 @@ export default function LeagueTable({
       // 높이 제한을 아예 풀어 행을 전부 보여준다(표 안쪽 세로 스크롤 없음).
       el.style.maxHeight = 'none'
     } else if (h > 0) {
-      el.style.maxHeight = `${thead.getBoundingClientRect().height + h * VISIBLE_ROWS}px`
+      // box-sizing: border-box(전역 리셋)라 max-height가 테두리까지 포함해서 계산된다.
+      // 테두리 두께를 안 더해주면 딱 20행(10경기)일 때 내용물이 테두리만큼(1~2px) 더 커서
+      // 스크롤바가 미세하게 생겼다 — 테두리 두께를 더해 실제 내용 높이와 맞춘다.
+      const borderV = el.getBoundingClientRect().height - el.clientHeight
+      el.style.maxHeight = `${thead.getBoundingClientRect().height + h * VISIBLE_ROWS + borderV}px`
     }
     // 헤더 1번째 줄(그룹명) 높이를 재서 2번째 줄(L/S/R 등)이 스크롤 중 붙는 위치로 쓴다.
     // CSS에 숫자를 고정해두면 실제 높이와 어긋나 돋보기·체크박스 칸(rowSpan)의 아래
@@ -337,6 +351,20 @@ export default function LeagueTable({
                       </th>,
                     ]
                   }
+                  if (g.label1 === '경기정보') {
+                    const matchCols = matchInfoCollapsedCols(g)
+                    return matchCols.map((c, ci) => (
+                      <th
+                        key={`${gi}-${c.key}`}
+                        className={`sub-header collapsed-cell${
+                          ci === matchCols.length - 1 ? dividerClass(g, isLastGroup) : ''
+                        }`}
+                        style={{ width: columnWidth(g, c) }}
+                      >
+                        {c.sub}
+                      </th>
+                    ))
+                  }
                   return [
                     <th
                       key={`${gi}-c`}
@@ -452,11 +480,40 @@ export default function LeagueTable({
                       // 일반정보를 접어도 금/토/일 베팅일 색상 + 라운드/시간은 계속 보여야
                       // 한다 — 접힌 채로도 몇 라운드 몇 시 경기인지 바로 알 수 있게.
                       const isGenInfo = g.label1 === '일반정보'
+                      // 경기정보를 접어도 팀명·순위(HP/HT/AT/AP)는 계속 보여준다.
+                      const isMatchInfo = g.label1 === '경기정보'
                       // 똥배를 접어도 똥1/똥2 순번은 계속 보여야 한다 — 그게 이 그룹의
                       // 핵심 정보라 접혀서 안 보이면 의미가 없다.
                       const isDdong = g.label1 === '똥배'
                       const style = isGenInfo ? bettingDayStyle(row) : null
-                      if (isGenInfo) {
+                      if (isMatchInfo) {
+                        const matchCols = matchInfoCollapsedCols(g)
+                        cells = matchCols.map((c, ci) => {
+                          const value = row[c.key]
+                          const isLastCol = ci === matchCols.length - 1
+                          const className = `collapsed-cell${isLastCol ? dividerClass(g, isLastGroup) : ''}`
+                          const text = formatCell(g, c, value, row)
+                          // RT는 펼쳤을 때처럼 칸 전체가 아니라 알약 배지로 보여준다(cell-badge).
+                          if (c.key === 'RT') {
+                            const badgeStyle = cellStyle(g, c, value, row)
+                            return (
+                              <td key={`${gi}-${c.key}`} className={className}>
+                                {badgeStyle ? (
+                                  <span className="cell-badge" style={badgeStyle}>{text}</span>
+                                ) : (
+                                  text
+                                )}
+                              </td>
+                            )
+                          }
+                          return (
+                            <td key={`${gi}-${c.key}`} className={className} style={cellStyle(g, c, value, row) || undefined}>
+                              {text}
+                            </td>
+                          )
+                        })
+                        cellKeys = matchCols.map(() => '__merge')
+                      } else if (isGenInfo) {
                         cells = [
                           ...(hasLeagueLabel
                             ? [

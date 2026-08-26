@@ -132,11 +132,13 @@ function DdongNote({ row }) {
 // 경기 결과가 아직 없어도(예정 경기) 팀명은 항상 보이고, 점수만 '-'로 비워둔다.
 // 팀 이름 옆엔 오늘 그 팀이 정배(정)인지 역배(역)인지 표시한다.
 function OddsTable({ row }) {
+  // 5번째 자리(final)는 그 배당의 배변(최종배당) 칸 이름 — 해외 핸디는 스코어맨이
+  // 무(D) 값을 안 주고 최종배당 자체를 안 모으므로 배변 행이 없다.
   const rows = [
-    ['국내 배당', 'KW', 'KD', 'KL'],
-    ['국내 핸디', 'KHW', 'KHD', 'KHL'],
-    ['해외 배당', 'FW', 'FD', 'FL'],
-    ['해외 핸디', 'FHW', 'FHD', 'FHL'],
+    ['국내 배당', 'KW', 'KD', 'KL', ['EKW', 'EKD', 'EKL']],
+    ['국내 핸디', 'KHW', 'KHD', 'KHL', ['EKHW', 'EKHD', 'EKHL']],
+    ['해외 배당', 'FW', 'FD', 'FL', ['EFW', 'EFD', 'EFL']],
+    ['해외 핸디', 'FHW', 'FHD', 'FHL', null],
   ]
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
@@ -198,16 +200,26 @@ function OddsTable({ row }) {
         </tr>
       </thead>
       <tbody>
-        {rows.map(([label, w, d, l]) => {
+        {rows.map(([label, w, d, l, final]) => {
           const isHandi = label === '국내 핸디' || label === '해외 핸디'
           const colClass = isHandi ? dogColClass : favColClass
           return (
-            <tr key={label}>
-              <td className="row-label">{label}</td>
-              <td className={colClass('w')}>{numOrDash(row[w])}</td>
-              <td>{numOrDash(row[d])}</td>
-              <td className={colClass('l')}>{numOrDash(row[l])}</td>
-            </tr>
+            <Fragment key={label}>
+              <tr>
+                <td className="row-label">{label}</td>
+                <td className={colClass('w')}>{numOrDash(row[w])}</td>
+                <td>{numOrDash(row[d])}</td>
+                <td className={colClass('l')}>{numOrDash(row[l])}</td>
+              </tr>
+              {final && (
+                <tr className="odds-final-row">
+                  <td className="row-label">배변</td>
+                  <td className={colClass('w')}>{numOrDash(row[final[0]])}</td>
+                  <td>{numOrDash(row[final[1]])}</td>
+                  <td className={colClass('l')}>{numOrDash(row[final[2]])}</td>
+                </tr>
+              )}
+            </Fragment>
           )
         })}
       </tbody>
@@ -251,26 +263,31 @@ function RiskCard({ row }) {
   // 리그 표(columnGroups.js RISK_GROUPS)와 같은 8칸을 같은 순서로 보여준다.
   // 값은 전부 백엔드가 "그 일이 일어날 확률(%)"로 내려주므로 뒤집지 않는다.
   // 핸무는 '플핸무 − 플'로 나오므로 칸을 따로 두지 않는다.
+  // 네 번째 자리(hasFinal)는 이 칸이 배변 줄에서 두 줄로 갈리는지 여부다. 배당에서
+  // 직접 나오는 정)·플(KO)은 최종배당으로 다시 계산한 값(E_*)이 실제로 있고, 국)지·
+  // 해)지(26지표 기반)는 아직 없다(engine.py를 건드리는 별도 작업) — 그래도 리그 표와
+  // 같은 모양(항상 두 줄)을 맞추려고 true로 두고, 값 없이 빈칸(-)만 보여준다.
   const groups = [
     ['정승 %', 'win', [
-      ['국)정', toN(row.WIN_RISK)],
-      ['해)정', toN(row.WIN_RISK_F)],
+      ['국)정', toN(row.WIN_RISK), toN(row.E_WIN_RISK), true],
+      ['해)정', toN(row.WIN_RISK_F), toN(row.E_WIN_RISK_F), true],
     ]],
     ['플핸무 %', 'nh', [
-      ['국)플', toN(row.NH_KO)],
-      ['국)지', toN(row.NH_KI)],
-      ['해)지', toN(row.NH_FI)],
+      ['국)플', toN(row.NH_KO), toN(row.E_NH_KO), true],
+      ['국)지', toN(row.NH_KI), null, true],
+      ['해)지', toN(row.NH_FI), null, true],
     ]],
     ['플 %', 'pl', [
-      ['국)플', toN(row.PL_KO)],
-      ['국)지', toN(row.PL_KI)],
-      ['해)지', toN(row.PL_FI)],
+      ['국)플', toN(row.PL_KO), toN(row.E_PL_KO), true],
+      ['국)지', toN(row.PL_KI), null, true],
+      ['해)지', toN(row.PL_FI), null, true],
     ]],
   ]
   return (
     <table className="detail-table risk-table">
       <thead>
         <tr>
+          <th className="row-label" />
           {groups.map(([title, , cols], gi) => (
             <th
               key={title}
@@ -282,6 +299,7 @@ function RiskCard({ row }) {
           ))}
         </tr>
         <tr>
+          <th className="row-label" />
           {groups.flatMap(([title, , cols], gi) =>
             cols.map(([label], ci) => (
               <th
@@ -296,16 +314,35 @@ function RiskCard({ row }) {
       </thead>
       <tbody>
         <tr>
+          <td className="row-label" />
           {groups.flatMap(([title, kind, cols], gi) =>
-            cols.map(([label, n], ci) => (
+            cols.map(([label, n, , hasFinal], ci) => (
               <td
                 key={`${title}-${label}`}
+                rowSpan={hasFinal ? 1 : 2}
                 className={ci === cols.length - 1 && gi < groups.length - 1 ? 'risk-edge' : ''}
                 style={riskCellStyle(kind, n)}
               >
                 {n === null ? '-' : `${n.toFixed(0)}%`}
               </td>
             ))
+          )}
+        </tr>
+        <tr className="risk-final-row">
+          <td className="row-label">배변</td>
+          {groups.flatMap(([title, kind, cols], gi) =>
+            cols
+              .map((col, ci) => ({ col, ci }))
+              .filter(({ col }) => col[3])
+              .map(({ col: [label, , en], ci }) => (
+                <td
+                  key={`${title}-${label}-e`}
+                  className={ci === cols.length - 1 && gi < groups.length - 1 ? 'risk-edge' : ''}
+                  style={riskCellStyle(kind, en)}
+                >
+                  {en === null ? '-' : `${en.toFixed(0)}%`}
+                </td>
+              ))
           )}
         </tr>
       </tbody>

@@ -2233,14 +2233,6 @@ def _scoreman_season(season: str) -> str:
     return f"{full(m.group(1))}-{full(m.group(2))}"
 
 
-def _dt_to_day(v) -> Optional[str]:
-    """DB DT('26-08-25 (Tue)') -> '2026-08-25'. 형식이 아니면 None."""
-    s = str(v).strip()
-    if len(s) < 8 or s[2] != "-":
-        return None
-    return "20" + s[:8]
-
-
 class RefreshFinalOddsBody(BaseModel):
     scope: str = PATHS.SCOPE_MASTER
     season: str
@@ -2336,15 +2328,15 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
             sched = SCOREMAN.season_schedule(league_id, _scoreman_season(body.season))
             f_aliases = CRAWL.list_aliases(udb, body.scope, code)   # source="" — 스코어맨 치환규칙
             sched = CRAWL.apply_aliases(sched, f_aliases)
+            # 날짜는 매칭 키에 안 쓴다 — 스코어맨과 DB의 킥오프 시각이 리그 전체에 걸쳐
+            # 한 시간씩 어긋나 있어(예: 스코어맨 23:30 ↔ DB 00:30), 자정을 넘나드는 경기는
+            # 날짜까지 하루 바뀌어 팀명이 맞는데도 못 찾는 문제가 있었다. 한 시즌 안에서
+            # 같은 (홈,원정) 순서 조합은 리그전 특성상 한 번만 나오므로 팀명만으로 충분하다.
             sidx = {}
             for g in sched:
-                day = (g.get("dt") or "")[:10]
-                sidx[(str(g.get("HT", "")).strip(), str(g.get("AT", "")).strip(), day)] = g
+                sidx[(str(g.get("HT", "")).strip(), str(g.get("AT", "")).strip())] = g
             for i in idxs:
-                day = _dt_to_day(df.at[i, "DT"])
-                if not day:
-                    continue
-                g = sidx.get((str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip(), day))
+                g = sidx.get((str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip()))
                 if not g:
                     continue
                 try:

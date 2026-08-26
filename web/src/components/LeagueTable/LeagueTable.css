@@ -104,7 +104,9 @@
 /* 해외배당↔내 예측 그룹 사이에 끼워 넣는 칸이라 sticky를 쓰지 않는다(체크박스 칸과
    달리 표의 왼쪽 끝에 붙어 있지 않으므로 position:sticky; left:0이 의미가 없다). */
 .detail-col {
-  width: 58px;
+  width: 34px;
+  padding-left: 4px;
+  padding-right: 4px;
   white-space: nowrap;
 }
 
@@ -257,7 +259,6 @@ td.sticky-col {
 }
 
 .collapsed-cell {
-  color: var(--text-muted-2);
   background: rgba(148, 163, 184, 0.06);
 }
 
@@ -332,6 +333,21 @@ td.sticky-col {
 .league-table tbody tr.row-final td {
   background: var(--row-final-bg, rgba(127, 127, 127, 0.07));
   border-top: 1px dashed var(--border-subtle, rgba(127, 127, 127, 0.35));
+}
+
+/* 최종배당 줄(아랫줄) 자체의 호버 — 값이 갈리는 칸은 그 줄만 밝아지면 된다.
+   .row-final의 옅은 배경(위 규칙)과 특이도가 같아서, 나중에 와야 호버 중엔
+   그 배경을 덮는다. (전에는 여기서 위/아랫줄을 통째로 묶어 호버시켰는데,
+   값이 갈리는 칸까지 같이 밝아지는 건 의도가 아니라서 rowSpan 칸만 남겼다.) */
+.league-table tbody tr[data-row-final]:hover td {
+  background: var(--row-hover);
+}
+
+/* 위/아래로 합쳐진 칸(rowSpan=2, 경기정보 등 값이 하나뿐인 칸)만 예외 —
+   그 칸은 아랫줄 자리까지 시각적으로 차지하고 있으니, 아랫줄에 마우스를
+   올려도 그 칸이 같이 밝아져야 자연스럽다. */
+.league-table tbody tr[data-row]:has(+ tr[data-row-final]:hover) td[rowspan] {
+  background: var(--row-hover);
 }
 
 /* 위아래로 합쳐진 칸(rowSpan=2)은 세로 가운데에 놓아야 두 줄의 중간에 걸린다 */

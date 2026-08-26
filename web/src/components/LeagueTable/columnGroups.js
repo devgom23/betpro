@@ -50,9 +50,10 @@ const DDONG_RISK_CUTS = [22, 30, 37]
 // 않는다 — 아래 목록에 있는 칸만 위아래로 값이 갈리고, 나머지(경기정보 등 값이 하나뿐인
 // 칸)는 위아래 셀을 합쳐(rowSpan) 한 번만 그린다.
 //
-// 여기 없는 확률 칸에 주의: 해)정(WIN_RISK_F)·해)지(NH_FI/PL_FI)는 해외배당에서 나오는데
-// 해외는 아직 배변 데이터가 없고, 국)지(NH_KI/PL_KI)는 26개 지표에서 나오는 값이라
-// 지표를 최종배당으로 다시 계산해야 바뀐다(별도 작업). 그래서 지금은 합쳐서 보여준다.
+// 국)지·해)지(NH_KI/NH_FI/PL_KI/PL_FI)는 26개 지표에서 나오는 값이라 지표 자체를
+// 최종배당 조건으로 다시 계산해야 바뀐다(engine.py를 건드리는 별도 작업, 아직 안 함).
+// 그래도 표 모양은 다른 확률 칸과 똑같이 두 줄로 맞추려고 값 없이(null) 등록해 둔다 —
+// 아랫줄이 항상 빈칸(—)으로 나올 뿐, 위아래 셀이 합쳐지진 않는다.
 // 값은 "아랫줄에 넣을 값을 담고 있는 컬럼". null이면 아랫줄을 빈칸으로 둔다.
 export const FINAL_FIELD = {
   // 국내배당 — 와이즈토토 배당변경 이력의 '지금 값'
@@ -65,6 +66,8 @@ export const FINAL_FIELD = {
   DDONG: 'E_DDONG', DDONG_RISK: 'E_DDONG_RISK', DDONGSA: 'E_DDONGSA',
   WIN_RISK: 'E_WIN_RISK', WIN_RISK_F: 'E_WIN_RISK_F',
   NH_KO: 'E_NH_KO', PL_KO: 'E_PL_KO',
+  // 아직 최종배당 재계산이 없는 26지표 기반 값 — 아랫줄은 항상 빈칸.
+  NH_KI: null, NH_FI: null, PL_KI: null, PL_FI: null,
 }
 
 /** 이 칸이 위/아래 두 줄로 갈리는가. (값이 null인 항목도 갈라지므로 in으로 본다) */
@@ -289,8 +292,14 @@ const COL_WIDTH = {
   HP: 34, AP: 34,
   HT: 82, AT: 82,
   HS: 28, AS: 28,
-  KW: 50, KD: 50, KL: 50, KH: 36, KHW: 50, KHD: 50, KHL: 50,
-  FW: 50, FD: 50, FL: 50, FH: 36,
+  // 배변 화살표(.odds-arrow, ~11px)가 붙으면 안 붙은 셀보다 내용이 길어져서,
+  // table-layout:auto인 표마다(요일별 이번주 리스트 등) 화살표 유무에 따라 이 컬럼
+  // 폭이 표마다 미세하게 달라지는 문제가 있었다 — 화살표가 항상 붙어 있다고 치고
+  // 폭을 고정한다. 57px까지 좁혀봤더니 두 자리 배당("10.XX" 등)에 화살표까지 붙는
+  // 실제 사례에서 다시 표마다 어긋나 59px로 확정했다(실측: 요일별 이번주 리스트
+  // 두 표에서 완전히 같은 폭으로 렌더링됨).
+  KW: 59, KD: 59, KL: 59, KH: 36, KHW: 59, KHD: 59, KHL: 59,
+  FW: 59, FD: 59, FL: 59, FH: 36,
   DDONG: 40, DDONG_RISK: 50, DDONGSA: 40,
   WIN_RISK: 50, WIN_RISK_F: 50,
   NH_KO: 50, NH_KI: 50, NH_FI: 50,
@@ -568,7 +577,7 @@ export function formStyle(value) {
 
 // ── 셀 배경/글자색 (인라인 style 객체로 반환) ──
 // row는 HS/AS처럼 '이 행의 다른 컬럼 값'을 봐야 할 때만 쓴다(예: 이긴 팀 점수 강조).
-export function cellStyle(group, col, value, row) {
+function cellStyleImpl(group, col, value, row) {
   const g1 = group.label1
   const sub = col.sub
 
@@ -602,7 +611,11 @@ export function cellStyle(group, col, value, row) {
   if ((g1 === '국내배당' || g1 === '해외배당') && (ODDS_HIT_PLAIN_COLS.includes(sub) || ODDS_HIT_KH_COLS.includes(sub))) {
     if (toNum(value) === null) return null
     const side = ODDS_HIT_KH_COLS.includes(sub) ? khHitSide(row) : oddsHitSide(row)
-    if (side && sub.endsWith(side)) return { background: '#FDD835', color: '#0D1B2A', fontWeight: 700 }
+    // 배변 화살표(빨강/파랑, --chip-*-fg)가 이 배경 위에서도 잘 보이도록 채도 낮은
+    // 칩 톤(--chip-yellow-*)을 쓴다. 예전 원색 노랑(#FDD835)은 화살표와 명도가 비슷해 묻혔다.
+    if (side && sub.endsWith(side)) {
+      return { background: 'var(--chip-yellow-bg)', color: 'var(--chip-yellow-fg)', fontWeight: 700 }
+    }
     return null
   }
 
@@ -678,4 +691,15 @@ export function cellStyle(group, col, value, row) {
   }
 
   return null
+}
+
+// 국내배당/해외배당은 숫자 자릿수가 들쭉날쭉해 가운데 정렬이면 배변 화살표(.odds-arrow) 위치가
+// 셀마다 흔들려 보인다 — 왼쪽 정렬로 고정해 화살표가 항상 같은 자리에 붙게 한다.
+export function cellStyle(group, col, value, row) {
+  const style = cellStyleImpl(group, col, value, row)
+  // KH/FH(핸디캡 라인)는 배변 화살표가 붙지 않는 칸이라 가운데 정렬 그대로 둔다.
+  if ((group.label1 === '국내배당' || group.label1 === '해외배당') && col.sub !== 'KH' && col.sub !== 'FH') {
+    return { textAlign: 'left', ...(style || {}) }
+  }
+  return style
 }
