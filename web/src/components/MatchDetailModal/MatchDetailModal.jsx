@@ -342,7 +342,7 @@ function RiskCard({ row }) {
                 className={ci === cols.length - 1 && gi < groups.length - 1 ? 'risk-edge' : ''}
                 style={riskCellStyle(kind, n)}
               >
-                {n === null ? '-' : `${n.toFixed(0)}%`}
+                {n === null ? '-' : n.toFixed(0)}
               </td>
             ))
           )}
@@ -364,7 +364,7 @@ function RiskCard({ row }) {
                     className={ci === cols.length - 1 && gi < groups.length - 1 ? 'risk-edge' : ''}
                     style={riskCellStyle(kind, en)}
                   >
-                    {en === null ? '-' : `${en.toFixed(0)}%`}
+                    {en === null ? '-' : en.toFixed(0)}
                     {dir && <span className="risk-arrow">{dir === 'up' ? '▲' : '▼'}</span>}
                   </td>
                 )

@@ -231,7 +231,7 @@ function toNum(v) {
   return Number.isNaN(n) ? null : n
 }
 
-function rtToText(v) {
+export function rtToText(v) {
   if (isBlank(v)) return ''
   const n = toNum(v)
   if (n !== null) return RT_DISPLAY[Math.trunc(n)] || ''
@@ -422,7 +422,8 @@ export function formatCell(group, col, value, row) {
     if (n === null) return ''
     // 8칸 전부 백엔드가 "그 일이 일어날 확률(%)"로 내려준다 — 뒤집지 않는다.
     // (예전엔 국플값·배당·AI·KF·AI만 100에서 빼서 보여줘 방향이 뒤섞여 있었다.)
-    return `${n.toFixed(0)}%`
+    // %는 그룹 제목(정승 %·플핸무 %·플 %)에 이미 있어 칸마다 또 안 붙인다.
+    return n.toFixed(0)
   }
   if (SUB4.includes(sub)) {
     const n = toNum(value)

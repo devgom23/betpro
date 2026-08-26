@@ -2,7 +2,7 @@ import { cloneElement, Fragment, useEffect, useMemo, useRef, useState } from 're
 import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
-  collapsedWidth, splitsOnFinal, oddsMoveDir, riskMoveDir, toFinalRow,
+  collapsedWidth, splitsOnFinal, oddsMoveDir, riskMoveDir, toFinalRow, rtToText,
 } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import MyPickModal from '../MyPickModal/MyPickModal'
@@ -587,7 +587,7 @@ export default function LeagueTable({
                             <td key={`${gi}-${ci}`} className={className}>
                               <button className="mypick-btn" onClick={() => setPickRow(row)}>
                                 {pickState.p ? (
-                                  <RtBadge label={pickState.p} />
+                                  <RtBadge label={pickState.p} matched={pickState.p === rtToText(row.RT)} />
                                 ) : (
                                   <span className="mypick-blank">－</span>
                                 )}

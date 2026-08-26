@@ -27,11 +27,14 @@ export const RT_CHIP = {
 // RT 라벨 배지. 값이 없으면 아무것도 그리지 않는다.
 // (예전엔 HeadToHeadResult / MatchDetailModal / HeadToHeadPage 에 글자 하나 안 다른
 //  복사본이 각각 있었고, .rt-badge CSS 도 3개 파일에 중복 정의돼 있었다.)
-export default function RtBadge({ label }) {
+// matched=true면 노란 테두리를 두른다 — "P"칸에서 내가 찍은 결과가 실제 RT와
+// 맞았는지 한눈에 보려는 용도(집계·판정에는 안 쓰는 순수 확인용, 다른 곳에서는
+// 안 씀).
+export default function RtBadge({ label, matched = false }) {
   if (!label) return null
   const chip = RT_CHIP[label] || { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' }
   return (
-    <span className="rt-badge" style={chip}>
+    <span className={`rt-badge${matched ? ' rt-badge-matched' : ''}`} style={chip}>
       {label}
     </span>
   )
