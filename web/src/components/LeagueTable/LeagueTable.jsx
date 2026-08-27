@@ -164,11 +164,12 @@ export default function LeagueTable({
       p: o?.p !== undefined ? o.p : row.MY_P || '',
       hit: o?.hit !== undefined ? o.hit : row.MY_HIT || '',
       memo: o?.memo !== undefined ? o.memo : row.MEMO || '',
+      reasonTag: o?.reasonTag !== undefined ? o.reasonTag : row.REASON_TAG || '',
     }
   }
 
-  // 별표/내픽/P태그/적중여부/메모 공용 저장 — patch에 준 필드만 바꾸고 나머지는 현재 값을
-  // 유지한 채 전체 상태를 다시 올린다(서버는 매번 값을 다 받아 upsert).
+  // 별표/내픽/P태그/적중여부/메모/오답노트태그 공용 저장 — patch에 준 필드만 바꾸고
+  // 나머지는 현재 값을 유지한 채 전체 상태를 다시 올린다(서버는 매번 값을 다 받아 upsert).
   async function savePick(row, patch) {
     const key = matchKey(row)
     const prevValue = pickOverridesRef.current[key] ?? {
@@ -177,6 +178,7 @@ export default function LeagueTable({
       p: row.MY_P || '',
       hit: row.MY_HIT || '',
       memo: row.MEMO || '',
+      reasonTag: row.REASON_TAG || '',
     }
     const next = { ...prevValue, ...patch }
     pickOverridesRef.current = { ...pickOverridesRef.current, [key]: next }
@@ -194,6 +196,7 @@ export default function LeagueTable({
         p: next.p || null,
         hit: next.hit || null,
         memo: next.memo || null,
+        reason_tag: next.reasonTag || null,
       })
     } catch {
       // 저장 실패 시 원래 상태로 되돌린다
@@ -713,6 +716,7 @@ export default function LeagueTable({
               MY_P: effectivePick(detailRow).p,
               MY_HIT: effectivePick(detailRow).hit,
               MEMO: effectivePick(detailRow).memo,
+              REASON_TAG: effectivePick(detailRow).reasonTag,
             }}
             scope={rowScope(detailRow)}
             onClose={() => setDetailRow(null)}

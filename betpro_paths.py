@@ -380,6 +380,8 @@ def ensure_predlog_db(username: str) -> str:
             con.execute("ALTER TABLE my_picks ADD COLUMN wp_hidden INTEGER NOT NULL DEFAULT 0")
         if "p" not in cols:
             con.execute("ALTER TABLE my_picks ADD COLUMN p TEXT")
+        if "reason_tag" not in cols:
+            con.execute("ALTER TABLE my_picks ADD COLUMN reason_tag TEXT")
         con.execute("PRAGMA foreign_keys=ON;")
         con.execute(_SCHEMA_BET_SLIPS)
         con.execute(_SCHEMA_BET_SLIP_LEGS)

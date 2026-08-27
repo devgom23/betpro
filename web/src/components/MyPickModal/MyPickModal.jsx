@@ -31,6 +31,7 @@ export default function MyPickModal({ code, scope, row, onClose, onSaved }) {
         p: p || null,
         hit: hit || null,
         memo: row.MEMO || null,
+        reason_tag: row.REASON_TAG || null,
       })
       onSaved({ pick: pick || '', p: p || '', hit: hit || '' })
       onClose()

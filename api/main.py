@@ -686,6 +686,7 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
         row["MY_P"] = p["p"] if p else None
         row["MY_HIT"] = p["hit"] if p else None
         row["MEMO"] = p["memo"] if p else None
+        row["REASON_TAG"] = p["reason_tag"] if p else None
 
 
 # 내픽(MY_PICK)+RT 대조 규칙 — web/src/components/LeagueTable/columnGroups.js의
@@ -759,15 +760,17 @@ class MyPickBody(BaseModel):
     p: Optional[str] = None
     hit: Optional[str] = None
     memo: Optional[str] = None
+    reason_tag: Optional[str] = None
 
 
 @app.post("/api/leagues/{code}/my_picks")
 def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_user)):
-    """중요 별표/내픽/P태그/적중여부/메모 저장 — 계정 개인 기록이라 scope(공식/내 데이터)와 무관하게 본인만 본다."""
+    """중요 별표/내픽/P태그/적중여부/메모/오답노트 태그 저장 — 계정 개인 기록이라
+    scope(공식/내 데이터)와 무관하게 본인만 본다."""
     MYPICKS.upsert_my_pick(
         user["username"], code, body.scope,
         body.S, body.R, body.No, body.HT, body.AT,
-        body.starred, body.pick, body.hit, body.memo, body.p,
+        body.starred, body.pick, body.hit, body.memo, body.p, body.reason_tag,
     )
     return {"ok": True}
 

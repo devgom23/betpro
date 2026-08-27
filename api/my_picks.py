@@ -2,6 +2,10 @@
 "내 예측" — 화면에서 직접 표시한 중요 별표(⭐) / 실제 벳팅 픽(내픽).
 계정 본인의 predlog.db(prediction_log와 같은 파일, 별도 테이블)에 저장한다.
 리그 표 자체(to_sql replace)와 분리되어 있어 재업로드·재계산에 영향받지 않는다.
+
+reason_tag: 오답노트용 "왜 이렇게 봤나" 태그(1개, pickOptions.js REASON_TAG_OPTIONS
+중 하나). pick(무엇을 걸지)과 반드시 분리한다 — 판정(_MY_PICK_VERDICT_MAP)이
+pick 문자열을 정확히 매칭해 적중/보험/미적을 가르므로, 여기 태그를 섞으면 안 된다.
 """
 import sqlite3
 
@@ -32,7 +36,8 @@ def list_my_picks(username: str, code: str, scope: str) -> list[dict]:
     con = _connect(username)
     try:
         rows = con.execute(
-            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, wp_hidden FROM my_picks WHERE code=? AND scope=?",
+            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, reason_tag, wp_hidden "
+            "FROM my_picks WHERE code=? AND scope=?",
             (code, scope),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -67,20 +72,21 @@ def hide_from_weekly_picks(username: str, items: list[dict]) -> int:
 def upsert_my_pick(username: str, code: str, scope: str,
                     s: str, r: str, no: str, ht: str, at: str,
                     starred: bool, pick: str | None, hit: str | None, memo: str | None,
-                    p: str | None = None) -> None:
+                    p: str | None = None, reason_tag: str | None = None) -> None:
     con = _connect(username)
     try:
         con.execute(
             """
-            INSERT INTO my_picks (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, wp_hidden, updated_dt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
+            INSERT INTO my_picks
+                (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, reason_tag, wp_hidden, updated_dt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
             ON CONFLICT(code, scope, S, R, No, HT, AT)
             DO UPDATE SET starred = excluded.starred, pick = excluded.pick, p = excluded.p,
-                          hit = excluded.hit, memo = excluded.memo, wp_hidden = 0,
-                          updated_dt = excluded.updated_dt
+                          hit = excluded.hit, memo = excluded.memo, reason_tag = excluded.reason_tag,
+                          wp_hidden = 0, updated_dt = excluded.updated_dt
             """,
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),
-             1 if starred else 0, pick or None, p or None, hit or None, memo or None),
+             1 if starred else 0, pick or None, p or None, hit or None, memo or None, reason_tag or None),
         )
         con.commit()
     finally:

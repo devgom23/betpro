@@ -3,7 +3,7 @@ import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
 import { isStarred, formatTime, formatDt, scoreClass } from '../../utils/format'
-import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS } from '../../utils/pickOptions'
+import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import './MatchDetailModal.css'
 
 
@@ -775,6 +775,7 @@ function MyPickBar({ row, onSavePick }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
   const [p, setP] = useState(row.MY_P || '')
   const [hit, setHit] = useState(row.MY_HIT || '')
+  const [reasonTag, setReasonTag] = useState(row.REASON_TAG || '')
   const [memo, setMemo] = useState(row.MEMO || '')
   const [savedMemo, setSavedMemo] = useState(row.MEMO || '')
 
@@ -794,6 +795,12 @@ function MyPickBar({ row, onSavePick }) {
     const next = e.target.value
     setHit(next)
     onSavePick({ hit: next || null })
+  }
+
+  function handleReasonTagChange(e) {
+    const next = e.target.value
+    setReasonTag(next)
+    onSavePick({ reasonTag: next || null })
   }
 
   function saveMemoIfChanged() {
@@ -831,6 +838,17 @@ function MyPickBar({ row, onSavePick }) {
         <select value={hit} onChange={handleHitChange}>
           <option value="">선택 안함</option>
           {HIT_OPTIONS.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mypick-bar-field" title="이 픽을 왜 이렇게 봤는지 — 오답노트용, 판정에는 안 쓰인다">
+        오답노트
+        <select value={reasonTag} onChange={handleReasonTagChange}>
+          <option value="">선택 안함</option>
+          {REASON_TAG_OPTIONS.map((o) => (
             <option key={o} value={o}>
               {o}
             </option>
