@@ -2238,6 +2238,13 @@ class RefreshFinalOddsBody(BaseModel):
     scope: str = PATHS.SCOPE_MASTER
     season: str
     round: str   # noqa: A003
+    # 27개 지표 재계산은 라운드당 CPU를 꽤 쓴다(통합DB 재구성 포함). 과거
+    # 대량 백필처럼 이 API를 초 단위로 연달아 두드릴 때 켜 두면, 파이썬 GIL
+    # 특성상 그 사이 화면 조회 요청까지 줄줄이 밀려 앱이 멈춘 것처럼 보인다
+    # (실측: 조회 0.1초 → 3초, 서버 90초 응답지연). 화면에서 누르는 평소
+    # 사용(기본값 True)은 그대로 계산해서 즉시 보여주고, 대량 백필 스크립트만
+    # False로 꺼서 배당만 빠르게 받게 한다 — 지표는 나중에 일괄 재계산하면 된다.
+    recompute_indicators: bool = True
 
 
 @app.post("/api/leagues/{code}/refresh_final_odds")
@@ -2366,8 +2373,9 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
     # 표본 풀(과거 경기)은 초기배당 그대로 — 자세한 이유는 final_indicators.py 상단.
     ind_updated = 0
     if kr_updated or ef_updated:
-        leagues = [code] if _is_user_scope(body.scope) else PATHS.LEAGUES
-        ind_updated = FINALIND.attach_to_df(df, idxs, db, leagues)
+        if body.recompute_indicators:
+            leagues = [code] if _is_user_scope(body.scope) else PATHS.LEAGUES
+            ind_updated = FINALIND.attach_to_df(df, idxs, db, leagues)
 
         con = sqlite3.connect(db)
         try:
