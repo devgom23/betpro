@@ -81,6 +81,7 @@ import user_leagues as USERLG  # noqa: E402
 import crawler as CRAWL        # noqa: E402
 import kr_crawler as KRCRAWL   # noqa: E402
 import scoreman_odds as SCOREMAN  # noqa: E402
+import final_indicators as FINALIND  # noqa: E402
 import my_picks as MYPICKS     # noqa: E402
 import bet_slips as BETSLIPS   # noqa: E402
 import pick_ai as PICKAI       # noqa: E402
@@ -2360,7 +2361,14 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
         except SCOREMAN.OddsError as e:
             ef_error = str(e)
 
+    # ── 최종배당 기준 27개 지표 재계산 ──
+    # 새로 받은 최종배당이 어느 배당 구간에 속하는지 다시 매겨 표본을 새로 센다.
+    # 표본 풀(과거 경기)은 초기배당 그대로 — 자세한 이유는 final_indicators.py 상단.
+    ind_updated = 0
     if kr_updated or ef_updated:
+        leagues = [code] if _is_user_scope(body.scope) else PATHS.LEAGUES
+        ind_updated = FINALIND.attach_to_df(df, idxs, db, leagues)
+
         con = sqlite3.connect(db)
         try:
             df.to_sql(code, con, if_exists="replace", index=False)
@@ -2371,6 +2379,7 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
     return {
         "domestic_updated": kr_updated, "domestic_error": kr_error,
         "overseas_updated": ef_updated, "overseas_error": ef_error,
+        "indicators_updated": ind_updated,
         "target_count": len(idxs),
     }
 

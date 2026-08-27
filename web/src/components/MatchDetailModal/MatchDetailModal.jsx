@@ -282,10 +282,9 @@ function RiskCard({ row }) {
   // 리그 표(columnGroups.js RISK_GROUPS)와 같은 8칸을 같은 순서로 보여준다.
   // 값은 전부 백엔드가 "그 일이 일어날 확률(%)"로 내려주므로 뒤집지 않는다.
   // 핸무는 '플핸무 − 플'로 나오므로 칸을 따로 두지 않는다.
-  // 네 번째 자리(hasFinal)는 이 칸이 배변 줄에서 두 줄로 갈리는지 여부다. 배당에서
-  // 직접 나오는 정)·플(KO)은 최종배당으로 다시 계산한 값(E_*)이 실제로 있고, 국)지·
-  // 해)지(26지표 기반)는 아직 없다(engine.py를 건드리는 별도 작업) — 그래도 리그 표와
-  // 같은 모양(항상 두 줄)을 맞추려고 true로 두고, 값 없이 빈칸(-)만 보여준다.
+  // 네 번째 자리(hasFinal)는 이 칸이 배변 줄에서 두 줄로 갈리는지 여부다. 여덟 칸
+  // 모두 최종배당 기준 값이 있다 — 정)·플(KO)은 배당에서 곧바로, 국)지·해)지는
+  // '최신배당 불러오기'가 최종배당으로 다시 센 27개 지표에서 나온다.
   const groups = [
     ['정승 %', 'win', [
       ['국)정', toN(row.WIN_RISK), toN(row.E_WIN_RISK), true],
@@ -293,13 +292,13 @@ function RiskCard({ row }) {
     ]],
     ['플핸무 %', 'nh', [
       ['국)플', toN(row.NH_KO), toN(row.E_NH_KO), true],
-      ['국)지', toN(row.NH_KI), null, true],
-      ['해)지', toN(row.NH_FI), null, true],
+      ['국)지', toN(row.NH_KI), toN(row.E_NH_KI), true],
+      ['해)지', toN(row.NH_FI), toN(row.E_NH_FI), true],
     ]],
     ['플 %', 'pl', [
       ['국)플', toN(row.PL_KO), toN(row.E_PL_KO), true],
-      ['국)지', toN(row.PL_KI), null, true],
-      ['해)지', toN(row.PL_FI), null, true],
+      ['국)지', toN(row.PL_KI), toN(row.E_PL_KI), true],
+      ['해)지', toN(row.PL_FI), toN(row.E_PL_FI), true],
     ]],
   ]
   return (
@@ -503,6 +502,13 @@ function maxCellClass(vals, i) {
   return second > 0 && vals[i] === second ? 'cell-second' : ''
 }
 
+// 국)분석·해)분석·토탈의 배변 줄 전용 — 1등만 강조하고 2등은 안 준다(초기배당
+// 줄은 1등+2등을 다 주는 것과 다르게, 배변은 "지금 가장 유력한 결과" 하나만 짚는다).
+function maxOnlyClass(vals, i) {
+  const max = Math.max(...vals)
+  return max > 0 && vals[i] === max ? 'cell-max' : ''
+}
+
 // TK-*/TF-* ("국/통", "해/통")는 그 리그를 통합DB(6대리그 등 여러 리그 합산)와
 // 섞은 지표다. 내 데이터는 리그 하나만 있어 통합 대상이 없으므로 항상 국내/해외
 // 지표와 값이 완전히 같아진다 — 의미 없는 중복이라 내 데이터에서는 아예 뺀다.
@@ -563,18 +569,34 @@ function AnalysisRow({ label, vals }) {
   )
 }
 
-// 지표 줄·분석 줄·토탈 줄 밑에 붙는 배변(최종배당) 줄 자리 — 26개 지표 표본은
-// 아직 최종배당 조건으로 다시 뽑지 않아(engine.py를 건드리는 별도 작업) 값 없이
-// 빈칸만 둔다. 그래도 다른 두 섹션(확률 지표·배당 표)과 모양을 맞추려고 항상 그린다.
-function SampleFinalRow({ label = '배변' }) {
+// 지표 줄·분석 줄·토탈 줄 밑에 붙는 배변(최종배당) 줄. '최신배당 불러오기'가 최종배당
+// 기준으로 표본을 다시 세어 둔 값을 그대로 보여준다(api/final_indicators.py).
+// 화살표는 붙이지 않는다 — 표본 개수는 늘고 주는 것 자체에 좋고 나쁨이 없어서다.
+// 아직 재계산이 안 돈 경기는 vals가 null이라 빈칸(-)으로 그려, 있으나 없으나 표
+// 모양이 항상 같게 한다.
+//   kind='count' : 지표 줄과 같은 "XX% (건수)" + 토탈 건수
+//   kind='pct'   : 분석·토탈 줄과 같은 "XX.X%" (가중평균이라 건수가 없다)
+// top1Only: 국)분석·해)분석·토탈 줄의 배변에서 쓴다 — 그 세 줄은 1등만 강조하고
+// 2등은 안 준다(바로 위 원본 줄은 1등+2등을 다 주는 것과 다르게 규칙이 다르다).
+function SampleFinalRow({ vals, total = 0, kind = 'count', top1Only = false }) {
+  const cells = vals || [null, null, null, null]
+  const text = (v) => {
+    if (v === null) return '-'
+    if (kind === 'pct') return `${v.toFixed(1)}%`
+    return total > 0 ? `${Math.round((v / total) * 100)}% (${v})` : '-'
+  }
+  // 토탈 칸은 바로 윗줄과 같은 규칙 — 가중평균인 분석 줄은 건수가 없어 '—',
+  // 토탈 줄은 건수를 보여준다(그래서 kind='pct'라도 total을 주면 숫자로 찍힌다).
+  const totalText = kind === 'pct' ? (total || '—') : (vals ? total : '-')
   return (
     <tr className="sample-final-row">
-      <td className="row-label">{label}</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td>-</td>
-      <td className="col-total">-</td>
+      <td className="row-label">배변</td>
+      {cells.map((v, i) => (
+        <td key={i} className={vals ? (top1Only ? maxOnlyClass(cells, i) : maxCellClass(cells, i)) : undefined}>
+          {text(v)}
+        </td>
+      ))}
+      <td className="col-total">{totalText}</td>
     </tr>
   )
 }
@@ -612,14 +634,23 @@ function SampleTable({ row, scope, expanded }) {
   const indicators = scope === 'user'
     ? SAMPLE_INDICATORS.filter(([code]) => !code.startsWith('TK-') && !code.startsWith('TF-'))
     : SAMPLE_INDICATORS
+  const cnt = (v) => {
+    const n = Number(v)
+    return Number.isNaN(n) ? 0 : Math.trunc(n)
+  }
   const allLines = indicators.map(([code, label]) => {
-    const vals = [1, 2, 3, 4].map((i) => {
-      const v = row[`${code} ${i}`]
-      const n = Number(v)
-      return Number.isNaN(n) ? 0 : Math.trunc(n)
-    })
-    const total = vals.reduce((a, b) => a + b, 0)
-    return { code, label, vals, total }
+    const vals = [1, 2, 3, 4].map((i) => cnt(row[`${code} ${i}`]))
+    // 최종배당 기준으로 다시 센 표본. 아직 '최신배당 불러오기'가 안 돈 경기는
+    // E_ 컬럼 자체가 없어(undefined) eVals를 null로 두고 빈칸으로 그린다.
+    const eRaw = [1, 2, 3, 4].map((i) => row[`E_${code} ${i}`])
+    const hasE = eRaw.some((v) => v !== null && v !== undefined && v !== '')
+    const eVals = hasE ? eRaw.map(cnt) : null
+    return {
+      code, label, vals,
+      total: vals.reduce((a, b) => a + b, 0),
+      eVals,
+      eTotal: eVals ? eVals.reduce((a, b) => a + b, 0) : 0,
+    }
   })
   const lines = expanded ? allLines : allLines.filter((l) => favCodes.has(l.code))
 
@@ -627,6 +658,15 @@ function SampleTable({ row, scope, expanded }) {
   // 눈에 보이는 숫자와 합이 안 맞아 읽는 사람이 검산할 수 없다.
   const grandVals = [0, 1, 2, 3].map((i) => lines.reduce((sum, l) => sum + l.vals[i], 0))
   const grandTotal = grandVals.reduce((a, b) => a + b, 0)
+
+  // 배변(최종배당) 쪽 합계 — 한 줄이라도 재계산돼 있을 때만 낸다.
+  const anyFinal = lines.some((l) => l.eVals)
+  const eGrandVals = anyFinal
+    ? [0, 1, 2, 3].map((i) => lines.reduce((sum, l) => sum + (l.eVals ? l.eVals[i] : 0), 0))
+    : null
+  const eGrandTotal = eGrandVals ? eGrandVals.reduce((a, b) => a + b, 0) : 0
+  // 분석 줄의 배변은 같은 가중평균을 최종배당 표본으로 한 번 더 돌린다.
+  const eLines = lines.map((l) => ({ ...l, vals: l.eVals || [0, 0, 0, 0], total: l.eTotal }))
 
   // 접었을 때만 국내/해외 블록 끝에 '분석' 줄을 붙인다. 펼치면 통합지표까지 섞여
   // 들어와 '리그 지표만 본다'는 전제가 깨지므로 그때는 계산하지 않는다(그때는 null).
@@ -638,6 +678,15 @@ function SampleTable({ row, scope, expanded }) {
   const bothAnalysis = [domAnalysis, forAnalysis].filter(Boolean)
   const totalAnalysis = bothAnalysis.length
     ? [0, 1, 2, 3].map((i) => bothAnalysis.reduce((s, a) => s + a[i], 0) / bothAnalysis.length)
+    : null
+
+  const eDomAnalysis = expanded || !anyFinal
+    ? null : weightedAnalysis(eLines.filter((l) => !isForeignCode(l.code)))
+  const eForAnalysis = expanded || !anyFinal
+    ? null : weightedAnalysis(eLines.filter((l) => isForeignCode(l.code)))
+  const eBoth = [eDomAnalysis, eForAnalysis].filter(Boolean)
+  const eTotalAnalysis = eBoth.length
+    ? [0, 1, 2, 3].map((i) => eBoth.reduce((s, a) => s + a[i], 0) / eBoth.length)
     : null
 
   return (
@@ -669,7 +718,7 @@ function SampleTable({ row, scope, expanded }) {
               {groupStart && !expanded && (
                 <>
                   <AnalysisRow label="국) 분석" vals={domAnalysis} />
-                  <SampleFinalRow />
+                  <SampleFinalRow vals={eDomAnalysis} kind="pct" top1Only />
                 </>
               )}
               <tr className={cls || undefined}>
@@ -682,7 +731,7 @@ function SampleTable({ row, scope, expanded }) {
                 ))}
                 <td className="col-total">{l.total}</td>
               </tr>
-              <SampleFinalRow />
+              <SampleFinalRow vals={l.eVals} total={l.eTotal} />
             </Fragment>
           )
         })}
@@ -690,16 +739,14 @@ function SampleTable({ row, scope, expanded }) {
         {!expanded && (
           <>
             <AnalysisRow label="해) 분석" vals={forAnalysis} />
-            <SampleFinalRow />
+            <SampleFinalRow vals={eForAnalysis} kind="pct" top1Only />
           </>
         )}
         {totalAnalysis ? (
           <tr className="sample-grand-total">
             <td className="row-label">토탈</td>
             {totalAnalysis.map((v, i) => (
-              <td key={i} className={maxCellClass(totalAnalysis, i)}>
-                {v.toFixed(1)}%
-              </td>
+              <td key={i} className={maxCellClass(totalAnalysis, i)}>{v.toFixed(1)}%</td>
             ))}
             <td className="col-total">{grandTotal}</td>
           </tr>
@@ -714,7 +761,9 @@ function SampleTable({ row, scope, expanded }) {
             <td className="col-total">{grandTotal}</td>
           </tr>
         )}
-        <SampleFinalRow />
+        {totalAnalysis
+          ? <SampleFinalRow vals={eTotalAnalysis} total={eGrandTotal} kind="pct" top1Only />
+          : <SampleFinalRow vals={eGrandVals} total={eGrandTotal} top1Only />}
       </tbody>
     </table>
   )

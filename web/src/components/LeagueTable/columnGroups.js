@@ -50,10 +50,6 @@ const DDONG_RISK_CUTS = [22, 30, 37]
 // 않는다 — 아래 목록에 있는 칸만 위아래로 값이 갈리고, 나머지(경기정보 등 값이 하나뿐인
 // 칸)는 위아래 셀을 합쳐(rowSpan) 한 번만 그린다.
 //
-// 국)지·해)지(NH_KI/NH_FI/PL_KI/PL_FI)는 26개 지표에서 나오는 값이라 지표 자체를
-// 최종배당 조건으로 다시 계산해야 바뀐다(engine.py를 건드리는 별도 작업, 아직 안 함).
-// 그래도 표 모양은 다른 확률 칸과 똑같이 두 줄로 맞추려고 값 없이(null) 등록해 둔다 —
-// 아랫줄이 항상 빈칸(—)으로 나올 뿐, 위아래 셀이 합쳐지진 않는다.
 // 값은 "아랫줄에 넣을 값을 담고 있는 컬럼". null이면 아랫줄을 빈칸으로 둔다.
 export const FINAL_FIELD = {
   // 국내배당 — 와이즈토토 배당변경 이력의 '지금 값'
@@ -66,8 +62,9 @@ export const FINAL_FIELD = {
   DDONG: 'E_DDONG', DDONG_RISK: 'E_DDONG_RISK', DDONGSA: 'E_DDONGSA',
   WIN_RISK: 'E_WIN_RISK', WIN_RISK_F: 'E_WIN_RISK_F',
   NH_KO: 'E_NH_KO', PL_KO: 'E_PL_KO',
-  // 아직 최종배당 재계산이 없는 26지표 기반 값 — 아랫줄은 항상 빈칸.
-  NH_KI: null, NH_FI: null, PL_KI: null, PL_FI: null,
+  // 국)지·해)지 — 최종배당으로 다시 센 27개 지표에서 나온다.
+  // (지표 4칸 자체도 두 줄로 갈린다 — GROUP_DEFS 아래에서 한꺼번에 등록한다)
+  NH_KI: 'E_NH_KI', NH_FI: 'E_NH_FI', PL_KI: 'E_PL_KI', PL_FI: 'E_PL_FI',
 }
 
 /** 이 칸이 위/아래 두 줄로 갈리는가. (값이 null인 항목도 갈라지므로 in으로 본다) */
@@ -97,11 +94,14 @@ export function isOddsMoved(row, colKey) {
   return oddsMoveDir(row, colKey) !== 0
 }
 
-// 확률 지표(정승%·플핸무%·플%) 중 배당에서 바로 재계산되는 4칸 — 배당처럼
-// "올랐다/내렸다"가 곧 "좋다/나쁘다"를 뜻하지 않아서(정배 확률이 오르면 플핸엔
-// 오히려 나쁠 수도 있다) 화살표는 오르든 내리든 색 구분 없이 흰색 ▲▼로만 표시한다
-// (상세보기 팝업의 .risk-arrow와 같은 규칙 — MatchDetailModal.jsx RiskCard 참고).
-const RISK_MOVE_COLS = ['WIN_RISK', 'WIN_RISK_F', 'NH_KO', 'PL_KO']
+// 확률 지표(정승%·플핸무%·플%) 8칸 전부 — 배당에서 바로 나오는 4칸(정·플)과
+// 27개 지표를 최종배당으로 다시 세어 나오는 4칸(국)지·해)지) 모두 최종배당 값이 있다.
+// 배당처럼 "올랐다/내렸다"가 곧 "좋다/나쁘다"를 뜻하지 않아서(정배 확률이 오르면
+// 플핸엔 오히려 나쁠 수도 있다) 화살표는 오르든 내리든 색 구분 없이 흰색 ▲▼로만
+// 표시한다(상세보기 팝업의 .risk-arrow와 같은 규칙 — MatchDetailModal.jsx RiskCard).
+const RISK_MOVE_COLS = ['WIN_RISK', 'WIN_RISK_F',
+                        'NH_KO', 'NH_KI', 'NH_FI',
+                        'PL_KO', 'PL_KI', 'PL_FI']
 
 /** 초기 → 최종으로 확률 지표가 움직인 방향. 1=올랐다, -1=내렸다, 0=그대로/값없음. */
 export function riskMoveDir(row, colKey) {
@@ -215,6 +215,14 @@ const GROUP_DEFS = [
   // (홈/원정)인 과거 경기만 센다. api/engine.py get_samples_fast의 'K-PL' 참고.
   ['K-PL', '27. 국) 플핸 분석'],
 ]
+
+// 27개 지표의 4칸(핸승/핸무/무/역)도 배당처럼 두 줄로 갈린다 — 아랫줄은 '최신배당
+// 불러오기'가 최종배당 기준으로 표본을 다시 세어 저장해 둔 E_ 컬럼이다
+// (api/final_indicators.py). 배당 칸과 달리 화살표는 붙이지 않는다: 표본 개수는
+// 늘고 주는 것 자체에 좋고 나쁨이 없어서 재계산된 개수만 그대로 보여준다.
+for (const [code] of GROUP_DEFS) {
+  for (let i = 1; i <= 4; i += 1) FINAL_FIELD[`${code} ${i}`] = `E_${code} ${i}`
+}
 
 const SUB4 = ['핸승', '핸무', '무', '역']
 

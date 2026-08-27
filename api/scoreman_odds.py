@@ -118,12 +118,15 @@ def season_schedule(league_id, season) -> list:
                 # [0]=경기ID [3]=킥오프 [4]=홈팀ID [5]=원정팀ID
                 if not isinstance(g, list) or len(g) < 6:
                     continue
+                # 리그·시즌에 따라 팀ID 자리(g[4]/g[5])가 리스트 등 해시 불가능한
+                # 값으로 오는 경우가 있다 — 그런 경기는 팀명 없이("") 건너뛴다.
+                ht_id, at_id = g[4], g[5]
                 out.append({
                     "mid": str(g[0]),
                     "R": f"{rnd}R" if rnd.isdigit() else rnd,
                     "dt": str(g[3] or ""),
-                    "HT": teams.get(g[4], ""),
-                    "AT": teams.get(g[5], ""),
+                    "HT": teams.get(ht_id, "") if isinstance(ht_id, (str, int)) else "",
+                    "AT": teams.get(at_id, "") if isinstance(at_id, (str, int)) else "",
                 })
 
     walk(d.get("ScheduleList") or {})

@@ -95,18 +95,20 @@ def _num(df: pd.DataFrame, name: str) -> pd.Series:
     return pd.to_numeric(df[name], errors='coerce')
 
 
-def _idx_pl_share(df: pd.DataFrame, codes: list) -> pd.Series:
+def _idx_pl_share(df: pd.DataFrame, codes: list, prefix: str = '') -> pd.Series:
     """26개 지표 블록에서 '무+역'(=순수 플핸)이 차지하는 비율(%).
 
     engine.compute_plushandi()가 PH_F/PH_K를 만드는 방식과 똑같이 13개 지표의
     4칸을 전부 더한 뒤, 3번(무)·4번(역) 칸만 분자로 쓴다. 표본 하한도 같은
     PH_MIN_SAMPLE을 써야 PH_F/PH_K와 값이 나오는 경기가 서로 어긋나지 않는다.
+
+    prefix='E_'를 주면 최종배당(배변 후) 기준으로 다시 센 지표를 읽는다.
     """
     tot = pd.Series(0.0, index=df.index)
     pl = pd.Series(0.0, index=df.index)
     for code in codes:
         for i in range(4):
-            col = f'{code} {i + 1}'
+            col = f'{prefix}{code} {i + 1}'
             if col not in df.columns:
                 continue
             v = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
@@ -295,9 +297,9 @@ def attach(df: pd.DataFrame, table: dict) -> pd.DataFrame:
 
 
 # 최종배당(배변 후)으로 다시 계산해서 화면에 두 번째 줄로 보여줄 값들.
-# 배당에서 직접 나오는 것만 넣는다 — 국)지·해)지(NH_KI/PL_KI/NH_FI/PL_FI)는 26개
-# 지표 기반이라 지표를 최종배당으로 다시 계산해야 바뀐다(그건 별도 작업). 그 칸들은
-# 화면에서 위아래 셀을 합쳐 한 번만 보여준다.
+# 여기에는 배당에서 곧바로 나오는 것만 넣는다. 국)지·해)지(NH_KI/PL_KI/NH_FI/PL_FI)는
+# 26개 지표에서 나오므로 이 목록이 아니라 attach_for_league() 끝에서 따로 붙인다 —
+# '최신배당 불러오기'가 최종배당으로 다시 센 지표(E_ 컬럼)를 읽는 방식이다.
 FINAL_ODDS_DERIVED = ['RISK', 'WIN_RISK', 'WIN_RISK_F', 'NH_KO', 'PL_KO', 'ODD_FLAG',
                       'EV_WIN', 'EV_DRAW', 'EV_PL', 'EV_COVER', 'EV_BEST', 'EV_N']
 
@@ -344,4 +346,12 @@ def attach_for_league(df: pd.DataFrame) -> pd.DataFrame:
     for c in FINAL_ODDS_DERIVED:
         if c in fout.columns:
             out['E_' + c] = fout[c]
+
+    # 국)지·해)지 — 최종배당 기준으로 다시 센 27개 지표(E_ 컬럼)에서 나온다.
+    # '최신배당 불러오기'가 저장해 둔 값을 읽기만 한다(api/final_indicators.py).
+    # 아직 재계산이 돌지 않은 경기는 그 컬럼이 비어 있어 자연히 NaN이 된다.
+    out['E_NH_KI'] = _num(df, 'E_PH_K')
+    out['E_NH_FI'] = _num(df, 'E_PH_F')
+    out['E_PL_KI'] = _idx_pl_share(df, engine.PH_K_CODES, prefix='E_')
+    out['E_PL_FI'] = _idx_pl_share(df, engine.PH_F_CODES, prefix='E_')
     return out
