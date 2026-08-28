@@ -3091,6 +3091,14 @@ def _recompute_one_league(db: str, code: str, include_historical: bool, scope: s
             league_df[c] = np.nan
         league_df.loc[new_ind.index, c] = new_ind[c].values
 
+    # ── 배변배당(최신배당) 기준 지표(E_ 접두사)도 같이 다시 센다 ──
+    # 위와 같은 대상(sub) 중, 최종배당(EKW~EFHL)이 실제로 들어와 있는 경기만
+    # final_indicators.attach_to_df()가 골라서 채운다 — 최종배당이 없는 경기는
+    # 손댈 게 없어 그대로 둔다. 비교 표본(과거 경기 풀)은 항상 초기배당 기준으로
+    # 고정한다는 원칙은 그 함수 안에서 그대로 지켜진다(engine.py는 안 건드림).
+    leagues_for_total = [code] if _is_user_scope(scope) else PATHS.LEAGUES
+    FINALIND.attach_to_df(league_df, sub.index, db, leagues_for_total)
+
     if not _is_user_scope(scope):
         PATHS.backup_master()     # 공식 데이터는 덮어쓰기 전에 자동 백업
 
@@ -3106,6 +3114,11 @@ def _recompute_one_league(db: str, code: str, include_historical: bool, scope: s
 @app.post("/api/leagues/{code}/recompute")
 def league_recompute(code: str, body: LeagueRecomputeBody, user: dict = Depends(get_current_user)):
     """리그 하나만 26개 지표·플핸예측을 다시 계산한다.
+
+    초기배당 기준과 배변배당(최신배당) 기준 둘 다 다시 센다 — 배변배당 쪽은 최종배당
+    (EKW~EFHL)이 이미 들어와 있는 경기에만 채워진다(_recompute_one_league 안의
+    FINALIND.attach_to_df 참고). include_historical=False면 예정 경기만, True면
+    과거 경기까지 전부가 대상이다.
 
     표본(모집단)은 스코프에 따라 다르다 — 내 데이터는 그 리그 하나, 공식 데이터는
     6대리그를 합친 통합DB. 공식 데이터라도 '쓰는 대상'은 이 리그 하나뿐이라 다른 리그

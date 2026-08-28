@@ -511,11 +511,11 @@ export default function LeaguePage({ code, scope }) {
         <div style={{ marginTop: 10 }}>
           <div className="league-recompute-row">
             <button className="btn-primary" disabled={busyRecomputePending} onClick={runRecomputePending}
-                   title="이 리그의 예정 경기만 다시 계산합니다.">
+                   title="이 리그의 예정 경기만, 초기배당·배변배당 둘 다 다시 계산합니다.">
               {busyRecomputePending ? '재분석 중...' : '🔄 예정경기 재분석'}
             </button>
             <button className="btn-danger" disabled={busyRecomputeAll} onClick={runRecomputeAll}
-                   title="이 리그의 과거 경기까지 전부 다시 계산합니다(오래 걸립니다).">
+                   title="이 리그의 과거 경기까지 전부, 초기배당·배변배당 둘 다 다시 계산합니다(오래 걸립니다).">
               {busyRecomputeAll ? '재계산 중...' : '🔧 통합 재분석'}
             </button>
             <div className="league-stat">
