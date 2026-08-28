@@ -4,6 +4,7 @@ import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
 import { isStarred, formatTime, formatDt, scoreClass } from '../../utils/format'
 import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
+import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import './MatchDetailModal.css'
 
 
@@ -147,6 +148,9 @@ function OddsTable({ row }) {
   const at = String(row.AT || '').trim()
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
   const homeFav = homeIsFav(row)
+  // 해외 배당이 크게 움직인 경기인가 — 리그 표 '지표 > 배변' 칸과 같은 값을 쓴다.
+  const moveGrade = oddsMoveGrade(row)
+  const moveTitle = oddsMoveTitle(row)
   // 순위 — 배당표는 칸이 좁아 '위'를 떼고 숫자만 쓴다(팝업 제목 줄은 (3위) 그대로).
   const rankNum = (v) => {
     if (v === null || v === undefined || v === '') return ''
@@ -239,7 +243,19 @@ function OddsTable({ row }) {
               </tr>
               {final && (
                 <tr className="odds-final-row">
-                  <td className="row-label">배변</td>
+                  <td className="row-label">
+                    배변
+                    {/* 배변 신뢰등급은 해외 배당 줄에만 붙인다 — 국내(와이즈토토)는 배당이
+                        움직여도 최신값이 더 정확하다는 증거가 없었다(utils/oddsMove.js 참고). */}
+                    {label === '해외 배당' && moveGrade && (
+                      <span
+                        className={`odds-move-grade ${moveGrade === '강' ? 'strong' : 'weak'}`}
+                        title={moveTitle}
+                      >
+                        ({moveGrade})
+                      </span>
+                    )}
+                  </td>
                   {[w, d, l].map((initKey, ci) => {
                     const dir = oddsDir(row[initKey], row[final[ci]])
                     const cls = ci === 0 ? colClass('w') : ci === 2 ? colClass('l') : undefined
@@ -862,8 +878,8 @@ function MyPickBar({ row, onSavePick }) {
           ))}
         </select>
       </label>
-      <label className="mypick-bar-field" title="이 픽을 왜 이렇게 봤는지 — 오답노트용, 판정에는 안 쓰인다">
-        오답노트
+      <label className="mypick-bar-field" title="이 픽을 왜 이렇게 봤는지 — 결과반성용, 판정에는 안 쓰인다">
+        결과반성
         <select value={reasonTag} onChange={handleReasonTagChange}>
           <option value="">선택 안함</option>
           {REASON_TAG_OPTIONS.map((o) => (

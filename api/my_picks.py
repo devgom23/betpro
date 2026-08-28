@@ -3,7 +3,7 @@
 계정 본인의 predlog.db(prediction_log와 같은 파일, 별도 테이블)에 저장한다.
 리그 표 자체(to_sql replace)와 분리되어 있어 재업로드·재계산에 영향받지 않는다.
 
-reason_tag: 오답노트용 "왜 이렇게 봤나" 태그(1개, pickOptions.js REASON_TAG_OPTIONS
+reason_tag: 결과반성용 "왜 이렇게 봤나" 태그(1개, pickOptions.js REASON_TAG_OPTIONS
 중 하나). pick(무엇을 걸지)과 반드시 분리한다 — 판정(_MY_PICK_VERDICT_MAP)이
 pick 문자열을 정확히 매칭해 적중/보험/미적을 가르므로, 여기 태그를 섞으면 안 된다.
 """

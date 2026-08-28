@@ -34,7 +34,7 @@ export default function WeekListPage() {
   // 일반정보는 기본으로 접어 둔다 — 시즌/날짜는 요일 구간 헤더로 이미 알 수 있어
   // 접힌 채로 리그명·라운드·시간만 보여도 충분하다(LeagueTable.jsx의 hasLeagueLabel
   // 처리 덕에 접혀도 리그명은 계속 보인다).
-  const [collapsed, setCollapsed] = useState(() => new Set(['일반정보']))
+  const [collapsed, setCollapsed] = useState(() => new Set(['일반정보', '지표']))
   const [showRiskLegend, setShowRiskLegend] = useState(false)
   const [busyRefreshOdds, setBusyRefreshOdds] = useState(false)
   const [refreshOddsNotice, setRefreshOddsNotice] = useState('')

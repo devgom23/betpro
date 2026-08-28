@@ -3,6 +3,7 @@
 // 산출 로직은 건드리지 않고, "표시 순서·라벨·색상"만 그대로 재현한다.
 
 import { formatDt } from '../../utils/format'
+import { ODDS_GRADE_KEY, oddsMoveGrade } from '../../utils/oddsMove'
 
 const GEN_COLS = ['L', 'S', 'R', 'No', 'DT', 'TM']
 // 그 경기 '직전까지'의 시즌 성적. 백엔드가 조회 시 계산해 붙여준다.
@@ -273,6 +274,16 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
     groups.push({ label1: '똥배', label2: '', kind: 'flat', cols: ddongLeaves })
   }
 
+  // 지표 — 지금은 '배변' 한 칸뿐이다. 저장된 컬럼이 아니라 해외배당(FW/FL·EFW/EFL)에서
+  // 그때그때 계산하는 값이라(utils/oddsMove.js) available에 없다. 해외 초기배당이
+  // 있는 표에서만 낸다 — 최종배당이 아직 없으면 값은 빈칸으로 나온다.
+  if (available.has('FW') && available.has('FL')) {
+    groups.push({
+      label1: '지표', label2: '', kind: 'flat',
+      cols: [{ key: ODDS_GRADE_KEY, sub: '배변' }],
+    })
+  }
+
   addFlatGroup('국내배당', '승(W) / 무(D) / 패(L)', K_ODDS_COLS)
   addFlatGroup('해외배당', '승(W) / 무(D) / 패(L)', F_ODDS_COLS)
 
@@ -326,6 +337,7 @@ const COL_WIDTH = {
   KW: 59, KD: 59, KL: 59, KH: 36, KHW: 59, KHD: 59, KHL: 59,
   FW: 59, FD: 59, FL: 59, FH: 36,
   DDONG: 40, DDONG_RISK: 50, DDONGSA: 40,
+  [ODDS_GRADE_KEY]: 40,          // '강'/'약' 한 글자 — 똥배 순번 칸(40)과 같은 폭
   WIN_RISK: 50, WIN_RISK_F: 50,
   NH_KO: 50, NH_KI: 50, NH_FI: 50,
   PL_KO: 50, PL_KI: 50, PL_FI: 50,
@@ -402,6 +414,8 @@ export function formatCell(group, col, value, row) {
     const n = toNum(value)
     return n === null ? '' : `${Math.round(n)}%`
   }
+  // 배변 신뢰등급 — 저장된 값이 없어 value는 늘 undefined다. 행에서 직접 계산한다.
+  if (g1 === '지표' && sub === '배변') return oddsMoveGrade(row)
   if (g1 === '경기정보' && sub === 'RT') return rtToText(value)
   if (g1 === '경기정보' && (sub === 'HS' || sub === 'AS')) {
     const n = toNum(value)
@@ -532,6 +546,7 @@ export function myHitStyle(value) {
   if (value === 'P-똥배') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-원정') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-핸↑') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  if (value === 'P-표X') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-관전') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-어렵') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'B-고민' || value === '벳고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
@@ -624,6 +639,19 @@ function cellStyleImpl(group, col, value, row) {
     const [safe, mid, warn] = DDONG_RISK_CUTS
     const tone =
       n < safe ? 'blue' : n < mid ? 'gray' : n < warn ? 'yellow' : 'red'
+    return {
+      background: `var(--chip-${tone}-bg)`,
+      color: `var(--chip-${tone}-fg)`,
+      fontWeight: 700,
+    }
+  }
+
+  // 배변 신뢰등급 — 똥배 '분석'과 같은 칩 톤(옅은 배경 + 진한 글씨)으로 맞춘다.
+  // 강은 눈에 들어오는 파랑, 약은 한 톤 죽인 회색. 빈칸은 아무 색도 주지 않는다.
+  if (g1 === '지표' && sub === '배변') {
+    const grade = oddsMoveGrade(row)
+    if (!grade) return undefined
+    const tone = grade === '강' ? 'blue' : 'gray'
     return {
       background: `var(--chip-${tone}-bg)`,
       color: `var(--chip-${tone}-fg)`,

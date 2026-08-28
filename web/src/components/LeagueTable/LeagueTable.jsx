@@ -91,7 +91,7 @@ export default function LeagueTable({
   // ref는 즉시(동기) 최신값을 읽고 쓸 수 있어 이 경쟁 상태를 막아준다.
   const pickOverridesRef = useRef({})
   const [pickOverrides, setPickOverrides] = useState({})
-  const [collapsedState, setCollapsedState] = useState(() => new Set())
+  const [collapsedState, setCollapsedState] = useState(() => new Set(['지표']))
   const collapsed = collapsedProp ?? collapsedState
   const setCollapsed = onCollapsedChange ?? setCollapsedState
   const [showRiskLegendState, setShowRiskLegendState] = useState(false)
@@ -168,7 +168,7 @@ export default function LeagueTable({
     }
   }
 
-  // 별표/내픽/P태그/적중여부/메모/오답노트태그 공용 저장 — patch에 준 필드만 바꾸고
+  // 별표/내픽/P태그/적중여부/메모/결과반성태그 공용 저장 — patch에 준 필드만 바꾸고
   // 나머지는 현재 값을 유지한 채 전체 상태를 다시 올린다(서버는 매번 값을 다 받아 upsert).
   async function savePick(row, patch) {
     const key = matchKey(row)
@@ -368,6 +368,19 @@ export default function LeagueTable({
                       </th>
                     ))
                   }
+                  // '지표'는 원래 칸이 하나뿐이라 접어도 숨겨지는 게 없다 — '···'
+                  // 대신 컬럼명을 그대로 두어 접힌 채로도 무슨 칸인지 알 수 있게 한다.
+                  if (g.label1 === '지표') {
+                    return [
+                      <th
+                        key={`${gi}-c`}
+                        className={`sub-header collapsed-cell${dividerClass(g, isLastGroup)}`}
+                        style={{ width: columnWidth(g, g.cols[0]) }}
+                      >
+                        {g.cols[0].sub}
+                      </th>,
+                    ]
+                  }
                   return [
                     <th
                       key={`${gi}-c`}
@@ -543,6 +556,20 @@ export default function LeagueTable({
                         cellKeys = hasLeagueLabel
                           ? ['__merge', '__merge', '__merge']
                           : ['__merge', '__merge']
+                      } else if (g.label1 === '지표') {
+                        // 지표는 칸이 하나뿐이라 접어도 펼친 것과 똑같이 그린다 —
+                        // 값(강/약)과 칩 색까지 그대로 살린다.
+                        const c0 = g.cols[0]
+                        cells = [
+                          <td
+                            key={`${gi}-c`}
+                            className={`collapsed-cell${dividerClass(g, isLastGroup)}`}
+                            style={cellStyle(g, c0, row[c0.key], row) || undefined}
+                          >
+                            {formatCell(g, c0, row[c0.key], row)}
+                          </td>,
+                        ]
+                        cellKeys = ['__merge']
                       } else {
                         cells = [
                           <td key={`${gi}-c`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>

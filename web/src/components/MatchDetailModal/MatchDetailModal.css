@@ -371,6 +371,21 @@
   color: #fff;
 }
 
+/* 배변 신뢰등급 (강)/(약) — '해외 배당'의 배변 행 라벨 옆에만 붙는다.
+   라벨 칸이 좁아 알약 배지를 넣으면 줄이 밀리므로, 배경 없이 글자색만 칩과
+   같은 색(--chip-*-fg)으로 준다. */
+.detail-table.odds-table .odds-move-grade {
+  margin-left: 2px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.detail-table.odds-table .odds-move-grade.strong {
+  color: var(--chip-blue-fg);
+}
+.detail-table.odds-table .odds-move-grade.weak {
+  color: var(--text-muted);
+}
+
 /* 배변(최종배당) 행 — 리그 표의 .row-final과 같은 톤으로, 바로 위 초기값 행과
    구분되게 옅은 배경 + 점선 윗줄만 준다. */
 .detail-table.odds-table tr.odds-final-row td,
