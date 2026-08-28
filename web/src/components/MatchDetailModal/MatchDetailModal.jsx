@@ -130,7 +130,10 @@ function DdongNote({ row }) {
 
 // 홈팀/점수/원정팀을 승(홈)·무·패(원정) 컬럼과 같은 자리에 맞춰 배당표 맨 위에 얹는다.
 // 경기 결과가 아직 없어도(예정 경기) 팀명은 항상 보이고, 점수만 '-'로 비워둔다.
-// 팀 이름 옆엔 오늘 그 팀이 정배(정)인지 역배(역)인지 표시한다.
+// 팀 이름 옆엔 그 라운드 직전 순위를 숫자만 붙이고, 정배(정)/역배(역)는 아랫줄로 내린다.
+//   서울(1)
+//   (정)
+// 팝업 제목 줄은 한 줄에 "서울(1위)(정)"로 그대로 둔다 — 거기는 가로 폭이 넉넉하다.
 function OddsTable({ row }) {
   // 5번째 자리(final)는 그 배당의 배변(최종배당) 칸 이름 — 해외 핸디는 스코어맨이
   // 무(D) 값을 안 주고 최종배당 자체를 안 모으므로 배변 행이 없다.
@@ -144,10 +147,23 @@ function OddsTable({ row }) {
   const at = String(row.AT || '').trim()
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
   const homeFav = homeIsFav(row)
+  // 순위 — 배당표는 칸이 좁아 '위'를 떼고 숫자만 쓴다(팝업 제목 줄은 (3위) 그대로).
+  const rankNum = (v) => {
+    if (v === null || v === undefined || v === '') return ''
+    const n = Number(v)
+    return Number.isNaN(n) ? '' : `(${Math.trunc(n)})`
+  }
+  // (정)/(역)은 팀명·순위 아래 줄로 내린다. 줄바꿈을 이 함수 안에 같이 넣어 둬야
+  // 배당이 없어 정/역을 못 가리는 경기(homeFav === null)에서 빈 줄만 남지 않는다.
   const roleSuffix = (isHome) => {
     if (homeFav === null) return null
     const isFav = isHome ? homeFav : !homeFav
-    return <span className={isFav ? 'odds-role-fav' : 'odds-role-dog'}> {isFav ? '(정)' : '(역)'}</span>
+    return (
+      <>
+        <br />
+        <span className={isFav ? 'odds-role-fav' : 'odds-role-dog'}>{isFav ? '(정)' : '(역)'}</span>
+      </>
+    )
   }
   // 정배 쪽 컬럼(승=홈팀 칸 / 패=원정팀 칸) 전체에 아주 연한 파란 배경을 준다 —
   // 홈이 정배면 '승' 컬럼(KW/FW/FHW), 원정이 정배면 '패' 컬럼(KL/FL/FHL).
@@ -182,6 +198,7 @@ function OddsTable({ row }) {
           <th className="row-label" />
           <th className="odds-team-name">
             {ht}
+            {rankNum(row.HP)}
             {roleSuffix(true)}
           </th>
           <th className="odds-score-cell">
@@ -197,6 +214,7 @@ function OddsTable({ row }) {
           </th>
           <th className="odds-team-name">
             {at}
+            {rankNum(row.AP)}
             {roleSuffix(false)}
           </th>
         </tr>

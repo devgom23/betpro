@@ -131,7 +131,8 @@ def _warm_master_cache_async():
             db_path = PATHS.get_master_db()
             for lg in DATA.LEAGUES:
                 DATA.load_league_df(db_path, lg)
-            DATA.load_total_df(db_path)   # 상세보기(상대전적)가 쓰는 통합DB
+            DATA.load_total_df(db_path)        # 통합DB 탭이 쓰는 전체 표
+            DATA.load_total_h2h_df(db_path)    # 상세보기(상대전적)가 쓰는 슬림 표
         except Exception:
             pass
 
@@ -1330,12 +1331,16 @@ def _h2h_source_df(db: str, scope: str, code: str) -> pd.DataFrame:
       master → 6대리그를 합친 통합DB(팀이 어느 리그 소속이든 다 뒤진다)
       user   → 내 데이터는 '통합DB' 자체가 없으므로(리그별 완전 독립), 그 리그
                하나만 본다. code 없이 호출되면(있을 수 없는 경우) 빈 결과를 낸다.
+
+    둘 다 '상대전적용 슬림 표'(DATA.H2H_COLS 14개 컬럼)를 쓴다 — 전체 표는 컬럼이 370개라
+    읽는 데만 3.5초가 걸리는데, 상대전적·시즌전적이 보는 건 그중 14개뿐이다. 새 컬럼을
+    쓰려면 DATA.H2H_COLS에 먼저 넣어야 한다(없으면 조용히 무시된다).
     """
     if scope != PATHS.SCOPE_USER:
-        return DATA.load_total_df(db)
+        return DATA.load_total_h2h_df(db)
     if not code:
         return pd.DataFrame()
-    return DATA.load_league_df(db, code)
+    return DATA.load_league_h2h_df(db, code)
 
 
 @app.get("/api/head_to_head")
@@ -1401,7 +1406,9 @@ def _team_streaks(db, scope, code, ht, at, row) -> dict:
     """두 팀의 최고 연속 기록을 그 리그 데이터로만 구한다(없으면 None)."""
     if not db or not code or not ht or not at:
         return None
-    league_df = DATA.load_league_df(db, code)
+    # 연속기록은 S/R/No/HT/AT/HS/AS만 보므로 상대전적과 같은 슬림 표를 쓴다
+    # (370컬럼짜리 전체 표를 읽으면 리그 하나당 콜드 620ms가 더 붙는다).
+    league_df = DATA.load_league_h2h_df(db, code)
     if league_df.empty:
         return None
     args = (row.get("S"), row.get("R"), row.get("No"))

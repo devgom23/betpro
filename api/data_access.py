@@ -176,6 +176,82 @@ def load_total_df(db_path: str) -> pd.DataFrame:
     return df
 
 
+# 상대전적·시즌전적이 실제로 읽는 컬럼만 추린 목록.
+#
+# 리그 테이블은 컬럼이 370개 가까이 된다(26개 지표 + 배당 + 순위/폼 등). 그런데
+# 상대전적 계산(_head_to_head_calc)과 시즌전적(_season_matches)이 보는 건 아래 14개
+# 뿐이다. 예전엔 상세보기 팝업이 열릴 때마다 통합DB를 만들려고 370컬럼짜리 리그 6개를
+# 통째로 읽었다 — 실측 3,545ms(리그당 520~640ms). 같은 데이터를 14컬럼만 읽으면
+# 178ms(20배)이고, 계산 결과는 완전히 동일하다(summary/wdl/matches 전부 대조 확인).
+#
+# ⚠ 여기에 없는 컬럼을 상대전적 쪽에서 쓰기 시작하면 조용히 KeyError가 아니라 "그
+#   컬럼이 없는 것처럼" 동작한다(_head_to_head_calc가 `if c in m.columns`로 거른다).
+#   상대전적/시즌전적/엑셀에서 새 컬럼을 쓰려면 반드시 이 목록에 먼저 추가할 것.
+# "No"는 상대전적 화면에는 안 나오지만 연속기록(standings.max_streaks_before)이 경기
+# 순서를 매기는 데 쓴다 — 빼면 그 함수가 KeyError를 낸다.
+H2H_COLS = ["S", "R", "No", "DT", "HT", "HS", "AS", "AT", "RT",
+            "KW", "KD", "KL", "FW", "FD", "FL"]
+
+
+def _read_table_slim(db_path: str, table: str, cols: list) -> pd.DataFrame:
+    """테이블에서 지정한 컬럼만 읽는다(없는 컬럼은 조용히 건너뛴다)."""
+    if not os.path.exists(db_path):
+        return pd.DataFrame()
+    con = sqlite3.connect(db_path)
+    try:
+        names = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if table not in names:
+            return pd.DataFrame()
+        have = {r[1] for r in con.execute(f'PRAGMA table_info("{table}")')}
+        use = [c for c in cols if c in have]
+        if not use:
+            return pd.DataFrame()
+        sel = ", ".join(f'"{c}"' for c in use)
+        return pd.read_sql(f'SELECT {sel} FROM "{table}"', con)
+    finally:
+        con.close()
+
+
+def load_league_h2h_df(db_path: str, league: str) -> pd.DataFrame:
+    """단일 리그 — 상대전적용 슬림 표(mtime 캐시). 내 데이터(user 스코프)가 쓴다."""
+    key = ("league_h2h:" + league, db_path)
+    mt = PATHS.db_mtime(db_path)
+    hit = _CACHE.get(key)
+    if hit and hit[0] == mt:
+        return hit[1]
+    df = _read_table_slim(db_path, league, H2H_COLS)
+    _CACHE[key] = (mt, df)
+    return df
+
+
+def load_total_h2h_df(db_path: str) -> pd.DataFrame:
+    """6개 리그를 합친 상대전적용 슬림 통합DB(mtime 캐시).
+
+    load_total_df(370컬럼)와 행 수·값이 같고 컬럼만 14개로 줄인 것이다. 상세보기 팝업과
+    상대전적 탭은 이쪽을 쓴다 — 저장 직후처럼 캐시가 풀린 상태에서 팝업을 처음 열 때
+    4.1초를 기다리던 게 0.3초대로 줄어든다.
+
+    ⚠ 화면 표(리그 조회·엑셀)는 여전히 load_league_df_ev를 써야 한다. 이 표에는 지표도
+      배당(E*)도 순위도 없다.
+    """
+    key = ("total_h2h", db_path)
+    mt = PATHS.db_mtime(db_path)
+    hit = _CACHE.get(key)
+    if hit and hit[0] == mt:
+        return hit[1]
+    frames = []
+    for lg in LEAGUES:
+        d = load_league_h2h_df(db_path, lg)
+        if len(d):
+            d = d.copy()
+            d["Source_League"] = lg
+            frames.append(d)
+    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    _CACHE[key] = (mt, df)
+    return df
+
+
 def cached_derive(db_path: str, key_name: str, build):
     """DataFrame이 아닌 '파생 결과'(인덱스·집계 등)도 같은 mtime 캐시에 얹는다.
 
