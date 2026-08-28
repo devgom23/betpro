@@ -191,3 +191,72 @@
   gap: 10px;
   margin-top: 14px;
 }
+
+/* ── 새 라운드 자동 가져오기 ──
+   시즌·라운드를 입력할 필요가 없는 주 경로라 아래 수동 단계(1·2)보다 위에 두고,
+   테두리를 줘서 한 덩어리로 보이게 한다. 간격·크기는 6-1장 눈금을 따른다. */
+.crawl-auto {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.crawl-auto-btn {
+  white-space: nowrap;
+}
+
+.crawl-auto .crawl-hint {
+  margin: 0;
+  flex: 1;
+  min-width: 220px;
+  line-height: 1.5;
+}
+
+/* 자동 경로가 주(主)이고 아래 1·2단계는 대비책이라는 걸 눈으로 갈라 준다 */
+.crawl-manual-divider {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+/* 자동으로 가져왔을 때만 나오는 요약 — 어느 라운드를 찾았는지, 배당이 몇 건 붙었는지 */
+.crawl-auto-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--bg-surface);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.crawl-auto-info p {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.crawl-auto-info strong {
+  color: var(--text-primary);
+}
+
+.crawl-auto-label {
+  flex: 0 0 62px;
+  color: var(--text-muted);
+}
+
+.crawl-auto-warn {
+  color: var(--chip-red-fg);
+}

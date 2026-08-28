@@ -91,6 +91,41 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
       return res
     })
 
+  // 시즌·라운드를 손으로 안 넣고 이 리그에 저장된 '최신 라운드'를 그대로 대상으로 삼는다.
+  //
+  // 해배 팝업의 같은 버튼은 '다음 라운드'(latest + 1)를 새로 만드는 것이지만, 국배는
+  // 새 경기를 만들지 않고 이미 있는 경기의 국내배당 칸만 채우는 작업이라 대상이 다르다.
+  // 해배로 새 라운드를 등록하면 그게 곧 최신 라운드가 되므로, 그 다음에 이 버튼을 누르면
+  // 방금 등록한 라운드에 국내배당이 붙는다.
+  //
+  // 회차(year/kr_round)는 비워서 보낸다 — 서버가 그 라운드 경기 날짜로 알아서 찾는다.
+  const handleAutoFetch = () =>
+    run('auto', async () => {
+      const s = (config?.latest_season || '').trim()
+      const r = (config?.latest_round || '').trim()
+      if (!s || !r) {
+        setError('이 리그에 저장된 경기가 없어 최신 라운드를 찾을 수 없습니다. 아래에서 직접 넣어 주세요.')
+        return null
+      }
+      // 무엇을 대상으로 했는지 입력칸에도 남겨 둔다 — 결과를 보고 바로 옆 라운드로
+      // 고쳐서 다시 누르기 쉽게.
+      setMatchSeason(s)
+      setMatchRound(r)
+      const res = await api.post('/api/crawl/kr/fetch', {
+        scope,
+        code,
+        season: s,
+        round: r,
+        league_name: leagueName.trim() || null,
+        year: '',
+        kr_round: '',
+      })
+      setResult(res)
+      setPicks({})
+      setManualText({})
+      return res
+    })
+
   const handleApply = () =>
     run('alias', async () => {
       const mapping = {}
@@ -146,6 +181,30 @@ export default function KrCrawlModal({ code, scope, label, onClose, onSaved }) {
           {label || code} · 와이즈토토의 초기배당을 읽어 이미 있는 경기의 국내배당 칸만 채웁니다
           (새 경기는 만들지 않습니다).
         </p>
+
+        {/* 자동 경로 — 시즌·라운드를 입력할 필요가 없다. 아래 1단계는 이게 안 될 때 쓰는 수동 경로. */}
+        <div className="kr-crawl-auto">
+          <button
+            className="btn-search kr-crawl-auto-btn"
+            onClick={handleAutoFetch}
+            disabled={busy === 'auto' || !config?.latest_round}
+          >
+            {busy === 'auto' ? '가져오는 중...' : '🔄 최신 라운드 자동 가져오기'}
+          </button>
+          <span className="kr-crawl-hint">
+            {config?.latest_round ? (
+              <>
+                이 리그의 <strong>가장 최근 라운드</strong>(
+                {config.latest_season} {config.latest_round})에 국내배당을 채웁니다. 회차는 그
+                라운드 경기 날짜로 알아서 찾습니다.
+              </>
+            ) : (
+              '저장된 경기가 없어 최신 라운드를 찾을 수 없습니다.'
+            )}
+          </span>
+        </div>
+
+        <p className="kr-crawl-manual-divider">아래는 다른 라운드를 받을 때 쓰는 수동 방법입니다</p>
 
         {/* ① 가져올 경기 — 이것만 넣으면 회차는 알아서 찾는다 */}
         <div className="kr-crawl-step">

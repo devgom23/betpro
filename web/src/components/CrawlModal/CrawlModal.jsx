@@ -30,6 +30,9 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
   // 확인하고 고칠 수 있게 입력칸으로 둔다 — 사이트 화면 구조가 또 바뀌어 라운드를
   // 잘못 읽어도 엉뚱한 라운드로 통째로 저장되는 사고를 여기서 막는다.
   const [saveRound, setSaveRound] = useState('')
+  // 이 결과를 어느 방법으로 가져왔는지 — 팀명 치환 후 '다시 가져오기'가 같은 방법으로
+  // 다시 돌아야 한다(자동으로 가져온 걸 크롬 창 경로로 다시 부르면 엉뚱한 게 온다).
+  const [lastMode, setLastMode] = useState('browser')
 
   const loadConfig = useCallback(async () => {
     try {
@@ -85,8 +88,31 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
   const handleFetch = () =>
     run('fetch', async () => {
       const res = await api.post('/api/crawl/fetch', { scope, code })
+      setLastMode('browser')
       setResult(res)
       setSaveRound(res.rounds?.length === 1 ? res.rounds[0] : '')
+      setPicks({})
+      setManualText({})
+      return res
+    })
+
+  // 크롬 창 없이 스코어맨 일정 API로 "DB 최신 라운드 + 1"을 통째로 가져온다.
+  // 응답에 rounds 배열이 없으므로(단일 라운드가 확정돼 있다) 아래 미리보기·저장이
+  // 그대로 쓰도록 rounds 모양만 맞춰 준다.
+  //
+  // with_domestic: false — 여긴 '해배 가져오기' 팝업이라 해외배당만 받는다. 국내배당은
+  // 국배 팝업의 역할이고, 여기서 같이 받아 버리면 어느 팝업이 무엇을 채우는지가 흐려진다
+  // (서버는 국내배당도 채울 수 있게 돼 있으니, 나중에 국배 팝업에서 켜서 쓰면 된다).
+  const handleAutoFetch = () =>
+    run('auto', async () => {
+      const res = await api.post('/api/crawl/next_round', {
+        scope,
+        code,
+        with_domestic: false,
+      })
+      setLastMode('auto')
+      setResult({ ...res, rounds: [res.round] })
+      setSaveRound(res.round || '')
       setPicks({})
       setManualText({})
       return res
@@ -111,13 +137,23 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
       }
       await api.post('/api/crawl/aliases', { scope, code, mapping })
       await loadConfig()
-      const res = await api.post('/api/crawl/fetch', { scope, code })
-      setResult(res)
-      setSaveRound(res.rounds?.length === 1 ? res.rounds[0] : '')
+      if (lastMode === 'auto') {
+        const res = await api.post('/api/crawl/next_round', {
+          scope,
+          code,
+          with_domestic: false,
+        })
+        setResult({ ...res, rounds: [res.round] })
+        setSaveRound(res.round || '')
+      } else {
+        const res = await api.post('/api/crawl/fetch', { scope, code })
+        setResult(res)
+        setSaveRound(res.rounds?.length === 1 ? res.rounds[0] : '')
+      }
       setPicks({})
       setManualText({})
       setNotice('치환 규칙을 저장했습니다. 다음부터는 자동으로 적용됩니다.')
-      return res
+      return null
     })
 
   const handleSave = () =>
@@ -157,6 +193,19 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
         <p className="modal-meta">
           {label || code} · 스코어맨 화면에 떠 있는 경기와 배당을 그대로 가져옵니다.
         </p>
+
+        {/* 자동 경로 — 시즌·라운드를 입력할 필요가 없다. 아래 1·2단계는 이게 안 될 때 쓰는 수동 경로. */}
+        <div className="crawl-auto">
+          <button className="btn-search crawl-auto-btn" onClick={handleAutoFetch} disabled={busy === 'auto'}>
+            {busy === 'auto' ? '가져오는 중...' : '🔄 새 라운드 자동 가져오기'}
+          </button>
+          <span className="crawl-hint">
+            저장된 마지막 라운드의 <strong>다음 라운드</strong>를 스스로 찾아 경기와 해외배당을
+            가져옵니다. 크롬 창을 열 필요가 없습니다. (국내배당은 국배 가져오기에서)
+          </span>
+        </div>
+
+        <p className="crawl-manual-divider">아래는 자동이 안 될 때 쓰는 수동 방법입니다</p>
 
         {/* ① 주소 */}
         <div className="crawl-step">
@@ -222,11 +271,40 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
         {result && (
           <div className="crawl-result">
             <p className="crawl-summary">
-              시즌 <strong>{result.season || '-'}</strong> · 화면에서 읽은 라운드{' '}
+              시즌 <strong>{result.season || '-'}</strong> ·{' '}
+              {lastMode === 'auto' ? '자동으로 찾은 라운드' : '화면에서 읽은 라운드'}{' '}
               <strong>{result.rounds?.join(', ') || '-'}</strong> ·{' '}
               <strong>{result.count}</strong>경기
               {result.matched_handicap > 0 && ` · 핸디배당 ${result.matched_handicap}건`}
             </p>
+
+            {lastMode === 'auto' && (
+              <div className="crawl-auto-info">
+                <p>
+                  <span className="crawl-auto-label">직전 저장</span>
+                  {result.latest_season} {result.latest_round}
+                  <span className="crawl-arrow">→</span>
+                  <strong>
+                    {result.season} {result.round}
+                  </strong>
+                </p>
+                <p>
+                  <span className="crawl-auto-label">해외배당</span>
+                  <strong>
+                    {result.overseas_filled}/{result.count}
+                  </strong>
+                  {result.overseas_error && (
+                    <span className="crawl-auto-warn"> — {result.overseas_error}</span>
+                  )}
+                </p>
+                {result.already_saved > 0 && (
+                  <p className="crawl-auto-warn">
+                    ⚠ 이 라운드는 이미 {result.already_saved}경기가 저장돼 있습니다 — 저장하면
+                    같은 경기는 새 값으로 대체됩니다.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* 저장될 라운드를 눈으로 확인하고 고칠 수 있게 — 잘못 읽었을 때 여기서 막는다 */}
             <div className="crawl-save-round">
@@ -315,9 +393,10 @@ export default function CrawlModal({ code, scope, label, onClose, onSaved }) {
                       {r.HS !== '' && r.AS !== '' ? `${r.HS} : ${r.AS}` : '-'}
                     </td>
                     <td>{r.AT}</td>
-                    <td>{r.FW}</td>
-                    <td>{r.FD}</td>
-                    <td>{r.FL}</td>
+                    <td>{r.FW ?? '-'}</td>
+                    <td>{r.FD ?? '-'}</td>
+                    <td>{r.FL ?? '-'}</td>
+                    {/* 자동 경로는 핸디기준(FH)을 받지 않는다 — 국내배당 기준 값이라 여기선 '-' */}
                     <td>{r['_핸디기준'] || '-'}</td>
                     <td>{r.FHW || '-'}</td>
                     <td>{r.FHL || '-'}</td>

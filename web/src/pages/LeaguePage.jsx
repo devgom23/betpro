@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, saveBlob } from '../api/client'
-import { useAuth } from '../context/AuthContext'
 import LeagueTable, { RiskLegendModal } from '../components/LeagueTable/LeagueTable'
 import { buildColumnGroups, groupKey, splitIndicatorBatches } from '../components/LeagueTable/columnGroups'
 import FilterForm from '../components/FilterForm/FilterForm'
@@ -28,7 +27,6 @@ function describeQuery(query) {
 }
 
 export default function LeaguePage({ code, scope }) {
-  const { user } = useAuth()
   const [filters, setFilters] = useState(null)
   const [query, setQuery] = useState(null)
   const [data, setData] = useState(null)
@@ -217,15 +215,28 @@ export default function LeaguePage({ code, scope }) {
     }
   }
 
+  // 재분석 결과 요약을 "리그명 N건 · 리그명 N건" 으로. 공식 데이터는 6대리그가 한꺼번에
+  // 돌아 여러 리그가 나오고, 내 데이터는 그 리그 하나만 나온다.
+  function summaryText(summary) {
+    return Object.entries(summary || {})
+      .filter(([, n]) => n > 0)
+      .map(([lg, n]) => `${leagues.find((l) => l.code === lg)?.label ?? lg} ${n}건`)
+      .join(' · ')
+  }
+
   async function runRecomputePending() {
     setBusyRecomputePending(true)
     setRecomputeNotice('')
     try {
+      // 두 스코프 모두 '이 리그 하나만' 돌린다. 공식 데이터도 표본은 6대리그 통합DB를
+      // 쓰지만(서버가 알아서 고른다) 값을 쓰는 대상은 이 리그뿐이라, 6개를 전부 돌릴
+      // 때와 결과가 같으면서 시간은 1/6이다(api/main.py _recompute_one_league의 ★ 주석).
       const res = await api.post(`/api/leagues/${code}/recompute`, {
-        scope, include_historical: false,
+        scope,
+        include_historical: false,
       })
-      const n = res.summary[code] ?? 0
-      setRecomputeNotice(n > 0 ? `재분석 완료 → ${n}건` : '재분석 대상(예정 경기)이 없습니다.')
+      const txt = summaryText(res.summary)
+      setRecomputeNotice(txt ? `재분석 완료 → ${txt}` : '재분석 대상(예정 경기)이 없습니다.')
       setReloadKey((k) => k + 1)
     } catch (err) {
       setRecomputeNotice(`실패: ${err.message}`)
@@ -235,17 +246,25 @@ export default function LeaguePage({ code, scope }) {
   }
 
   async function runRecomputeAll() {
-    if (!window.confirm('과거 경기를 포함해 전체를 다시 계산합니다. 경기 수가 많으면 시간이 걸릴 수 있습니다. 계속할까요?')) {
+    const n = filters?.total_rows ?? 0
+    if (
+      !window.confirm(
+        `이 리그(${n.toLocaleString()}경기)만 과거 경기까지 포함해 다시 계산합니다.\n` +
+          '다른 리그는 건드리지 않습니다. 경기 수에 따라 몇 분 걸릴 수 있습니다. 계속할까요?'
+      )
+    ) {
       return
     }
     setBusyRecomputeAll(true)
     setRecomputeNotice('')
     try {
       const res = await api.post(`/api/leagues/${code}/recompute`, {
-        scope, include_historical: true, confirm: true,
+        scope,
+        include_historical: true,
+        confirm: true,
       })
-      const n = res.summary[code] ?? 0
-      setRecomputeNotice(n > 0 ? `통합 재분석 완료 → ${n}건` : '재계산할 데이터가 없습니다.')
+      const txt = summaryText(res.summary)
+      setRecomputeNotice(txt ? `통합 재분석 완료 → ${txt}` : '재계산할 데이터가 없습니다.')
       setReloadKey((k) => k + 1)
     } catch (err) {
       setRecomputeNotice(`실패: ${err.message}`)
@@ -487,13 +506,15 @@ export default function LeaguePage({ code, scope }) {
         </>
       )}
 
-      {scope === 'user' && data.can_write && (
+      {data.can_write && (
         <div style={{ marginTop: 10 }}>
           <div className="league-recompute-row">
-            <button className="btn-primary" disabled={busyRecomputePending} onClick={runRecomputePending}>
+            <button className="btn-primary" disabled={busyRecomputePending} onClick={runRecomputePending}
+                   title="이 리그의 예정 경기만 다시 계산합니다.">
               {busyRecomputePending ? '재분석 중...' : '🔄 예정경기 재분석'}
             </button>
-            <button className="btn-danger" disabled={busyRecomputeAll} onClick={runRecomputeAll}>
+            <button className="btn-danger" disabled={busyRecomputeAll} onClick={runRecomputeAll}
+                   title="이 리그의 과거 경기까지 전부 다시 계산합니다(오래 걸립니다).">
               {busyRecomputeAll ? '재계산 중...' : '🔧 통합 재분석'}
             </button>
             <div className="league-stat">
@@ -521,17 +542,6 @@ export default function LeaguePage({ code, scope }) {
             </button>
           </div>
           {recomputeNotice && <p className="recompute-notice">{recomputeNotice}</p>}
-        </div>
-      )}
-
-      {user.role === 'admin' && scope === 'master' && (
-        <div className="delete-select-bar">
-          <button className="btn-reset" onClick={() => setShowDeleteModal(true)}>
-            🗑 경기 Data 삭제 선택
-          </button>
-          <span className="delete-select-caption">
-            '경기 Data 삭제 선택'을 클릭하시면 삭제할 리그 및 경기를 선택한 후 삭제를 하시면 됩니다.
-          </span>
         </div>
       )}
 

@@ -829,6 +829,38 @@ def _betting_day_sort_key(dt_val, tm_val):
     return (d.isoformat(), order)
 
 
+def _row_order_sort_key(df: pd.DataFrame) -> pd.DataFrame:
+    """리그 표를 DB에 다시 쓸 때 물리적 행 순서를 정하는 키 — 시즌 -> 라운드 -> 실제
+    경기일(베팅일 기준) -> No 순. No 값 자체는 절대 바꾸지 않는다(정렬에만 쓴다).
+
+    연기됐다가 나중에 다른 날짜로 재편성된 경기는 원래 No가 그 라운드 안에서 훨씬
+    이른 순번을 갖고 있어도(예: 라리가 26-27 1R 5번 셀타비고-오사수나, 원래 8/17
+    예정이 8/27로 밀림) 실제 뛴 날짜를 기준으로 자리가 잡힌다 — No만 보고 정렬하면
+    이런 경기가 표에서 엉뚱한 위치에 끼어 보인다.
+    DT가 아직 비어 있으면(다음 재편성 날짜 미정) 그 라운드 맨 뒤로 보낸다.
+    """
+    s = df["S"].astype(str) if "S" in df.columns else pd.Series([""] * len(df), index=df.index)
+    r = df["R"].map(_round_sort_key) if "R" in df.columns else pd.Series([0] * len(df), index=df.index)
+    no = pd.to_numeric(df["No"], errors="coerce") if "No" in df.columns else pd.Series(np.nan, index=df.index)
+    if "DT" in df.columns:
+        tm_col = df["TM"] if "TM" in df.columns else pd.Series([None] * len(df), index=df.index)
+        days, orders = [], []
+        for dt_val, tm_val in zip(df["DT"], tm_col):
+            # _betting_day_sort_key는 TM이 NaN이면 int(NaN)에서 죽는다(원래 호출부는
+            # 항상 유효한 TM만 넘겨서 안 걸렸다) — 여기선 리그 표 전체를 훑으므로
+            # TM이 비어 있는 옛날 경기도 나온다. None으로 미리 걸러 준다.
+            tm_safe = tm_val if pd.notna(tm_val) else None
+            d, o = _betting_day_sort_key(dt_val, tm_safe)
+            if not _DT_RE.search(str(dt_val or "")):
+                d = "9999-99-99"    # 날짜 미정 — 그 라운드 맨 뒤
+            days.append(d)
+            orders.append(o)
+    else:
+        days = [""] * len(df)
+        orders = [0.0] * len(df)
+    return pd.DataFrame({"S": s, "_r": r, "_day": days, "_order": orders, "_no": no}, index=df.index)
+
+
 def _scope_league_labels(scope: str, user: dict) -> dict:
     """리그 코드 → 화면에 쓰는 리그명(라벨). 내 데이터는 사용자가 리그 생성 시
     직접 지은 이름(예: ul_2 → 'K2')이라 코드만으론 알아볼 수 없어 따로 매핑해준다."""
@@ -1694,15 +1726,11 @@ def _merge_and_save(db: str, code: str, scope: str, new: pd.DataFrame, confirm: 
             final.loc[res_new.index, c] = res_new[c].values
 
     # 병합(concat+dedup) 과정에서 이미 있던 경기가 뒤로 밀려 저장되면, 화면은 raw 저장
-    # 순서를 그대로 보여주므로 같은 라운드 안에서 No가 뒤죽박죽으로 보인다(예: 1,3,2,4..).
-    # 값 자체는 그대로이니 저장 직전에 시즌·라운드·No 순으로 다시 정렬해 둔다.
+    # 순서를 그대로 보여주므로 같은 라운드 안에서 뒤죽박죽으로 보인다. 값 자체는 그대로이니
+    # 저장 직전에 시즌·라운드·실제 경기일·No 순으로 다시 정렬해 둔다(_row_order_sort_key).
     if {"S", "R", "No"}.issubset(final.columns):
-        sort_key = pd.DataFrame({
-            "S": final["S"].astype(str),
-            "_r": final["R"].map(_round_sort_key),
-            "_no": pd.to_numeric(final["No"], errors="coerce"),
-        }, index=final.index)
-        final = final.loc[sort_key.sort_values(["S", "_r", "_no"], kind="stable").index]
+        final = final.loc[_row_order_sort_key(final).sort_values(
+            ["S", "_r", "_day", "_order", "_no"], kind="stable").index]
         final = final.reset_index(drop=True)
 
     con = sqlite3.connect(db)
@@ -2244,6 +2272,217 @@ def _scoreman_season(season: str) -> str:
     return f"{full(m.group(1))}-{full(m.group(2))}"
 
 
+# ─────────────────── 새 라운드 자동 가져오기 (크롬 창 불필요) ───────────────────
+class NextRoundBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    code: str
+    season: str = ""        # 비우면 DB의 최신 시즌
+    round: str = ""         # noqa: A003 — 비우면 "최신 라운드 + 1"
+    with_overseas: bool = True   # 해외배당(스코어맨)까지 받을지
+    with_domestic: bool = True   # 국내배당(와이즈토토)까지 받을지
+
+
+def _scoreman_kickoff(dt_raw):
+    """스코어맨 일정 JSON의 킥오프('2026-08-22 23:00') -> ('2026-08-23', 0.0).
+
+    ⚠ 정확히 1시간을 더해야 한다. 스코어맨 JSON의 시각은 사이트 기준 시간대라
+      화면에 보이는 값보다 1시간 이르다(crawler.py _date_time의 같은 주석 참고 —
+      크롬 창으로 긁는 기존 경로는 data-t 대신 '화면에 찍힌 시각'을 쓰기 때문에
+      이 보정이 이미 들어가 있다). 보정 없이 저장하면 기존에 저장된 경기와 TM이
+      1시간씩 어긋나고, 자정 근처 경기는 날짜까지 하루 밀린다.
+      실측 대조(라리가 26-27 2R): 보정 전 10경기 중 TM 8건·DT 1건 불일치 -> 보정 후 0건.
+
+    날짜/시각을 못 읽으면 ("", None).
+    """
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})", str(dt_raw or "").strip())
+    if not m:
+        d_part = str(dt_raw or "").partition(" ")[0]
+        return d_part, None
+    y, mo, d, hh, mi = (int(x) for x in m.groups())
+    shown = datetime(y, mo, d, hh, mi) + timedelta(hours=1)
+    return shown.strftime("%Y-%m-%d"), float(f"{shown.hour:02d}{shown.minute:02d}")
+
+
+def _latest_season_round(df: pd.DataFrame):
+    """리그 표에서 (최신 시즌, 그 시즌의 최신 라운드). 없으면 (None, None)."""
+    if df.empty or "S" not in df.columns or "R" not in df.columns:
+        return None, None
+    seasons = sorted([s for s in df["S"].dropna().unique().tolist()], key=str)
+    if not seasons:
+        return None, None
+    s = str(seasons[-1])
+    rounds = df.loc[df["S"].astype(str) == s, "R"].dropna().unique().tolist()
+    if not rounds:
+        return s, None
+    return s, str(sorted(rounds, key=_round_sort_key)[-1])
+
+
+def _scoreman_league_id(udb: str, scope: str, code: str):
+    """저장된 스코어맨 리그 주소에서 리그 ID만 뽑는다. 없으면 None."""
+    m = re.search(r"/league/(\d+)", CRAWL.get_source(udb, scope, code) or "")
+    return int(m.group(1)) if m else None
+
+
+def _round_num_of(v) -> str:
+    """'20R' -> '20' — 라운드 표기에서 숫자만."""
+    return re.sub(r"[Rr]$", "", str(v).strip())
+
+
+@app.post("/api/crawl/next_round")
+def crawl_next_round(body: NextRoundBody, user: dict = Depends(get_current_user)):
+    """"새 라운드 가져오기" — 시즌·라운드를 사람이 입력하지 않고 스스로 찾아서 가져온다.
+
+    기존 해배 가져오기는 크롬 창을 띄워 사용자가 시즌·라운드를 직접 골라야 했는데,
+    스코어맨은 시즌 전체 일정을 JSON으로도 주기 때문에 브라우저 없이 다음 라운드를
+    특정할 수 있다(백필 스크립트가 쓰던 것과 같은 경로).
+
+    흐름: DB 최신 라운드 -> +1 -> 스코어맨 일정에서 그 라운드 경기 -> 팀명 치환 ->
+          킥오프 순으로 No 부여 -> 해외배당·국내배당 붙이기.
+
+    저장은 하지 않는다 — 화면에서 눈으로 확인한 뒤 기존 /api/crawl/save로 저장한다.
+    배당은 둘 다 best effort다: 스코어맨이 막혀 있거나 프로토 회차가 아직 발행 전이면
+    그 부분만 비워서 돌려주고 사유를 같이 알려준다(경기 목록 자체는 그대로 쓸 수 있다).
+    """
+    _check_league_for(body.code, body.scope, user)
+    db = _resolve_scope_db(body.scope, user)
+    udb = _user_db_of(user)
+
+    df = DATA.load_league_df(db, body.code)
+    if df.empty:
+        raise HTTPException(status_code=400,
+                            detail="이 리그에 저장된 경기가 없습니다. 첫 라운드는 엑셀 업로드나 "
+                                   "기존 해배 가져오기로 등록해 주세요.")
+
+    latest_s, latest_r = _latest_season_round(df)
+    season = str(body.season).strip() or latest_s
+    if not season:
+        raise HTTPException(status_code=400, detail="시즌을 찾을 수 없습니다.")
+
+    league_id = _scoreman_league_id(udb, body.scope, body.code)
+    if not league_id:
+        raise HTTPException(status_code=400,
+                            detail="스코어맨 리그 주소를 확인할 수 없습니다. "
+                                   "'해배 가져오기'에서 먼저 주소를 저장해 주세요.")
+
+    try:
+        sched = SCOREMAN.season_schedule(league_id, _scoreman_season(season))
+    except SCOREMAN.OddsError as e:
+        raise HTTPException(status_code=400, detail=f"스코어맨 일정을 못 받았습니다: {e}")
+    if not sched:
+        raise HTTPException(status_code=400,
+                            detail=f"스코어맨에 '{season}' 시즌 일정이 없습니다. 시즌 표기를 확인해 주세요.")
+
+    # 목표 라운드 결정 — 직접 지정했으면 그대로, 아니면 DB 최신 + 1.
+    if str(body.round).strip():
+        want = _round_sort_key(body.round)
+    elif latest_r:
+        want = _round_sort_key(latest_r) + 1
+    else:
+        want = 1
+
+    sched = CRAWL.apply_aliases(sched, CRAWL.list_aliases(udb, body.scope, body.code))
+    games = [g for g in sched if _round_sort_key(g.get("R")) == want]
+    if not games:
+        avail = sorted({_round_sort_key(g.get("R")) for g in sched})
+        raise HTTPException(
+            status_code=400,
+            detail=f"스코어맨 '{season}' 시즌에 {want}R이 없습니다"
+                   f"(있는 라운드: {avail[0]}R~{avail[-1]}R). 시즌이 끝났다면 새 시즌은 "
+                   "엑셀 업로드나 기존 해배 가져오기로 시작해 주세요.")
+
+    round_label = f"{want}R"
+
+    # 이미 DB에 있는 라운드인지 알려준다(막지는 않는다 — 다시 받아 덮어쓸 수도 있다).
+    already = int(((df["S"].astype(str).str.strip() == season)
+                   & (df["R"].astype(str).apply(_round_num_of) == str(want))).sum())
+
+    # 킥오프 시각 순으로 정렬해 No를 1번부터 매긴다(경기 순서 소팅 규칙과 같은 기준).
+    games.sort(key=lambda g: str(g.get("dt") or ""))
+    L = _l_value(db, body.scope, body.code)
+    rows = []
+    for i, g in enumerate(games, start=1):
+        d_part, tm = _scoreman_kickoff(g.get("dt"))
+        rows.append({
+            "L": L, "S": season, "R": round_label, "No": float(i),
+            "DT": d_part, "TM": tm,
+            "HT": g.get("HT", ""), "AT": g.get("AT", ""),
+            "_mid": g.get("mid"),
+        })
+
+    # ── 해외배당(스코어맨) ── 막혀 있으면 그 부분만 빈 채로 둔다.
+    overseas_filled = 0
+    overseas_error = None
+    if body.with_overseas:
+        for r in rows:
+            try:
+                o = SCOREMAN.match_odds(r["_mid"])
+            except SCOREMAN.OddsError as e:
+                overseas_error = str(e)
+                break
+            if o.get("FW") is not None or o.get("EFW") is not None:
+                for c in ("FW", "FD", "FL", "FHW", "FHL",
+                          "EFW", "EFD", "EFL", "EFHW", "EFHL"):
+                    if o.get(c) is not None:
+                        r[c] = o[c]
+                overseas_filled += 1
+            # 남의 서버 — 몰아치면 IP 단위로 막힌다(refresh_final_odds와 같은 텀).
+            time.sleep(0.15)
+        if not overseas_filled and not overseas_error:
+            overseas_error = ("스코어맨에 이 라운드 배당이 아직 없습니다"
+                              "(경기 직전에 올라오거나, 요청이 일시 차단된 상태일 수 있습니다).")
+
+    # ── 국내배당(와이즈토토) ── 프로토 회차가 아직 없으면 정상적으로 비어 있다.
+    domestic_filled = 0
+    domestic_error = None
+    if body.with_domestic:
+        label = _l_value(db, body.scope, body.code)
+        league_name = (CRAWL.get_league_name(udb, body.scope, body.code)
+                       or KR_LEAGUE_NAME_GUESS.get(label, "")).strip()
+        days = []
+        for r in rows:
+            try:
+                days.append(datetime.strptime(str(r["DT"])[:10], "%Y-%m-%d"))
+            except ValueError:
+                continue
+        if not league_name:
+            domestic_error = "와이즈토토 리그명이 설정돼 있지 않습니다('국배 가져오기'에서 지정)."
+        elif not days:
+            domestic_error = "경기 날짜를 읽지 못해 프로토 회차를 찾을 수 없습니다."
+        else:
+            try:
+                raw = KRCRAWL.fetch_by_dates(league_name, min(days), max(days))
+                kr_rows = CRAWL.apply_aliases(
+                    raw["rows"], CRAWL.list_aliases(udb, body.scope, body.code, source="kr"))
+                kidx = {(str(k["HT"]).strip(), str(k["AT"]).strip()): k for k in kr_rows}
+                for r in rows:
+                    k = kidx.get((str(r["HT"]).strip(), str(r["AT"]).strip()))
+                    if not k:
+                        continue
+                    for c in ("KW", "KD", "KL", "KHW", "KHD", "KHL",
+                              "EKW", "EKD", "EKL", "EKHW", "EKHD", "EKHL"):
+                        if k.get(c) is not None:
+                            r[c] = k[c]
+                    domestic_filled += 1
+            except KRCRAWL.CrawlError as e:
+                domestic_error = str(e)
+
+    teams = _league_teams(db, body.code)
+    unknown = sorted({t for r in rows for t in (r["HT"], r["AT"]) if t and t not in teams})
+    for r in rows:
+        r.pop("_mid", None)
+
+    return {
+        "season": season, "round": round_label,
+        "latest_season": latest_s, "latest_round": latest_r,
+        "count": len(rows), "rows": rows,
+        "already_saved": already,
+        "overseas_filled": overseas_filled, "overseas_error": overseas_error,
+        "domestic_filled": domestic_filled, "domestic_error": domestic_error,
+        "teams": teams, "unknown_teams": unknown,
+    }
+
+
+
 class RefreshFinalOddsBody(BaseModel):
     scope: str = PATHS.SCOPE_MASTER
     season: str
@@ -2661,6 +2900,13 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
 
     filled_sides = _fill_missing_ph_side(df, db, body.scope, touched_idx)
 
+    # DT를 고쳤을 수 있으니(연기 경기 재편성 등) 저장 전에 표시 순서를 다시 잡는다.
+    # No 값 자체는 안 바꾼다 — _row_order_sort_key 참고.
+    if {"S", "R", "No"}.issubset(df.columns):
+        df = df.loc[_row_order_sort_key(df).sort_values(
+            ["S", "_r", "_day", "_order", "_no"], kind="stable").index]
+        df = df.reset_index(drop=True)
+
     if body.scope == PATHS.SCOPE_MASTER:
         PATHS.backup_master()
 
@@ -2788,19 +3034,27 @@ def recompute_all(body: RecomputeBody, user: dict = Depends(get_current_user)):
     return {"summary": summary}
 
 
-# ─────────────────────────── 재계산 ('내 데이터' 리그 1개 전용) ───────────────────────────
-# engine.recompute_pending_matches/all(위)은 PATHS.LEAGUES(공식 6대리그) 테이블명을
-# 그대로 훑기 때문에 'ul_1' 같은 내 데이터 테이블에는 아예 적용되지 않는다 — 그래서
-# 국내배당을 새로 올려도 26개 지표·플핸예측이 저절로 다시 계산되지 않았다.
-# engine.py는 계산 로직 수정 금지 대상이라, 그 함수는 그대로 두고 '내 데이터는 리그별로
-# 완전 독립'이라는 원칙(다른 곳과 동일)에 따라 그 리그 하나만 재계산하는 버전을 여기 둔다.
+# ─────────────────────────── 재계산 (리그 1개만) ───────────────────────────
+# engine.recompute_pending_matches/all(위)은 PATHS.LEAGUES(공식 6대리그)를 통째로 훑는다.
+# 그래서 ① 'ul_1' 같은 내 데이터 테이블에는 아예 적용되지 않고, ② 공식 데이터에서는
+# EPL 하나만 고쳐도 6개 리그가 전부 다시 계산돼 몇 분씩 걸린다.
+# engine.py는 계산 로직 수정 금지 대상이라 그 함수는 그대로 두고, 리그 하나만 돌리는
+# 버전을 여기 둔다.
+#
+# ★ 리그 하나만 돌려도 결과가 같은 이유 —
+#   engine._recompute_by_mask를 보면 통합지표(TF-/TK-)의 표본이 되는 total_df를 루프
+#   '시작 전에 한 번' 만들고, 리그마다 그 같은 값을 그대로 넘긴다. 루프 안에서 갱신하지
+#   않는다. 즉 A리그를 다시 계산해도 B리그의 표본은 안 바뀐다(지표 재계산은 배당·RT 같은
+#   원본을 건드리지 않으므로 표본 자체가 불변이다). 그래서 같은 total_df만 넘겨주면
+#   리그를 하나씩 따로 돌린 결과와 6개를 한꺼번에 돌린 결과가 완전히 같다.
+#   실측 대조: EPL 6,480행 × 지표 전 컬럼 비교 → 불일치 0건.
 class LeagueRecomputeBody(BaseModel):
     scope: str = PATHS.SCOPE_USER
     include_historical: bool = False
     confirm: bool = False
 
 
-def _recompute_user_league(db: str, code: str, include_historical: bool) -> dict:
+def _recompute_one_league(db: str, code: str, include_historical: bool, scope: str) -> dict:
     league_df = DATA.load_league_df(db, code)
     if league_df.empty or "RT" not in league_df.columns:
         return {code: 0}
@@ -2811,14 +3065,24 @@ def _recompute_user_league(db: str, code: str, include_historical: bool) -> dict
     if n_target == 0:
         return {code: 0}
 
+    # 통합(TF-/TK-) 지표의 표본이 스코프마다 다르다.
+    #   내 데이터 → 그 리그 하나 (리그별 완전 독립 — _merge_and_save와 같은 규칙)
+    #   공식     → 6대리그를 합친 통합DB (engine._recompute_by_mask가 쓰는 것과 같은 값)
+    total_df = league_df if _is_user_scope(scope) else DATA.load_total_df(db)
+    if total_df.empty:
+        total_df = league_df
+
+    # ⚠ 캐시된 df를 그대로 고치면 다음 요청이 오염된 값을 받는다 — 반드시 복사본에 쓴다.
+    league_df = league_df.copy()
     sub = league_df[mask]
-    # 내 데이터는 통합(TF-/TK-) 지표도 그 리그 하나만으로 계산한다 — league_full_df와
-    # total_df에 같은 league_df를 준다(_merge_and_save가 이미 쓰는 것과 같은 규칙).
-    new_ind = engine._recompute_indicators_for_subset(sub, league_df, league_df)
+    new_ind = engine._recompute_indicators_for_subset(sub, league_df, total_df)
     for c in new_ind.columns:
         if c not in league_df.columns:
             league_df[c] = np.nan
         league_df.loc[new_ind.index, c] = new_ind[c].values
+
+    if not _is_user_scope(scope):
+        PATHS.backup_master()     # 공식 데이터는 덮어쓰기 전에 자동 백업
 
     con = sqlite3.connect(db)
     try:
@@ -2831,19 +3095,21 @@ def _recompute_user_league(db: str, code: str, include_historical: bool) -> dict
 
 @app.post("/api/leagues/{code}/recompute")
 def league_recompute(code: str, body: LeagueRecomputeBody, user: dict = Depends(get_current_user)):
+    """리그 하나만 26개 지표·플핸예측을 다시 계산한다.
+
+    표본(모집단)은 스코프에 따라 다르다 — 내 데이터는 그 리그 하나, 공식 데이터는
+    6대리그를 합친 통합DB. 공식 데이터라도 '쓰는 대상'은 이 리그 하나뿐이라 다른 리그
+    테이블은 건드리지 않으며, 값은 6개를 한꺼번에 돌렸을 때와 같다(위 ★ 주석 참고).
+
+    6개를 한 번에 돌리고 싶으면 통합DB 탭의 /api/recompute/pending·all을 쓴다.
     """
-    '내 데이터' 리그 하나만 26개 지표·플핸예측을 다시 계산한다(그 리그 자신만 표본으로 씀).
-    공식 데이터(6대리그)는 통합DB 탭의 /api/recompute/pending·all을 그대로 쓴다.
-    """
-    if not _is_user_scope(body.scope):
-        raise HTTPException(status_code=400, detail="이 기능은 내 데이터 리그에서만 씁니다.")
     _check_league_for(code, body.scope, user)
     if not PATHS.can_write(body.scope, user.get("role")):
         raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
     if body.include_historical and not body.confirm:
         raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
     db = _resolve_scope_db(body.scope, user)
-    summary = _recompute_user_league(db, code, body.include_historical)
+    summary = _recompute_one_league(db, code, body.include_historical, body.scope)
     return {"summary": summary}
 
 

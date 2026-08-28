@@ -225,3 +225,37 @@
   gap: 10px;
   margin-top: 14px;
 }
+
+/* 최신 라운드 자동 가져오기 — 시즌·라운드를 입력할 필요가 없는 주 경로라
+   아래 수동 단계보다 위에 두고 테두리로 한 덩어리로 묶는다.
+   해배 팝업의 .crawl-auto 와 같은 규격(6-1장 눈금). */
+.kr-crawl-auto {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.kr-crawl-auto-btn {
+  white-space: nowrap;
+}
+
+.kr-crawl-auto .kr-crawl-hint {
+  margin: 0;
+  flex: 1;
+  min-width: 220px;
+  line-height: 1.5;
+}
+
+.kr-crawl-manual-divider {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
