@@ -547,6 +547,7 @@ export function myHitStyle(value) {
   if (value === 'P-원정') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-핸↑') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-표X') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  if (value === 'P-무↑') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-관전') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-어렵') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'B-고민' || value === '벳고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }

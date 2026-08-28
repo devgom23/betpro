@@ -18,7 +18,8 @@ export const P_OPTIONS = ['핸승', '핸무', '무', '역']
 
 // 의견 — 배팅 비중·판단 메모용 태그. 색상은 columnGroups.js의 myHitStyle이 정한다.
 export const HIT_OPTIONS = [
-  'Pass', 'P-고민', 'P-분산', 'P-엇갈', 'P-상대', 'P-똥배', 'P-원정', 'P-핸↑', 'P-표X', 'P-관전', 'P-어렵',
+  'Pass', 'P-고민', 'P-분산', 'P-엇갈', 'P-상대', 'P-똥배', 'P-원정', 'P-핸↑', 'P-표X', 'P-무↑',
+  'P-관전', 'P-어렵',
   'B-고민', 'B-Ma', 'B-Si', '축', '축-Si',
 ]
 
