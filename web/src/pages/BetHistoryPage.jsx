@@ -108,7 +108,10 @@ function SummaryBar({ summary }) {
 // 띠로 올려서, 그 구간이 시작하는 자리에서 바로 손익을 알 수 있게 한다. 미확정
 // 구간에는 "선택 삭제/회차 설정" 버튼도 여기로 옮겨, 그 구간 자체를 다루는
 // 조작이 전부 한 자리에 모이게 했다.
-function SectionHeader({ sec, index, locked, colSpan, selectedCount, busy, onDeleteSelected, onLockSelected }) {
+function SectionHeader({
+  sec, index, locked, colSpan, selectedCount, busy, onDeleteSelected, onLockSelected,
+  open, onToggleOpen,
+}) {
   const batchCount = sec.batches.length
   const slipCount = sec.batches.reduce((n, b) => n + b.slips.length, 0)
   return (
@@ -117,6 +120,17 @@ function SectionHeader({ sec, index, locked, colSpan, selectedCount, busy, onDel
         <td colSpan={colSpan}>
           <div className="bh-section-header">
             <div className="bh-section-title">
+              {/* 확정된 회차만 접을 수 있다 — 미확정 구간은 체크박스로 벳을 고르는
+                  작업 중인 곳이라 항상 펼쳐 둔다. */}
+              {locked && (
+                <button
+                  className="bh-fold-btn"
+                  onClick={onToggleOpen}
+                  title={open ? '접기' : '펼치기'}
+                >
+                  {open ? '▾' : '▸'}
+                </button>
+              )}
               <span className="bh-section-name">{locked ? `${index}회차` : '미확정'}</span>
               <span className="bh-section-range">{rangeLabel(sec.round_start, sec.round_end)}</span>
               {locked && <span className="bh-locked-badge">확정 · 잠김</span>}
@@ -158,6 +172,10 @@ export default function BetHistoryPage({ scope }) {
   const [busy, setBusy] = useState(false)
   // 회차 설정 전(group_id가 없는) 벳만 체크할 수 있다.
   const [selected, setSelected] = useState(new Set())
+  // 회차별 펼침 상태 — "이 회차는 펼쳐 봤다"만 담는다. 확정된(group_id 있는) 회차는
+  // 여기 없으면 기본이 접힘이고, 미확정 구간은 group_id가 없어 애초에 이 Set을
+  // 안 보고 항상 펼친다(SectionHeader의 open prop 계산 참고).
+  const [openRounds, setOpenRounds] = useState(new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -267,6 +285,9 @@ export default function BetHistoryPage({ scope }) {
               return sections.map((sec, si) => {
               const locked = sec.group_id != null
               if (locked) roundIdx += 1
+              // 미확정 구간은 항상 펼침. 확정된 회차는 openRounds에 명시적으로
+              // 펼쳐 뒀다고 기록돼 있을 때만 펼친다(기본값 = 접힘).
+              const isOpen = !locked || openRounds.has(sec.group_id)
               return (
                 <Fragment key={sec.group_id ?? `pending-${si}`}>
                   {si > 0 && (
@@ -283,8 +304,17 @@ export default function BetHistoryPage({ scope }) {
                     busy={busy}
                     onDeleteSelected={handleDeleteSelected}
                     onLockSelected={handleLockSelected}
+                    open={isOpen}
+                    onToggleOpen={() => setOpenRounds((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(sec.group_id)) next.delete(sec.group_id)
+                      else next.add(sec.group_id)
+                      return next
+                    })}
                   />
-                  {sec.batches.map((batch, bi) => {
+                  {/* 번호(rowNum)는 원래도 DB id가 아니라 '화면에 보이는 순서'로 매긴다
+                      (위 주석 참고) — 접힌 회차는 안 보이니 그만큼 자연스럽게 건너뛴다. */}
+                  {isOpen && sec.batches.map((batch, bi) => {
                     const isLastBatch = bi === sec.batches.length - 1
                     return (
                     // 등록 묶음마다 tr을 굵은 선으로 갈라 보여준다.

@@ -239,6 +239,24 @@
   flex-wrap: wrap;
 }
 
+/* 회차 접기/펼치기 — LeagueTable.jsx 그룹 접기 버튼(.fold-btn)과 같은 톤. */
+.bh-fold-btn {
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--accent);
+  background: var(--fold-btn-bg);
+  border-radius: 4px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+.bh-fold-btn:hover {
+  background: var(--fold-btn-bg-hover);
+  color: #fff;
+}
+
 .bh-section-name {
   font-size: 14px;
   font-weight: 700;
