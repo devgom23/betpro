@@ -134,20 +134,28 @@ def season_schedule(league_id, season) -> list:
 
 
 def _dec(v):
-    """홍콩식 핸디배당 -> 소수식(1을 더한다). 빈 값이면 None."""
+    """홍콩식 핸디배당 -> 소수식(1을 더한다). 빈 값이거나 변환 결과가 1.00(=HK 0,
+    마켓이 안 열렸을 때의 표기)이면 None."""
     try:
         f = float(v)
     except (TypeError, ValueError):
         return None
-    return round(f + 1.0, 3)
+    dec = round(f + 1.0, 3)
+    return None if dec <= 1.0 else dec
 
 
 def _num(v):
+    """양수인 배당이면 float, 아니면(빈값·0·음수·1.00) None.
+
+    1.00은 실제로 나올 수 없는 배당이다(그 결과가 나와도 수익이 0이라는 뜻이라
+    배당업체가 절대 안 준다) — 마켓이 안 열렸을 때 채우는 표기로 보인다.
+    2026-08-28 국내배당 전수조사에서 확인된 패턴과 같아 여기도 같이 막는다.
+    """
     try:
         f = float(v)
     except (TypeError, ValueError):
         return None
-    return f if f > 0 else None
+    return f if f > 1.0 else None
 
 
 def match_odds(mid) -> dict:

@@ -531,7 +531,17 @@ export default function LeaguePage({ code, scope }) {
             </div>
             <div className="league-stat">
               <span className="league-stat-label">예정</span>
-              <span className="league-stat-value">{filters.pending_count.toLocaleString()}</span>
+              <span className="league-stat-value">
+                {(filters.pending_count - filters.cancelled_count - filters.postponed_count).toLocaleString()}
+              </span>
+            </div>
+            <div className="league-stat">
+              <span className="league-stat-label">연기</span>
+              <span className="league-stat-value">{filters.postponed_count.toLocaleString()}</span>
+            </div>
+            <div className="league-stat">
+              <span className="league-stat-label">취소</span>
+              <span className="league-stat-value">{filters.cancelled_count.toLocaleString()}</span>
             </div>
             <div className="league-stat">
               <span className="league-stat-label">국내배당</span>

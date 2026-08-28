@@ -313,11 +313,17 @@ def _parse_round(html, target_league):
 
 
 def _num_or_none(v):
+    """양수인 배당이면 원래 표기 그대로, 아니면(빈값·0·음수·1.00) None.
+
+    1.00은 와이즈토토가 '이 마켓엔 배당을 안 준다'(경기 특례 등)는 뜻으로 채워 넣는
+    표기다 — 실제 배당은 승/무/패 셋이 전부 1.00일 수 없다(배당업체 마진이 마이너스가
+    된다). 2026-08-28 6대리그+K1+K2 전수조사로 확인(관련 값 536건 정리).
+    """
     try:
         f = float(v)
     except (TypeError, ValueError):
         return None
-    return None if f <= 0 else v
+    return None if f <= 1.0 else v
 
 
 def _to_row(rec):

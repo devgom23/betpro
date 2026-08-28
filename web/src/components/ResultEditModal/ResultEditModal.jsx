@@ -480,7 +480,7 @@ export default function ResultEditModal({ code, scope, label, onClose, onSaved }
                         <select value={r._RT} onChange={(e) => updateRow(i, '_RT', e.target.value)}>
                           {RT_OPTIONS.map((o) => (
                             <option key={o || 'blank'} value={o}>
-                              {o || '미정'}
+                              {o || '예정'}
                             </option>
                           ))}
                         </select>

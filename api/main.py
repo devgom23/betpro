@@ -396,6 +396,12 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
     latest_round = (rounds_by_season.get(latest_season) or [None])[0]
     rt_summary = _rt_summary(df)
     rt_total = rt_summary["총"] if rt_summary else 0
+    # "결과 없음" 86건이 전부 같은 게 아니다(2026-08-28 실측 — 에레디비지에 86건 중
+    # 취소 74 · 미정 11 · 연기 1). pending_count(기존, 하위호환용)는 셋을 합친 값 그대로
+    # 두고, 화면에 따로 보여주려는 쪽을 위해 취소·연기만 따로 센다.
+    rt_num = pd.to_numeric(df["RT"], errors="coerce") if "RT" in df.columns else pd.Series(dtype=float)
+    cancelled_count = int((rt_num == 5).sum())
+    postponed_count = int((rt_num == 6).sum())
     return {
         "seasons": [str(s) for s in seasons],
         "rounds_by_season": rounds_by_season,
@@ -406,6 +412,8 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
         # 리그 관리 박스(내 데이터 재계산 버튼 옆)에 쓰는 요약 — 통합DB 탭 대시보드 표와 같은 항목.
         "season_range": f"{seasons[-1]} ~ {seasons[0]}" if seasons else "-",
         "pending_count": len(df) - rt_total,
+        "cancelled_count": cancelled_count,
+        "postponed_count": postponed_count,
         "kw_count": int(df["KW"].notna().sum()) if "KW" in df.columns else 0,
         "fw_count": int(df["FW"].notna().sum()) if "FW" in df.columns else 0,
     }
@@ -2526,11 +2534,13 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
     label = _l_value(db, body.scope, code)
 
     def _f(v):
+        # 1.00은 실제 배당이 아니다(마켓 특례 표기) — KRCRAWL·SCOREMAN이 이미 원천에서
+        # 걸러 주지만, 여기서도 한 번 더 막아 둔다(2026-08-28 전수조사·정리).
         try:
             x = float(v)
         except (TypeError, ValueError):
             return None
-        return x if x > 0 else None
+        return x if x > 1.0 else None
 
     for c in ("EKW", "EKD", "EKL", "EKH", "EKHW", "EKHD", "EKHL",
               "EFW", "EFD", "EFL", "EFH", "EFHW", "EFHD", "EFHL"):
