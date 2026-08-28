@@ -237,6 +237,29 @@
   gap: 8px;
 }
 
+/* 상대전적 옆 '홈보기' 체크박스 — 라벨+체크박스라 아주 붙은 한 덩어리(gap 4px).
+   본문(13px)보다 한 단계 흐리게(11px, --text-muted) 둬서 제목 글자보다 눈에
+   덜 띄게 하고, 체크가 켜지면 강조색으로 바뀌어 상태를 바로 알 수 있게 한다. */
+.detail-h2h-home-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.detail-h2h-home-toggle input {
+  cursor: pointer;
+}
+
+.detail-h2h-home-toggle:has(input:checked) {
+  color: var(--chip-blue-fg);
+  font-weight: 700;
+}
+
 .detail-h2h-avg {
   color: var(--text-primary);
   font-weight: 700;

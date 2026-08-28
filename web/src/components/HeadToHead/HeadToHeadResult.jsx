@@ -132,6 +132,7 @@ function WdlGrid({ wdl, wdlHome }) {
 export default function HeadToHeadResult({
   scope, code, home, away, cross = true, limit = 200,
   preset, presetLoading = false, presetError = '',
+  homeOnly = false,
 }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
@@ -178,51 +179,60 @@ export default function HeadToHeadResult({
 
   const wdl = effData.wdl_summary
   const wdlHome = effData.wdl_summary_home
+  // '홈보기' — 위 요약표 '홈기준' 줄과 같은 기준(home팀이 실제로 홈이었던 경기만).
+  const shownMatches = homeOnly ? effData.matches.filter((m) => m.HT === home) : effData.matches
 
   return (
     <>
       <WdlGrid wdl={wdl} wdlHome={wdlHome} />
 
-      <div className="match-list-scroll">
-        <table className="detail-table match-list">
-          <thead>
-            <tr>
-              <th>시즌</th>
-              <th>R</th>
-              <th>HT</th>
-              <th>HS</th>
-              <th>AS</th>
-              <th>AT</th>
-              <th>결과</th>
-              <th>유형</th>
-              <th>승점</th>
-            </tr>
-          </thead>
-          <tbody>
-            {effData.matches.map((m, i) => {
-              const seasonStart = i > 0 && m.S !== effData.matches[i - 1].S
-              return (
-                <tr key={i} className={seasonStart ? 'season-start' : undefined}>
-                  <td>{m.S}</td>
-                  <td>{m.R}</td>
-                  <td className={`row-label ${m.HT === home ? 'h2h-home-cell' : ''}`}>{m.HT}</td>
-                  <td className={scoreClass(m.HS, m.AS, 'home')}>{m.HS ?? ''}</td>
-                  <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
-                  <td className={`row-label ${m.AT === home ? 'h2h-home-cell' : ''}`}>{m.AT}</td>
-                  <td>
-                    <WdlBadge letter={{ 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]} />
-                  </td>
-                  <td>
-                    <RtBadge label={m.RT_label} />
-                  </td>
-                  <td className="col-total">{homePoints(m, home)}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      {effData.total > effData.matches.length && (
+      {homeOnly && shownMatches.length === 0 ? (
+        <p className="detail-empty">{home}의 홈경기 맞대결 기록 없음</p>
+      ) : (
+        <div className="match-list-scroll">
+          <table className="detail-table match-list">
+            <thead>
+              <tr>
+                <th>시즌</th>
+                <th>R</th>
+                <th>HT</th>
+                <th>HS</th>
+                <th>AS</th>
+                <th>AT</th>
+                <th>결과</th>
+                <th>유형</th>
+                <th>승점</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shownMatches.map((m, i) => {
+                const seasonStart = i > 0 && m.S !== shownMatches[i - 1].S
+                return (
+                  <tr key={i} className={seasonStart ? 'season-start' : undefined}>
+                    <td>{m.S}</td>
+                    <td>{m.R}</td>
+                    <td className={`row-label ${m.HT === home ? 'h2h-home-cell' : ''}`}>{m.HT}</td>
+                    <td className={scoreClass(m.HS, m.AS, 'home')}>{m.HS ?? ''}</td>
+                    <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
+                    <td className={`row-label ${m.AT === home ? 'h2h-home-cell' : ''}`}>{m.AT}</td>
+                    <td>
+                      <WdlBadge letter={{ 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]} />
+                    </td>
+                    <td>
+                      <RtBadge label={m.RT_label} />
+                    </td>
+                    <td className="col-total">{homePoints(m, home)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {homeOnly && shownMatches.length > 0 && (
+        <p className="h2h-more">홈경기 {shownMatches.length}건만 표시</p>
+      )}
+      {!homeOnly && effData.total > effData.matches.length && (
         <p className="h2h-more">
           최근 {effData.matches.length}경기만 표시 (총 {effData.total}경기)
         </p>

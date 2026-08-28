@@ -1026,6 +1026,9 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
   const h2hSectionRef = useRef(null)
   const columnsRef = useRef(null)
   const [h2hMaxHeight, setH2hMaxHeight] = useState(null)
+  // 상대전적 목록 필터 — 켜면 지금 보는 경기의 홈팀(ht)이 실제로 홈이었던
+  // 맞대결만 남긴다. 위 요약표의 '홈기준' 줄과 같은 기준(homePoints의 referenceTeam=home).
+  const [h2hHomeOnly, setH2hHomeOnly] = useState(false)
 
   useEffect(() => {
     const sampleEl = sampleSectionRef.current
@@ -1182,6 +1185,14 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
               <h3 className="detail-h2h-title">
                 <span>
                   상대전적{' '}
+                  <label className="detail-h2h-home-toggle">
+                    <input
+                      type="checkbox"
+                      checked={h2hHomeOnly}
+                      onChange={(e) => setH2hHomeOnly(e.target.checked)}
+                    />
+                    홈보기
+                  </label>{' '}
                   {/* 예전 종합분석 '상대전적' 카드에 있던 문장(맞대결 평균 총득점).
                       확률 계산에는 안 들어가는 참고값이라 제목 옆에 붙여만 두되, 눈에 띄게 강조한다. */}
                   {h2hSig && h2hSig.value_text && (
@@ -1195,6 +1206,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                 preset={pickData ? pickData.h2h : null}
                 presetLoading={!pickData && !pickError}
                 presetError={pickError}
+                homeOnly={h2hHomeOnly}
               />
             </section>
           </div>
