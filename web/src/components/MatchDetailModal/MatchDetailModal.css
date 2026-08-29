@@ -504,7 +504,18 @@
 }
 
 /* 배변(최종배당) 행 — 리그 표의 .row-final과 같은 톤으로, 바로 위 초기값 행과
-   구분되게 옅은 배경 + 점선 윗줄만 준다. */
+   구분되게 옅은 배경 + 점선 윗줄만 준다.
+   ⚠ border-collapse에서는 같은 폭이면 solid가 dashed를 이기므로(946번째 줄
+   .pick-ind-ref-row 주석과 같은 문제), 2px로 굵혀서 이기게 할 수도 있지만 그러면
+   리그 표(1px)보다 점선 간격이 성겨 보인다(실측 확인됨). 대신 바로 위 초기값 행의
+   아래쪽 테두리를 아예 지워서 부딪힐 상대 자체를 없앤다 — 그러면 1px 그대로도
+   점선이 온전히 보이고, 리그 표와 간격까지 완전히 같아진다. */
+.detail-table.odds-table tr:has(+ tr.odds-final-row) td,
+.detail-table.risk-table tr:has(+ tr.risk-final-row) td,
+.detail-table.sample-table tr:has(+ tr.sample-final-row) td {
+  border-bottom: none;
+}
+
 .detail-table.odds-table tr.odds-final-row td,
 .detail-table.risk-table tr.risk-final-row td,
 .detail-table.sample-table tr.sample-final-row td {
