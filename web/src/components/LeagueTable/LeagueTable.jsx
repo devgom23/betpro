@@ -5,7 +5,6 @@ import {
   collapsedWidth, splitsOnFinal, oddsMoveDir, riskMoveDir, toFinalRow, rtToText,
 } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
-import MyPickModal from '../MyPickModal/MyPickModal'
 import RtBadge from '../RtBadge/RtBadge'
 import { api } from '../../api/client'
 import { useFontSize } from '../../context/FontSizeContext'
@@ -83,7 +82,6 @@ export default function LeagueTable({
   const rowScope = (row) => row?.scope || scope
   const groups = useMemo(() => buildColumnGroups(columns || [], { hideIndicators }), [columns, hideIndicators])
   const [detailRow, setDetailRow] = useState(null)
-  const [pickRow, setPickRow] = useState(null) // 내픽 팝업 대상 행
   // 별표/내픽/메모 클릭 즉시 반영용 오버레이. 새로 조회하면(rows가 바뀌면) 서버가 다시
   // 내려준 최신값으로 자연히 대체되므로 초기화한다.
   // ref로도 같은 값을 들고 있는 이유: React state 갱신은 비동기라 "별표 클릭 직후 곧바로
@@ -321,10 +319,6 @@ export default function LeagueTable({
                     </th>
                   )
                 }
-                // 돋보기(상세보기) 칸 — 해외배당 그룹 바로 다음, 내 예측 그룹 바로 앞에 둔다.
-                if (g.label1 === '해외배당') {
-                  return [th, <th key={`${gi}-detail`} className="detail-col group-divider" rowSpan={2}></th>]
-                }
                 return [th]
               })}
             </tr>
@@ -479,19 +473,6 @@ export default function LeagueTable({
                   ...groups.flatMap((g, gi) => {
                     const key = groupKey(g)
                     const isLastGroup = gi === groups.length - 1
-                    // 돋보기(상세보기) 칸 — 해외배당 그룹의 셀들 바로 뒤에 붙여, 헤더의
-                    // 위치(해외배당↔내 예측 사이)와 맞춘다.
-                    const detailCell = (
-                      <td key={`${gi}-detail`} className="detail-col group-divider">
-                        <button
-                          className="detail-btn"
-                          title="상세 경기 정보"
-                          onClick={() => setDetailRow(row)}
-                        >
-                          🔍
-                        </button>
-                      </td>
-                    )
                     // cells와 짝을 이루는 컬럼 이름 — fit()이 이 이름으로 합칠지 나눌지 정한다.
                     // '__merge'는 "배당과 무관해서 위아래를 항상 합치는 칸"이라는 뜻.
                     let cells
@@ -514,10 +495,17 @@ export default function LeagueTable({
                           const className = `collapsed-cell${isLastCol ? dividerClass(g, isLastGroup) : ''}`
                           const text = formatCell(g, c, value, row)
                           // RT는 펼쳤을 때처럼 칸 전체가 아니라 알약 배지로 보여준다(cell-badge).
+                          // 예전 돋보기 버튼을 없앤 대신, 이 칸(값이 없는 예정 경기의 빈칸
+                          // 포함)을 누르면 상세보기가 열린다.
                           if (c.key === 'RT') {
                             const badgeStyle = cellStyle(g, c, value, row)
                             return (
-                              <td key={`${gi}-${c.key}`} className={className}>
+                              <td
+                                key={`${gi}-${c.key}`}
+                                className={`${className} rt-detail-cell`}
+                                title="상세 경기 정보"
+                                onClick={() => setDetailRow(row)}
+                              >
                                 {badgeStyle ? (
                                   <span className="cell-badge" style={badgeStyle}>{text}</span>
                                 ) : (
@@ -615,7 +603,7 @@ export default function LeagueTable({
                         if (c.key === 'MY_P') {
                           return (
                             <td key={`${gi}-${ci}`} className={className}>
-                              <button className="mypick-btn" onClick={() => setPickRow(row)}>
+                              <button className="mypick-btn" onClick={() => setDetailRow(row)}>
                                 {pickState.p ? (
                                   <RtBadge label={pickState.p} matched={pickState.p === rtToText(row.RT)} />
                                 ) : (
@@ -631,7 +619,7 @@ export default function LeagueTable({
                               <button
                                 className="mypick-btn"
                                 style={myHitStyle(pickState.hit) || undefined}
-                                onClick={() => setPickRow(row)}
+                                onClick={() => setDetailRow(row)}
                               >
                                 {pickState.hit || <span className="mypick-blank">－</span>}
                               </button>
@@ -645,7 +633,7 @@ export default function LeagueTable({
                             className={className}
                             style={myPickStyle(pickState.pick) || undefined}
                           >
-                            <button className="mypick-btn" onClick={() => setPickRow(row)}>
+                            <button className="mypick-btn" onClick={() => setDetailRow(row)}>
                               {pickState.pick || <span className="mypick-blank">－</span>}
                             </button>
                           </td>
@@ -659,10 +647,14 @@ export default function LeagueTable({
                       const value = c.key === 'L' && row.L_LABEL != null ? row.L_LABEL : row[c.key]
                       const isHighlighted = highlightCols.includes(c.key)
                       const isLastCol = !isLastGroup && ci === g.cols.length - 1
+                      // 별표(중요) 행의 금색 배경은 배당 칸까지 덮으면 배당 적중·배변 화살표
+                      // 배경(oddsHitSide 등)이 묻혀 안 보인다 — 국내배당/해외배당 칸만 빼둔다.
+                      const isOddsGroup = g.label1 === '국내배당' || g.label1 === '해외배당'
                       const classNames = [
                         isHighlighted ? 'cell-highlight' : '',
                         isLastCol ? dividerClass(g, isLastGroup).trim() : '',
                         riskColClass(g, c).trim(),
+                        isOddsGroup ? 'odds-group-cell' : '',
                       ].filter(Boolean).join(' ')
                       const text = formatCell(g, c, value, row)
                       // 폼(PPG) 칸 — 상세보기 팝업의 폼 지표와 같은 스타일로, 뱃지가 아니라
@@ -675,10 +667,17 @@ export default function LeagueTable({
                         )
                       }
                       // RT(핸승/핸무/무/역) 칸도 칸 전체가 아니라 값만 알약 모양 뱃지로 보여준다.
+                      // 예전 돋보기 버튼을 없앤 대신, 이 칸(값이 없는 예정 경기의 빈칸
+                      // 포함)을 누르면 상세보기가 열린다.
                       if (g.label1 === '경기정보' && c.key === 'RT') {
                         const badgeStyle = cellStyle(g, c, value, row)
                         return (
-                          <td key={`${gi}-${ci}`} className={classNames || undefined}>
+                          <td
+                            key={`${gi}-${ci}`}
+                            className={`${classNames || ''} rt-detail-cell`.trim()}
+                            title="상세 경기 정보"
+                            onClick={() => setDetailRow(row)}
+                          >
                             {badgeStyle ? (
                               <span className="cell-badge" style={badgeStyle}>
                                 {text}
@@ -701,10 +700,8 @@ export default function LeagueTable({
                       )
                       })
                     }
-                    const all = g.label1 === '해외배당' ? [...cells, detailCell] : cells
-                    const allKeys = g.label1 === '해외배당' ? [...cellKeys, '__merge'] : cellKeys
                     // 아랫줄에서 빠지는 칸은 null이 되므로 걸러낸다.
-                    return all.map((cell, ci) => fit(cell, allKeys[ci])).filter(Boolean)
+                    return cells.map((cell, ci) => fit(cell, cellKeys[ci])).filter(Boolean)
                   }),
                 ]
               }
@@ -748,22 +745,6 @@ export default function LeagueTable({
             scope={rowScope(detailRow)}
             onClose={() => setDetailRow(null)}
             onSavePick={(patch) => savePick(detailRow, patch)}
-          />
-        )}
-
-        {pickRow && (
-          <MyPickModal
-            code={rowCode(pickRow)}
-            scope={rowScope(pickRow)}
-            row={{
-              ...pickRow,
-              MY_PICK: effectivePick(pickRow).pick,
-              MY_P: effectivePick(pickRow).p,
-              MY_HIT: effectivePick(pickRow).hit,
-              IMPORTANT: effectivePick(pickRow).important,
-            }}
-            onClose={() => setPickRow(null)}
-            onSaved={(patch) => savePick(pickRow, patch)}
           />
         )}
 
