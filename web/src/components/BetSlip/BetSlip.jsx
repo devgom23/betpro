@@ -25,19 +25,30 @@ const toNum = (v) => {
 // 최소 벳 단위는 100원 — 자동 배분/재계산 결과도 항상 100원 단위로 맞춘다.
 const roundStake = (v) => Math.round(v / 100) * 100
 
+// 최신배당(EK*, 배변 후 값)이 있으면 그걸 쓰고, 아직 안 받아왔으면 초기배당(K*)으로
+// 대신한다 — "이번주 벳"의 배당 표기·벳배당 계산은 항상 지금 시점 기준이어야 한다.
+function latestOdds(row, ekKey, kKey) {
+  const ek = toNum(row?.[ekKey])
+  return ek != null ? ek : toNum(row?.[kKey])
+}
+
 // 유형별 국내배당을 골라준다. 정/역은 고정 컬럼이 아니라 승·패 배당 중 낮은 쪽이
 // 정배(시장이 강하다고 본 쪽)라는 규칙을 따르고, 핸승/플핸도 같은 기준으로 갈린다.
+// 어느 쪽이 정배인지는 초기배당(KW/KL) 기준으로 고정한다 — 배변으로 숫자가 바뀌어도
+// "정"이 가리키는 팀 자체는 바뀌지 않는다(oddsMove.js의 favIsHome 판정과 같은 규칙).
 export function oddsForPick(row, pick) {
-  const kw = toNum(row?.KW)
-  const kd = toNum(row?.KD)
-  const kl = toNum(row?.KL)
-  const khw = toNum(row?.KHW)
-  const khd = toNum(row?.KHD)
-  const khl = toNum(row?.KHL)
+  const kw0 = toNum(row?.KW)
+  const kl0 = toNum(row?.KL)
+  const kd = latestOdds(row, 'EKD', 'KD')
+  const khd = latestOdds(row, 'EKHD', 'KHD')
   if (pick === '무') return kd
   if (pick === '핸무') return khd
-  if (kw == null || kl == null) return null
-  const homeIsFav = kw <= kl
+  if (kw0 == null || kl0 == null) return null
+  const homeIsFav = kw0 <= kl0
+  const kw = latestOdds(row, 'EKW', 'KW')
+  const kl = latestOdds(row, 'EKL', 'KL')
+  const khw = latestOdds(row, 'EKHW', 'KHW')
+  const khl = latestOdds(row, 'EKHL', 'KHL')
   if (pick === '정') return homeIsFav ? kw : kl
   if (pick === '역') return homeIsFav ? kl : kw
   if (pick === '핸승') return homeIsFav ? khw : khl
