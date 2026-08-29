@@ -703,6 +703,71 @@ const DIR_PARTS = {
   플: [['플', PL]],
 }
 
+// ── 이 방향성이 과거에 얼마나 맞았나 (2026-08-29 실측) ──
+// 6대리그 32,466경기(결과가 있고 배변 지표까지 있는 경기 전부) 기준.
+// 적중 = 그 이름이 '빼라'고 한 결과가 실제로 안 나옴(정무면 역만 안 나오면 적중) —
+// CLAUDE.md 5-1의 "3개 중 1개 배제" 관점 그대로다.
+//
+// ⚠ 같음/다름은 '이름'이 아니라 '방향'으로 가른다(DIR_SIDE).
+//   정무·정역·정 = 정 방향(핸승+핸무 쪽이 유력), 플핸무·플핸승·플 = 플 방향(무+역 쪽).
+//   정무와 정역은 둘 다 정배 쪽을 보되 보험을 무로 가냐 역으로 가냐만 다르므로
+//   "같은 방향"이 맞다. 이름 문자열로 가르면 이걸 '다름'으로 잘못 세게 된다.
+//
+// 값은 [적중률%, 표본수]. 표본 200건 미만인 칸은 아예 넣지 않았다(띄우지 않는다).
+//   same    = 국·해가 같은 방향 (이름은 그중 국내 쪽 기준)
+//   diff    = 방향이 갈렸을 때, 국내 쪽 이름을 따랐을 경우
+//   diffFor = 방향이 갈렸을 때, 해외 쪽 이름을 따랐을 경우 (설명 문구에만 쓴다)
+//
+// ⚠ 실측에서 드러난 것 — 초기와 배변이 정반대로 움직인다.
+//   초기: 방향이 같을 때가 가장 믿을 만하다(전체 78.3%, n=20,768).
+//   배변: 방향이 같을 때가 오히려 가장 나쁘다(전체 68.4%, n=20,625).
+//   원인은 api/final_indicators.py가 표본 풀은 과거 경기의 '초기배당' 기준으로 두고
+//   이 경기만 '최종배당'으로 찾아 들어가기 때문이다(배당이 안 움직인 경기는 초기와
+//   값이 완전히 같고, 움직인 경기에서만 뒤집힌다 — 국 20.7%→36.3%, 해 19.9%→36.9%).
+const DIR_HIT_RATE = {
+  init: {
+    same: { 정무: [84, 5861], 정역: [77, 2702], 플핸무: [81, 4221], 플핸승: [78, 3675], 정: [73, 3056], 플: [60, 1253] },
+    diff: { 정무: [77, 3106], 정역: [72, 2128], 플핸무: [76, 2166], 플핸승: [76, 3112], 정: [58, 670], 플: [56, 516] },
+    diffFor: { 정무: [78, 3401], 정역: [75, 2058], 플핸무: [77, 2642], 플핸승: [77, 3113], 정: [67, 335] },
+  },
+  final: {
+    same: { 정무: [77, 5724], 정역: [66, 2788], 플핸무: [71, 3959], 플핸승: [65, 3750], 정: [65, 3130], 플: [44, 1274] },
+    diff: { 정무: [78, 3128], 정역: [68, 2135], 플핸무: [78, 2266], 플핸승: [77, 3017], 정: [62, 742], 플: [61, 553] },
+    diffFor: { 정무: [63, 3264], 정역: [49, 2155], 플핸무: [63, 2609], 플핸승: [62, 3167], 정: [49, 417], 플: [29, 229] },
+  },
+}
+
+/** 이름 -> 방향. 첫 조각(DIR_PARTS의 '정'/'플')이 곧 방향이다. */
+const DIR_SIDE = { 정무: '정', 정역: '정', 정: '정', 플핸무: '플', 플핸승: '플', 플: '플' }
+
+// 아무 정보 없이 그 이름에 걸었을 때의 적중률 — 위 숫자를 이것과 견줘야 의미가 있다.
+// (같은 32,466경기의 결과 분포: 핸승 30.1% / 핸무 23.6% / 무 25.0% / 역 21.2%)
+const DIR_BASE_RATE = { 정무: 79, 정역: 75, 플핸무: 70, 플핸승: 76, 정: 54, 플: 46 }
+
+/** 기준선보다 이만큼 벗어나면 색으로 표시한다(%p). */
+const DIR_RATE_MARK = 3
+
+/** altName: 방향이 갈렸을 때의 해외 쪽 이름 — 본문에는 안 쓰고 설명(title)에만 덧붙인다. */
+function DirRate({ phase, same, name, altName }) {
+  const e = name ? DIR_HIT_RATE[phase]?.[same ? 'same' : 'diff']?.[name] : null
+  if (!e) return <span className="dir-rate dir-rate-none" title="표본이 적어(200건 미만) 값을 내지 않습니다">—</span>
+  const [pct, n] = e
+  const base = DIR_BASE_RATE[name]
+  const gap = pct - base
+  const cls = gap >= DIR_RATE_MARK ? ' dir-rate-good' : gap <= -DIR_RATE_MARK ? ' dir-rate-bad' : ''
+  let tip = same
+    ? `국·해가 같은 방향(${DIR_SIDE[name]})일 때 — 과거 ${n.toLocaleString()}경기 중 ${pct}%에서 '${name}'의 배제가 맞았습니다.`
+    : `방향이 갈렸을 때 국내 쪽 '${name}'을 따랐다면 — 과거 ${n.toLocaleString()}경기 중 ${pct}%에서 배제가 맞았습니다.`
+  tip += `\n아무 정보 없이 ${name}에 걸면 ${base}% (${gap >= 0 ? '+' : ''}${gap}%p)`
+  if (altName) {
+    const a = DIR_HIT_RATE[phase]?.diffFor?.[altName]
+    tip += a
+      ? `\n해외 쪽 '${altName}'을 따랐다면 ${a[0]}% (${a[1].toLocaleString()}경기)`
+      : `\n해외 쪽 '${altName}'은 표본이 적어 값이 없습니다`
+  }
+  return <span className={`dir-rate${cls}`} title={tip}>{pct}%</span>
+}
+
 // 괄호 안 — 핸승/핸무/무/역 중 값이 가장 큰 것 하나. 방향성과는 별개 정보다
 // (방향성은 '무엇을 뺄까', 이건 '무엇이 제일 유력한가').
 const DIR_TOP_LABELS = ['핸승', '핸무', '무', '역']
@@ -749,33 +814,40 @@ function analysisPair(row, scope, final) {
 // actual: 이미 결과가 나온 경기면 rtLabel(row.RT)('핸승'/'핸무'/'무'/'역'), 아니면 null.
 // 괄호 안(최다 1개)이 실제 결과와 같으면 그 글자만 노란색으로 — "적중" 표시와
 // 같은 색(--chip-yellow-fg, PICK_VERDICT '적중' 배지와 동일 계열)이다.
-function DirectionPart({ pair, actual }) {
+// 국·해 사이 구분자가 곧 "두 지표가 같은 방향을 가리켰는가"를 말해 준다.
+// 이름이 아니라 방향(정/플)으로 가른다 — 정무와 정역은 둘 다 정배 쪽을 보고
+// 보험만 다른 것이라 '같음'이다(DIR_SIDE 주석 참고).
+//   같으면  국)정무(역) = 해)정역(무)   → 84%
+//   다르면  국)정무(역) ≠ 해)플핸무(무) → 77%
+// 끝의 퍼센트는 하나뿐이다. 갈렸을 때는 국내 쪽 이름을 따랐을 경우의 값을 쓴다 —
+// 실제로 거는 시장이 국내(프로토)이고 줄에서도 국)이 먼저 나오기 때문이다.
+// 해외 쪽을 따랐을 때의 값은 마우스를 올리면 나온다.
+function DirectionPart({ pair, actual, phase }) {
   if (!pair || (!pair.dom && !pair.forr)) return <span className="dir-none">—</span>
-  const one = (label, v) => (
+  const domName = pair.dom ? directionName(pair.dom) : null
+  const forName = pair.forr ? directionName(pair.forr) : null
+  // 한쪽 값이 아예 없으면 '같다/다르다'를 말할 수 없다 — 그때만 중립 구분자(/)를 쓴다.
+  const bothKnown = domName !== null && forName !== null
+  const same = bothKnown && DIR_SIDE[domName] === DIR_SIDE[forName]
+  const one = (label, v, name) => (
     <span className="dir-one" key={label}>
       <span className="dir-market">{label})</span>
       {v ? (
-        (() => {
-          const name = directionName(v)
-          const parts = DIR_PARTS[name] || [[name, []]]
-          return (
-            <>
-              <b className="dir-name">
-                {parts.map(([piece, covers]) => (
-                  <span
-                    key={piece}
-                    className={actual && covers.includes(actual) ? 'dir-name-hit' : undefined}
-                  >
-                    {piece}
-                  </span>
-                ))}
-              </b>
-              <span className={`dir-top${actual && topOutcome(v) === actual ? ' dir-top-hit' : ''}`}>
-                ({topOutcome(v)})
+        <>
+          <b className="dir-name">
+            {(DIR_PARTS[name] || [[name, []]]).map(([piece, covers]) => (
+              <span
+                key={piece}
+                className={actual && covers.includes(actual) ? 'dir-name-hit' : undefined}
+              >
+                {piece}
               </span>
-            </>
-          )
-        })()
+            ))}
+          </b>
+          <span className={`dir-top${actual && topOutcome(v) === actual ? ' dir-top-hit' : ''}`}>
+            ({topOutcome(v)})
+          </span>
+        </>
       ) : (
         <span className="dir-none">—</span>
       )}
@@ -783,9 +855,13 @@ function DirectionPart({ pair, actual }) {
   )
   return (
     <>
-      {one('국', pair.dom)}
-      <span className="dir-sep">/</span>
-      {one('해', pair.forr)}
+      {one('국', pair.dom, domName)}
+      <span className={`dir-sep${bothKnown && !same ? ' dir-sep-diff' : ''}`}>
+        {bothKnown ? (same ? '=' : '≠') : '/'}
+      </span>
+      {one('해', pair.forr, forName)}
+      <span className="dir-arrow-rate">→</span>
+      <DirRate phase={phase} same={same} name={domName} altName={same ? null : forName} />
     </>
   )
 }
@@ -802,12 +878,14 @@ function DirectionSummary({ row, scope }) {
     <span className="detail-section-note dir-summary">
       <span className="dir-block">
         <span className="dir-when">초기</span>
-        <DirectionPart pair={init} actual={actual} />
+        <DirectionPart pair={init} actual={actual} phase="init" />
       </span>
       <span className="dir-bar">|</span>
       <span className="dir-block">
         <span className="dir-when dir-when-final">배변</span>
-        {hasFinal ? <DirectionPart pair={fin} actual={actual} /> : <span className="dir-none">—</span>}
+        {hasFinal
+          ? <DirectionPart pair={fin} actual={actual} phase="final" />
+          : <span className="dir-none">—</span>}
       </span>
     </span>
   )

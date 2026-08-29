@@ -258,8 +258,15 @@
 .dir-market,
 .dir-sep,
 .dir-bar,
+.dir-arrow-rate,
 .dir-top {
   color: var(--text-muted);
+}
+
+/* 국·해가 갈렸다는 표시(≠) — 같을 때(=)와 한눈에 구분되게 조금 더 진하게. */
+.dir-sep-diff {
+  color: var(--text-secondary);
+  font-weight: 700;
 }
 
 .dir-bar {
@@ -304,6 +311,29 @@
 .dir-top-hit {
   color: var(--chip-yellow-fg);
   font-weight: 700;
+}
+
+/* 이 조합이 과거에 맞은 비율(실측) — 이름 자체(.dir-name)보다 한 단계 약하게 둔다.
+   '기준선(아무 정보 없이 걸었을 때)'보다 나은지 나쁜지를 색으로만 표시한다.
+   숫자 폭이 들쭉날쭉하면 두 줄(초기/배변)의 자리가 안 맞아 읽기 힘들어서 tabular-nums. */
+.dir-rate {
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dir-rate-good {
+  color: var(--chip-green-fg);
+}
+
+.dir-rate-bad {
+  color: var(--chip-red-fg);
+}
+
+.dir-rate-none {
+  color: var(--text-muted);
+  font-weight: 400;
+  opacity: 0.7;
 }
 
 /* 상대전적 제목 줄 — 평균득점 문구는 왼쪽에 붙여 강조하고, 승점 기준 안내문은
