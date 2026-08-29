@@ -562,10 +562,12 @@ export function myHitStyle(value) {
   if (value === 'P-핸↑') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-표X') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-무↑') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  if (value === 'P-역↑') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-관전') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'P-어렵') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
   if (value === 'B-고민' || value === '벳고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
-  if (value === '축') return { background: '#00897B', color: '#fff', fontWeight: 700 }
+  if (value === '축-플') return { background: '#00897B', color: '#fff', fontWeight: 700 }
+  if (value === '축-정') return { background: '#00897B', color: '#fff', fontWeight: 700 }
   if (value === '축-Si' || value === '축-사이드') return { background: '#00695C', color: '#fff', fontWeight: 700 }
   if (value === 'B-Ma' || value === 'B-메인' || value === '메인벳') return { background: '#1565C0', color: '#fff', fontWeight: 700 }
   if (value === 'B-Si' || value === 'B-사이드' || value === 'S벳') return { background: '#6A1B9A', color: '#fff', fontWeight: 700 }
