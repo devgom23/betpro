@@ -794,6 +794,17 @@ const DIR_HIT = {
 /** 이름 -> 방향. 첫 조각(DIR_PARTS의 '정'/'플')이 곧 방향이다. */
 const DIR_SIDE = { 정무: '정', 정역: '정', 정: '정', 플핸무: '플', 플핸승: '플', 플: '플' }
 
+// ── 초기 -> 배변으로 그 지표의 '방향'이 뒤집힌 경기 (2026-08-29 실측) ──
+// 이번 실측에서 나온 가장 강한 신호다. 방향이 바뀌면 배변 쪽 이름은 반반이 되는데,
+// 같은 경기에서 초기 쪽 이름을 그대로 따랐으면 80%대였다 — 30%p 넘게 갈린다.
+//   6대리그 국: 배변 51.0% vs 초기 83.5% (n=3,814) / 해: 52.7% vs 83.8% (n=10,885)
+//   K1     국: 47.5% vs 81.2% (n=516)  / 해: 48.6% vs 84.1% (n=1,116)
+//   K2     국: 52.3% vs 82.2% (n=342)  / 해: 49.7% vs 81.3% (n=706)
+// 8개 리그·양쪽 지표에서 예외 없이 같은 방향이라 내 데이터에도 그대로 띄운다
+// (적중률 표 DIR_HIT과 달리 이 경고는 K리그에서도 검증됐다).
+// 값은 [초기 쪽을 따랐을 때 %, 배변 쪽을 따랐을 때 %].
+const DIR_FLIP = { master: [84, 52], user: [82, 49] }
+
 // 정배배당 구간 — oddsMove.js·CLAUDE.md가 쓰는 1.8 경계를 포함해 넷으로 나눈다.
 const DIR_BANDS = [[1.5, '~1.5'], [1.8, '1.5~1.8'], [2.2, '1.8~2.2'], [Infinity, '2.2+']]
 
@@ -815,6 +826,21 @@ const DIR_RATE_WHERE = {
   same: (name) => `국·해가 같은 방향(${DIR_SIDE[name]})일 때`,
   diff: () => '방향이 갈렸을 때 국내 쪽',
   diffFor: () => '방향이 갈렸을 때 해외 쪽',
+}
+
+/** 배변에서 그 지표의 방향이 초기와 뒤집혔을 때 붙는 경고. from=초기 이름, to=배변 이름. */
+function DirFlip({ from, to, scope }) {
+  const [keep, flip] = DIR_FLIP[scope === 'user' ? 'user' : 'master']
+  return (
+    <span
+      className="dir-flip"
+      title={`초기에는 '${from}'(${DIR_SIDE[from]} 방향)이었는데 배변에서 '${to}'(${DIR_SIDE[to]} 방향)로 뒤집혔습니다.`
+        + `\n실측상 이럴 때 배변 쪽을 따르면 ${flip}%, 초기 쪽('${from}')을 그대로 따르면 ${keep}%였습니다.`
+        + '\n= 방향이 뒤집혔다는 말은 믿지 않는 편이 훨씬 나았습니다.'}
+    >
+      ⚠
+    </span>
+  )
 }
 
 function DirRate({ phase, slot, name, band }) {
@@ -900,14 +926,17 @@ function analysisPair(row, scope, final) {
 //   다르면  국)정무(역) 77% ≠ 해)플핸무(무) 77%   ← 서로 다른 베팅이라 각각 붙인다
 // 갈렸을 때 한쪽만 보여주면(예전 방식) 나머지 절반이 숨고, '국내 우선'이라는 규칙도
 // 화면만 봐선 알 수 없어 오해를 낳는다.
-function DirectionPart({ pair, actual, phase, band }) {
+function DirectionPart({ pair, actual, phase, band, prev, scope }) {
   if (!pair || (!pair.dom && !pair.forr)) return <span className="dir-none">—</span>
   const domName = pair.dom ? directionName(pair.dom) : null
   const forName = pair.forr ? directionName(pair.forr) : null
   // 한쪽 값이 아예 없으면 '같다/다르다'를 말할 수 없다 — 그때만 중립 구분자(/)를 쓴다.
   const bothKnown = domName !== null && forName !== null
   const same = bothKnown && DIR_SIDE[domName] === DIR_SIDE[forName]
-  const one = (label, v, name, slot) => (
+  // prev(초기 쪽 이름)는 배변 줄에만 넘어온다 — 같은 지표의 방향이 뒤집혔는지 본다.
+  const flipped = (name, before) =>
+    before && name && DIR_SIDE[before] !== DIR_SIDE[name] ? before : null
+  const one = (label, v, name, slot, before) => (
     <span className="dir-one" key={label}>
       <span className="dir-market">{label})</span>
       {v ? (
@@ -925,6 +954,7 @@ function DirectionPart({ pair, actual, phase, band }) {
           <span className={`dir-top${actual && topOutcome(v) === actual ? ' dir-top-hit' : ''}`}>
             ({topOutcome(v)})
           </span>
+          {flipped(name, before) && <DirFlip from={before} to={name} scope={scope} />}
           {slot && band !== false && <DirRate phase={phase} slot={slot} name={name} band={band} />}
         </>
       ) : (
@@ -935,11 +965,11 @@ function DirectionPart({ pair, actual, phase, band }) {
   // 방향이 같으면 두 쪽이 한 덩어리라 끝에 하나만, 갈렸으면 각 쪽에 따로 붙인다.
   return (
     <>
-      {one('국', pair.dom, domName, same ? null : 'diff')}
+      {one('국', pair.dom, domName, same ? null : 'diff', prev?.dom)}
       <span className={`dir-sep${bothKnown && !same ? ' dir-sep-diff' : ''}`}>
         {bothKnown ? (same ? '=' : '≠') : '/'}
       </span>
-      {one('해', pair.forr, forName, same ? null : 'diffFor')}
+      {one('해', pair.forr, forName, same ? null : 'diffFor', prev?.forr)}
       {same && band !== false && (
         <>
           <span className="dir-arrow-rate">→</span>
@@ -967,17 +997,27 @@ function DirectionSummary({ row, scope }) {
   const isMaster = scope !== 'user'
   const bandInit = isMaster ? dirBand(row.KW, row.KL) : false
   const bandFinal = isMaster ? (dirBand(row.EKW, row.EKL) ?? dirBand(row.KW, row.KL)) : false
+  // 배변 줄에 '방향이 뒤집혔다' 경고를 붙이려면 초기 쪽 이름을 같이 넘겨야 한다.
+  const prev = {
+    dom: init?.dom ? directionName(init.dom) : null,
+    forr: init?.forr ? directionName(init.forr) : null,
+  }
   return (
     <span className="detail-section-note dir-summary">
       <span className="dir-block">
         <span className="dir-when">초기</span>
-        <DirectionPart pair={init} actual={actual} phase="init" band={bandInit} />
+        <DirectionPart pair={init} actual={actual} phase="init" band={bandInit} scope={scope} />
       </span>
       <span className="dir-bar">|</span>
       <span className="dir-block">
         <span className="dir-when dir-when-final">배변</span>
         {hasFinal
-          ? <DirectionPart pair={fin} actual={actual} phase="final" band={bandFinal} />
+          ? (
+            <DirectionPart
+              pair={fin} actual={actual} phase="final" band={bandFinal}
+              prev={prev} scope={scope}
+            />
+          )
           : <span className="dir-none">—</span>}
       </span>
     </span>
