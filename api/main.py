@@ -1467,22 +1467,48 @@ def pick_ai(body: PickAiBody, user: dict = Depends(get_current_user)):
     # 사용자 지정대로 '그 리그 안에서만' 세므로 리그 하나만 따로 읽는다.
     result["streaks"] = _team_streaks(db if ht and at else None, body.scope, body.code,
                                       ht, at, body.row)
+    # '최근10경기 전적' 칸에 마우스를 올렸을 때 보여줄 경기 정보. 위 streaks와 같은
+    # 슬림 표를 쓰므로 읽기 비용이 더 붙지 않는다.
+    result["recent10"] = _team_recent10(db if ht and at else None, body.scope, body.code,
+                                        ht, at, body.row)
     return result
+
+
+def _league_slim_df(db, code):
+    """연속기록·최근10에 함께 쓰는 슬림 표(없으면 None).
+    370컬럼짜리 전체 표를 읽으면 리그 하나당 콜드 620ms가 더 붙는다."""
+    if not db or not code:
+        return None
+    league_df = DATA.load_league_h2h_df(db, code)
+    return None if league_df.empty else league_df
 
 
 def _team_streaks(db, scope, code, ht, at, row) -> dict:
     """두 팀의 최고 연속 기록을 그 리그 데이터로만 구한다(없으면 None)."""
-    if not db or not code or not ht or not at:
+    if not ht or not at:
         return None
-    # 연속기록은 S/R/No/HT/AT/HS/AS만 보므로 상대전적과 같은 슬림 표를 쓴다
-    # (370컬럼짜리 전체 표를 읽으면 리그 하나당 콜드 620ms가 더 붙는다).
-    league_df = DATA.load_league_h2h_df(db, code)
-    if league_df.empty:
+    league_df = _league_slim_df(db, code)
+    if league_df is None:
         return None
     args = (row.get("S"), row.get("R"), row.get("No"))
     return {
         "home": standings.max_streaks_before(league_df, ht, *args),
         "away": standings.max_streaks_before(league_df, at, *args),
+    }
+
+
+def _team_recent10(db, scope, code, ht, at, row) -> dict:
+    """최근10경기 칸 하나하나가 어느 경기였는지. 화면 칸 순서와 같게 만든다 —
+    홈팀은 과거→최신, 원정팀은 최신→과거(standings.recent10_before 주석 참고)."""
+    if not ht or not at:
+        return None
+    league_df = _league_slim_df(db, code)
+    if league_df is None:
+        return None
+    args = (row.get("S"), row.get("R"), row.get("No"))
+    return {
+        "home": standings.recent10_before(league_df, ht, *args),
+        "away": standings.recent10_before(league_df, at, *args, newest_first=True),
     }
 
 

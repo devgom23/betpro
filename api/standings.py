@@ -291,6 +291,63 @@ def _chrono_key(s, r, no):
     return (str(s), _round_num(r), n)
 
 
+def recent10_before(df, team, season, round_, no, newest_first=False):
+    """'최근10경기 전적' 칸 하나하나가 어느 경기였는지 — 마우스를 올렸을 때 보여줄 정보.
+
+    ⚠ 화면의 HR10/AR10 칸과 **한 칸씩 정확히 맞아야** 한다. 그래서 그 값을 만드는
+      _attach_one_season()과 같은 규칙을 쓴다 —
+        · 같은 시즌 안에서만 센다(연속기록 max_streaks_before는 시즌을 넘나드는 것과 다르다)
+        · 그 경기 '직전까지'만 (자기 자신과 그 이후는 제외)
+        · 결과가 없는 경기(예정·취소·연기)는 건너뛴다
+        · 홈팀은 과거→최신, 원정팀은 최신→과거(newest_first=True)
+    반환: [{DT, TM, HT, HS, AS, AT, RT, is_home, letter}, ...] 최대 10개.
+    """
+    t = str(team or "").strip()
+    if not t or df is None or df.empty:
+        return []
+    if not all(c in df.columns for c in _REQUIRED):
+        return []
+
+    ht = df["HT"].astype(str).str.strip()
+    at = df["AT"].astype(str).str.strip()
+    same_season = df["S"].astype(str).str.strip() == str(season or "").strip()
+    mine = df[((ht == t) | (at == t)) & same_season]
+    if mine.empty:
+        return []
+
+    cutoff = _chrono_key(season, round_, no)
+    get = lambda r, c: (r[c] if c in mine.columns else None)  # noqa: E731
+    rows = []
+    for _, r in mine.iterrows():
+        key = _chrono_key(r["S"], r["R"], r["No"])
+        if key >= cutoff:
+            continue
+        a, b = _score(r["HS"]), _score(r["AS"])
+        if a is None or b is None:
+            continue
+        is_home = str(r["HT"]).strip() == t
+        mine_, theirs = (a, b) if is_home else (b, a)
+        rows.append((key, {
+            "DT": _plain(get(r, "DT")), "TM": _plain(get(r, "TM")),
+            "HT": str(r["HT"]).strip(), "AT": str(r["AT"]).strip(),
+            "HS": a, "AS": b, "RT": _plain(get(r, "RT")),
+            "is_home": is_home,
+            "letter": "W" if mine_ > theirs else "L" if mine_ < theirs else "D",
+        }))
+    rows.sort(key=lambda x: x[0])
+    out = [v for _, v in rows[-RECENT10_N:]]
+    return list(reversed(out)) if newest_first else out
+
+
+def _plain(v):
+    """JSON으로 내보낼 수 있게 NaN/numpy 값을 파이썬 기본형으로."""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    return str(v).strip() or None
+
+
 def max_streaks_before(df, team, season, round_, no):
     """team이 그 경기 '직전까지' 세운 최고 연속 기록 4종.
 

@@ -189,7 +189,7 @@ def load_total_df(db_path: str) -> pd.DataFrame:
 #   상대전적/시즌전적/엑셀에서 새 컬럼을 쓰려면 반드시 이 목록에 먼저 추가할 것.
 # "No"는 상대전적 화면에는 안 나오지만 연속기록(standings.max_streaks_before)이 경기
 # 순서를 매기는 데 쓴다 — 빼면 그 함수가 KeyError를 낸다.
-H2H_COLS = ["S", "R", "No", "DT", "HT", "HS", "AS", "AT", "RT",
+H2H_COLS = ["S", "R", "No", "DT", "TM", "HT", "HS", "AS", "AT", "RT",
             "KW", "KD", "KL", "FW", "FD", "FL"]
 
 

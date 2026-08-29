@@ -1094,6 +1094,14 @@
   background: rgba(66, 165, 245, 0.28);
 }
 
+/* 마우스를 올리면 그 경기 정보가 뜨는 칸 — 올릴 수 있다는 걸 커서와 밑줄로 알린다.
+   (빈 칸에는 안 붙는다) */
+.recent-cell-tip {
+  cursor: help;
+  text-decoration: underline dotted var(--text-muted-2);
+  text-underline-offset: 2px;
+}
+
 .recent-home-swatch {
   display: inline-block;
   vertical-align: middle;

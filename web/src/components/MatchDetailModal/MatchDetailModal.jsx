@@ -487,10 +487,29 @@ function StreakLine({ data, align }) {
   )
 }
 
-function RecentTable({ row, streaks }) {
+// 칸 하나에 마우스를 올렸을 때 보여줄 그 경기 정보.
+//   26-08-24(수) 20:30
+//   리버플 1 - 0 노팅엄 (역)
+// 서버가 준 목록(recent10)은 화면 칸과 같은 순서라 자리만 맞춰 꺼내 쓴다. 다만 칸은
+// 항상 10개인데 경기가 그보다 적을 수 있어(시즌 초반), 원정팀 쪽은 뒤에서부터 채우는
+// recentCells의 offset을 똑같이 적용해 자리를 맞춘다.
+function recentTip(m) {
+  if (!m) return undefined
+  const when = [formatDt(m.DT), formatTime(m.TM)].filter(Boolean).join(' ')
+  // 스코어는 DB에 실수(2.0)로 들어 있어 그대로 쓰면 '2.00 - 2.00'이 된다.
+  const g = (v) => (v === null || v === undefined ? '-' : Math.trunc(v))
+  const score = `${m.HT} ${g(m.HS)} - ${g(m.AS)} ${m.AT}`
+  const rt = rtLabel(m.RT)
+  return [when, rt ? `${score} (${rt})` : score].filter(Boolean).join('\n')
+}
+
+function RecentTable({ row, streaks, recent10 }) {
   // 시즌 첫 라운드면 아직 치른 경기가 없어 양쪽 다 비어 있다 — 폼 지표와 같이 '-'로 둔다.
   const homeCells = recentCells(String(row.HR10 || ''), String(row.HR10H || ''))
   const awayCells = recentCells(String(row.AR10 || ''), String(row.AR10H || ''), true)
+  const homeGames = recent10?.home || []
+  const awayGames = recent10?.away || []
+  const awayOffset = Math.max(0, 10 - awayGames.length)
   const hasStreak = streaks && (streaks.home?.played || streaks.away?.played)
   return (
     <>
@@ -503,16 +522,32 @@ function RecentTable({ row, streaks }) {
         </thead>
         <tbody>
           <tr>
-            {homeCells.map((c, i) => (
-              <td key={`h${i}`} className={`recent-cell recent-${c.ch} ${c.isHome ? 'recent-cell-home' : ''}`}>
-                {c.ch || '-'}
-              </td>
-            ))}
-            {awayCells.map((c, i) => (
-              <td key={`a${i}`} className={`recent-cell recent-${c.ch} ${c.isHome ? 'recent-cell-home' : ''}`}>
-                {c.ch || '-'}
-              </td>
-            ))}
+            {homeCells.map((c, i) => {
+              const tip = c.ch ? recentTip(homeGames[i]) : undefined
+              return (
+                <td
+                  key={`h${i}`}
+                  className={`recent-cell recent-${c.ch} ${c.isHome ? 'recent-cell-home' : ''}`
+                    + (tip ? ' recent-cell-tip' : '')}
+                  title={tip}
+                >
+                  {c.ch || '-'}
+                </td>
+              )
+            })}
+            {awayCells.map((c, i) => {
+              const tip = c.ch ? recentTip(awayGames[i - awayOffset]) : undefined
+              return (
+                <td
+                  key={`a${i}`}
+                  className={`recent-cell recent-${c.ch} ${c.isHome ? 'recent-cell-home' : ''}`
+                    + (tip ? ' recent-cell-tip' : '')}
+                  title={tip}
+                >
+                  {c.ch || '-'}
+                </td>
+              )
+            })}
           </tr>
         </tbody>
       </table>
@@ -1559,7 +1594,11 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                   <span className="recent-home-swatch" /> 홈경기 · 경기 직전까지 그 리그에서 세운 최다 기록
                 </span>
               </h3>
-              <RecentTable row={row} streaks={pickData ? pickData.streaks : null} />
+              <RecentTable
+                row={row}
+                streaks={pickData ? pickData.streaks : null}
+                recent10={pickData ? pickData.recent10 : null}
+              />
             </section>
             <section
               className="detail-section detail-section-grow"
