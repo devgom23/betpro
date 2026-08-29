@@ -75,6 +75,8 @@ body {
   --chip-yellow-fg: #fde68a;
   --chip-teal-bg: #123f3a;
   --chip-teal-fg: #7fe0d2;
+  --chip-purple-bg: #3a2260;
+  --chip-purple-fg: #d8b4fe;
 }
 
 :root[data-theme='light'] {
@@ -126,4 +128,6 @@ body {
   --chip-yellow-fg: #78350f;
   --chip-teal-bg: #ccfbf1;
   --chip-teal-fg: #115e59;
+  --chip-purple-bg: #f3e8ff;
+  --chip-purple-fg: #6b21a8;
 }

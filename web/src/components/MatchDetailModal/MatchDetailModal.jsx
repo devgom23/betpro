@@ -684,6 +684,25 @@ function directionName(v) {
   return cand.reduce((best, c) => (c[1] < best[1] ? c : best))[0]
 }
 
+// 방향성 이름은 실제로 두 조각의 합성어다 — '정'(핸승+핸무를 묶어 부르는 이름)
+// '플'(무+역을 묶어 부르는 이름) + 나머지 하나(무/역/핸무/핸승 그대로).
+//   정무 = 정(핸승,핸무) + 무   |   정역 = 정(핸승,핸무) + 역
+//   플핸무 = 플(무,역) + 핸무    |   플핸승 = 플(무,역) + 핸승
+//   정 = 정(핸승,핸무) 단독      |   플 = 플(무,역) 단독
+// 그래서 "정무인데 실제 결과가 핸승이면 '정' 조각만 켜고 '무'는 그대로 둬야" 맞다 —
+// 결과가 무일 때만 '무' 조각이 켜진다. 통짜로 같이 켜면(예전 방식) 결과가 핸승일 때
+// 안 나온 '무'까지 같이 켜져서 틀린 정보가 된다.
+const JEONG = ['핸승', '핸무']
+const PL = ['무', '역']
+const DIR_PARTS = {
+  정무: [['정', JEONG], ['무', ['무']]],
+  정역: [['정', JEONG], ['역', ['역']]],
+  플핸무: [['플', PL], ['핸무', ['핸무']]],
+  플핸승: [['플', PL], ['핸승', ['핸승']]],
+  정: [['정', JEONG]],
+  플: [['플', PL]],
+}
+
 // 괄호 안 — 핸승/핸무/무/역 중 값이 가장 큰 것 하나. 방향성과는 별개 정보다
 // (방향성은 '무엇을 뺄까', 이건 '무엇이 제일 유력한가').
 const DIR_TOP_LABELS = ['핸승', '핸무', '무', '역']
@@ -727,16 +746,36 @@ function analysisPair(row, scope, final) {
 }
 
 // "국) 정무(무) / 해) 플핸무(역)" 한 덩어리. 값이 없으면 null.
-function DirectionPart({ pair }) {
+// actual: 이미 결과가 나온 경기면 rtLabel(row.RT)('핸승'/'핸무'/'무'/'역'), 아니면 null.
+// 괄호 안(최다 1개)이 실제 결과와 같으면 그 글자만 노란색으로 — "적중" 표시와
+// 같은 색(--chip-yellow-fg, PICK_VERDICT '적중' 배지와 동일 계열)이다.
+function DirectionPart({ pair, actual }) {
   if (!pair || (!pair.dom && !pair.forr)) return <span className="dir-none">—</span>
   const one = (label, v) => (
     <span className="dir-one" key={label}>
       <span className="dir-market">{label})</span>
       {v ? (
-        <>
-          <b className="dir-name">{directionName(v)}</b>
-          <span className="dir-top">({topOutcome(v)})</span>
-        </>
+        (() => {
+          const name = directionName(v)
+          const parts = DIR_PARTS[name] || [[name, []]]
+          return (
+            <>
+              <b className="dir-name">
+                {parts.map(([piece, covers]) => (
+                  <span
+                    key={piece}
+                    className={actual && covers.includes(actual) ? 'dir-name-hit' : undefined}
+                  >
+                    {piece}
+                  </span>
+                ))}
+              </b>
+              <span className={`dir-top${actual && topOutcome(v) === actual ? ' dir-top-hit' : ''}`}>
+                ({topOutcome(v)})
+              </span>
+            </>
+          )
+        })()
       ) : (
         <span className="dir-none">—</span>
       )}
@@ -756,16 +795,19 @@ function DirectionSummary({ row, scope }) {
   const init = analysisPair(row, scope, false)
   const fin = analysisPair(row, scope, true)
   const hasFinal = fin && (fin.dom || fin.forr)
+  // 취소·연기는 '결과'가 아니라 핸승/핸무/무/역 중 하나일 때만 적중 비교 대상이다.
+  const rtText = rtLabel(row.RT)
+  const actual = ['핸승', '핸무', '무', '역'].includes(rtText) ? rtText : null
   return (
     <span className="detail-section-note dir-summary">
       <span className="dir-block">
-        <span className="dir-when">초기 :</span>
-        <DirectionPart pair={init} />
+        <span className="dir-when">초기</span>
+        <DirectionPart pair={init} actual={actual} />
       </span>
       <span className="dir-bar">|</span>
       <span className="dir-block">
-        <span className="dir-when">배변 :</span>
-        {hasFinal ? <DirectionPart pair={fin} /> : <span className="dir-none">—</span>}
+        <span className="dir-when dir-when-final">배변</span>
+        {hasFinal ? <DirectionPart pair={fin} actual={actual} /> : <span className="dir-none">—</span>}
       </span>
     </span>
   )
@@ -1062,7 +1104,7 @@ function PickBand({ row, scope }) {
     <section className="pick-band">
       <div className="pick-band-risk">
         <h3>
-          확률 지표{' '}
+          확률 지표
           <DirectionSummary row={row} scope={scope} />
         </h3>
         <RiskCard row={row} />
@@ -1227,7 +1269,8 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
           <div className="modal-col">
             <section className="detail-section">
               <h3>
-                배당 <DdongNote row={row} />
+                배당
+                <DdongNote row={row} />
               </h3>
               <OddsTable row={row} />
             </section>
@@ -1241,7 +1284,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                 >
                   {sampleExpanded ? '▾' : '▸'}
                 </button>
-                지표별 표본{' '}
+                지표별 표본
                 <span className="detail-section-note">
                   {sampleExpanded ? '전체' : '판단에 쓰는 지표만'}
                 </span>
@@ -1257,7 +1300,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                 {/* note 원문은 한 문장이 길어(‘오늘과 같은 정배/역배 구도였던 …’) 제목 줄이
                     두 줄로 흘러 옆 폼 지표를 밀어낸다 — 짧게 줄이고 원문은 title로 남긴다. */}
                 <h3>
-                  시즌전적{' '}
+                  시즌전적
                   {seasonSig && seasonSig.note && (
                     <span className="detail-section-note" title={seasonSig.note}>
                       같은 정배 구도였던 이번 시즌 경기
@@ -1279,7 +1322,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
             </div>
             <section className="detail-section">
               <h3>
-                최근10경기 전적{' '}
+                최근10경기 전적
                 <span className="detail-section-note">
                   <span className="recent-home-swatch" /> 홈경기 · 경기 직전까지 그 리그에서 세운 최다 기록
                 </span>
@@ -1292,8 +1335,8 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
               style={h2hMaxHeight ? { maxHeight: `${h2hMaxHeight}px` } : undefined}
             >
               <h3 className="detail-h2h-title">
-                <span>
-                  상대전적{' '}
+                <span className="detail-h2h-title-left">
+                  상대전적
                   <label className="detail-h2h-home-toggle">
                     <input
                       type="checkbox"
@@ -1301,7 +1344,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                       onChange={(e) => setH2hHomeOnly(e.target.checked)}
                     />
                     홈보기
-                  </label>{' '}
+                  </label>
                   {/* 예전 종합분석 '상대전적' 카드에 있던 문장(맞대결 평균 총득점).
                       확률 계산에는 안 들어가는 참고값이라 제목 옆에 붙여만 두되, 눈에 띄게 강조한다. */}
                   {h2hSig && h2hSig.value_text && (

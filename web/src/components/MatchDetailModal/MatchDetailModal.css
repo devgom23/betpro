@@ -217,6 +217,10 @@
 
 .modal-col h3,
 .detail-section h3 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
   font-size: 13px;
   color: var(--text-secondary);
   margin: 0 0 8px;
@@ -241,7 +245,7 @@
 
 .dir-block {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
 }
 
@@ -251,7 +255,6 @@
   gap: 2px;
 }
 
-.dir-when,
 .dir-market,
 .dir-sep,
 .dir-bar,
@@ -263,15 +266,44 @@
   opacity: 0.5;
 }
 
+/* '초기'/'배변' 알약형 배지 — 이 줄 안에서 이미 파랑(핸승)·초록(핸무)·회색(무)·
+   빨강(역)·노랑(적중)을 다 쓰고 있어, 안 겹치는 청록(teal)을 골랐다. */
+.dir-when {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--chip-teal-bg);
+  color: var(--chip-teal-fg);
+}
+
+/* '배변'은 '초기'(청록)와 확실히 다른 색으로 — 이 화면에서 아직 안 쓴 보라(purple). */
+.dir-when-final {
+  background: var(--chip-purple-bg);
+  color: var(--chip-purple-fg);
+}
+
 /* 방향성(정무·플핸무·정 등) — 이 줄에서 유일하게 눈에 들어와야 하는 값. */
 .dir-name {
   font-weight: 700;
   color: var(--text-primary);
 }
 
+/* 방향성이 '커버'하는 결과 안에 실제 결과가 들어오면 이름 자체를 적중 노랑으로. */
+.dir-name-hit {
+  color: var(--chip-yellow-fg);
+}
+
 .dir-none {
   color: var(--text-muted);
   opacity: 0.7;
+}
+
+/* 괄호 안(최다 1개)이 실제 경기 결과와 같을 때 — '적중'과 같은 노란색. */
+.dir-top-hit {
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
 }
 
 /* 상대전적 제목 줄 — 평균득점 문구는 왼쪽에 붙여 강조하고, 승점 기준 안내문은
@@ -280,6 +312,17 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 8px;
+}
+
+/* 상대전적 / 홈보기 / 평균득점 — 예전엔 텍스트 공백({' '})으로만 벌려 놔서
+   브라우저가 연속 공백을 하나로 뭉개 간격이 들쭉날쭉했다(CLAUDE.md 6-2). flex gap으로 고정. */
+.detail-h2h-title-left {
+  display: flex;
+  /* baseline이면 '홈보기'(11px, 체크박스 포함) 라벨이 '상대전적'(13px)보다
+     글자 크기가 작아 시각 중심이 1px 어긋난다(실측) — center로 박스 중심을 맞춘다. */
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -649,6 +692,10 @@
 }
 
 .pick-band-risk h3 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
   margin: 0 0 8px;
   font-size: 13px;
   color: var(--text-secondary);
