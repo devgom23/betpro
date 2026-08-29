@@ -228,6 +228,52 @@
   color: var(--text-muted);
 }
 
+/* 확률 지표 제목 옆 방향성 요약 — "초기 : 국) 정무(무) / 해) 플핸무(역) | 배변 : …"
+   리그 화면 요약 바와 같은 표기 규칙(CLAUDE.md 6-2): 값(방향성)은 <b>로 밝게, 라벨과
+   구분자는 흐리게. 구분자를 텍스트 공백으로 두면 브라우저가 연속 공백을 뭉개 간격이
+   들쭉날쭉해지므로 전부 flex gap으로 벌린다. */
+.dir-summary {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dir-block {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.dir-one {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.dir-when,
+.dir-market,
+.dir-sep,
+.dir-bar,
+.dir-top {
+  color: var(--text-muted);
+}
+
+.dir-bar {
+  opacity: 0.5;
+}
+
+/* 방향성(정무·플핸무·정 등) — 이 줄에서 유일하게 눈에 들어와야 하는 값. */
+.dir-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dir-none {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
 /* 상대전적 제목 줄 — 평균득점 문구는 왼쪽에 붙여 강조하고, 승점 기준 안내문은
    같은 줄 오른쪽 끝으로 밀어낸다(공백만으로는 안 밀리므로 flex로 양끝 정렬). */
 .detail-h2h-title {

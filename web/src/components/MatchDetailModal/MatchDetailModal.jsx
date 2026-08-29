@@ -660,6 +660,117 @@ function weightedAnalysis(lines) {
   return acc.map((v) => v / wSum)
 }
 
+// ── 방향성 요약 (확률 지표 제목 옆 한 줄) ──
+// 지표별 표본의 '국) 분석 / 해) 분석' 줄과 정확히 같은 4칸(핸승/핸무/무/역 %)에서,
+// 사용자가 실제로 거는 "3개 중 1개 배제" 형태의 이름 하나를 뽑는다(CLAUDE.md 5-1).
+//
+// 6종 = 두 3way 시장에서 각각 하나를 배제한 나머지
+//   승무패 {정승(핸승+핸무), 무, 역} : 역배제=정무 / 무배제=정역 / 정승배제=플
+//   핸디   {핸승, 핸무, 플핸(무+역)} : 핸승배제=플핸무 / 핸무배제=플핸승 / 플핸배제=정
+//
+// 규칙이 두 단계인 이유 — '가장 작은 하나를 배제'만 쓰면 정·플은 배제 대상이 둘이라
+// 단일보다 작아지기가 거의 불가능해 사실상 안 나온다(실측 1,136경기: 플 0.4% / 정 0.0%).
+// 그래서 한쪽 쌍이 압도적일 때만 정·플을 먼저 집는 단계를 앞에 뒀다.
+// 기준선 80%는 실측으로 골랐다 — 70%면 정이 26.3%로 정무보다 흔해지고, 90%면 플이
+// 1.9%로 거의 안 나온다. 80%에서 정 14.1% / 플 5.4%로 "가끔 나오는 신호"가 된다.
+const DIR_PAIR_CUT = 80
+
+function directionName(v) {
+  if (!v) return null
+  const [hs, hm, mu, yk] = v
+  if (hs + hm >= DIR_PAIR_CUT) return '정'
+  if (mu + yk >= DIR_PAIR_CUT) return '플'
+  const cand = [['플핸무', hs], ['플핸승', hm], ['정역', mu], ['정무', yk]]
+  return cand.reduce((best, c) => (c[1] < best[1] ? c : best))[0]
+}
+
+// 괄호 안 — 핸승/핸무/무/역 중 값이 가장 큰 것 하나. 방향성과는 별개 정보다
+// (방향성은 '무엇을 뺄까', 이건 '무엇이 제일 유력한가').
+const DIR_TOP_LABELS = ['핸승', '핸무', '무', '역']
+function topOutcome(v) {
+  if (!v) return null
+  let bi = 0
+  for (let i = 1; i < 4; i += 1) if (v[i] > v[bi]) bi = i
+  return DIR_TOP_LABELS[bi]
+}
+
+// row에서 '국) 분석 / 해) 분석'과 같은 4칸을 만든다. SampleTable이 화면에 그리는 값과
+// 어긋나지 않도록, 거기서 쓰는 것과 완전히 같은 재료(판단 9줄 · 같은 순서 · 같은 가중치)를 쓴다.
+//   final=false → 초기배당 기준(vals),  final=true → 배변(최종배당) 기준(E_ 컬럼)
+function analysisPair(row, scope, final) {
+  const favCodes = favSampleCodes(row)
+  const indicators = scope === 'user'
+    ? SAMPLE_INDICATORS.filter(([code]) => !code.startsWith('TK-') && !code.startsWith('TF-'))
+    : SAMPLE_INDICATORS
+  const cnt = (v) => {
+    const n = Number(v)
+    return Number.isNaN(n) ? 0 : Math.trunc(n)
+  }
+  const lines = []
+  for (const [code, label] of indicators) {
+    if (!favCodes.has(code)) continue        // 화면 기본값과 같은 '판단에 쓰는 9줄'만
+    let vals
+    if (final) {
+      const raw = [1, 2, 3, 4].map((i) => row[`E_${code} ${i}`])
+      if (!raw.some((v) => v !== null && v !== undefined && v !== '')) continue
+      vals = raw.map(cnt)
+    } else {
+      vals = [1, 2, 3, 4].map((i) => cnt(row[`${code} ${i}`]))
+    }
+    lines.push({ code, label, vals, total: vals.reduce((a, b) => a + b, 0) })
+  }
+  const isForeign = (c) => /^(F|TF)-/.test(c)
+  return {
+    dom: weightedAnalysis(lines.filter((l) => !isForeign(l.code))),
+    forr: weightedAnalysis(lines.filter((l) => isForeign(l.code))),
+  }
+}
+
+// "국) 정무(무) / 해) 플핸무(역)" 한 덩어리. 값이 없으면 null.
+function DirectionPart({ pair }) {
+  if (!pair || (!pair.dom && !pair.forr)) return <span className="dir-none">—</span>
+  const one = (label, v) => (
+    <span className="dir-one" key={label}>
+      <span className="dir-market">{label})</span>
+      {v ? (
+        <>
+          <b className="dir-name">{directionName(v)}</b>
+          <span className="dir-top">({topOutcome(v)})</span>
+        </>
+      ) : (
+        <span className="dir-none">—</span>
+      )}
+    </span>
+  )
+  return (
+    <>
+      {one('국', pair.dom)}
+      <span className="dir-sep">/</span>
+      {one('해', pair.forr)}
+    </>
+  )
+}
+
+// 확률 지표 제목 옆 방향성 요약 줄 — 초기 | 배변.
+function DirectionSummary({ row, scope }) {
+  const init = analysisPair(row, scope, false)
+  const fin = analysisPair(row, scope, true)
+  const hasFinal = fin && (fin.dom || fin.forr)
+  return (
+    <span className="detail-section-note dir-summary">
+      <span className="dir-block">
+        <span className="dir-when">초기 :</span>
+        <DirectionPart pair={init} />
+      </span>
+      <span className="dir-bar">|</span>
+      <span className="dir-block">
+        <span className="dir-when">배변 :</span>
+        {hasFinal ? <DirectionPart pair={fin} /> : <span className="dir-none">—</span>}
+      </span>
+    </span>
+  )
+}
+
 // expanded=false(기본)면 판단에 쓰는 9줄만 보여준다. 그때는 보이는 게 전부 대상이라
 // 테두리 강조를 걸지 않는다 — 다 강조하면 강조가 아니게 되기 때문. 펼쳐서 27줄을
 // 다 보여줄 때만 그 9줄에 테두리를 둘러 어느 것이 대상인지 구분해 준다.
@@ -946,15 +1057,13 @@ function findSignal(data, key) {
 // 확률 지표 밴드. 예전에는 이 위에 '종합 분석' 카드 4장(플핸무 확률·해외지표·국내지표·
 // 상대전적)이 같이 있었는데 화면에서 뺐다 — 계산은 그대로 남아 있고(api/pick_ai.py,
 // /api/pick_ai), 시즌전적과 상대전적 문장만 아래 표 쪽으로 옮겨 붙였다.
-function PickBand({ row }) {
+function PickBand({ row, scope }) {
   return (
     <section className="pick-band">
       <div className="pick-band-risk">
         <h3>
           확률 지표{' '}
-          <span className="detail-section-note">
-            앞글자 = 시장(국/해) · 뒷글자 = 재료(정 승무패배당 · 플 핸디배당 · 지 26지표)
-          </span>
+          <DirectionSummary row={row} scope={scope} />
         </h3>
         <RiskCard row={row} />
       </div>
@@ -1112,7 +1221,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
         </p>
         <MyPickBar row={row} onSavePick={onSavePick} />
 
-        <PickBand row={row} />
+        <PickBand row={row} scope={scope} />
 
         <div className="modal-columns" ref={columnsRef}>
           <div className="modal-col">
