@@ -105,18 +105,28 @@ def fetch_round_html(year, rnd):
     })
 
 
-_dates_cache = {}
+_dates_cache = {}          # (연도, 회차) -> (만료시각, 날짜목록)
+
+# 캐시 유효시간(초).
+# ⚠ 빈 회차를 영구 캐시하면 안 된다. 아직 발행 안 된 회차는 지금은 비어 있지만
+#   곧 열리는데, 서버가 --reload 없이 며칠씩 떠 있으면 그동안 '없는 회차'로 굳어
+#   "…에 열린 프로토 회차가 없습니다"가 계속 난다(2026-08-29 실측 — 워커가
+#   4시간 반 떠 있는 동안 102·103회차를 못 봤고, 재시작하니 바로 정상).
+# 반대로 날짜가 들어 있는 회차는 지나간 사실이라 오래 들고 있어도 안전하다.
+_TTL_EMPTY = 120           # 2분  — 아직 안 열렸을 수 있으니 금방 다시 본다
+_TTL_FOUND = 3600          # 1시간 — 이미 열린 회차의 날짜는 잘 안 바뀐다
 
 
 def _round_dates(year, rnd):
     """그 회차에 걸린 경기 날짜들. 없는 회차면 빈 목록.
 
     회차 자동 탐색이 한 회차를 여러 번 들여다보므로 캐시해 둔다 — 캐시가 없으면
-    이분탐색 한 번에 HTTP 요청이 수십 번 나간다.
+    이분탐색 한 번에 HTTP 요청이 수십 번 나간다. 다만 영구 캐시는 아니다(위 주석).
     """
     key = (str(year), str(rnd))
-    if key in _dates_cache:
-        return _dates_cache[key]
+    hit = _dates_cache.get(key)
+    if hit is not None and time.time() < hit[0]:
+        return hit[1]
     html = fetch_round_html(year, rnd)
     out = []
     if html:
@@ -125,7 +135,7 @@ def _round_dates(year, rnd):
                 out.append(datetime(int(year), int(mo), int(dd)))
             except ValueError:
                 pass
-    _dates_cache[key] = out
+    _dates_cache[key] = (time.time() + (_TTL_FOUND if out else _TTL_EMPTY), out)
     return out
 
 
