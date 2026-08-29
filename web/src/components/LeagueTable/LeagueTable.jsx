@@ -89,7 +89,7 @@ export default function LeagueTable({
   // ref는 즉시(동기) 최신값을 읽고 쓸 수 있어 이 경쟁 상태를 막아준다.
   const pickOverridesRef = useRef({})
   const [pickOverrides, setPickOverrides] = useState({})
-  const [collapsedState, setCollapsedState] = useState(() => new Set(['지표']))
+  const [collapsedState, setCollapsedState] = useState(() => new Set(['일반정보', '경기정보', '지표']))
   const collapsed = collapsedProp ?? collapsedState
   const setCollapsed = onCollapsedChange ?? setCollapsedState
   const [showRiskLegendState, setShowRiskLegendState] = useState(false)
