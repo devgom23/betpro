@@ -5,11 +5,14 @@
 접두사를 붙인 컬럼(예: 'E_F-W 1')에 저장해 화면에서 두 번째 줄로 보여준다.
 
 ⚠ engine.py의 계산 함수는 한 글자도 고치지 않는다. get_samples_fast()에 넘기는
-  '현재 경기 행'의 배당 칸만 최종배당으로 바꿔 끼우고(아래 shadow_row) 그대로 부른다.
+  배당 칸만 최종배당으로 바꿔 끼우고 그대로 부른다 —
+  '현재 경기 행'은 shadow_row(), '표본 풀'은 shadow_pool().
 
-⚠ 표본 풀(비교 대상이 되는 과거 경기들)은 초기배당 기준 그대로 둔다. 과거 경기에게
-  '그때 그 배당'은 바꿀 수 없는 사실이고, 그 배당으로 어떤 결과가 났는지가 표본의
-  의미이기 때문이다. 바뀌는 것은 "지금 이 경기를 어느 칸에서 찾을 것인가"뿐이다.
+⚠ 2026-08-30 수정: 예전에는 표본 풀을 초기배당 그대로 뒀다. "과거 경기에게 그때 그
+  배당은 바꿀 수 없는 사실"이라는 이유였는데, 그러면 이 경기의 '마감배당'을 과거
+  경기의 '초기배당' 칸에서 찾게 되어 서로 다른 시점의 배당을 맞대는 꼴이 된다.
+  실측에서 이 지표가 반대로 맞는다는 게 드러나 풀도 최종배당 기준으로 바꿨다
+  (근거와 수치는 shadow_pool() 주석에 있다).
 """
 from __future__ import annotations
 
@@ -43,6 +46,8 @@ FINAL_TO_BASE = {'EFW': 'FW', 'EFD': 'FD', 'EFL': 'FL', 'EFHW': 'FHW',
 # 251개 전부 읽는 것과 결과가 완전히 같으면서 16배 빠르다(실측 2,431ms → 155ms).
 PREP_COLS = ['FW', 'FD', 'FL', 'FHW', 'KW', 'KD', 'KL', 'KHW', 'KHL',
              'HS', 'HT', 'AT', 'RT']
+# 표본 풀도 배변배당으로 갈아끼우므로(shadow_pool) 그 원본 칸까지 같이 읽어야 한다.
+PREP_COLS_E = PREP_COLS + list(FINAL_TO_BASE)
 
 # 재계산 결과로 만들어지는 컬럼 전체 — 27개×4칸 + 플핸 예측 5칸.
 E_SAMPLE_COLS = [f'E_{c} {i}' for c in IND_CODES for i in (1, 2, 3, 4)]
@@ -80,6 +85,35 @@ def has_final_odds(rd: dict) -> bool:
     return any(_pos(rd.get(c)) is not None for c in FINAL_TO_BASE)
 
 
+def shadow_pool(db: pd.DataFrame) -> pd.DataFrame:
+    """표본 풀(비교 대상이 되는 과거 경기들)도 최종배당으로 갈아끼운 복사본.
+
+    ⚠ 2026-08-30 이전에는 이걸 안 했다. 표본 풀은 초기배당 그대로 두고 '지금 이
+      경기'만 최종배당으로 바꿔 찾았는데(shadow_row), 그러면 서로 다른 시점의
+      배당을 맞대게 된다. 1.8로 열렸다가 1.5로 마감한 경기를 '초기배당 1.5' 칸에서
+      찾으면, 그 칸에 든 건 처음부터 1.5였던 더 센 팀들이라 정배 쪽이 부풀려진다.
+      실측(6대리그 32,466경기): 실제 결과가 '가장 작은 칸'이었던 비율이 초기 지표는
+      20.5%(정보 있음)인데 배변 지표는 26.3%, 해외는 35.9%로 뒤집혔다. 배당이 안
+      움직인 경기에서는 초기와 값이 같고(20.4% vs 20.5%) 움직인 경기에서만
+      뒤집혔다 — 서랍을 잘못 여는 순간에만 망가진다는 뜻이다.
+
+    최종배당이 없는 과거 경기는 그 칸을 NaN으로 둔다(초기배당으로 메우지 않는다).
+    '안 움직였다'와 '아직 안 받아왔다'를 구분할 수 없는데, 초기배당으로 메우면
+    바로 그 편향이 다시 섞여 들어오기 때문이다. get_samples_fast의 비교는 `==`라
+    NaN은 자연히 어느 것과도 안 맞아 표본에서 빠진다.
+    표본이 모자라지도 않는다 — 실측상 풀이 5%만 줄고, 지표별로는 오히려 늘었다
+    (해)승+무+패는 표본 0건인 경기가 24.2% → 0.0%, 중앙값 5건 → 16건).
+    """
+    out = db.copy()
+    for e_col, base_col in FINAL_TO_BASE.items():
+        if base_col not in out.columns:
+            continue
+        v = pd.to_numeric(out[e_col], errors='coerce') if e_col in out.columns \
+            else pd.Series(np.nan, index=out.index)
+        out[base_col] = v.where(v > 0)      # 0·1.00 미만·빈칸은 배당이 아니다
+    return out
+
+
 def recompute_row(rd: dict, db_cache: dict, total_cache: dict) -> dict:
     """한 경기의 27개 지표를 최종배당 기준으로 다시 세어 E_ 컬럼 dict로 반환."""
     sr = shadow_row(rd)
@@ -103,7 +137,8 @@ def recompute_row(rd: dict, db_cache: dict, total_cache: dict) -> dict:
 
 
 def load_total_prep(db_path: str, league_df: pd.DataFrame, leagues) -> dict:
-    """통합DB(6대리그)의 _prep_db 캐시 — 계산에 쓰는 13개 컬럼만 읽어 만든다."""
+    """통합DB(6대리그)의 _prep_db 캐시 — 계산에 쓰는 칸만 읽어 만든다.
+    표본 풀도 최종배당 기준이라 EK*/EF*까지 읽고 shadow_pool로 갈아끼운다."""
     frames = []
     con = sqlite3.connect(db_path)
     try:
@@ -113,7 +148,7 @@ def load_total_prep(db_path: str, league_df: pd.DataFrame, leagues) -> dict:
             if lg not in tabs:
                 continue
             have = {r[1] for r in con.execute(f'PRAGMA table_info("{lg}")').fetchall()}
-            sel = ', '.join(f'"{c}"' for c in PREP_COLS if c in have)
+            sel = ', '.join(f'"{c}"' for c in PREP_COLS_E if c in have)
             if not sel:
                 continue
             d = pd.read_sql(f'SELECT {sel} FROM "{lg}"', con)
@@ -122,7 +157,7 @@ def load_total_prep(db_path: str, league_df: pd.DataFrame, leagues) -> dict:
     finally:
         con.close()
     total = pd.concat(frames, ignore_index=True) if frames else league_df
-    return engine._prep_db(total)
+    return engine._prep_db(shadow_pool(total))
 
 
 def attach_to_df(df: pd.DataFrame, idxs, db_path: str, leagues) -> int:
@@ -136,7 +171,9 @@ def attach_to_df(df: pd.DataFrame, idxs, db_path: str, leagues) -> int:
     if not targets:
         return 0
 
-    db_cache = engine._prep_db(df)
+    # 표본 풀도 최종배당 기준으로 — 이 경기만 바꾸고 풀을 그대로 두면 서로 다른
+    # 시점의 배당을 맞대게 된다(shadow_pool 주석 참고).
+    db_cache = engine._prep_db(shadow_pool(df))
     total_cache = load_total_prep(db_path, df, leagues)
 
     # 없는 E_ 컬럼은 한 번에 붙인다 — 113개를 df[c]=...로 하나씩 넣으면 pandas가
