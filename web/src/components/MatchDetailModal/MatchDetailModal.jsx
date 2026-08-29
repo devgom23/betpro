@@ -493,14 +493,39 @@ function StreakLine({ data, align }) {
 // 서버가 준 목록(recent10)은 화면 칸과 같은 순서라 자리만 맞춰 꺼내 쓴다. 다만 칸은
 // 항상 10개인데 경기가 그보다 적을 수 있어(시즌 초반), 원정팀 쪽은 뒤에서부터 채우는
 // recentCells의 offset을 똑같이 적용해 자리를 맞춘다.
-function recentTip(m) {
-  if (!m) return undefined
-  const when = [formatDt(m.DT), formatTime(m.TM)].filter(Boolean).join(' ')
-  // 스코어는 DB에 실수(2.0)로 들어 있어 그대로 쓰면 '2.00 - 2.00'이 된다.
+// 칸에 마우스를 올렸을 때 뜨는 말풍선.
+//   26-08-24 (일) 00:30 / D
+//   뉴캐슬 2 - 2 리버풀 (무)
+// 브라우저 기본 툴팁(title)으로는 밑줄·색을 못 넣어서 직접 그린다. team(그 칸의 주인)
+// 이름에 밑줄을 긋고, 이긴 쪽 점수는 앱의 기존 규칙과 같은 빨강(.winner-score)으로.
+function RecentTip({ game, team, rect }) {
+  if (!game || !rect) return null
   const g = (v) => (v === null || v === undefined ? '-' : Math.trunc(v))
-  const score = `${m.HT} ${g(m.HS)} - ${g(m.AS)} ${m.AT}`
-  const rt = rtLabel(m.RT)
-  return [when, rt ? `${score} (${rt})` : score].filter(Boolean).join('\n')
+  const hs = g(game.HS)
+  const as_ = g(game.AS)
+  const win = hs === '-' || as_ === '-' ? null : hs > as_ ? 'home' : as_ > hs ? 'away' : null
+  const rt = rtLabel(game.RT)
+  const name = (t) => (t === team ? <u>{t}</u> : t)
+  return (
+    <div
+      className="recent-tip"
+      style={{ left: Math.round(rect.left + rect.width / 2), top: Math.round(rect.top - 8) }}
+    >
+      <div className="recent-tip-when">
+        {[formatDt(game.DT), formatTime(game.TM)].filter(Boolean).join(' ')}
+        <span className="recent-tip-sep">/</span>
+        <b className={`recent-tip-wdl recent-${game.letter}`}>{game.letter}</b>
+      </div>
+      <div className="recent-tip-score">
+        {name(game.HT)}{' '}
+        <b className={win === 'home' ? 'winner-score' : undefined}>{hs}</b>
+        {' - '}
+        <b className={win === 'away' ? 'winner-score' : undefined}>{as_}</b>
+        {' '}{name(game.AT)}
+        {rt && <span className="recent-tip-rt"> ({rt})</span>}
+      </div>
+    </div>
+  )
 }
 
 function RecentTable({ row, streaks, recent10 }) {
@@ -511,6 +536,17 @@ function RecentTable({ row, streaks, recent10 }) {
   const awayGames = recent10?.away || []
   const awayOffset = Math.max(0, 10 - awayGames.length)
   const hasStreak = streaks && (streaks.home?.played || streaks.away?.played)
+  // 지금 마우스가 올라가 있는 칸 하나 — 떼면 null이 되어 말풍선이 사라진다.
+  const [tip, setTip] = useState(null)
+  const homeTeam = String(row.HT || '').trim()
+  const awayTeam = String(row.AT || '').trim()
+  const cellProps = (game, team) => (game
+    ? {
+      className: ' recent-cell-tip',
+      onMouseEnter: (e) => setTip({ game, team, rect: e.currentTarget.getBoundingClientRect() }),
+      onMouseLeave: () => setTip(null),
+    }
+    : { className: '' })
   return (
     <>
       <table className="detail-table recent-table">
@@ -523,26 +559,26 @@ function RecentTable({ row, streaks, recent10 }) {
         <tbody>
           <tr>
             {homeCells.map((c, i) => {
-              const tip = c.ch ? recentTip(homeGames[i]) : undefined
+              const p = cellProps(c.ch ? homeGames[i] : null, homeTeam)
               return (
                 <td
                   key={`h${i}`}
-                  className={`recent-cell recent-${c.ch} ${c.isHome ? 'recent-cell-home' : ''}`
-                    + (tip ? ' recent-cell-tip' : '')}
-                  title={tip}
+                  className={`recent-cell recent-${c.ch} ${c.isHome ? 'recent-cell-home' : ''}${p.className}`}
+                  onMouseEnter={p.onMouseEnter}
+                  onMouseLeave={p.onMouseLeave}
                 >
                   {c.ch || '-'}
                 </td>
               )
             })}
             {awayCells.map((c, i) => {
-              const tip = c.ch ? recentTip(awayGames[i - awayOffset]) : undefined
+              const p = cellProps(c.ch ? awayGames[i - awayOffset] : null, awayTeam)
               return (
                 <td
                   key={`a${i}`}
-                  className={`recent-cell recent-${c.ch} ${c.isHome ? 'recent-cell-home' : ''}`
-                    + (tip ? ' recent-cell-tip' : '')}
-                  title={tip}
+                  className={`recent-cell recent-${c.ch} ${c.isHome ? 'recent-cell-home' : ''}${p.className}`}
+                  onMouseEnter={p.onMouseEnter}
+                  onMouseLeave={p.onMouseLeave}
                 >
                   {c.ch || '-'}
                 </td>
@@ -557,6 +593,7 @@ function RecentTable({ row, streaks, recent10 }) {
           <StreakLine data={streaks.away} align="right" />
         </div>
       )}
+      {tip && <RecentTip {...tip} />}
     </>
   )
 }

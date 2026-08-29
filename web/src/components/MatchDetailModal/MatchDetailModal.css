@@ -1102,6 +1102,63 @@
   text-underline-offset: 2px;
 }
 
+/* 최근10경기 칸 말풍선. 브라우저 기본 툴팁(title)은 밑줄·색을 못 넣어서 직접 그린다.
+   position:fixed + 칸의 getBoundingClientRect 값으로 띄운다 — 팝업 안쪽이 스크롤돼도
+   칸을 따라오고, 표가 좁아 부모에 상대배치하면 잘리기 때문이다.
+   translate(-50%, -100%)로 칸 위 가운데에 세운다. */
+.recent-tip {
+  position: fixed;
+  z-index: 60;
+  transform: translate(-50%, -100%);
+  pointer-events: none;          /* 말풍선이 마우스를 가로채 깜빡이지 않게 */
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-page);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.recent-tip-when {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.recent-tip-sep {
+  margin: 0 4px;
+  opacity: 0.5;
+}
+
+/* W/D/L — 칸에 쓰는 색(.recent-W 등)을 그대로 물려받되 글자만 세운다 */
+.recent-tip-wdl {
+  font-weight: 700;
+}
+
+.recent-tip-score {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* 그 칸의 주인 팀에만 밑줄 — <u> 기본 밑줄이 글자에 붙어 답답해서 살짝 띄운다 */
+.recent-tip-score u {
+  text-underline-offset: 3px;
+}
+
+/* 이긴 쪽 점수는 앱의 기존 규칙과 같은 빨강. 원본 규칙(.detail-table .winner-score)은
+   표 안쪽에만 걸려 있고 이 말풍선은 표 바깥이라 여기서 한 번 더 준다. */
+.recent-tip .winner-score {
+  color: var(--chip-red-fg);
+  font-weight: 700;
+}
+
+.recent-tip-rt {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .recent-home-swatch {
   display: inline-block;
   vertical-align: middle;
