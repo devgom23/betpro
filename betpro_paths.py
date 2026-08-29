@@ -286,6 +286,21 @@ CREATE TABLE IF NOT EXISTS my_picks (
 )
 """
 
+# '시즌 지표 ③ 과거 이력'에 다는 메모 — my_picks(경기 하나 단위)와 달리 "리그+시즌+
+# 라운드" 하나에 메모 하나뿐이다(그 라운드 전체를 보고 남기는 생각이라 특정 경기에
+# 안 묶인다). 그래서 my_picks에 얹지 않고 별도 테이블로 둔다.
+_SCHEMA_SEASON_NOTES = """
+CREATE TABLE IF NOT EXISTS season_notes (
+    code TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    S TEXT NOT NULL,
+    R TEXT NOT NULL,
+    memo TEXT,
+    updated_dt TEXT,
+    PRIMARY KEY (code, scope, S, R)
+)
+"""
+
 # 조합베팅(파를레이) 등록 내역 — my_picks와 마찬가지로 리그 표와 분리된 predlog.db에 둔다.
 # 한 슬립(bet_slips)이 여러 경기 다리(bet_slip_legs)를 갖고, 각 다리는 어느 리그(code)
 # 소속인지 함께 저장해서(교차 리그 조합 가능) 실제 결과(RT) 조회 시 리그별로 찾아간다.
@@ -382,6 +397,11 @@ def ensure_predlog_db(username: str) -> str:
             con.execute("ALTER TABLE my_picks ADD COLUMN p TEXT")
         if "reason_tag" not in cols:
             con.execute("ALTER TABLE my_picks ADD COLUMN reason_tag TEXT")
+        if "memo_pre" not in cols:
+            # memo(기존)는 결과가 나온 뒤 쓰는 회고, memo_pre는 경기 전에 미리 적어 두는
+            # 메모 — 상세보기에서 결과반성 칸 앞에 따로 둔다(MatchDetailModal.jsx).
+            con.execute("ALTER TABLE my_picks ADD COLUMN memo_pre TEXT")
+        con.execute(_SCHEMA_SEASON_NOTES)
         con.execute("PRAGMA foreign_keys=ON;")
         con.execute(_SCHEMA_BET_SLIPS)
         con.execute(_SCHEMA_BET_SLIP_LEGS)

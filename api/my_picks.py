@@ -6,6 +6,9 @@
 reason_tag: 결과반성용 "왜 이렇게 봤나" 태그(1개, pickOptions.js REASON_TAG_OPTIONS
 중 하나). pick(무엇을 걸지)과 반드시 분리한다 — 판정(_MY_PICK_VERDICT_MAP)이
 pick 문자열을 정확히 매칭해 적중/보험/미적을 가르므로, 여기 태그를 섞으면 안 된다.
+
+memo_pre vs memo: memo_pre는 경기 전에 적는 메모, memo는 결과가 나온 뒤 적는
+회고 메모 — 시점이 다른 별개 글이라 컬럼을 나눈다.
 """
 import sqlite3
 
@@ -36,7 +39,7 @@ def list_my_picks(username: str, code: str, scope: str) -> list[dict]:
     con = _connect(username)
     try:
         rows = con.execute(
-            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, reason_tag, wp_hidden "
+            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, reason_tag, wp_hidden "
             "FROM my_picks WHERE code=? AND scope=?",
             (code, scope),
         ).fetchall()
@@ -72,21 +75,54 @@ def hide_from_weekly_picks(username: str, items: list[dict]) -> int:
 def upsert_my_pick(username: str, code: str, scope: str,
                     s: str, r: str, no: str, ht: str, at: str,
                     starred: bool, pick: str | None, hit: str | None, memo: str | None,
-                    p: str | None = None, reason_tag: str | None = None) -> None:
+                    p: str | None = None, reason_tag: str | None = None,
+                    memo_pre: str | None = None) -> None:
     con = _connect(username)
     try:
         con.execute(
             """
             INSERT INTO my_picks
-                (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, reason_tag, wp_hidden, updated_dt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
+                (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, reason_tag, wp_hidden, updated_dt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
             ON CONFLICT(code, scope, S, R, No, HT, AT)
             DO UPDATE SET starred = excluded.starred, pick = excluded.pick, p = excluded.p,
-                          hit = excluded.hit, memo = excluded.memo, reason_tag = excluded.reason_tag,
+                          hit = excluded.hit, memo = excluded.memo, memo_pre = excluded.memo_pre,
+                          reason_tag = excluded.reason_tag,
                           wp_hidden = 0, updated_dt = excluded.updated_dt
             """,
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),
-             1 if starred else 0, pick or None, p or None, hit or None, memo or None, reason_tag or None),
+             1 if starred else 0, pick or None, p or None, hit or None, memo or None,
+             memo_pre or None, reason_tag or None),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def get_season_note(username: str, code: str, scope: str, s: str, r: str) -> str | None:
+    """'시즌 지표 ③ 과거 이력'에 단 메모 — 경기 하나가 아니라 리그+시즌+라운드 하나에 1개뿐."""
+    con = _connect(username)
+    try:
+        row = con.execute(
+            "SELECT memo FROM season_notes WHERE code=? AND scope=? AND S=? AND R=?",
+            (code, scope, normalize(s), normalize(r)),
+        ).fetchone()
+        return row["memo"] if row else None
+    finally:
+        con.close()
+
+
+def upsert_season_note(username: str, code: str, scope: str, s: str, r: str, memo: str | None) -> None:
+    con = _connect(username)
+    try:
+        con.execute(
+            """
+            INSERT INTO season_notes (code, scope, S, R, memo, updated_dt)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(code, scope, S, R)
+            DO UPDATE SET memo = excluded.memo, updated_dt = excluded.updated_dt
+            """,
+            (code, scope, normalize(s), normalize(r), memo or None),
         )
         con.commit()
     finally:

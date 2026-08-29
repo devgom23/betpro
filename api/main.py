@@ -695,6 +695,7 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
         row["MY_P"] = p["p"] if p else None
         row["MY_HIT"] = p["hit"] if p else None
         row["MEMO"] = p["memo"] if p else None
+        row["MEMO_PRE"] = p["memo_pre"] if p else None
         row["REASON_TAG"] = p["reason_tag"] if p else None
 
 
@@ -769,18 +770,44 @@ class MyPickBody(BaseModel):
     p: Optional[str] = None
     hit: Optional[str] = None
     memo: Optional[str] = None
+    memo_pre: Optional[str] = None
     reason_tag: Optional[str] = None
 
 
 @app.post("/api/leagues/{code}/my_picks")
 def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_user)):
-    """중요 별표/내픽/P태그/적중여부/메모/결과반성 태그 저장 — 계정 개인 기록이라
-    scope(공식/내 데이터)와 무관하게 본인만 본다."""
+    """중요 별표/내픽/P태그/적중여부/메모(경기전·결과반성)/결과반성 태그 저장 — 계정
+    개인 기록이라 scope(공식/내 데이터)와 무관하게 본인만 본다."""
     MYPICKS.upsert_my_pick(
         user["username"], code, body.scope,
         body.S, body.R, body.No, body.HT, body.AT,
         body.starred, body.pick, body.hit, body.memo, body.p, body.reason_tag,
+        body.memo_pre,
     )
+    return {"ok": True}
+
+
+class SeasonNoteBody(BaseModel):
+    scope: str = PATHS.SCOPE_USER
+    season: str
+    round: str
+    memo: Optional[str] = None
+
+
+@app.get("/api/leagues/{code}/season_note")
+def get_season_note(code: str, scope: str = PATHS.SCOPE_USER,
+                    season: str = "", round: str = "",   # noqa: A002
+                    user: dict = Depends(get_current_user)):
+    """'시즌 지표 ③ 과거 이력'에 단 메모 — 경기 하나가 아니라 리그+시즌+라운드 하나에 1개뿐."""
+    _check_league_for(code, scope, user)
+    memo = MYPICKS.get_season_note(user["username"], code, scope, season, round)
+    return {"memo": memo}
+
+
+@app.post("/api/leagues/{code}/season_note")
+def save_season_note(code: str, body: SeasonNoteBody, user: dict = Depends(get_current_user)):
+    _check_league_for(code, body.scope, user)
+    MYPICKS.upsert_season_note(user["username"], code, body.scope, body.season, body.round, body.memo)
     return {"ok": True}
 
 
@@ -926,6 +953,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
                 rec["MY_P"] = p["p"]
                 rec["MY_HIT"] = p["hit"]
                 rec["MEMO"] = p["memo"]
+                rec["MEMO_PRE"] = p["memo_pre"]
                 rows.append(rec)
 
     rows.sort(key=lambda r: _betting_day_sort_key(r.get("DT"), r.get("TM")))

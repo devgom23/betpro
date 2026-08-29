@@ -235,7 +235,7 @@ function OddsTable({ row }) {
           const colClass = isHandi ? dogColClass : favColClass
           return (
             <Fragment key={label}>
-              <tr>
+              <tr className={label === '해외 배당' ? 'odds-group-start' : undefined}>
                 <td className="row-label">{label}</td>
                 <td className={colClass('w')}>{numOrDash(row[w])}</td>
                 <td>{numOrDash(row[d])}</td>
@@ -963,6 +963,10 @@ function MyPickBar({ row, onSavePick }) {
   const [p, setP] = useState(row.MY_P || '')
   const [hit, setHit] = useState(row.MY_HIT || '')
   const [reasonTag, setReasonTag] = useState(row.REASON_TAG || '')
+  // memoPre = 경기 전에 적는 메모, memo = 결과가 나온 뒤 적는 회고 메모 — 시점이
+  // 다른 별개의 글이라 따로 관리한다(결과반성 칸 앞/뒤에 하나씩 둔다).
+  const [memoPre, setMemoPre] = useState(row.MEMO_PRE || '')
+  const [savedMemoPre, setSavedMemoPre] = useState(row.MEMO_PRE || '')
   const [memo, setMemo] = useState(row.MEMO || '')
   const [savedMemo, setSavedMemo] = useState(row.MEMO || '')
 
@@ -990,6 +994,12 @@ function MyPickBar({ row, onSavePick }) {
     onSavePick({ reasonTag: next || null })
   }
 
+  function saveMemoPreIfChanged() {
+    if (memoPre === savedMemoPre) return
+    setSavedMemoPre(memoPre)
+    onSavePick({ memoPre: memoPre || null })
+  }
+
   function saveMemoIfChanged() {
     if (memo === savedMemo) return
     setSavedMemo(memo)
@@ -999,9 +1009,8 @@ function MyPickBar({ row, onSavePick }) {
   return (
     <div className="mypick-bar">
       <label className="mypick-bar-field">
-        내픽
         <select value={pick} onChange={handlePickChange}>
-          <option value="">선택 안함</option>
+          <option value="">내픽</option>
           {PICK_OPTIONS.map((o) => (
             <option key={o} value={o}>
               {o}
@@ -1010,9 +1019,8 @@ function MyPickBar({ row, onSavePick }) {
         </select>
       </label>
       <label className="mypick-bar-field">
-        P
         <select value={p} onChange={handlePChange}>
-          <option value="">선택 안함</option>
+          <option value="">P</option>
           {P_OPTIONS.map((o) => (
             <option key={o} value={o}>
               {o}
@@ -1021,9 +1029,8 @@ function MyPickBar({ row, onSavePick }) {
         </select>
       </label>
       <label className="mypick-bar-field">
-        의견
         <select value={hit} onChange={handleHitChange}>
-          <option value="">선택 안함</option>
+          <option value="">의견</option>
           {HIT_OPTIONS.map((o) => (
             <option key={o} value={o}>
               {o}
@@ -1031,10 +1038,21 @@ function MyPickBar({ row, onSavePick }) {
           ))}
         </select>
       </label>
+      <label className="mypick-bar-field mypick-bar-memo" title="경기가 열리기 전에 적어 두는 메모">
+        <input
+          type="text"
+          value={memoPre}
+          placeholder="경기 전 생각을 입력해주세요"
+          onChange={(e) => setMemoPre(e.target.value)}
+          onBlur={saveMemoPreIfChanged}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur()
+          }}
+        />
+      </label>
       <label className="mypick-bar-field" title="이 픽을 왜 이렇게 봤는지 — 결과반성용, 판정에는 안 쓰인다">
-        결과반성
         <select value={reasonTag} onChange={handleReasonTagChange}>
-          <option value="">선택 안함</option>
+          <option value="">결과반성</option>
           {REASON_TAG_OPTIONS.map((o) => (
             <option key={o} value={o}>
               {o}
@@ -1042,11 +1060,11 @@ function MyPickBar({ row, onSavePick }) {
           ))}
         </select>
       </label>
-      <label className="mypick-bar-field mypick-bar-memo">
+      <label className="mypick-bar-field mypick-bar-memo" title="결과가 나온 뒤 적는 회고 메모">
         <input
           type="text"
           value={memo}
-          placeholder="경기에 대한 메모를 입력해주세요"
+          placeholder="결과 이후 생각을 입력해주세요"
           onChange={(e) => setMemo(e.target.value)}
           onBlur={saveMemoIfChanged}
           onKeyDown={(e) => {
