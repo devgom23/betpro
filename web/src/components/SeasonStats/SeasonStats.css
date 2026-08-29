@@ -84,7 +84,8 @@
 
 .ss-title {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 12px;
   font-weight: 700;
@@ -96,6 +97,21 @@
   font-size: 11px;
   font-weight: 400;
   color: var(--text-muted);
+}
+
+/* ③ 과거 이력 메모 — 상세보기 결과반성 메모칸(.mypick-bar-field input)과 같은 스타일.
+   타이틀 줄(ss-title) 안의 flex 아이템이라 남는 폭을 채우되(flex:1), 줄이 접혀도
+   (historyOpen=false) 타이틀은 항상 그려지므로 메모도 항상 보인다. */
+.ss-history-memo {
+  flex: none;
+  width: 1000px;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
 }
 
 /* 라운드가 38개까지 늘어나므로 블록마다 가로 스크롤을 준다 — 페이지 자체는 안 밀린다 */

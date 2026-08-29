@@ -35,7 +35,7 @@ function gridTemplate(roundCount) {
 export default function SeasonStats({ code, scope, season, round }) {
   const [data, setData] = useState(null)
   const [open, setOpen] = useState(false)
-  const [ddongOpen, setDdongOpen] = useState(true)
+  const [ddongOpen, setDdongOpen] = useState(false)
   const [resultOpen, setResultOpen] = useState(true)
   const [historyOpen, setHistoryOpen] = useState(true)
   // 표①·표②는 라운드 열이 서로 포개져 보여야 하므로, 한쪽을 가로 스크롤하면
@@ -43,6 +43,10 @@ export default function SeasonStats({ code, scope, season, round }) {
   // 스크롤 위치만 맞추면 된다).
   const ddongScrollRef = useRef(null)
   const resultScrollRef = useRef(null)
+  // ③ 과거 이력 메모 — 경기 하나가 아니라 '이 리그+시즌+라운드' 하나에 메모 하나뿐이다
+  // (특정 두 팀이 아니라 그 라운드 전체를 보고 남기는 생각이라 my_picks와 별도 저장).
+  const [seasonMemo, setSeasonMemo] = useState('')
+  const [savedSeasonMemo, setSavedSeasonMemo] = useState('')
   function syncScroll(target) {
     return (e) => {
       if (target.current) target.current.scrollLeft = e.currentTarget.scrollLeft
@@ -72,6 +76,49 @@ export default function SeasonStats({ code, scope, season, round }) {
       cancelled = true
     }
   }, [code, scope, season, round])
+
+  // season_stats와 별개 API — season_notes는 (code,scope,S,R) 단위라 시즌 지표
+  // 데이터가 없어도(예: 표본 자체가 없는 라운드) 메모는 남길 수 있어야 한다.
+  useEffect(() => {
+    const ready = season && season !== 'ALL' && round && round !== 'ALL'
+    if (!ready) {
+      setSeasonMemo('')
+      setSavedSeasonMemo('')
+      return undefined
+    }
+    let cancelled = false
+    api
+      .get(
+        `/api/leagues/${code}/season_note?scope=${scope}` +
+          `&season=${encodeURIComponent(season)}&round=${encodeURIComponent(round)}`
+      )
+      .then((res) => {
+        if (cancelled) return
+        setSeasonMemo(res?.memo || '')
+        setSavedSeasonMemo(res?.memo || '')
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSeasonMemo('')
+          setSavedSeasonMemo('')
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [code, scope, season, round])
+
+  function saveSeasonMemoIfChanged() {
+    if (seasonMemo === savedSeasonMemo) return
+    setSavedSeasonMemo(seasonMemo)
+    api
+      .post(`/api/leagues/${code}/season_note`, { scope, season, round, memo: seasonMemo || null })
+      .catch(() => {
+        // 저장 실패 시 되돌린다
+        setSeasonMemo(savedSeasonMemo)
+        setSavedSeasonMemo(savedSeasonMemo)
+      })
+  }
 
   // 이번 라운드에 나온 똥배 배당값 — 과거 라운드의 같은 값에 표시를 넣어
   // "그때는 어떤 결과였나"를 눈으로 찾을 수 있게 한다.
@@ -239,6 +286,18 @@ export default function SeasonStats({ code, scope, season, round }) {
               </button>
               ③ {data.round} 과거 이력
               <span className="ss-hint">시즌마다 이 라운드의 결과 분포와 똥배 경기 (최근 시즌 순)</span>
+              {/* 타이틀 줄 안에 둬서 ③을 접어도(historyOpen=false) 메모는 계속 보이게 한다. */}
+              <input
+                type="text"
+                className="ss-history-memo"
+                value={seasonMemo}
+                placeholder="이 라운드에 대한 생각을 입력해주세요"
+                onChange={(e) => setSeasonMemo(e.target.value)}
+                onBlur={saveSeasonMemoIfChanged}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                }}
+              />
             </div>
             {historyOpen && (
               <div className="ss-scroll">
