@@ -267,6 +267,15 @@
   margin-left: auto;
 }
 
+/* '최신배당 불러오기' 버튼 옆 마지막 실행 시각 — 값 없이 라벨만이라 흐리게(--text-muted).
+   버튼 자체를 안 눌러도 항상 보이므로 버튼 안에 넣지 않고 옆에 둔다(버튼 폭이
+   시각 문구 길이에 따라 흔들리지 않게). */
+.final-odds-ts {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ── 리그 전체 대시보드 (탭 바로 아래, 필터 위) ── */
 .league-dashboard {
   display: flex;

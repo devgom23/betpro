@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
 import { bettingDayOf } from '../components/LeagueTable/columnGroups'
+import {
+  getWeekListFinalOddsTime, setWeekListFinalOddsTime, setManyRoundFinalOddsTime, formatFinalOddsTime,
+} from '../utils/finalOddsTime'
 import './WeekListPage.css'
 
 // 날짜(DT)가 비어 아직 베팅일을 못 정하는 경기들을 모아 둘 자리. 맨 아래로 보낸다.
@@ -38,6 +41,10 @@ export default function WeekListPage() {
   const [showRiskLegend, setShowRiskLegend] = useState(false)
   const [busyRefreshOdds, setBusyRefreshOdds] = useState(false)
   const [refreshOddsNotice, setRefreshOddsNotice] = useState('')
+  // 이번주 리스트 버튼 자체를 마지막으로 눌렀던 시각 — 개별 라운드 버튼과는 별개 값이다
+  // (utils/finalOddsTime.js 참고. 이 버튼을 누르면 그 안의 각 라운드 값도 같이 갱신되지만,
+  //  반대로 라운드 버튼을 눌렀다고 이 값이 갱신되진 않는다).
+  const [weekListTs, setWeekListTs] = useState(() => getWeekListFinalOddsTime())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -75,13 +82,16 @@ export default function WeekListPage() {
     let ek = 0
     let ef = 0
     const fails = []
-    for (const { scope, code, season, round } of combos.values()) {
+    const succeeded = []
+    for (const combo of combos.values()) {
+      const { scope, code, season, round } = combo
       try {
         const res = await api.post(`/api/leagues/${code}/refresh_final_odds`, { scope, season, round })
         ek += res.domestic_updated || 0
         ef += res.overseas_updated || 0
         if (res.domestic_error) fails.push(`${code} ${round} 국내: ${res.domestic_error}`)
         if (res.overseas_error) fails.push(`${code} ${round} 해외: ${res.overseas_error}`)
+        succeeded.push(combo)
       } catch (err) {
         fails.push(`${code} ${round}: ${err.message}`)
       }
@@ -89,6 +99,14 @@ export default function WeekListPage() {
     const parts = [`${combos.size}개 라운드 · 국내 ${ek}건 · 해외 ${ef}건 갱신`]
     if (fails.length) parts.push(...fails)
     setRefreshOddsNotice(parts.join(' · '))
+    // 응답을 정상적으로 받은(catch에 안 걸린) 조합만 "불러왔다"로 친다 — 이 버튼 자체의
+    // 시각과, 그 안에 포함된 각 라운드(리그 화면에서 보이는)의 시각을 같이 찍는다.
+    if (succeeded.length) {
+      const now = new Date().toISOString()
+      setManyRoundFinalOddsTime(succeeded, now)
+      setWeekListFinalOddsTime(now)
+      setWeekListTs(now)
+    }
     if (ek || ef) load()
     setBusyRefreshOdds(false)
   }
@@ -159,6 +177,9 @@ export default function WeekListPage() {
           >
             {busyRefreshOdds ? '불러오는 중…' : '최신배당 불러오기'}
           </button>
+          {weekListTs && (
+            <span className="final-odds-ts">최신배당({formatFinalOddsTime(weekListTs)})</span>
+          )}
           {refreshOddsNotice && <p className="recompute-notice">{refreshOddsNotice}</p>}
         </div>
       )}

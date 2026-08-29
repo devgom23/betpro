@@ -12,6 +12,7 @@ import KrCrawlModal from '../components/KrCrawlModal/KrCrawlModal'
 import ResultEditModal from '../components/ResultEditModal/ResultEditModal'
 import SeasonStats from '../components/SeasonStats/SeasonStats'
 import { buildQueryString, ODDS_KEYS } from '../utils/query'
+import { getRoundFinalOddsTime, setRoundFinalOddsTime, formatFinalOddsTime } from '../utils/finalOddsTime'
 
 function describeQuery(query) {
   if (!query) return ''
@@ -71,6 +72,18 @@ export default function LeaguePage({ code, scope }) {
   // 다시 받는다. 초기배당·26개 지표는 절대 안 건드린다(api/main.py refresh_final_odds).
   const [busyRefreshOdds, setBusyRefreshOdds] = useState(false)
   const [refreshOddsNotice, setRefreshOddsNotice] = useState('')
+  // 이 리그·시즌·라운드에서 '최신배당 불러오기'를 마지막으로 실제 실행한 시각
+  // (브라우저 저장 — utils/finalOddsTime.js). 조회 조건(시즌·라운드)이 바뀌면
+  // 그 조합의 값을 다시 읽는다. 시즌·라운드가 'ALL'이면 특정 라운드 하나를 가리키는
+  // 값이 없어 표시하지 않는다.
+  const [finalOddsTs, setFinalOddsTs] = useState(null)
+  useEffect(() => {
+    if (!query || query.season === 'ALL' || query.round === 'ALL') {
+      setFinalOddsTs(null)
+      return
+    }
+    setFinalOddsTs(getRoundFinalOddsTime(scope, code, query.season, query.round))
+  }, [scope, code, query])
 
   // 재계산('내 데이터' 리그 1개 전용 — RT 없는 예정 경기만, 이 리그 하나만 대상)
   const [busyRecomputePending, setBusyRecomputePending] = useState(false)
@@ -208,6 +221,11 @@ export default function LeaguePage({ code, scope }) {
       if (res.domestic_error) parts.push(`국내 실패: ${res.domestic_error}`)
       if (res.overseas_error) parts.push(`해외 실패: ${res.overseas_error}`)
       setRefreshOddsNotice(parts.join(' · '))
+      // API가 에러 없이 응답했으면(갱신 건수가 0이어도) "지금 확인했다"는 사실이라
+      // 시각을 찍는다 — 실패(catch)했을 때만 안 찍는다.
+      const now = new Date().toISOString()
+      setRoundFinalOddsTime(scope, code, query.season, query.round, now)
+      setFinalOddsTs(now)
       if (res.domestic_updated || res.overseas_updated) setReloadKey((k) => k + 1)
     } catch (err) {
       setRefreshOddsNotice(`실패: ${err.message}`)
@@ -463,6 +481,9 @@ export default function LeaguePage({ code, scope }) {
             <span className="league-summary-divider" aria-hidden="true" />
             <PickSummaryBar summary={data.hit_summary} />
             <div className="league-summary-toolbar">
+              {finalOddsTs && (
+                <span className="final-odds-ts">최신배당({formatFinalOddsTime(finalOddsTs)})</span>
+              )}
               <button
                 className="batch-fold-btn"
                 onClick={runRefreshFinalOdds}
@@ -470,6 +491,13 @@ export default function LeaguePage({ code, scope }) {
                 title="이 시즌·라운드 경기들의 국내·해외 최종배당(배변 후)만 다시 받습니다. 초기배당은 그대로 둡니다."
               >
                 {busyRefreshOdds ? '불러오는 중…' : '최신배당 불러오기'}
+              </button>
+              <button
+                className="batch-fold-btn"
+                onClick={() => setShowRiskLegend(true)}
+                title="색상별 구간 참고표"
+              >
+                플핸무 확률 참고
               </button>
               {batch1Groups.length > 0 && (
                 <button className="batch-fold-btn" onClick={() => toggleBatch(batch1Groups)}>
@@ -481,13 +509,6 @@ export default function LeaguePage({ code, scope }) {
                   국내지표 {batch2Groups.every((g) => collapsed.has(groupKey(g))) ? '펼치기' : '접기'}
                 </button>
               )}
-              <button
-                className="batch-fold-btn"
-                onClick={() => setShowRiskLegend(true)}
-                title="색상별 구간 참고표"
-              >
-                플핸무 확률 참고
-              </button>
             </div>
           </div>
           {refreshOddsNotice && <p className="recompute-notice">{refreshOddsNotice}</p>}
