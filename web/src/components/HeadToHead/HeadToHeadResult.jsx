@@ -95,6 +95,18 @@ function withinPeriod(matches, years) {
   })
 }
 
+// 정/역 좁혀 보기 — 그 경기의 HT(그 경기 자체의 홈팀)가 정배였는지 역배였는지로
+// 거른다(팀명 옆 (정)/(역) 표식과 같은 값, favSide 재사용). 체크된 것들의 합집합
+// 이다 — 정만 체크하면 정만, 역만 체크하면 역만, 둘 다 체크하면 둘 다(=정배를
+// 못 정한 동배 경기만 빠짐). 둘 다 안 켜면 필터 없음.
+function filterFav(matches, favJ, favY) {
+  if (!favJ && !favY) return matches
+  return matches.filter((m) => {
+    const f = favSide(m)
+    return (favJ && f === 'H') || (favY && f === 'A')
+  })
+}
+
 // 기간을 좁히면 위 요약표(전체기준/홈기준)도 그 기간만으로 다시 세야 한다.
 // 백엔드 _wdl_breakdown(api/main.py)과 같은 규칙을 그대로 옮긴 것이다 — 기준 팀이
 // 그 경기에서 홈이었든 원정이었든 실제 스코어로 W/D/L을 판정하고, 그 안에서 RT를 쪼갠다.
@@ -212,7 +224,7 @@ function WdlGrid({ wdl, wdlHome }) {
 export default function HeadToHeadResult({
   scope, code, home, away, cross = true, limit = 200,
   preset, presetLoading = false, presetError = '',
-  homeOnly = false, years = 0,
+  homeOnly = false, years = 0, favJ = false, favY = false,
 }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
@@ -257,14 +269,27 @@ export default function HeadToHeadResult({
     )
   }
 
-  // 기간(최근 N시즌)을 먼저 좁힌다 — 요약표와 경기 목록이 같은 대상을 봐야 한다.
+  // 기간(최근 N시즌) → 정/역 순서로 좁힌다 — 요약표와 경기 목록이 같은 대상을 봐야 한다.
   const periodMatches = withinPeriod(effData.matches, years)
-  const narrowed = years > 0 && periodMatches.length < effData.matches.length
-  // 기간을 좁혔을 때만 요약표를 다시 센다(안 좁혔으면 백엔드 값 그대로 — 위 주석 참고).
-  const wdl = years > 0 ? wdlBreakdown(periodMatches, home, false) : effData.wdl_summary
-  const wdlHome = years > 0 ? wdlBreakdown(periodMatches, home, true) : effData.wdl_summary_home
+  const favMatches = filterFav(periodMatches, favJ, favY)
+  const favActive = favJ || favY
+  // 기간을 좁혔거나 정/역을 걸렀을 때만 요약표를 다시 센다(둘 다 안 걸렀으면 백엔드
+  // 값 그대로 — 아래 wdlBreakdown 주석 참고).
+  const recomputed = years > 0 || favActive
+  const wdl = recomputed ? wdlBreakdown(favMatches, home, false) : effData.wdl_summary
+  const wdlHome = recomputed ? wdlBreakdown(favMatches, home, true) : effData.wdl_summary_home
   // '홈보기' — 위 요약표 '홈기준' 줄과 같은 기준(home팀이 실제로 홈이었던 경기만).
-  const shownMatches = homeOnly ? periodMatches.filter((m) => m.HT === home) : periodMatches
+  const shownMatches = homeOnly ? favMatches.filter((m) => m.HT === home) : favMatches
+  // 지금 걸려 있는 조건을 한 줄로 — 기간·정/역 어느 것이든 걸리면 요약표까지 그
+  // 조건만으로 바뀌므로, 무엇을 보고 있는지 반드시 밝혀야 전체 전적과 안 헷갈린다.
+  const filterLabel = [
+    years > 0 && periodMatches.length < effData.matches.length
+      && `최근 ${years}년(${periodMatches[periodMatches.length - 1]?.S}~${periodMatches[0]?.S})`,
+    favJ && !favY && '홈팀 정배 경기만',
+    favY && !favJ && '홈팀 역배 경기만',
+    favJ && favY && '홈팀 정배·역배 경기만(동배 제외)',
+  ].filter(Boolean).join(' · ')
+  const narrowed = filterLabel.length > 0
 
   return (
     <>
@@ -272,7 +297,7 @@ export default function HeadToHeadResult({
 
       {shownMatches.length === 0 ? (
         <p className="detail-empty">
-          {years > 0 && `최근 ${years}년 `}
+          {narrowed && `${filterLabel} · `}
           {homeOnly ? `${home}의 홈경기 맞대결 기록 없음` : '맞대결 기록 없음'}
         </p>
       ) : (
@@ -323,12 +348,11 @@ export default function HeadToHeadResult({
           </table>
         </div>
       )}
-      {/* 기간을 좁히면 위 요약표까지 그 기간 값으로 바뀌므로, 지금 무엇을 보고 있는지
-          숫자 옆에 반드시 적어 둔다 — 안 적으면 전체 전적과 구분이 안 된다. */}
+      {/* 기간·정/역을 걸리면 위 요약표까지 그 조건 값으로 바뀌므로, 지금 무엇을
+          보고 있는지 숫자 옆에 반드시 적어 둔다 — 안 적으면 전체 전적과 구분이 안 된다. */}
       {narrowed && (
         <p className="h2h-more">
-          최근 {years}년({periodMatches[periodMatches.length - 1]?.S}~{periodMatches[0]?.S})
-          {' '}{periodMatches.length}경기 기준 · 요약표도 이 기간만 집계
+          {filterLabel} {favMatches.length}경기 기준 · 요약표도 이 조건만 집계
           {' '}(전체 {effData.total}경기)
         </p>
       )}

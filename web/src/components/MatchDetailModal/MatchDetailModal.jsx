@@ -1664,6 +1664,11 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
   // 상대전적을 최근 N시즌만 보기 (0 = 전체). 고르면 아래 경기 목록뿐 아니라
   // 위 요약표(전체기준/홈기준)까지 그 기간만으로 다시 집계된다.
   const [h2hYears, setH2hYears] = useState(0)
+  // 정/역 좁혀 보기 — 그 경기의 HT(그 경기 자체의 홈팀)가 정배였는지 역배였는지로
+  // 거른다. 둘 다 켜면 정+역(동배만 빠짐), 둘 다 끄면 필터 없음. 켜면 기간처럼
+  // 위 요약표까지 그 조건만으로 다시 집계된다.
+  const [h2hFavJ, setH2hFavJ] = useState(false)
+  const [h2hFavY, setH2hFavY] = useState(false)
 
   useEffect(() => {
     const sampleEl = sampleSectionRef.current
@@ -1840,6 +1845,22 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                     />
                     홈보기
                   </label>
+                  <label className="detail-h2h-home-toggle detail-h2h-fav-toggle-j">
+                    <input
+                      type="checkbox"
+                      checked={h2hFavJ}
+                      onChange={(e) => setH2hFavJ(e.target.checked)}
+                    />
+                    정
+                  </label>
+                  <label className="detail-h2h-home-toggle detail-h2h-fav-toggle-y">
+                    <input
+                      type="checkbox"
+                      checked={h2hFavY}
+                      onChange={(e) => setH2hFavY(e.target.checked)}
+                    />
+                    역
+                  </label>
                   {/* 예전 종합분석 '상대전적' 카드에 있던 문장(맞대결 평균 총득점).
                       확률 계산에는 안 들어가는 참고값이라 제목 옆에 붙여만 두되, 눈에 띄게 강조한다. */}
                   {h2hSig && h2hSig.value_text && (
@@ -1855,6 +1876,8 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                 presetError={pickError}
                 homeOnly={h2hHomeOnly}
                 years={h2hYears}
+                favJ={h2hFavJ}
+                favY={h2hFavY}
               />
             </section>
           </div>

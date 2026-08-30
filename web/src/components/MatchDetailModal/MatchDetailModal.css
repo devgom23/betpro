@@ -402,6 +402,12 @@
   font-weight: 700;
 }
 
+/* 정/역 체크박스는 팀명 옆 (정)/(역) 표식(h2h-fav)과 같은 색 축을 쓴다 —
+   정=파랑은 위 기본 규칙과 같아서 따로 안 써도 되지만, 역만 빨강으로 덮어쓴다. */
+.detail-h2h-fav-toggle-y:has(input:checked) {
+  color: var(--chip-red-fg);
+}
+
 .detail-h2h-avg {
   color: var(--text-primary);
   font-weight: 700;
