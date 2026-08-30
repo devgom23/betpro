@@ -784,6 +784,67 @@
   font-weight: 700;
 }
 
+/* 배당차 뱃지 — 국초/해초 · 국배/해배 네 값을 한 칸에.
+   초기 둘·배변 둘을 각각 묶고(gap-pair), 두 묶음 사이는 더 벌려서 어디까지가
+   초기이고 어디부터 배변인지 간격만으로 보이게 한다(확률 지표 줄과 같은 순서).
+   구분자를 텍스트 공백으로 두면 브라우저가 뭉개므로 전부 flex gap이다(CLAUDE.md 6-2). */
+.gap-row {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;              /* 초기 묶음 ↔ 배변 묶음 */
+}
+
+.gap-pair {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;               /* 국 ↔ / ↔ 해 — 아주 붙은 한 덩어리 */
+}
+
+.gap-one {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  cursor: help;
+}
+
+.gap-market,
+.gap-sep {
+  color: var(--text-muted);
+}
+
+.gap-one b {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* 플핸무 적중률 — 색을 '% 그 자체'로 정한다(배당차 구간이 아니라).
+   화면에 보이는 숫자와 색이 어긋나지 않게 하려는 것이다 — 구간으로 자르면
+   80%인데 회색, 79%인데 초록 같은 일이 생긴다(전체 평균은 69.8%).
+     80% 이상   초록    배당차 ~1.0    전체의 31%
+     75~80%     파랑    배당차 1~1.5   전체의 13%
+     그 아래     기본색  배당차 1.5+    전체의 56%
+   ⚠ 노랑(--chip-yellow-fg)은 이 앱에서 '적중'을 뜻하는 색이라(.dir-top-hit,
+     .dir-name-hit, PICK_VERDICT 배지) 여기 쓰면 안 된다.
+   숫자 폭이 들쭉날쭉하면 네 값의 자리가 안 맞아 읽기 힘들어서 tabular-nums. */
+.gap-rate {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.gap-rate-best {
+  color: var(--chip-green-fg);
+}
+
+.gap-rate-mid {
+  color: var(--chip-blue-fg);
+}
+
+/* 기본 글자색 — 다크에서는 흰색, 라이트에서는 검정. 색을 아예 안 준다. */
+.gap-rate-plain {
+  color: var(--text-primary);
+}
+
 .match-chip-empty {
   font-size: 11px;
   font-weight: 400;

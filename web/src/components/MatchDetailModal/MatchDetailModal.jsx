@@ -149,12 +149,114 @@ function ddongChips(row) {
   return out
 }
 
+// ── 배당차 뱃지 (2026-08-30 실측) ──
+// 배당차 = |승배당 − 패배당| = 역배 − 정배. 괄호 안은 그 구간의 '플핸무 적중률'
+// (= 핸승만 안 나오면 적중). 6대리그 결과 있는 경기 전부로 쟀다.
+//
+// ⚠ 이 숫자는 확률 지표가 모르는 새 정보가 아니다. 배당차는 정배배당과 거의 같은
+//    값이라(상관 −0.79~−0.85, 정배배당이 배당차의 71%를 설명한다) 여기 적힌 차이는
+//    사실상 정배배당이 만든 것이다. 실제로 정배배당을 0.05 단위로 고정하고 다시 재면
+//    플핸무 쪽 차이는 사라진다(핸승 z가 −0.48 ~ −3.70으로 부호까지 뒤섞인다).
+//    그래서 이건 "배당표 보고 머릿속으로 빼야 알던 걸 미리 계산해 둔 참조값"이다.
+//    똥배 뱃지도 같은 성격이다(그것도 배당에서 나온 값).
+//
+// 초기·배변을 둘 다 띄우는 이유: 91%는 같은 구간에 들어가지만 9%는 갈린다.
+// 국·해를 둘 다 띄우는 이유: 같은 구간에 들어가는 게 54.2%뿐이다(절반은 갈린다).
+const GAP_CUTS = [0.5, 1.0, 1.5, 2.5, 4.0, 7.0]
+// [플핸무 적중률%, 적중 건수, 전체 건수] × 7구간(~0.5 / 0.5~1 / 1~1.5 / 1.5~2.5 / 2.5~4 / 4~7 / 7+)
+const GAP_HIT = {
+  국초: [[83.4, 4304, 5162], [80.0, 3929, 4913], [76.2, 3205, 4207], [72.6, 4191, 5769],
+    [66.5, 3407, 5121], [57.2, 2633, 4600], [39.7, 1170, 2948]],
+  해초: [[83.1, 3735, 4495], [81.4, 3751, 4608], [77.6, 3462, 4462], [74.2, 4823, 6499],
+    [68.2, 4155, 6090], [60.1, 3210, 5340], [43.8, 1943, 4438]],
+  국배: [[83.4, 4101, 4915], [80.2, 3850, 4799], [76.6, 3256, 4248], [72.7, 4279, 5883],
+    [67.0, 3500, 5227], [57.1, 2698, 4728], [39.6, 1156, 2922]],
+  해배: [[84.9, 3441, 4051], [81.7, 3561, 4361], [78.9, 3282, 4159], [74.7, 4909, 6570],
+    [68.5, 4253, 6205], [61.8, 3411, 5516], [43.8, 2223, 5071]],
+}
+const GAP_BASE = 69.8      // 배당차를 안 가린 전체 평균 — 색은 이 값 대비로 정한다
+const GAP_BAND_LABEL = ['~0.5', '0.5~1', '1~1.5', '1.5~2.5', '2.5~4', '4~7', '7+']
+// 라벨 → [승배당 칸, 패배당 칸, 비었을 때 대신 볼 칸]
+const GAP_SRC = [
+  ['국초', 'KW', 'KL', null],
+  ['해초', 'FW', 'FL', null],
+  ['국배', 'EKW', 'EKL', ['KW', 'KL']],
+  ['해배', 'EFW', 'EFL', ['FW', 'FL']],
+]
+
+function gapOf(row, wKey, lKey, fb) {
+  const pick = (a, b) => {
+    const w = numOrNull(row[a])
+    const l = numOrNull(row[b])
+    return w !== null && l !== null && w > 1 && l > 1 ? Math.abs(w - l) : null
+  }
+  const v = pick(wKey, lKey)
+  return v !== null ? v : (fb ? pick(fb[0], fb[1]) : null)
+}
+
+function gapBandIndex(gap) {
+  let i = 0
+  while (i < GAP_CUTS.length && gap >= GAP_CUTS[i]) i += 1
+  return i
+}
+
+// 0.5 → "0.5", 0.15 → "0.15", 1.2100000001 → "1.21"
+function gapText(v) {
+  return String(Number(v.toFixed(2)))
+}
+
+function gapChips(row) {
+  const parts = GAP_SRC.map(([label, w, l, fb]) => {
+    const gap = gapOf(row, w, l, fb)
+    if (gap === null) return null
+    const idx = gapBandIndex(gap)
+    const [rate, hit, tot] = GAP_HIT[label][idx]
+    // 색은 배당차 구간이 아니라 '플핸무 % 그 자체'로 정한다 — 화면에 보이는 숫자와
+    // 색이 어긋나지 않게(80%인데 회색, 79%인데 초록 같은 일이 없게) 하기 위함이다.
+    //   80% 이상  초록   (배당차 1.0 이하)
+    //   75~80%    파랑   (배당차 1~1.5) — 노랑은 이 앱에서 '적중' 색이라 안 쓴다
+    //   그 아래    기본색 (배당차 1.5 초과 — 계속 떨어지기만 해서 등급을 안 매긴다)
+    const tone = rate >= 80 ? 'best' : rate >= 75 ? 'mid' : 'plain'
+    return { label, gap, rate, hit, tot, idx, tone }
+  })
+  if (parts.every((p) => p === null)) return []
+  const one = (p) => (p === null ? null : (
+    <span
+      className="gap-one"
+      key={p.label}
+      title={`${p.label} 배당차 ${gapText(p.gap)} → ${GAP_BAND_LABEL[p.idx]} 구간.`
+        + ` 6대리그 ${p.tot.toLocaleString()}경기 중 플핸무 적중 ${p.hit.toLocaleString()}건`
+        + ` (${p.rate}%). 배당차를 안 가린 전체 평균은 ${GAP_BASE}%.`
+        + ' ※ 배당차는 정배배당과 거의 같은 값이라, 확률 지표가 이미 반영한 정보입니다.'}
+    >
+      <span className="gap-market">{p.label})</span>
+      <b>{gapText(p.gap)}</b>
+      <span className={`gap-rate gap-rate-${p.tone}`}>({Math.round(p.rate)}%)</span>
+    </span>
+  ))
+  // 초기 둘 / 배변 둘로 묶어 보여준다 — 확률 지표 줄의 '초기 | 배변'과 같은 순서.
+  return [
+    <MatchChip key="gap" label="배당차(플핸무%)">
+      <span className="gap-row">
+        <span className="gap-pair">
+          {one(parts[0])}<span className="gap-sep">/</span>{one(parts[1])}
+        </span>
+        <span className="gap-pair">
+          {one(parts[2])}<span className="gap-sep">/</span>{one(parts[3])}
+        </span>
+      </span>
+    </MatchChip>,
+  ]
+}
+
 // 경기지표 — 이 경기가 전반적으로 어떤 경기인지 한 줄로. 확률 지표 바로 위에 둔다.
 // 해당되는 게 하나도 없으면 줄을 없애지 않고 '해당 없음'을 적는다 — 뱃지가 있고 없고에
 // 따라 아래 내용이 위아래로 튀면 매번 눈으로 다시 찾아야 한다.
 // 제목 <h3> 안에 들어가므로 반드시 <span>이어야 한다(h3 안에는 <div>를 넣을 수 없다).
 function MatchIndicators({ row }) {
-  const chips = [...ddongChips(row)]
+  // 똥배가 앞, 배당차가 뒤. 똥배는 해당될 때만 붙는 '이 경기의 특징'이라 먼저 보여야
+  // 하고, 배당차는 모든 경기에 늘 있는 참조값이라 뒤가 맞다.
+  const chips = [...ddongChips(row), ...gapChips(row)]
   return (
     <span className="match-chip-row">
       {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}
