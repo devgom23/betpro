@@ -127,7 +127,9 @@ function ddongChips(row) {
   if (!ddong) return []
   const risk = numOrNull(row.DDONG_RISK)
   const [, label, tone] = DDONG_GRADES.find(([cut]) => risk !== null && risk < cut) || []
-  const out = [
+  // 똥사는 여기 두지 않는다 — '결과가 뒤집혔다'는 결과 정보라, 팝업 맨 위 RT 배지
+  // 옆(DdongsaBadge)에 붙는 게 맞다. 경기지표는 결과가 아니라 경기의 성격만 담는다.
+  return [
     <MatchChip
       key="ddong"
       label="똥배"
@@ -139,14 +141,21 @@ function ddongChips(row) {
       {risk !== null && ` · ${label} ${Math.round(risk)}%`}
     </MatchChip>,
   ]
-  if (String(row.DDONGSA || '').trim()) {
-    out.push(
-      <MatchChip key="sa" label="결과" tone="red" title="똥배였는데 실제 결과가 무/역으로 뒤집혔다">
-        똥사
-      </MatchChip>
-    )
-  }
-  return out
+}
+
+// 팝업 맨 위 RT 배지 옆 '똥사' — 똥배(강한 정배)였는데 결과가 무/역으로 뒤집힌 경기.
+// RT와 같은 '결과' 정보라 RT 배지 바로 옆에 둔다. 모양은 RtBadge와 같은 것을 쓴다.
+function DdongsaBadge({ row }) {
+  if (!String(row.DDONGSA || '').trim()) return null
+  return (
+    <span
+      className="rt-badge"
+      style={{ background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' }}
+      title="똥배(국내배당 1.49 이하의 강한 정배)였는데 결과가 무/역으로 뒤집혔다"
+    >
+      똥사
+    </span>
+  )
 }
 
 // ── 배당차 뱃지 (2026-08-30 실측) ──
@@ -1708,6 +1717,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
           {formatTime(row.TM) ? ` ${formatTime(row.TM)}` : ''}
           &nbsp;&nbsp;
           {rt ? <RtBadge label={rt} /> : <span className="modal-scheduled">예정 경기</span>}
+          <DdongsaBadge row={row} />
         </p>
         <MyPickBar row={row} onSavePick={onSavePick} />
 
