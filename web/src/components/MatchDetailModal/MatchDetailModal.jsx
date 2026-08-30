@@ -1484,6 +1484,9 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
   // 상대전적 목록 필터 — 켜면 지금 보는 경기의 홈팀(ht)이 실제로 홈이었던
   // 맞대결만 남긴다. 위 요약표의 '홈기준' 줄과 같은 기준(homePoints의 referenceTeam=home).
   const [h2hHomeOnly, setH2hHomeOnly] = useState(false)
+  // 상대전적을 최근 N시즌만 보기 (0 = 전체). 고르면 아래 경기 목록뿐 아니라
+  // 위 요약표(전체기준/홈기준)까지 그 기간만으로 다시 집계된다.
+  const [h2hYears, setH2hYears] = useState(0)
 
   useEffect(() => {
     const sampleEl = sampleSectionRef.current
@@ -1645,6 +1648,16 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
               <h3 className="detail-h2h-title">
                 <span className="detail-h2h-title-left">
                   상대전적
+                  <select
+                    className={`detail-h2h-period${h2hYears ? ' is-on' : ''}`}
+                    value={h2hYears}
+                    onChange={(e) => setH2hYears(Number(e.target.value))}
+                    title="최근 N시즌만 집계 (요약표까지 같이 바뀝니다)"
+                  >
+                    <option value={0}>전체경기 선택</option>
+                    <option value={3}>최근 3년</option>
+                    <option value={5}>최근 5년</option>
+                  </select>
                   <label className="detail-h2h-home-toggle">
                     <input
                       type="checkbox"
@@ -1667,6 +1680,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                 presetLoading={!pickData && !pickError}
                 presetError={pickError}
                 homeOnly={h2hHomeOnly}
+                years={h2hYears}
               />
             </section>
           </div>

@@ -75,6 +75,56 @@ function FavMark({ side, me }) {
   )
 }
 
+// ── 기간 좁혀 보기 (최근 N시즌) ──
+// 기준 시즌은 목록 맨 위 = 지금 보고 있는 경기의 시즌이다(백엔드가 S 내림차순으로
+// 정렬해 주고, 지금 경기 자신도 맞대결 목록에 들어 있다).
+// '최근 3년'은 기준 시즌을 포함해 3개 시즌 — 26-27 기준이면 24-25까지다.
+function seasonStart(s) {
+  const n = Number(String(s ?? '').slice(0, 2))
+  return Number.isFinite(n) ? n : null
+}
+
+function withinPeriod(matches, years) {
+  if (!years || !matches.length) return matches
+  const ref = seasonStart(matches[0].S)
+  if (ref === null) return matches
+  const cut = ref - (years - 1)
+  return matches.filter((m) => {
+    const y = seasonStart(m.S)
+    return y !== null && y >= cut
+  })
+}
+
+// 기간을 좁히면 위 요약표(전체기준/홈기준)도 그 기간만으로 다시 세야 한다.
+// 백엔드 _wdl_breakdown(api/main.py)과 같은 규칙을 그대로 옮긴 것이다 — 기준 팀이
+// 그 경기에서 홈이었든 원정이었든 실제 스코어로 W/D/L을 판정하고, 그 안에서 RT를 쪼갠다.
+// 스코어가 없는 경기(예정·취소)는 백엔드와 똑같이 뺀다.
+//
+// 기간을 안 좁혔을 때는 이걸 쓰지 않고 백엔드 값을 그대로 쓴다 — 경기 목록은 limit으로
+// 잘릴 수 있어서(총 N경기 중 최근 200경기만), 잘린 목록으로 다시 세면 백엔드 값보다
+// 작게 나온다. 3·5년 창은 limit보다 훨씬 짧아 잘릴 일이 없다.
+function wdlBreakdown(matches, referenceTeam, homeOnly) {
+  const out = {
+    W: { total: 0, breakdown: {} },
+    D: { total: 0, breakdown: {} },
+    L: { total: 0, breakdown: {} },
+  }
+  matches.forEach((m) => {
+    const hs = m.HS
+    const as_ = m.AS
+    if (hs === null || hs === undefined || as_ === null || as_ === undefined) return
+    const rowHt = String(m.HT ?? '').trim()
+    if (homeOnly && rowHt !== referenceTeam) return
+    const mine = rowHt === referenceTeam ? hs : as_
+    const theirs = rowHt === referenceTeam ? as_ : hs
+    const letter = mine > theirs ? 'W' : mine < theirs ? 'L' : 'D'
+    const lab = m.RT_label || '기타'
+    out[letter].breakdown[lab] = (out[letter].breakdown[lab] || 0) + 1
+    out[letter].total += 1
+  })
+  return out
+}
+
 const RT_ORDER = ['핸승', '핸무', '무', '역']
 // 상대전적 표는 핸승/핸무/무/역 개별 색이 아니라, 그 칸이 속한 승/무/패(W/D/L) 그룹
 // 색으로 통일한다 — 글자는 핸승/핸무/무/역 그대로 두고, 배경만 그룹당 하나의 색으로
@@ -162,7 +212,7 @@ function WdlGrid({ wdl, wdlHome }) {
 export default function HeadToHeadResult({
   scope, code, home, away, cross = true, limit = 200,
   preset, presetLoading = false, presetError = '',
-  homeOnly = false,
+  homeOnly = false, years = 0,
 }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
@@ -207,17 +257,24 @@ export default function HeadToHeadResult({
     )
   }
 
-  const wdl = effData.wdl_summary
-  const wdlHome = effData.wdl_summary_home
+  // 기간(최근 N시즌)을 먼저 좁힌다 — 요약표와 경기 목록이 같은 대상을 봐야 한다.
+  const periodMatches = withinPeriod(effData.matches, years)
+  const narrowed = years > 0 && periodMatches.length < effData.matches.length
+  // 기간을 좁혔을 때만 요약표를 다시 센다(안 좁혔으면 백엔드 값 그대로 — 위 주석 참고).
+  const wdl = years > 0 ? wdlBreakdown(periodMatches, home, false) : effData.wdl_summary
+  const wdlHome = years > 0 ? wdlBreakdown(periodMatches, home, true) : effData.wdl_summary_home
   // '홈보기' — 위 요약표 '홈기준' 줄과 같은 기준(home팀이 실제로 홈이었던 경기만).
-  const shownMatches = homeOnly ? effData.matches.filter((m) => m.HT === home) : effData.matches
+  const shownMatches = homeOnly ? periodMatches.filter((m) => m.HT === home) : periodMatches
 
   return (
     <>
       <WdlGrid wdl={wdl} wdlHome={wdlHome} />
 
-      {homeOnly && shownMatches.length === 0 ? (
-        <p className="detail-empty">{home}의 홈경기 맞대결 기록 없음</p>
+      {shownMatches.length === 0 ? (
+        <p className="detail-empty">
+          {years > 0 && `최근 ${years}년 `}
+          {homeOnly ? `${home}의 홈경기 맞대결 기록 없음` : '맞대결 기록 없음'}
+        </p>
       ) : (
         <div className="match-list-scroll">
           <table className="detail-table match-list">
@@ -266,10 +323,19 @@ export default function HeadToHeadResult({
           </table>
         </div>
       )}
+      {/* 기간을 좁히면 위 요약표까지 그 기간 값으로 바뀌므로, 지금 무엇을 보고 있는지
+          숫자 옆에 반드시 적어 둔다 — 안 적으면 전체 전적과 구분이 안 된다. */}
+      {narrowed && (
+        <p className="h2h-more">
+          최근 {years}년({periodMatches[periodMatches.length - 1]?.S}~{periodMatches[0]?.S})
+          {' '}{periodMatches.length}경기 기준 · 요약표도 이 기간만 집계
+          {' '}(전체 {effData.total}경기)
+        </p>
+      )}
       {homeOnly && shownMatches.length > 0 && (
         <p className="h2h-more">홈경기 {shownMatches.length}건만 표시</p>
       )}
-      {!homeOnly && effData.total > effData.matches.length && (
+      {!homeOnly && !narrowed && effData.total > effData.matches.length && (
         <p className="h2h-more">
           최근 {effData.matches.length}경기만 표시 (총 {effData.total}경기)
         </p>
