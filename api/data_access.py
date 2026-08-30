@@ -252,6 +252,16 @@ def load_total_h2h_df(db_path: str) -> pd.DataFrame:
     return df
 
 
+def load_combo_index(db_path: str) -> dict:
+    """승+패 배당 조합 → 과거 결과 건수 표(mtime 캐시).
+
+    combo_dir.attach()가 리그 표에 방향성 컬럼을 붙일 때 쓴다. 조합 전수를 세려면
+    통합DB를 한 번 훑어야 해서, 요청마다 다시 만들면 리그 조회가 그만큼 느려진다.
+    """
+    import combo_dir as CD
+    return cached_derive(db_path, "combo_index", lambda: CD.build_index(load_total_df(db_path)))
+
+
 def cached_derive(db_path: str, key_name: str, build):
     """DataFrame이 아닌 '파생 결과'(인덱스·집계 등)도 같은 mtime 캐시에 얹는다.
 

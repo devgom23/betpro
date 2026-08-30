@@ -285,14 +285,102 @@ function gapChips(row) {
   ]
 }
 
+// ── 승+패 조합 방향성 뱃지 (2026-08-30 실측) ──
+// 이 경기와 승·패 배당이 **소수점까지 완전히 같은** 과거 경기만 모아, 그중 가장 적게
+// 나온 결과 하나를 배제한 것이 방향성이다(계산은 api/combo_dir.py).
+//   핸승 배제 → 플핸무   핸무 배제 → 플핸승   무 배제 → 정역   역 배제 → 정무
+// 표기는 확률 지표 줄과 같은 꼴: 국)플핸무(핸승)78%
+//   괄호 안은 '배제하는 결과'다 — 확률 지표 줄의 괄호(최다 결과)와는 뜻이 다르므로
+//   툴팁에 표본 4칸을 그대로 적어 오해가 없게 한다.
+//
+// 실측(6대리그 35,952경기, 그 경기 이전 표본만 써서 미래 정보 차단):
+//   해배·통합 80.5% / 국배·통합 78.6%. 표본 20건 이상이면 80.8%.
+//   방향성별로는 정무가 가장 잘 맞았다(해배 84.4%). 여섯 리그가 78~81%로 거의 같다.
+// 국배는 조합이 잘 안 겹쳐 표본이 없는 경기가 많다 — 그때는 그 칸을 아예 안 그린다.
+// 표본이 이보다 적으면 %를 못 믿는다 — 값은 그대로 보여주되 흐리게 깔고 물음표를
+// 붙인다. n=1이면 그 조합의 %는 무조건 100%가 되는데, 실제 적중률은 75.4%였다
+// (아래 COMBO_EXPECT 실측). 100%가 진하게 뜨면 최고의 신호로 오해된다.
+const COMBO_MIN_N = 20
+
+// 표본 크기별 '실제로는 얼마나 맞았나' — 해외 초기배당 34,330경기 실측(2026-08-31).
+// 그 경기 이전 표본만 써서 미래 정보를 막고, 조합의 최소값을 배제하는 같은 규칙으로 쟀다.
+// 표본이 작을수록 화면 %는 100%에 가까워지지만 실제 적중률은 75%대에 머문다.
+const COMBO_EXPECT = [
+  [2, 75.4], [4, 76.8], [9, 78.1], [19, 80.1], [49, 80.0], [Infinity, 81.1],
+]
+
+function comboExpect(n) {
+  return (COMBO_EXPECT.find(([hi]) => n <= hi) || [0, 79.8])[1]
+}
+const COMBO_SRC = [
+  ['국초', 'SPK'], ['해초', 'SPF'],
+  ['국배', 'SPEK'], ['해배', 'SPEF'],
+]
+
+function comboChips(row) {
+  const parts = COMBO_SRC.map(([label, p]) => {
+    const name = row[`${p}_NAME`]
+    const rate = numOrNull(row[`${p}_RATE`])
+    const n = numOrNull(row[`${p}_N`])
+    if (!name || rate === null || !n) return null
+    return { label, name, excl: row[`${p}_EXCL`], rate, n,
+      cnt: row[`${p}_CNT`], lgn: numOrNull(row[`${p}_LGN`]),
+      tie: numOrNull(row[`${p}_TIE`]) === 1, weak: n < COMBO_MIN_N }
+  })
+  if (parts.every((x) => x === null)) return []
+  const one = (x, key) => (x === null ? (
+    <span className="combo-one" key={key}>
+      <span className="combo-market">{key})</span>
+      <span className="combo-none">—</span>
+    </span>
+  ) : (
+    <span
+      className="combo-one"
+      key={key}
+      title={`${x.label} 배당이 이 경기와 소수점까지 완전히 같았던 과거 `
+        + `${x.n.toLocaleString()}경기(6대리그 합산). 결과는 핸승·핸무·무·역 = ${x.cnt}건.`
+        + ` 가장 적게 나온 ${x.excl}을 빼는 것이 '${x.name}'이고,`
+        + ` 그 ${x.n.toLocaleString()}경기 중 ${x.excl}이 안 나온 비율이 ${x.rate}%.`
+        + (x.tie ? ' ※ 가장 적은 결과가 동점이라 방향을 하나로 못 정했다(묶어서 표시).' : '')
+        + (x.weak
+          ? ` ※ 표본 ${COMBO_MIN_N}경기 미만이라 이 %는 믿을 수 없다 —`
+            + ` 표본이 ${x.n}건일 때 실제 적중률은 6대리그 실측으로 ${comboExpect(x.n)}%였다.`
+          : '')
+        + (x.lgn ? ` (이 리그 안에서만 세면 ${x.lgn}경기)` : '')}
+    >
+      <span className="combo-market">{x.label})</span>
+      <b className={`combo-name${x.tie ? ' combo-tie' : ''}`}>{x.name}</b>
+      <span className="combo-excl">({x.excl})</span>
+      <span className={`combo-rate${x.weak ? ' combo-weak' : (x.rate >= 85 ? ' combo-rate-hi' : '')}`}>
+        {Math.round(x.rate)}%{x.weak && '?'}
+      </span>
+      <span className="combo-n">n={x.n.toLocaleString()}</span>
+    </span>
+  ))
+  // 초기 둘 / 배변 둘로 묶는다 — 확률 지표 줄의 '초기 | 배변'과 같은 순서.
+  return [
+    <MatchChip key="combo" label="승+패">
+      <span className="combo-row">
+        <span className="combo-pair">
+          {one(parts[0], '국초')}{one(parts[1], '해초')}
+        </span>
+        <span className="combo-pair">
+          {one(parts[2], '국배')}{one(parts[3], '해배')}
+        </span>
+      </span>
+    </MatchChip>,
+  ]
+}
+
 // 경기지표 — 이 경기가 전반적으로 어떤 경기인지 한 줄로. 확률 지표 바로 위에 둔다.
 // 해당되는 게 하나도 없으면 줄을 없애지 않고 '해당 없음'을 적는다 — 뱃지가 있고 없고에
 // 따라 아래 내용이 위아래로 튀면 매번 눈으로 다시 찾아야 한다.
 // 제목 <h3> 안에 들어가므로 반드시 <span>이어야 한다(h3 안에는 <div>를 넣을 수 없다).
 function MatchIndicators({ row }) {
-  // 똥배가 앞, 배당차가 뒤. 똥배는 해당될 때만 붙는 '이 경기의 특징'이라 먼저 보여야
-  // 하고, 배당차는 모든 경기에 늘 있는 참조값이라 뒤가 맞다.
-  const chips = [...ddongChips(row), ...gapChips(row)]
+  // 똥배 → 승+패 → 배당차 순. 똥배는 해당될 때만 붙는 '이 경기의 특징'이라 먼저,
+  // 승+패는 이 경기와 배당이 똑같았던 과거 경기만 본 값이라 그다음, 배당차는
+  // 배당대 전체를 본 참조값이라 마지막.
+  const chips = [...ddongChips(row), ...comboChips(row), ...gapChips(row)]
   return (
     <span className="match-chip-row">
       {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}

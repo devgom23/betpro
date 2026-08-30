@@ -85,6 +85,7 @@ import final_indicators as FINALIND  # noqa: E402
 import my_picks as MYPICKS     # noqa: E402
 import bet_slips as BETSLIPS   # noqa: E402
 import pick_ai as PICKAI       # noqa: E402
+import combo_dir as COMBODIR   # noqa: E402
 import standings               # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
@@ -524,10 +525,13 @@ def league_rows(code: str,
 
     total = len(sub)
     page = sub.iloc[offset: offset + limit]
+    # 승+패 배당 조합 방향성 — 보이는 행에만 붙인다(전체에 붙이면 헛일이 크다).
+    page = COMBODIR.attach(page, DATA.load_combo_index(db), code)
     records = DATA.df_to_records(page)
     _attach_my_picks(records, user["username"], code, scope)
     return {
-        "columns": list(df.columns) + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT"],
+        "columns": list(df.columns) + COMBODIR.COLS
+                   + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT"],
         "rows": records,
         "total": total,
         "season": season,
@@ -1547,7 +1551,9 @@ def match_excel_download(code: str,
     if sub.empty:
         raise HTTPException(status_code=404, detail="해당 경기를 찾을 수 없습니다.")
 
-    records = DATA.df_to_records(sub.head(1))
+    # 리그 표와 같은 값을 팝업에서도 쓰도록 승+패 조합 방향성을 붙인다.
+    records = DATA.df_to_records(
+        COMBODIR.attach(sub.head(1), DATA.load_combo_index(db), code))
     _attach_my_picks(records, user["username"], code, scope)   # 내픽/P/의견/메모/별표
     row = records[0]
     ht = str(row.get("HT") or "").strip()

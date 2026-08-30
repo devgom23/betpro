@@ -814,6 +814,78 @@
   cursor: help;
 }
 
+/* ── 승+패 조합 방향성 — 국)플핸무(핸승)78% n=126 ──
+   확률 지표 줄(.dir-*)과 같은 표기 규칙: 시장·구분자는 흐리게, 방향성 이름은
+   밝게, %는 굵게. 다만 여기 괄호는 '배제하는 결과'라 확률 지표의 괄호(최다 결과)와
+   뜻이 다르다 — 그래서 색을 다르게(흐리게) 줘서 같은 것으로 안 읽히게 한다. */
+.combo-row {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;              /* 초기 묶음 ↔ 배변 묶음 */
+}
+
+.combo-pair {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;               /* 국 ↔ 해 */
+}
+
+.combo-one {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  cursor: help;
+}
+
+.combo-market,
+.combo-sep,
+.combo-excl,
+.combo-n {
+  color: var(--text-muted);
+}
+
+.combo-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.combo-rate {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 85% 이상 — 전체 평균(78~80%)보다 뚜렷이 높은 조합만 초록으로 짚어 준다.
+   배당차 뱃지(.gap-rate-best)와 같은 초록을 써서 "좋다"의 뜻을 통일한다. */
+.combo-rate-hi {
+  color: var(--chip-green-fg);
+}
+
+/* 표본 수는 값이 아니라 '얼마나 믿을 수 있나'라서 한 단계 더 작게. */
+.combo-n {
+  font-size: 10px;
+}
+
+/* 표본이 10경기 미만 — 값은 보여주되 흐리게 깔아 "참고만"임을 알린다.
+   n=1이면 무조건 100%가 뜨는데, 그게 초록으로 강조되면 최고의 신호처럼 보인다. */
+.combo-weak {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* 가장 적게 나온 결과가 동점이라 방향을 하나로 못 정한 경우 — 이름이 '플핸무/정역'
+   처럼 묶여 나온다. 확정된 방향과 구분되게 한 단계 흐리게. */
+.combo-tie {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.combo-none {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
 .gap-market,
 .gap-sep,
 .gap-paren {
