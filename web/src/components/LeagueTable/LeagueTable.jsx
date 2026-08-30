@@ -504,7 +504,9 @@ export default function LeagueTable({
                           // 포함)을 누르면 상세보기가 열린다.
                           if (c.key === 'RT') {
                             const badgeStyle = cellStyle(g, c, value, row)
-                            const hasMemo = !!pickState.memo?.trim()
+                            // 결과반성 = 메모 글이나 결과반성 태그 드롭박스, 둘 중 하나만
+                            // 골라도 '썼다'로 본다 — 태그만 고르고 글은 안 쓴 경우도 흔하다.
+                            const hasMemo = !!(pickState.memo?.trim() || pickState.reasonTag)
                             return (
                               <td
                                 key={`${gi}-${c.key}`}
@@ -676,7 +678,9 @@ export default function LeagueTable({
                       // 포함)을 누르면 상세보기가 열린다.
                       if (g.label1 === '경기정보' && c.key === 'RT') {
                         const badgeStyle = cellStyle(g, c, value, row)
-                        const hasMemo = !!pickState.memo?.trim()
+                        // 결과반성 = 메모 글이나 결과반성 태그 드롭박스, 둘 중 하나만
+                        // 골라도 '썼다'로 본다 — 태그만 고르고 글은 안 쓴 경우도 흔하다.
+                        const hasMemo = !!(pickState.memo?.trim() || pickState.reasonTag)
                         return (
                           <td
                             key={`${gi}-${ci}`}
