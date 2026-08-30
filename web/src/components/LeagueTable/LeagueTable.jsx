@@ -504,15 +504,18 @@ export default function LeagueTable({
                           // 포함)을 누르면 상세보기가 열린다.
                           if (c.key === 'RT') {
                             const badgeStyle = cellStyle(g, c, value, row)
+                            const hasMemo = !!pickState.memo?.trim()
                             return (
                               <td
                                 key={`${gi}-${c.key}`}
                                 className={`${className} rt-detail-cell`}
-                                title="상세 경기 정보"
+                                title={hasMemo ? '상세 경기 정보 (결과반성 작성됨)' : '상세 경기 정보'}
                                 onClick={() => setDetailRow(row)}
                               >
                                 {badgeStyle ? (
-                                  <span className="cell-badge" style={badgeStyle}>{text}</span>
+                                  <span className={`cell-badge${hasMemo ? ' cell-badge-memo' : ''}`} style={badgeStyle}>
+                                    {text}
+                                  </span>
                                 ) : (
                                   text
                                 )}
@@ -673,15 +676,16 @@ export default function LeagueTable({
                       // 포함)을 누르면 상세보기가 열린다.
                       if (g.label1 === '경기정보' && c.key === 'RT') {
                         const badgeStyle = cellStyle(g, c, value, row)
+                        const hasMemo = !!pickState.memo?.trim()
                         return (
                           <td
                             key={`${gi}-${ci}`}
                             className={`${classNames || ''} rt-detail-cell`.trim()}
-                            title="상세 경기 정보"
+                            title={hasMemo ? '상세 경기 정보 (결과반성 작성됨)' : '상세 경기 정보'}
                             onClick={() => setDetailRow(row)}
                           >
                             {badgeStyle ? (
-                              <span className="cell-badge" style={badgeStyle}>
+                              <span className={`cell-badge${hasMemo ? ' cell-badge-memo' : ''}`} style={badgeStyle}>
                                 {text}
                               </span>
                             ) : (
