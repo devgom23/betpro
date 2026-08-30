@@ -411,35 +411,6 @@
   white-space: nowrap;
 }
 
-/* 배당 제목 옆 똥배 표시 — 똥1 · [안전 17%] · 똥사
-   리그 화면 상단 요약 바(등록된 시즌 18 · 경기수 5,229 …)와 같은 표기를 그대로 쓴다:
-   값은 <strong>으로 밝게, 사이는 가운뎃점, 등급은 RtSummaryBar와 같은 알약형 칩. */
-.detail-ddong {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;              /* 순번 · 등급칩 · 똥사 사이 간격 */
-  margin-left: 6px;      /* '배당' 제목과 떨어뜨린다 */
-}
-
-.detail-ddong strong {
-  color: var(--text-primary);
-  font-weight: 700;
-}
-
-.detail-ddong-grade {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.detail-ddong-sa {
-  color: var(--danger-text) !important;
-}
-
 .detail-table {
   width: 100%;
   border-collapse: collapse;
@@ -755,11 +726,76 @@
   }
 }
 
+/* ── 경기지표 — 이 경기가 어떤 경기인지(똥배 등)를 뱃지 줄로. 확률 지표 바로 위. ──
+   제목과 뱃지를 '한 줄'로 둔다 — 바로 아래 '확률 지표' 줄(제목 + 방향성 요약)과 같은
+   구조라서, 여기만 두 줄이면 두 지표 줄의 눈높이가 어긋난다. */
+.pick-band-match h3 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;             /* '확률 지표' 줄의 제목↔요약 간격과 같은 값 */
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 성격이 다른 뱃지가 여러 개 늘어서는 줄이라 '나열 항목 사이' 기본 간격(8px).
+   flex gap으로 벌린다 — 텍스트 공백으로 두면 브라우저가 뭉개 간격이 들쭉날쭉해진다
+   (CLAUDE.md 6-2). */
+.match-chip-row {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.match-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;                 /* 라벨과 값은 아주 붙은 한 덩어리 */
+  padding: 2px 8px;
+  border-radius: 12px;      /* 알약형 — RtSummaryBar 배지와 같은 톤 */
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  font-size: 11px;
+  /* 제목 <h3> 안에 들어가므로 굵기를 명시하지 않으면 뱃지 글자까지 전부 굵어진다. */
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* 값 자체가 등급·경고인 뱃지는 --chip-* 배경으로 칠한다(색은 인라인 style).
+   그때는 테두리가 배경과 겹쳐 지저분해 보여서 없앤다. */
+.match-chip-tone {
+  border-color: transparent;
+}
+
+.match-chip-label {
+  color: var(--text-muted);
+}
+
+/* 배경이 칠해진 뱃지 안에서는 라벨도 그 글자색을 따라가야 한다 — --text-muted를
+   그대로 두면 칠해진 배경 위에서 대비가 무너진다. 살짝 흐리게만 준다. */
+.match-chip-tone .match-chip-label {
+  color: inherit;
+  opacity: 0.75;
+}
+
+.match-chip strong {
+  font-weight: 700;
+}
+
+.match-chip-empty {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
 /* 핸승 위험도. 예전엔 위에 '종합 분석' 카드들이 같은 밴드 안에 있어서 구분선으로
-   갈라 뒀는데, 그 카드들을 화면에서 뺀 뒤로는 밴드에 이것 하나만 남아 윗선이 필요 없다. */
+   갈라 뒀는데, 지금은 위에 '경기지표' 줄이 있어 다시 구분선을 둔다. */
 .pick-band-risk {
-  margin-top: 0;
-  padding-top: 0;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .pick-band-risk h3 {

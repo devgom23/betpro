@@ -98,33 +98,66 @@ const DDONG_GRADES = [
   [Infinity, '위험', 'red'],
 ]
 
-function DdongNote({ row }) {
+// 경기지표 뱃지 한 칸 — '라벨 + 값' 한 덩어리.
+// 라벨을 값에 붙여 두는 이유: 이 줄에는 성격이 다른 뱃지가 여러 개 늘어설 예정이라,
+// 뱃지마다 자기가 무엇을 말하는지 스스로 설명해야 한다(제목 하나로는 못 가른다).
+// tone을 주면 --chip-* 토큰으로 배경까지 칠한다(등급처럼 값 자체가 경고인 경우).
+function MatchChip({ label, tone, title, children }) {
+  const style = tone
+    ? { background: `var(--chip-${tone}-bg)`, color: `var(--chip-${tone}-fg)` }
+    : undefined
+  return (
+    <span className={`match-chip${tone ? ' match-chip-tone' : ''}`} style={style} title={title}>
+      <span className="match-chip-label">{label}</span>
+      <strong>{children}</strong>
+    </span>
+  )
+}
+
+// 똥배 뱃지 — 리그 표의 '똥배' 그룹(똥 / 분석 / 똥사)과 같은 값.
+// 등급 경계와 색은 columnGroups.js의 DDONG_RISK_CUTS와 맞춰 둔다(계산 근거는
+// api/data_access.py의 _ddong_risk 주석에 6대리그 실측과 함께 있다).
+// 2026-08-30 '배당' 카드 제목 옆에 있던 것을 경기지표 줄로 옮겼다 — 배당에서 파생된
+// 값이긴 하지만 성격은 '이 경기가 어떤 경기인가'라서 경기지표 쪽이 맞다.
+// 뱃지는 컴포넌트가 아니라 '원소 배열을 돌려주는 함수'로 만든다 — 지표마다 해당이
+// 없으면 아예 안 나오는데, 컴포넌트로 두면 "이 줄에 뱃지가 하나라도 있나"를 밖에서
+// 알 방법이 없다(원소를 직접 호출해 보는 건 훅이 들어가는 순간 깨진다).
+function ddongChips(row) {
   const ddong = String(row.DDONG || '').trim()
-  if (!ddong) return null
+  if (!ddong) return []
   const risk = numOrNull(row.DDONG_RISK)
   const [, label, tone] = DDONG_GRADES.find(([cut]) => risk !== null && risk < cut) || []
-  // 리그 화면 상단 요약 바(등록된 시즌 18 · 경기수 5,229 …)와 같은 표기 —
-  // 값은 <strong>으로 밝게, 사이는 가운뎃점으로, 등급은 RtSummaryBar처럼 칩으로.
+  const out = [
+    <MatchChip
+      key="ddong"
+      label="똥배"
+      tone={risk !== null ? tone : undefined}
+      title={`국내배당 1.49 이하 — 그 라운드에서 ${ddong.replace('똥', '')}번째로 강한 정배.`
+        + (risk !== null ? ` 무/역으로 뒤집힐 확률 ${Math.round(risk)}%(${label}).` : '')}
+    >
+      {ddong}
+      {risk !== null && ` · ${label} ${Math.round(risk)}%`}
+    </MatchChip>,
+  ]
+  if (String(row.DDONGSA || '').trim()) {
+    out.push(
+      <MatchChip key="sa" label="결과" tone="red" title="똥배였는데 실제 결과가 무/역으로 뒤집혔다">
+        똥사
+      </MatchChip>
+    )
+  }
+  return out
+}
+
+// 경기지표 — 이 경기가 전반적으로 어떤 경기인지 한 줄로. 확률 지표 바로 위에 둔다.
+// 해당되는 게 하나도 없으면 줄을 없애지 않고 '해당 없음'을 적는다 — 뱃지가 있고 없고에
+// 따라 아래 내용이 위아래로 튀면 매번 눈으로 다시 찾아야 한다.
+// 제목 <h3> 안에 들어가므로 반드시 <span>이어야 한다(h3 안에는 <div>를 넣을 수 없다).
+function MatchIndicators({ row }) {
+  const chips = [...ddongChips(row)]
   return (
-    <span className="detail-section-note detail-ddong">
-      <strong>{ddong}</strong>
-      {risk !== null && (
-        <>
-          {' · '}
-          <span
-            className="detail-ddong-grade"
-            style={{ background: `var(--chip-${tone}-bg)`, color: `var(--chip-${tone}-fg)` }}
-          >
-            {label} {Math.round(risk)}%
-          </span>
-        </>
-      )}
-      {String(row.DDONGSA || '').trim() && (
-        <>
-          {' · '}
-          <strong className="detail-ddong-sa">똥사</strong>
-        </>
-      )}
+    <span className="match-chip-row">
+      {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}
     </span>
   )
 }
@@ -1406,6 +1439,12 @@ function findSignal(data, key) {
 function PickBand({ row, scope }) {
   return (
     <section className="pick-band">
+      <div className="pick-band-match">
+        <h3>
+          경기지표
+          <MatchIndicators row={row} />
+        </h3>
+      </div>
       <div className="pick-band-risk">
         <h3>
           확률 지표
@@ -1575,10 +1614,9 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
         <div className="modal-columns" ref={columnsRef}>
           <div className="modal-col">
             <section className="detail-section">
-              <h3>
-                배당
-                <DdongNote row={row} />
-              </h3>
+              {/* 똥배는 2026-08-30 '경기지표' 줄(팝업 위쪽)로 옮겼다 — 여기에도 두면
+                  같은 값이 화면에 두 번 나온다. */}
+              <h3>배당</h3>
               <OddsTable row={row} />
             </section>
             <section className="detail-section" ref={sampleSectionRef}>
