@@ -342,9 +342,23 @@ function OddsTable({ row }) {
   }
   // 정배 쪽 컬럼(승=홈팀 칸 / 패=원정팀 칸) 전체에 아주 연한 파란 배경을 준다 —
   // 홈이 정배면 '승' 컬럼(KW/FW/FHW), 원정이 정배면 '패' 컬럼(KL/FL/FHL).
-  const favColClass = (col) => {
-    if (homeFav === null) return undefined
-    const favCol = homeFav ? 'w' : 'l'
+  // 줄마다(국내/해외) 자기 자신의 배당으로 정배를 판단한다 — 예전엔 이 표 전체가
+  // homeFav(국내 우선) 하나만 써서, 국내·해외 정배 방향이 갈리는 경기(예: 26-27 2R
+  // 선덜랜드-풀럼 — 국배는 선덜랜드 KW 2.25<KL 2.80로 정배, 해배는 FW 2.75>FL 2.38로
+  // 오히려 풀럼이 정배)에서 '해외 배당'·'해외 핸디' 줄까지 국내 기준으로 강조돼
+  // 실제로는 정배인 쪽이 역배 칸에 색칠되는 사고가 있었다. 그 줄이 국내 소속이면
+  // KW/KL로, 해외 소속이면 FW/FL로 — 항상 그 줄 자신이 속한 시장의 배당을 본다.
+  const marketFav = (label) => {
+    const [wk, lk] = label.startsWith('국내') ? ['KW', 'KL'] : ['FW', 'FL']
+    const w = numOrNull(row[wk])
+    const l = numOrNull(row[lk])
+    if (w === null || l === null || w === l) return null
+    return w < l
+  }
+  const favColClass = (col, label) => {
+    const fav = marketFav(label)
+    if (fav === null) return undefined
+    const favCol = fav ? 'w' : 'l'
     return col === favCol ? 'odds-fav-col' : undefined
   }
   // 핸디 배당(국내 핸디·해외 핸디) 줄은 정배 쪽이 아니라 핸디를 받은 언더독 쪽을
@@ -352,10 +366,13 @@ function OddsTable({ row }) {
   // 늘 언더독 칸이 관심 대상이다. 핸디 적용 후 두 배당 중 어느 쪽이 숫자가 더
   // 작은지는(정배가 여전히 근소 유리한 경우도 흔함) 이 강조와 무관하다 — 예전엔
   // "핸디 적용 후 더 작은 값" 쪽을 칠했는데, 그러면 핸디를 크게 줘도 정배가 계속
-  // 강조되는 경우가 있어 실제로 보고 싶은 언더독 쪽과 어긋났다.
-  const dogColClass = (col) => {
-    if (homeFav === null) return undefined
-    const dogCol = homeFav ? 'l' : 'w'
+  // 강조되는 경우가 있어 실제로 보고 싶은 언더독 쪽과 어긋났다. 언더독도 그 핸디가
+  // 속한 시장(국내 핸디→KW/KL, 해외 핸디→FW/FL) 기준으로 정한다 — 위 favColClass와
+  // 같은 이유.
+  const dogColClass = (col, label) => {
+    const fav = marketFav(label)
+    if (fav === null) return undefined
+    const dogCol = fav ? 'l' : 'w'
     return col === dogCol ? 'odds-fav-col' : undefined
   }
   // 초기 → 최종 배당이 움직인 방향 — 리그 표(columnGroups.js oddsMoveDir)와 같은
@@ -395,15 +412,18 @@ function OddsTable({ row }) {
         </tr>
         <tr>
           <th>구분</th>
-          <th className={favColClass('w')}>승</th>
+          {/* 이 헤더는 4줄(국내/해외 배당·핸디) 전체가 공유하는 열 이름이라 줄마다 다른
+              시장을 가리킬 수 없다 — 국내 배당을 기준 삼는다(팝업 제목의 (정)/(역)과
+              같은 기준). 실제 강조는 아래 각 줄에서 그 줄 자신의 시장으로 다시 정해진다. */}
+          <th className={favColClass('w', '국내 배당')}>승</th>
           <th>무</th>
-          <th className={favColClass('l')}>패</th>
+          <th className={favColClass('l', '국내 배당')}>패</th>
         </tr>
       </thead>
       <tbody>
         {rows.map(([label, w, d, l, final]) => {
           const isHandi = label === '국내 핸디' || label === '해외 핸디'
-          const colClass = isHandi ? dogColClass : favColClass
+          const colClass = (col) => (isHandi ? dogColClass(col, label) : favColClass(col, label))
           return (
             <Fragment key={label}>
               <tr className={label === '해외 배당' ? 'odds-group-start' : undefined}>
