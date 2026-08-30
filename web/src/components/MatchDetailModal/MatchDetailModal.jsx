@@ -1692,7 +1692,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                     onChange={(e) => setH2hYears(Number(e.target.value))}
                     title="최근 N시즌만 집계 (요약표까지 같이 바뀝니다)"
                   >
-                    <option value={0}>전체경기 선택</option>
+                    <option value={0}>전체년도</option>
                     <option value={3}>최근 3년</option>
                     <option value={5}>최근 5년</option>
                   </select>
