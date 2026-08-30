@@ -45,6 +45,36 @@ function WdlBadge({ letter }) {
   )
 }
 
+// 그 경기에서 정배(배당이 낮은 쪽)가 홈이었나 원정이었나 — 'H' / 'A' / null.
+// 국내배당(KW/KL)을 먼저 보고, 없는 옛 경기는 해외배당(FW/FL)으로 대신한다.
+// 배당이 같거나(무배당) 둘 다 없으면 정배를 못 정하므로 null(표시 안 함).
+function favSide(m) {
+  const pick = (w, l) => {
+    const a = Number(w)
+    const b = Number(l)
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0 || a === b) return null
+    return a < b ? 'H' : 'A'
+  }
+  return pick(m.KW, m.KL) || pick(m.FW, m.FL)
+}
+
+// 팀명 옆 (정)/(역) 표식.
+//
+// 이게 왜 필요한가 — 상대전적의 RT(핸승/핸무/무/역)는 항상 '그 경기 자체의 정배'
+// 기준이다. 그런데 과거 맞대결에서 정배였던 팀이 지금 경기에서도 정배라는 보장이
+// 없다(6대리그 실측: 과거 맞대결의 27.6%가 지금과 정배가 다르다). 그래서 정배가
+// 누구였는지 모르고 RT만 읽으면 "역이 몇 번"을 지금 경기 관점으로 잘못 세게 된다.
+// 승/무/패(W/D/L)는 스코어에서 바로 나오므로 이 문제가 없다 — RT를 읽을 때만 본다.
+//
+// 색은 앱 전체 축을 그대로 따른다(정배 쪽=파랑 / 역배 쪽=빨강 — 핸디기준점·RT와 같은 축).
+function FavMark({ side, me }) {
+  if (!side) return null
+  const isFav = side === me
+  return (
+    <span className={`h2h-fav h2h-fav-${isFav ? 'j' : 'y'}`}>({isFav ? '정' : '역'})</span>
+  )
+}
+
 const RT_ORDER = ['핸승', '핸무', '무', '역']
 // 상대전적 표는 핸승/핸무/무/역 개별 색이 아니라, 그 칸이 속한 승/무/패(W/D/L) 그룹
 // 색으로 통일한다 — 글자는 핸승/핸무/무/역 그대로 두고, 배경만 그룹당 하나의 색으로
@@ -207,14 +237,21 @@ export default function HeadToHeadResult({
             <tbody>
               {shownMatches.map((m, i) => {
                 const seasonStart = i > 0 && m.S !== shownMatches[i - 1].S
+                const fav = favSide(m)
                 return (
                   <tr key={i} className={seasonStart ? 'season-start' : undefined}>
                     <td>{m.S}</td>
                     <td>{m.R}</td>
-                    <td className={`row-label ${m.HT === home ? 'h2h-home-cell' : ''}`}>{m.HT}</td>
+                    <td className={`row-label ${m.HT === home ? 'h2h-home-cell' : ''}`}>
+                      {m.HT}
+                      <FavMark side={fav} me="H" />
+                    </td>
                     <td className={scoreClass(m.HS, m.AS, 'home')}>{m.HS ?? ''}</td>
                     <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
-                    <td className={`row-label ${m.AT === home ? 'h2h-home-cell' : ''}`}>{m.AT}</td>
+                    <td className={`row-label ${m.AT === home ? 'h2h-home-cell' : ''}`}>
+                      {m.AT}
+                      <FavMark side={fav} me="A" />
+                    </td>
                     <td>
                       <WdlBadge letter={{ 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]} />
                     </td>
