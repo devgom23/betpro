@@ -2,10 +2,7 @@
 // (예전엔 LeagueTable / MatchDetailModal / MyPickModal / HeadToHeadResult 에
 //  글자 하나 안 다른 복사본이 각각 들어 있었다.)
 
-// 중요 별표 값 — 서버가 true / 1 / '1' 중 어떤 형태로 내려줘도 켜짐으로 본다.
-export function isStarred(v) {
-  return v === true || v === 1 || v === '1'
-}
+// 중요 별표 값(0/1/2 3단계)을 보고 싶으면 components/StarButton의 starLevel을 쓴다.
 
 // TM은 'HHMM' 숫자(예: 1930)로 저장되어 있다 — "19:30"으로 보여준다.
 export function formatTime(v) {

@@ -261,21 +261,9 @@ td.sticky-col {
   font-weight: 700;
 }
 
-/* ── 내 예측(중요 별표 / 내픽) ── */
-.star-btn {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
-  color: var(--text-muted);
-  padding: 2px 4px;
-}
-
-.star-btn.star-on {
-  color: #f5b301;
-}
-
+/* ── 내 예측(중요 별표 / 내픽) ──
+   별표 버튼(.star-btn) 자체 스타일은 components/StarButton/StarButton.css로
+   옮겼다(LeagueTable·MatchDetailModal 둘 다 그 컴포넌트를 쓴다). */
 .mypick-btn {
   display: inline-flex;
   align-items: center;
@@ -416,10 +404,22 @@ td.sticky-col {
   background: rgba(245, 179, 1, 0.24);
 }
 
+/* 보류(반개 별)는 확정된 중요 표시보다 한 단계 옅게 — 온별(row-starred)의 절반 톤. */
+.league-table tbody tr.row-star-half td,
+.league-table tbody tr.row-star-half td.sticky-col {
+  background: rgba(245, 179, 1, 0.06);
+}
+
+.league-table tbody tr.row-star-half:hover td {
+  background: rgba(245, 179, 1, 0.14);
+}
+
 /* 국내배당·해외배당 칸은 별표 금색을 안 씌운다 — 배당 적중(노란 배경)·배변
    화살표 배경(oddsHitSide 등 자체 배경)이 금색에 묻혀 안 보이게 되기 때문. */
 .league-table tbody tr.row-starred td.odds-group-cell,
-.league-table tbody tr.row-starred:hover td.odds-group-cell {
+.league-table tbody tr.row-starred:hover td.odds-group-cell,
+.league-table tbody tr.row-star-half td.odds-group-cell,
+.league-table tbody tr.row-star-half:hover td.odds-group-cell {
   background: none;
 }
 

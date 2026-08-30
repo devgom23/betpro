@@ -1,0 +1,41 @@
+/* 중요 별표 버튼(3단계: 없음 ☆ / 보류 반개 / 중요 ★).
+   LeagueTable(표 안 칸)과 MatchDetailModal(팝업 제목 옆) 둘 다 이 클래스를 쓴다 —
+   글자 크기만 각 파일에서 컨텍스트별로 덮어쓴다(예: .modal-title .star-btn). */
+.star-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-muted);
+  padding: 2px 4px;
+}
+
+.star-btn.star-on {
+  color: #f5b301;
+}
+
+/* 반개(보류) — 온별보다 한 단계 약한 톤. 색 자체는 아래 .star-glyph-front가
+   담당하고(항상 온별과 같은 금색), 여기서는 버튼 자체 상태 표시만 한다. */
+.star-btn.star-half {
+  color: var(--text-muted);
+}
+
+.star-glyph {
+  position: relative;
+  display: inline-block;
+}
+
+/* 뒤판 — 빈 별 전체(반개의 오른쪽 절반이 이걸로 보인다). */
+.star-glyph-back {
+  color: var(--text-muted);
+}
+
+/* 앞판 — 채운 별을 왼쪽 절반만 남기고 잘라 뒤판 위에 겹친다. */
+.star-glyph-front {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  width: 50%;
+  color: #f5b301;
+}

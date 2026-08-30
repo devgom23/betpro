@@ -6,9 +6,9 @@ import {
 } from './columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import RtBadge from '../RtBadge/RtBadge'
+import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { api } from '../../api/client'
 import { useFontSize } from '../../context/FontSizeContext'
-import { isStarred } from '../../utils/format'
 import './LeagueTable.css'
 
 const VISIBLE_ROWS = 20
@@ -157,7 +157,7 @@ export default function LeagueTable({
   function effectivePick(row) {
     const o = pickOverrides[matchKey(row)]
     return {
-      important: o?.important ?? isStarred(row.IMPORTANT),
+      important: o?.important ?? starLevel(row.IMPORTANT),
       pick: o?.pick !== undefined ? o.pick : row.MY_PICK || '',
       p: o?.p !== undefined ? o.p : row.MY_P || '',
       hit: o?.hit !== undefined ? o.hit : row.MY_HIT || '',
@@ -173,7 +173,7 @@ export default function LeagueTable({
   async function savePick(row, patch) {
     const key = matchKey(row)
     const prevValue = pickOverridesRef.current[key] ?? {
-      important: isStarred(row.IMPORTANT),
+      important: starLevel(row.IMPORTANT),
       pick: row.MY_PICK || '',
       p: row.MY_P || '',
       hit: row.MY_HIT || '',
@@ -423,7 +423,8 @@ export default function LeagueTable({
               const prevRow = ri > 0 ? rows[ri - 1] : null
               const isRoundStart = prevRow && (prevRow.S !== row.S || prevRow.R !== row.R || prevRow.L !== row.L)
               const rowClass = [
-                pickState.important ? 'row-starred' : '',
+                pickState.important === 2 ? 'row-starred' : '',
+                pickState.important === 1 ? 'row-star-half' : '',
                 isRoundStart ? 'round-start' : '',
               ].filter(Boolean).join(' ')
 
@@ -579,13 +580,10 @@ export default function LeagueTable({
                         if (c.key === 'IMPORTANT') {
                           return (
                             <td key={`${gi}-${ci}`} className={className}>
-                              <button
-                                className={`star-btn ${pickState.important ? 'star-on' : ''}`}
-                                title={pickState.important ? '중요 표시 해제' : '중요 표시'}
-                                onClick={() => savePick(row, { important: !pickState.important })}
-                              >
-                                {pickState.important ? '★' : '☆'}
-                              </button>
+                              <StarButton
+                                level={pickState.important}
+                                onClick={() => savePick(row, { important: nextStarLevel(pickState.important) })}
+                              />
                             </td>
                           )
                         }

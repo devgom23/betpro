@@ -2,7 +2,8 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
-import { isStarred, formatTime, formatDt, scoreClass } from '../../utils/format'
+import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
+import { formatTime, formatDt, scoreClass } from '../../utils/format'
 import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import './MatchDetailModal.css'
@@ -1703,13 +1704,10 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
             {titleRoleSuffix(false)}
             <TeamBetRecord name={at} />
           </span>
-          <button
-            className={`star-btn ${isStarred(row.IMPORTANT) ? 'star-on' : ''}`}
-            title={isStarred(row.IMPORTANT) ? '중요 표시 해제' : '중요 표시'}
-            onClick={() => onSavePick({ important: !isStarred(row.IMPORTANT) })}
-          >
-            {isStarred(row.IMPORTANT) ? '★' : '☆'}
-          </button>
+          <StarButton
+            level={starLevel(row.IMPORTANT)}
+            onClick={() => onSavePick({ important: nextStarLevel(starLevel(row.IMPORTANT)) })}
+          />
         </h2>
         <p className="modal-meta">
           {row.S} · {row.R}

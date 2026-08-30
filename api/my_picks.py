@@ -3,6 +3,12 @@
 계정 본인의 predlog.db(prediction_log와 같은 파일, 별도 테이블)에 저장한다.
 리그 표 자체(to_sql replace)와 분리되어 있어 재업로드·재계산에 영향받지 않는다.
 
+starred는 2026-08-30부터 3단계다: 0=표시 없음 / 1=반개(보류·고민중) / 2=온별(중요).
+예전엔 boolean이라 1이 곧 '중요'였다 — 그 값을 새 체계에서 반개로 잘못 읽지 않도록
+betpro_paths.ensure_predlog_db()가 PRAGMA user_version으로 한 번만 1→2로 옮긴다.
+"이번주 벳" 목록에는 2(온별)만 들어간다(main.py weekly_picks) — 반개는 아직 확정
+전이라 조합에 안 섞는다.
+
 reason_tag: 결과반성용 "왜 이렇게 봤나" 태그(1개, pickOptions.js REASON_TAG_OPTIONS
 중 하나). pick(무엇을 걸지)과 반드시 분리한다 — 판정(_MY_PICK_VERDICT_MAP)이
 pick 문자열을 정확히 매칭해 적중/보험/미적을 가르므로, 여기 태그를 섞으면 안 된다.
@@ -74,7 +80,7 @@ def hide_from_weekly_picks(username: str, items: list[dict]) -> int:
 
 def upsert_my_pick(username: str, code: str, scope: str,
                     s: str, r: str, no: str, ht: str, at: str,
-                    starred: bool, pick: str | None, hit: str | None, memo: str | None,
+                    starred: int, pick: str | None, hit: str | None, memo: str | None,
                     p: str | None = None, reason_tag: str | None = None,
                     memo_pre: str | None = None) -> None:
     con = _connect(username)
@@ -91,7 +97,7 @@ def upsert_my_pick(username: str, code: str, scope: str,
                           wp_hidden = 0, updated_dt = excluded.updated_dt
             """,
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),
-             1 if starred else 0, pick or None, p or None, hit or None, memo or None,
+             max(0, min(2, int(starred or 0))), pick or None, p or None, hit or None, memo or None,
              memo_pre or None, reason_tag or None),
         )
         con.commit()

@@ -401,6 +401,14 @@ def ensure_predlog_db(username: str) -> str:
             # memo(기존)는 결과가 나온 뒤 쓰는 회고, memo_pre는 경기 전에 미리 적어 두는
             # 메모 — 상세보기에서 결과반성 칸 앞에 따로 둔다(MatchDetailModal.jsx).
             con.execute("ALTER TABLE my_picks ADD COLUMN memo_pre TEXT")
+        # 2026-08-30 별표 3단계 도입(0=없음/1=반개·보류/2=온별·중요). 그 전엔 boolean이라
+        # 1이 곧 '중요'였다 — 그 값을 새 체계에서 반개로 잘못 읽지 않도록 딱 한 번만
+        # 1→2로 옮긴다. 컬럼 추가가 아니라 값 자체를 바꾸는 마이그레이션이라 컬럼
+        # 존재 여부로는 이미 했는지 알 수 없어서, 이 파일 전용 버전 번호(PRAGMA
+        # user_version, 새 SQLite 파일은 기본 0)로 딱 한 번만 도는 것을 보장한다.
+        if con.execute("PRAGMA user_version").fetchone()[0] < 1:
+            con.execute("UPDATE my_picks SET starred = 2 WHERE starred = 1")
+            con.execute("PRAGMA user_version = 1")
         con.execute(_SCHEMA_SEASON_NOTES)
         con.execute("PRAGMA foreign_keys=ON;")
         con.execute(_SCHEMA_BET_SLIPS)

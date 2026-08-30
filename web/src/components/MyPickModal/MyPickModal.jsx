@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../../api/client'
-import { isStarred, formatTime, formatDt } from '../../utils/format'
+import { starLevel } from '../StarButton/StarButton'
+import { formatTime, formatDt } from '../../utils/format'
 import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS } from '../../utils/pickOptions'
 // .modal-backdrop / .modal-card / .modal-close / .modal-title / .modal-meta 를 그대로 재사용한다.
 import './MyPickModal.css'
@@ -26,7 +27,7 @@ export default function MyPickModal({ code, scope, row, onClose, onSaved }) {
         No: row.No,
         HT: row.HT,
         AT: row.AT,
-        starred: isStarred(row.IMPORTANT),
+        starred: starLevel(row.IMPORTANT),
         pick: pick || null,
         p: p || null,
         hit: hit || null,

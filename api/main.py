@@ -684,13 +684,13 @@ def _my_pick_key(s, r, no, ht, at) -> tuple:
 
 
 def _attach_my_picks(records: list, username: str, code: str, scope: str) -> None:
-    """조회된 행마다 이 계정이 표시한 중요 별표(IMPORTANT)/내픽(MY_PICK)/P태그(MY_P)/
-    적중여부(MY_HIT)/메모(MEMO)를 붙인다."""
+    """조회된 행마다 이 계정이 표시한 중요 별표(IMPORTANT — 0=없음/1=반개·보류/2=온별·
+    중요)/내픽(MY_PICK)/P태그(MY_P)/적중여부(MY_HIT)/메모(MEMO)를 붙인다."""
     picks = MYPICKS.list_my_picks(username, code, scope)
     by_key = {_my_pick_key(p["S"], p["R"], p["No"], p["HT"], p["AT"]): p for p in picks}
     for row in records:
         p = by_key.get(_my_pick_key(row.get("S"), row.get("R"), row.get("No"), row.get("HT"), row.get("AT")))
-        row["IMPORTANT"] = bool(p["starred"]) if p else False
+        row["IMPORTANT"] = int(p["starred"]) if p else 0
         row["MY_PICK"] = p["pick"] if p else None
         row["MY_P"] = p["p"] if p else None
         row["MY_HIT"] = p["hit"] if p else None
@@ -765,7 +765,8 @@ class MyPickBody(BaseModel):
     No: Union[str, int, float]
     HT: Union[str, int, float]
     AT: Union[str, int, float]
-    starred: bool = False
+    # 0=표시 없음 / 1=반개(보류·고민중) / 2=온별(중요). upsert_my_pick이 0~2로 다시 자른다.
+    starred: int = 0
     pick: Optional[str] = None
     p: Optional[str] = None
     hit: Optional[str] = None
@@ -906,9 +907,11 @@ def _scope_league_labels(scope: str, user: dict) -> dict:
 
 @app.get("/api/weekly_picks")
 def weekly_picks(user: dict = Depends(get_current_user)):
-    """공식 데이터·내 데이터를 가리지 않고 별표(★)로 표시한 경기를 전부 모아 보여준다.
-    "이번주 벳"에서 조합을 만들 대상이 되는 표라서, 리그 표와 같은 컬럼 구성을 그대로 쓰되
-    어느 리그 경기인지 알 수 있도록 L(리그 코드)을 채워서 내려준다."""
+    """공식 데이터·내 데이터를 가리지 않고 별표(★=온별, starred==2)로 표시한 경기를
+    전부 모아 보여준다. 반개(★반개=보류·고민중, starred==1)는 아직 확정 전이라 여기
+    안 넣는다 — "이번주 벳"은 실제로 조합을 짤 대상이라 확정된 것만 섞여야 한다.
+    리그 표와 같은 컬럼 구성을 그대로 쓰되 어느 리그 경기인지 알 수 있도록
+    L(리그 코드)을 채워서 내려준다."""
     username = user["username"]
     rows: list[dict] = []
     for scope in (PATHS.SCOPE_MASTER, PATHS.SCOPE_USER):
@@ -921,7 +924,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
             starred = {
                 _my_pick_key(p["S"], p["R"], p["No"], p["HT"], p["AT"]): p
                 for p in MYPICKS.list_my_picks(username, code, scope)
-                if p["starred"] and not p["wp_hidden"]
+                if p["starred"] == 2 and not p["wp_hidden"]
             }
             if not starred:
                 continue
@@ -948,7 +951,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
                 rec["L"] = code
                 rec["L_LABEL"] = labels.get(code, code)
                 rec["scope"] = scope
-                rec["IMPORTANT"] = True
+                rec["IMPORTANT"] = 2
                 rec["MY_PICK"] = p["pick"]
                 rec["MY_P"] = p["p"]
                 rec["MY_HIT"] = p["hit"]
