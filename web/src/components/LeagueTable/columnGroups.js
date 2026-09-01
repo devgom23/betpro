@@ -599,6 +599,19 @@ export function computeAutoVerdict(pick, rt) {
   return '미적'
 }
 
+// 여러 행을 한꺼번에 적중/보험/미적 건수로 묶는다 — RtSummaryBar의 PickSummaryBar가
+// 그대로 받는 {적중,보험,미적,총} 모양(api/main.py _hit_summary와 같은 모양).
+// 내픽을 안 찍었거나 결과가 아직 없는 행은 세지 않는다. 유효 판정이 하나도 없으면 null.
+export function summarizeVerdicts(rows) {
+  const counts = { 적중: 0, 보험: 0, 미적: 0 }
+  for (const row of rows) {
+    const v = computeAutoVerdict(row.MY_PICK, row.RT)
+    if (v === '적중' || v === '보험' || v === '미적') counts[v] += 1
+  }
+  const 총 = counts.적중 + counts.보험 + counts.미적
+  return 총 > 0 ? { ...counts, 총 } : null
+}
+
 // 내 예측의 자동 "적중" 배지 색상 — 예전 핸승위험도 그룹의 적중(VERDICT) 배색을 그대로 쓴다.
 export function pickVerdictStyle(value) {
   if (value === '적중') return { background: 'var(--chip-yellow-bg)', color: 'var(--chip-yellow-fg)', fontWeight: 700 }

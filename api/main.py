@@ -47,6 +47,7 @@ BETPRO API 서버 (FastAPI) - 골격
   GET  /api/admin/access_log           열람 기록
 ================================================================
 """
+import base64
 import io
 import os
 import re
@@ -1069,6 +1070,36 @@ def hide_weekly_picks(body: HideBody, user: dict = Depends(get_current_user)):
     리그 표의 ★ 표시·적중 기록은 안 바뀐다."""
     cleared = MYPICKS.hide_from_weekly_picks(user["username"], [item.model_dump() for item in body.items])
     return {"ok": True, "cleared": cleared}
+
+
+# ─────────────────────────── 화면 스냅샷 ───────────────────────────
+# 지금은 "저장만" 한다 — data/users/{계정}/snapshots/ 밑에 시각을 이름에 담아 쌓아 두고,
+# 어디서 다시 볼지(목록 화면 등)는 나중에 정한다.
+
+class SnapshotBody(BaseModel):
+    page: str
+    image: str  # data:image/png;base64,... 또는 순수 base64
+
+
+@app.post("/api/snapshots")
+def save_snapshot(body: SnapshotBody, user: dict = Depends(get_current_user)):
+    m = re.match(r"^data:image/(png|jpeg);base64,(.+)$", body.image, re.DOTALL)
+    raw_b64 = m.group(2) if m else body.image
+    try:
+        raw = base64.b64decode(raw_b64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="이미지 데이터를 읽을 수 없습니다.")
+    if not raw:
+        raise HTTPException(status_code=400, detail="빈 이미지입니다.")
+
+    d = PATHS.get_snapshots_dir(user["username"])
+    os.makedirs(d, exist_ok=True)
+    page = re.sub(r"[^A-Za-z0-9_-]", "_", body.page or "screen")[:40]
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{ts}_{page}.png"
+    with open(os.path.join(d, filename), "wb") as f:
+        f.write(raw)
+    return {"ok": True, "filename": filename}
 
 
 # ─────────────────────────── 베팅내역 (조합베팅) ───────────────────────────

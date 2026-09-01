@@ -1,11 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import html2canvas from 'html2canvas'
 import { api } from '../api/client'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
-import { bettingDayOf } from '../components/LeagueTable/columnGroups'
+import { bettingDayOf, summarizeVerdicts } from '../components/LeagueTable/columnGroups'
+import { PickSummaryBar } from '../components/RtSummaryBar/RtSummaryBar'
 import {
   getWeekListFinalOddsTime, setWeekListFinalOddsTime, setManyRoundFinalOddsTime, formatFinalOddsTime,
 } from '../utils/finalOddsTime'
+import { isWeekSnapshotDone, markWeekSnapshotDone } from '../utils/weekSnapshotFlag'
 import './WeekListPage.css'
+
+// 회차 마지막날 판정용 — 서버(datetime.date.today())와 마찬가지로 이 PC의 현지 날짜를 쓴다
+// (Date.toISOString()은 UTC라 자정 근처에서 하루가 밀릴 수 있어 쓰지 않는다).
+function localDateStr(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function hasResult(v) {
+  return v !== null && v !== undefined && String(v).trim() !== ''
+}
 
 // 날짜(DT)가 비어 아직 베팅일을 못 정하는 경기들을 모아 둘 자리. 맨 아래로 보낸다.
 const NO_DAY = { key: '￿', label: '날짜 미정' }
@@ -45,6 +59,13 @@ export default function WeekListPage() {
   // (utils/finalOddsTime.js 참고. 이 버튼을 누르면 그 안의 각 라운드 값도 같이 갱신되지만,
   //  반대로 라운드 버튼을 눌렀다고 이 값이 갱신되진 않는다).
   const [weekListTs, setWeekListTs] = useState(() => getWeekListFinalOddsTime())
+  const [snapping, setSnapping] = useState(false)
+  const [snapshotNotice, setSnapshotNotice] = useState('')
+  // 스냅샷 캡처 범위 — 화면 전체(이 페이지 콘텐츠 전부)를 담는다.
+  const pageRef = useRef(null)
+  // 자동 스냅샷이 지금 진행 중인지 — data/rows가 다시 바뀌어 이펙트가 또 돌아도
+  // 캡처가 끝나기 전엔 중복으로 또 찍지 않게 막는다.
+  const autoSnapBusyRef = useRef(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -137,16 +158,69 @@ export default function WeekListPage() {
     }
     for (const sec of buckets.values()) {
       sec.rows.sort((a, b) => rank(a) - rank(b) || tmOf(a) - tmOf(b))
+      sec.verdict = summarizeVerdicts(sec.rows)
     }
     return [...buckets.values()].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
   }, [rows, leagueOrder])
+
+  // 지금 불러온 회차 전체(요일 구분 없이)의 적중/보험/미적 — 새로고침 버튼 옆 요약.
+  const totalVerdict = useMemo(() => summarizeVerdicts(rows), [rows])
+
+  // 화면 전체(요일 구간·표 포함)를 이미지로 저장한다. 어디서 다시 볼지는 아직 안 정했고,
+  // 지금은 저장만 한다 — data/users/{계정}/snapshots/ 밑에 시각을 이름에 담아 쌓인다.
+  // reason: 'manual'(버튼 직접 클릭) | 'results'(경기 결과 전부 입력됨) | 'last_day'(회차 마지막날).
+  // 성공 여부를 돌려줘야 자동 트리거 쪽에서 "이 회차는 이미 찍었다" 표시를 성공했을 때만 남긴다.
+  const captureAndSave = useCallback(async (reason) => {
+    if (!pageRef.current) return false
+    setSnapping(true)
+    setSnapshotNotice('')
+    try {
+      const canvas = await html2canvas(pageRef.current, { backgroundColor: null, useCORS: true })
+      const image = canvas.toDataURL('image/png')
+      await api.post('/api/snapshots', { page: 'week_list', image })
+      const label = reason === 'results' ? '자동 저장(경기 결과 전부 입력됨)'
+        : reason === 'last_day' ? '자동 저장(회차 마지막날)'
+        : '스냅샷'
+      setSnapshotNotice(`${label}을 저장했습니다.`)
+      return true
+    } catch (err) {
+      setSnapshotNotice(`스냅샷 저장 실패: ${err.message}`)
+      return false
+    } finally {
+      setSnapping(false)
+    }
+  }, [])
+
+  function handleSnapshot() {
+    captureAndSave('manual')
+  }
+
+  // 자동 스냅샷 — 회차(시작~종료)당 한 번만, 아래 둘 중 먼저 맞는 조건에서 찍는다.
+  //   1) 화면에 있는 경기 전부에 결과(RT)가 입력됨 — "이 회차는 다 끝났다"
+  //   2) 오늘이 이 회차의 마지막날 — 결과 입력이 덜 됐어도(연기 등으로 영영 안 채워질 수도
+  //      있으니) 회차가 넘어가기 전에 마지막 모습을 남겨 둔다
+  // ⚠ 브라우저를 이 화면에서 열어봐야만 찍힌다(서버 혼자 알아서 찍지는 못한다 — 스크린샷이라
+  //   화면이 실제로 그려져야 한다). 표시는 회차별로 브라우저(localStorage)에 남긴다.
+  useEffect(() => {
+    if (!data.start || !data.end || rows.length === 0) return
+    if (autoSnapBusyRef.current || isWeekSnapshotDone(data.start, data.end)) return
+    const allDecided = rows.every((r) => hasResult(r.RT))
+    const isLastDay = localDateStr() >= data.end
+    if (!allDecided && !isLastDay) return
+    const reason = allDecided ? 'results' : 'last_day'
+    autoSnapBusyRef.current = true
+    captureAndSave(reason).then((ok) => {
+      if (ok) markWeekSnapshotDone(data.start, data.end, reason)
+      autoSnapBusyRef.current = false
+    })
+  }, [data.start, data.end, rows, captureAndSave])
 
   const period = data.start && data.end
     ? `${data.label ? `${data.label} ` : ''}${shortDate(data.start)} ~ ${shortDate(data.end)}`
     : ''
 
   return (
-    <div className="wl-page">
+    <div className="wl-page" ref={pageRef}>
       <div className="wl-title-row">
         <h2 className="wl-title">🗓 이번주 리스트</h2>
         {period && <span className="wl-period">{period}</span>}
@@ -169,6 +243,7 @@ export default function WeekListPage() {
 
       {rows.length > 0 && (
         <div className="wl-refresh-row">
+          <PickSummaryBar summary={totalVerdict} />
           <button
             className="batch-fold-btn"
             onClick={runRefreshFinalOdds}
@@ -177,10 +252,19 @@ export default function WeekListPage() {
           >
             {busyRefreshOdds ? '불러오는 중…' : '최신배당 불러오기'}
           </button>
+          <button
+            className="batch-fold-btn"
+            onClick={handleSnapshot}
+            disabled={snapping}
+            title="지금 이 화면(요일별 목록 전체)을 이미지로 저장합니다. 어디서 다시 볼지는 나중에 정합니다."
+          >
+            {snapping ? '저장 중…' : '📸 스냅샷 저장'}
+          </button>
           {weekListTs && (
             <span className="final-odds-ts">최신배당({formatFinalOddsTime(weekListTs)})</span>
           )}
           {refreshOddsNotice && <p className="recompute-notice">{refreshOddsNotice}</p>}
+          {snapshotNotice && <p className="recompute-notice">{snapshotNotice}</p>}
         </div>
       )}
 
@@ -189,6 +273,7 @@ export default function WeekListPage() {
           <div className="wl-day-head">
             <span className={`wl-day-chip wl-day-${sec.weekday || 'none'}`}>{sec.label}</span>
             <span className="wl-day-count">{sec.rows.length}경기</span>
+            <PickSummaryBar summary={sec.verdict} />
           </div>
           <LeagueTable
             columns={data.columns}

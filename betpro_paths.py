@@ -170,6 +170,11 @@ def get_user_db(username: str) -> str:
     return os.path.join(get_user_dir(username), "user.db")
 
 
+def get_snapshots_dir(username: str) -> str:
+    """화면 스냅샷(PNG) 저장 폴더. 어디서 다시 볼지는 아직 안 정했고, 지금은 저장만 한다."""
+    return os.path.join(get_user_dir(username), "snapshots")
+
+
 def get_predlog_db(username: str) -> str:
     """
     💡 [업데이트 내용] (4) 예측 로그 분리.
