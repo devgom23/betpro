@@ -73,6 +73,16 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
     })
   }
 
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(selectKey(r)))
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelected(new Map())
+      return
+    }
+    setSelected(new Map(rows.map((r) => [selectKey(r), r])))
+  }
+
   async function handleDeleteSelected() {
     if (selected.size === 0) return
     if (!window.confirm(`선택한 ${selected.size}개 경기를 이번주 픽에서 지웁니다(리그 데이터는 그대로입니다). 계속할까요?`)) return
@@ -97,9 +107,14 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
       <div className="wp-title-row">
         <h2 className="wp-title">📋 이번주 픽</h2>
         {rows.length > 0 && (
-          <button className="wp-clear-btn" onClick={handleDeleteSelected} disabled={clearing || selected.size === 0}>
-            🗑 선택 삭제{selected.size > 0 ? ` (${selected.size})` : ''}
-          </button>
+          <>
+            <button className="wp-clear-btn" onClick={toggleSelectAll} disabled={clearing}>
+              {allSelected ? '☐ 전체해제' : '☑ 전체선택'}
+            </button>
+            <button className="wp-clear-btn" onClick={handleDeleteSelected} disabled={clearing || selected.size === 0}>
+              🗑 선택 삭제{selected.size > 0 ? ` (${selected.size})` : ''}
+            </button>
+          </>
         )}
       </div>
       <p className="wp-desc">

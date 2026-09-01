@@ -110,7 +110,7 @@ function SummaryBar({ summary }) {
 // 조작이 전부 한 자리에 모이게 했다.
 function SectionHeader({
   sec, index, locked, colSpan, selectedCount, busy, onDeleteSelected, onLockSelected,
-  open, onToggleOpen,
+  open, onToggleOpen, slipIds, allSelected, onToggleSelectAll,
 }) {
   const batchCount = sec.batches.length
   const slipCount = sec.batches.reduce((n, b) => n + b.slips.length, 0)
@@ -142,6 +142,9 @@ function SectionHeader({
             <div className="bh-section-right">
               {!locked && (
                 <div className="bh-section-actions">
+                  <button className="bh-action-btn" onClick={onToggleSelectAll} disabled={busy || slipIds.length === 0}>
+                    {allSelected ? '☐ 전체해제' : '☑ 전체선택'}
+                  </button>
                   <button className="bh-action-btn" onClick={onDeleteSelected} disabled={busy || selectedCount === 0}>
                     🗑 선택 삭제{selectedCount > 0 ? ` (${selectedCount})` : ''}
                   </button>
@@ -198,6 +201,19 @@ export default function BetHistoryPage({ scope }) {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
+      return next
+    })
+  }
+
+  // 그 구간(미확정)에 있는 벳들만 한꺼번에 켜고/끈다 — 이미 전부 선택돼 있으면 전체해제로 바뀐다.
+  function toggleSelectAll(ids, allSelected) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        for (const id of ids) next.delete(id)
+      } else {
+        for (const id of ids) next.add(id)
+      }
       return next
     })
   }
@@ -288,6 +304,9 @@ export default function BetHistoryPage({ scope }) {
               // 미확정 구간은 항상 펼침. 확정된 회차는 openRounds에 명시적으로
               // 펼쳐 뒀다고 기록돼 있을 때만 펼친다(기본값 = 접힘).
               const isOpen = !locked || openRounds.has(sec.group_id)
+              // 체크박스는 미확정 구간에만 있으니, 전체선택도 그 구간 안의 벳 id만 대상으로 한다.
+              const sectionSlipIds = locked ? [] : sec.batches.flatMap((b) => b.slips.map((s) => s.id))
+              const allSelected = sectionSlipIds.length > 0 && sectionSlipIds.every((id) => selected.has(id))
               return (
                 <Fragment key={sec.group_id ?? `pending-${si}`}>
                   {si > 0 && (
@@ -311,6 +330,9 @@ export default function BetHistoryPage({ scope }) {
                       else next.add(sec.group_id)
                       return next
                     })}
+                    slipIds={sectionSlipIds}
+                    allSelected={allSelected}
+                    onToggleSelectAll={() => toggleSelectAll(sectionSlipIds, allSelected)}
                   />
                   {/* 번호(rowNum)는 원래도 DB id가 아니라 '화면에 보이는 순서'로 매긴다
                       (위 주석 참고) — 접힌 회차는 안 보이니 그만큼 자연스럽게 건너뛴다. */}
