@@ -956,6 +956,86 @@
   .pick-band-risk-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ── 시스템 판정 — 경기지표 바로 아래. 지표 4칸 + 무 보정을 합친 결론 ── */
+.sys-band {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* 제목 옆 결론 한 줄: [플핸무] ★★★ 86% */
+.sys-head {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;              /* 나열 항목 사이 기본 간격 */
+}
+
+.sys-pick {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 정 쪽=파랑 / 플 쪽=빨강 — 앱 전체 축 그대로(핸디기준점·RT와 같다) */
+.sys-pick-j { color: var(--chip-blue-fg); }
+.sys-pick-p { color: var(--chip-red-fg); }
+
+.sys-stars {
+  font-size: 11px;
+  color: var(--chip-yellow-fg);
+  letter-spacing: 1px;
+  cursor: help;
+}
+
+.sys-rate {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 4칸 표 — 확률 지표 표보다 좁아도 되므로 폭을 내용에 맡긴다(늘어나면 오른쪽이 빈다). */
+.detail-table.sys-table {
+  width: auto;
+  table-layout: auto;
+}
+
+.sys-table .row-label {
+  white-space: nowrap;
+}
+
+.sys-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* 종합 판정이 나온 칸(해배·초기)을 옅게 짚어 준다 — 어디서 결론이 나왔는지 보이게. */
+.sys-table .sys-pick-cell {
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.sys-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+.sys-note-label {
+  color: var(--text-muted);
+}
+
+.sys-tend {
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* 무 보정이 판정과 같은 편인지 — 초록/빨강은 앱의 '좋다/나쁘다' 축을 그대로 쓴다. */
+.sys-rel-ok { color: var(--chip-green-fg); font-weight: 700; }
+.sys-rel-bad { color: var(--chip-red-fg); font-weight: 700; }
+.sys-rel-none { color: var(--text-muted); }
+
 /* 판정 블록 — 결론(플핸무 확률)과 그 기준선(배당)을 한 카드에 */
 .pick-verdict-card {
   border: 1px solid var(--border);
