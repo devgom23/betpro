@@ -118,6 +118,14 @@
   white-space: nowrap;
 }
 
+/* 결과/유형/승점 — 안에 든 게 배지 한 개(글자 1~2자) 또는 숫자 한 자리뿐이라
+   기본 padding(5px 7px)만큼 안 필요하다. 여기서 줄인 만큼을 HT/AT(팀명 + (정/역)
+   + 배당) 칸이 가져가서, 5글자 팀명 + 배당까지도 줄바꿈 없이 한 줄에 들어가게 한다. */
+.detail-table.match-list .col-narrow {
+  padding-left: 3px;
+  padding-right: 3px;
+}
+
 .match-list-scroll .detail-table.match-list thead th {
   position: sticky;
   top: 0;

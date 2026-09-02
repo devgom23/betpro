@@ -45,20 +45,34 @@ function WdlBadge({ letter }) {
   )
 }
 
+// ── 이 표의 배당은 전부 해외배당(FW/FL)이다 (2026-09-02 실측으로 확정) ──
+// 예전엔 국내배당(KW/KL)을 먼저 보고 없으면 해외로 넘어갔는데, 두 시장이 서로 다른
+// 방향을 가리킬 때 **해외 쪽이 더 자주 맞았다**. 6대리그 32,699경기 중 방향이 갈린
+// 10,116경기(배제 1개짜리끼리, 같은 경기 위에서 짝지어 비교)에서
+//   국내배당을 따르면 75.4% · 해외배당을 따르면 77.2% (+1.8%p, McNemar z=2.69,
+//   6리그 모두 같은 방향)
+// 그래서 표시 기준을 해외배당 하나로 통일했다. 섞어 쓰면 어느 시장 값인지 알 수 없고,
+// 국내배당이 승=패로 같은 경기(37건)에선 정/역 표식과 숫자가 서로 어긋나기까지 했다.
+// 해외배당이 없는 경기는 42,224건 중 233건(0.6%)뿐이고, 그중 국내배당만 있는 건
+// 18건(0.04%)이다 — 그 18건은 배당을 아예 안 보여준다(섞지 않는 쪽을 택했다).
+
 // 그 경기에서 정배(배당이 낮은 쪽)가 홈이었나 원정이었나 — 'H' / 'A' / null.
-// 국내배당(KW/KL)을 먼저 보고, 없는 옛 경기는 해외배당(FW/FL)으로 대신한다.
-// 배당이 같거나(무배당) 둘 다 없으면 정배를 못 정하므로 null(표시 안 함).
+// 배당이 같거나(무배당) 없으면 정배를 못 정하므로 null(표시 안 함).
 function favSide(m) {
-  const pick = (w, l) => {
-    const a = Number(w)
-    const b = Number(l)
-    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0 || a === b) return null
-    return a < b ? 'H' : 'A'
-  }
-  return pick(m.KW, m.KL) || pick(m.FW, m.FL)
+  const a = Number(m.FW)
+  const b = Number(m.FL)
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0 || a === b) return null
+  return a < b ? 'H' : 'A'
 }
 
-// 팀명 옆 (정)/(역) 표식.
+// 그 팀이 그 경기에서 받은 해외배당(승 기준). a===b(무배당)까지도 값 자체는
+// 보여준다 — 정/역 판정과 달리 숫자는 같아도 의미가 있다.
+function teamOdds(m, isHome) {
+  const n = Number(isHome ? m.FW : m.FL)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+// 팀명 옆 (정)/(역) 표식 — 그때 받았던 배당도 같이 적는다.
 //
 // 이게 왜 필요한가 — 상대전적의 RT(핸승/핸무/무/역)는 항상 '그 경기 자체의 정배'
 // 기준이다. 그런데 과거 맞대결에서 정배였던 팀이 지금 경기에서도 정배라는 보장이
@@ -67,11 +81,13 @@ function favSide(m) {
 // 승/무/패(W/D/L)는 스코어에서 바로 나오므로 이 문제가 없다 — RT를 읽을 때만 본다.
 //
 // 색은 앱 전체 축을 그대로 따른다(정배 쪽=파랑 / 역배 쪽=빨강 — 핸디기준점·RT와 같은 축).
-function FavMark({ side, me }) {
+function FavMark({ side, me, odds }) {
   if (!side) return null
   const isFav = side === me
   return (
-    <span className={`h2h-fav h2h-fav-${isFav ? 'j' : 'y'}`}>({isFav ? '정' : '역'})</span>
+    <span className={`h2h-fav h2h-fav-${isFav ? 'j' : 'y'}`}>
+      ({isFav ? '정' : '역'}{odds !== null ? ` ${odds.toFixed(2)}` : ''})
+    </span>
   )
 }
 
@@ -311,9 +327,9 @@ export default function HeadToHeadResult({
                 <th>HS</th>
                 <th>AS</th>
                 <th>AT</th>
-                <th>결과</th>
-                <th>유형</th>
-                <th>승점</th>
+                <th className="col-narrow">결과</th>
+                <th className="col-narrow">유형</th>
+                <th className="col-narrow">승점</th>
               </tr>
             </thead>
             <tbody>
@@ -326,21 +342,21 @@ export default function HeadToHeadResult({
                     <td>{m.R}</td>
                     <td className={`row-label ${m.HT === home ? 'h2h-home-cell' : ''}`}>
                       {m.HT}
-                      <FavMark side={fav} me="H" />
+                      <FavMark side={fav} me="H" odds={teamOdds(m, true)} />
                     </td>
                     <td className={scoreClass(m.HS, m.AS, 'home')}>{m.HS ?? ''}</td>
                     <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
                     <td className={`row-label ${m.AT === home ? 'h2h-home-cell' : ''}`}>
                       {m.AT}
-                      <FavMark side={fav} me="A" />
+                      <FavMark side={fav} me="A" odds={teamOdds(m, false)} />
                     </td>
-                    <td>
+                    <td className="col-narrow">
                       <WdlBadge letter={{ 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]} />
                     </td>
-                    <td>
+                    <td className="col-narrow">
                       <RtBadge label={m.RT_label} />
                     </td>
-                    <td className="col-total">{homePoints(m, home)}</td>
+                    <td className="col-total col-narrow">{homePoints(m, home)}</td>
                   </tr>
                 )
               })}

@@ -6,6 +6,7 @@ import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { formatTime, formatDt, scoreClass } from '../../utils/format'
 import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
+import { h2hVerdict } from '../../utils/h2hVerdict'
 import './MatchDetailModal.css'
 
 
@@ -66,10 +67,10 @@ const SAMPLE_INDICATORS = [
   ['K-PL', '국) 플핸'],
   ['K-WL', '국) 승+패'], ['K-WDL', '국) 승+무+패'],
   ['K-W-HT', '국) 승=홈팀'], ['K-L-AT', '국) 패=원정팀'],
-  ['TK-W', '국/통) 승'], ['TK-L', '국/통) 패'], ['TK-WL', '국/통) 승+패'], ['TK-WDL', '국/통) 승+무+패'],
+  ['TK-W', '국통) 승'], ['TK-L', '국통) 패'], ['TK-WL', '국통) 승+패'], ['TK-WDL', '국통) 승+무+패'],
   ['F-W', '해) 승'], ['F-L', '해) 패'], ['F-WL', '해) 승+패'], ['F-WDL', '해) 승+무+패'],
   ['F-W-HT', '해) 승=홈팀'], ['F-L-AT', '해) 패=원정팀'],
-  ['TF-W', '해/통) 승'], ['TF-L', '해/통) 패'], ['TF-WL', '해/통) 승+패'], ['TF-WDL', '해/통) 승+무+패'],
+  ['TF-W', '해통) 승'], ['TF-L', '해통) 패'], ['TF-WL', '해통) 승+패'], ['TF-WDL', '해통) 승+무+패'],
 ]
 
 function numOrNull(v) {
@@ -285,102 +286,34 @@ function gapChips(row) {
   ]
 }
 
-// ── 승+패 조합 방향성 뱃지 (2026-08-30 실측) ──
-// 이 경기와 승·패 배당이 **소수점까지 완전히 같은** 과거 경기만 모아, 그중 가장 적게
-// 나온 결과 하나를 배제한 것이 방향성이다(계산은 api/combo_dir.py).
-//   핸승 배제 → 플핸무   핸무 배제 → 플핸승   무 배제 → 정역   역 배제 → 정무
-// 표기는 확률 지표 줄과 같은 꼴: 국)플핸무(핸승)78%
-//   괄호 안은 '배제하는 결과'다 — 확률 지표 줄의 괄호(최다 결과)와는 뜻이 다르므로
-//   툴팁에 표본 4칸을 그대로 적어 오해가 없게 한다.
-//
-// 실측(6대리그 35,952경기, 그 경기 이전 표본만 써서 미래 정보 차단):
-//   해배·통합 80.5% / 국배·통합 78.6%. 표본 20건 이상이면 80.8%.
-//   방향성별로는 정무가 가장 잘 맞았다(해배 84.4%). 여섯 리그가 78~81%로 거의 같다.
-// 국배는 조합이 잘 안 겹쳐 표본이 없는 경기가 많다 — 그때는 그 칸을 아예 안 그린다.
-// 표본이 이보다 적으면 %를 못 믿는다 — 값은 그대로 보여주되 흐리게 깔고 물음표를
-// 붙인다. n=1이면 그 조합의 %는 무조건 100%가 되는데, 실제 적중률은 75.4%였다
-// (아래 COMBO_EXPECT 실측). 100%가 진하게 뜨면 최고의 신호로 오해된다.
-const COMBO_MIN_N = 20
-
-// 표본 크기별 '실제로는 얼마나 맞았나' — 해외 초기배당 34,330경기 실측(2026-08-31).
-// 그 경기 이전 표본만 써서 미래 정보를 막고, 조합의 최소값을 배제하는 같은 규칙으로 쟀다.
-// 표본이 작을수록 화면 %는 100%에 가까워지지만 실제 적중률은 75%대에 머문다.
-const COMBO_EXPECT = [
-  [2, 75.4], [4, 76.8], [9, 78.1], [19, 80.1], [49, 80.0], [Infinity, 81.1],
-]
-
-function comboExpect(n) {
-  return (COMBO_EXPECT.find(([hi]) => n <= hi) || [0, 79.8])[1]
-}
-const COMBO_SRC = [
-  ['국초', 'SPK'], ['해초', 'SPF'],
-  ['국배', 'SPEK'], ['해배', 'SPEF'],
-]
-
-function comboChips(row) {
-  const parts = COMBO_SRC.map(([label, p]) => {
-    const name = row[`${p}_NAME`]
-    const rate = numOrNull(row[`${p}_RATE`])
-    const n = numOrNull(row[`${p}_N`])
-    if (!name || rate === null || !n) return null
-    return { label, name, excl: row[`${p}_EXCL`], rate, n,
-      cnt: row[`${p}_CNT`], lgn: numOrNull(row[`${p}_LGN`]),
-      tie: numOrNull(row[`${p}_TIE`]) === 1, weak: n < COMBO_MIN_N }
-  })
-  if (parts.every((x) => x === null)) return []
-  const one = (x, key) => (x === null ? (
-    <span className="combo-one" key={key}>
-      <span className="combo-market">{key})</span>
-      <span className="combo-none">—</span>
-    </span>
-  ) : (
-    <span
-      className="combo-one"
-      key={key}
-      title={`${x.label} 배당이 이 경기와 소수점까지 완전히 같았던 과거 `
-        + `${x.n.toLocaleString()}경기(6대리그 합산). 결과는 핸승·핸무·무·역 = ${x.cnt}건.`
-        + ` 가장 적게 나온 ${x.excl}을 빼는 것이 '${x.name}'이고,`
-        + ` 그 ${x.n.toLocaleString()}경기 중 ${x.excl}이 안 나온 비율이 ${x.rate}%.`
-        + (x.tie ? ' ※ 가장 적은 결과가 동점이라 방향을 하나로 못 정했다(묶어서 표시).' : '')
-        + (x.weak
-          ? ` ※ 표본 ${COMBO_MIN_N}경기 미만이라 이 %는 믿을 수 없다 —`
-            + ` 표본이 ${x.n}건일 때 실제 적중률은 6대리그 실측으로 ${comboExpect(x.n)}%였다.`
-          : '')
-        + (x.lgn ? ` (이 리그 안에서만 세면 ${x.lgn}경기)` : '')}
-    >
-      <span className="combo-market">{x.label})</span>
-      <b className={`combo-name${x.tie ? ' combo-tie' : ''}`}>{x.name}</b>
-      <span className="combo-excl">({x.excl})</span>
-      <span className={`combo-rate${x.weak ? ' combo-weak' : (x.rate >= 85 ? ' combo-rate-hi' : '')}`}>
-        {Math.round(x.rate)}%{x.weak && '?'}
-      </span>
-      <span className="combo-n">n={x.n.toLocaleString()}</span>
-    </span>
-  ))
-  // 초기 둘 / 배변 둘로 묶는다 — 확률 지표 줄의 '초기 | 배변'과 같은 순서.
+// ── 상대전적 판정 뱃지 (2026-09-02 실측) ──
+// 홈우세 / 홈만우세 / 전적보합 / 원정만우세 / 원정우세 — 판정 규칙과 실측 근거는
+// utils/h2hVerdict.js 주석에 전부 적어 뒀다. 여기선 그 결과를 칩으로 그리기만 한다.
+// verdict는 /api/pick_ai가 이미 내려주는 h2h(wdl_summary·wdl_summary_home)로
+// 만든다 — 상대전적 카드가 쓰는 것과 같은 값이라 API를 더 부르지 않는다.
+// 아직 안 왔으면(로딩 중) 칸을 비워 두지 않고 '계산 중'으로 자리를 잡아 둔다 —
+// 뱃지가 뒤늦게 끼어들면서 아래 내용이 밀리는 걸 막는다.
+function h2hChips(verdict, loading) {
+  if (loading) {
+    return [<MatchChip key="h2h" label="전적">…</MatchChip>]
+  }
+  if (!verdict) return []
   return [
-    <MatchChip key="combo" label="승+패">
-      <span className="combo-row">
-        <span className="combo-pair">
-          {one(parts[0], '국초')}{one(parts[1], '해초')}
-        </span>
-        <span className="combo-pair">
-          {one(parts[2], '국배')}{one(parts[3], '해배')}
-        </span>
-      </span>
+    <MatchChip key="h2h" label="전적" tone={verdict.tone} title={verdict.title}>
+      {verdict.label}
     </MatchChip>,
   ]
 }
 
-// 경기지표 — 이 경기가 전반적으로 어떤 경기인지 한 줄로. 확률 지표 바로 위에 둔다.
+// 경기지표 — 이 경기가 전반적으로 어떤 경기인지 한 줄로. 확률 지표 표 바로 아래에 둔다.
 // 해당되는 게 하나도 없으면 줄을 없애지 않고 '해당 없음'을 적는다 — 뱃지가 있고 없고에
 // 따라 아래 내용이 위아래로 튀면 매번 눈으로 다시 찾아야 한다.
-// 제목 <h3> 안에 들어가므로 반드시 <span>이어야 한다(h3 안에는 <div>를 넣을 수 없다).
-function MatchIndicators({ row }) {
-  // 똥배 → 승+패 → 배당차 순. 똥배는 해당될 때만 붙는 '이 경기의 특징'이라 먼저,
-  // 승+패는 이 경기와 배당이 똑같았던 과거 경기만 본 값이라 그다음, 배당차는
-  // 배당대 전체를 본 참조값이라 마지막.
-  const chips = [...ddongChips(row), ...comboChips(row), ...gapChips(row)]
+// 2026-09-02 '승+패' 조합 방향성 뱃지는 화면에서 영구 삭제했다(계산은
+// api/combo_dir.py에 그대로 남아 있고 row의 SPK_*/SPF_*/SPEK_*/SPEF_* 필드도
+// 계속 내려오지만, 여기서는 더 이상 쓰지 않는다).
+function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading }) {
+  // 똥배 → 배당차 → 전적 순.
+  const chips = [...ddongChips(row), ...gapChips(row), ...h2hChips(verdict, h2hLoading)]
   return (
     <span className="match-chip-row">
       {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}
@@ -1378,6 +1311,70 @@ function DirectionSummary({ row, scope }) {
   )
 }
 
+// '확률 지표' 밴드 왼쪽 칸 — 지표별 표본(아래 SampleTable)의 승+패 4줄(국)승+패·
+// 국통)승+패·해)승+패·해통)승+패)만 그대로 뽑아 보여준다. 승·패 각각의 방향(정배가
+// 홈인지 원정인지)과 달리 승+패는 방향 무관 지표라 이 경기와 늘 관련이 있다(favSampleCodes
+// 주석 참고) — 그래서 여기서는 대상 거르기 없이 네 줄을 고정으로 보여준다.
+// scope==='user'일 때 TK-/TF-를 빼는 것도 SampleTable과 같은 이유(내 데이터는 리그
+// 하나뿐이라 통합 지표가 국내·해외 지표와 완전히 같아져 의미 없는 중복이 된다).
+const WL_CODES = ['K-WL', 'TK-WL', 'F-WL', 'TF-WL']
+
+function WlIndicatorTable({ row, scope }) {
+  const codes = scope === 'user' ? WL_CODES.filter((c) => !c.startsWith('T')) : WL_CODES
+  const cnt = (v) => {
+    const n = Number(v)
+    return Number.isNaN(n) ? 0 : Math.trunc(n)
+  }
+  const lines = codes.map((code) => {
+    const label = SAMPLE_INDICATORS.find(([c]) => c === code)[1]
+    const vals = [1, 2, 3, 4].map((i) => cnt(row[`${code} ${i}`]))
+    const eRaw = [1, 2, 3, 4].map((i) => row[`E_${code} ${i}`])
+    const hasE = eRaw.some((v) => v !== null && v !== undefined && v !== '')
+    const eVals = hasE ? eRaw.map(cnt) : null
+    return {
+      code, label, vals,
+      total: vals.reduce((a, b) => a + b, 0),
+      eVals,
+      eTotal: eVals ? eVals.reduce((a, b) => a + b, 0) : 0,
+    }
+  })
+  const isForeignCode = (c) => /^(F|TF)-/.test(c)
+  return (
+    <table className="detail-table sample-table wl-indicator-table">
+      <thead>
+        <tr>
+          <th className="row-label">지표</th>
+          <th className="col-hs">핸승</th>
+          <th className="col-hm">핸무</th>
+          <th className="col-mu">무</th>
+          <th className="col-yk">역</th>
+          <th className="col-total">토탈</th>
+        </tr>
+      </thead>
+      <tbody>
+        {lines.map((l, li) => {
+          const prev = li > 0 ? lines[li - 1] : null
+          const groupStart = prev && isForeignCode(l.code) && !isForeignCode(prev.code)
+          return (
+            <Fragment key={l.code}>
+              <tr className={groupStart ? 'sample-group-start' : undefined}>
+                <td className="row-label">{l.label}</td>
+                {l.vals.map((v, i) => (
+                  <td key={i} className={maxCellClass(l.vals, i)}>
+                    {l.total > 0 ? `${Math.round((v / l.total) * 100)}% (${v})` : '-'}
+                  </td>
+                ))}
+                <td className="col-total">{l.total}</td>
+              </tr>
+              <SampleFinalRow vals={l.eVals} total={l.eTotal} />
+            </Fragment>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+}
+
 // expanded=false(기본)면 판단에 쓰는 9줄만 보여준다. 그때는 보이는 게 전부 대상이라
 // 테두리 강조를 걸지 않는다 — 다 강조하면 강조가 아니게 되기 때문. 펼쳐서 27줄을
 // 다 보여줄 때만 그 9줄에 테두리를 둘러 어느 것이 대상인지 구분해 준다.
@@ -1445,12 +1442,12 @@ function SampleTable({ row, scope, expanded }) {
     <table className="detail-table sample-table">
       <thead>
         <tr>
-          <th>지표</th>
+          <th className="row-label">지표</th>
           <th className="col-hs">핸승</th>
           <th className="col-hm">핸무</th>
           <th className="col-mu">무</th>
           <th className="col-yk">역</th>
-          <th>토탈</th>
+          <th className="col-total">토탈</th>
         </tr>
       </thead>
       <tbody>
@@ -1682,21 +1679,31 @@ function findSignal(data, key) {
 // 확률 지표 밴드. 예전에는 이 위에 '종합 분석' 카드 4장(플핸무 확률·해외지표·국내지표·
 // 상대전적)이 같이 있었는데 화면에서 뺐다 — 계산은 그대로 남아 있고(api/pick_ai.py,
 // /api/pick_ai), 시즌전적과 상대전적 문장만 아래 표 쪽으로 옮겨 붙였다.
-function PickBand({ row, scope }) {
+function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
   return (
     <section className="pick-band">
-      <div className="pick-band-match">
-        <h3>
-          경기지표
-          <MatchIndicators row={row} />
-        </h3>
-      </div>
       <div className="pick-band-risk">
-        <h3>
-          확률 지표
-          <DirectionSummary row={row} scope={scope} />
-        </h3>
-        <RiskCard row={row} />
+        <div className="pick-band-risk-cols">
+          <div className="pick-band-risk-col">
+            <h3 className="pick-band-risk-col-title">승+패 지표</h3>
+            <WlIndicatorTable row={row} scope={scope} />
+          </div>
+          <div className="pick-band-risk-col">
+            <h3 className="pick-band-risk-col-title">
+              확률 지표
+              <DirectionSummary row={row} scope={scope} />
+            </h3>
+            <RiskCard row={row} />
+            {/* 경기지표는 왼쪽 '승+패 지표' 칸이 아니라 이 칸(확률 지표) 표 바로
+                밑에만 붙인다 — 왼쪽 칸과는 무관하게 오른쪽 칸 안에서만 쌓인다.
+                뱃지는 제목 옆이 아니라 제목 아래 줄에 깐다(뱃지가 늘어나면 제목
+                옆에서는 줄이 넘쳐 두 줄로 흘렀다). */}
+            <div className="pick-band-match">
+              <h3>경기지표</h3>
+              <MatchIndicators row={row} h2hVerdict={verdict} h2hLoading={h2hLoading} />
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   )
@@ -1739,6 +1746,11 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
   // 종합분석 카드를 화면에서 뺀 뒤로 이 응답에서 실제로 쓰는 건 이 둘과 streaks뿐이다.
   const seasonSig = findSignal(pickData, 'season')
   const h2hSig = findSignal(pickData, 'h2h')
+  // 경기지표의 '전적' 뱃지(홈우세/홈만우세/전적보합/원정만우세/원정우세).
+  // 상대전적 카드가 쓰는 것과 같은 h2h를 그대로 재사용한다 — API를 더 부르지 않는다.
+  const h2hMark = pickData && pickData.h2h
+    ? h2hVerdict(pickData.h2h.wdl_summary, pickData.h2h.wdl_summary_home)
+    : null
 
   useEffect(() => {
     let alive = true
@@ -1858,17 +1870,22 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
         </p>
         <MyPickBar row={row} onSavePick={onSavePick} />
 
-        <PickBand row={row} scope={scope} />
+        <PickBand
+          row={row}
+          scope={scope}
+          h2hVerdict={h2hMark}
+          h2hLoading={!pickData && !pickError}
+        />
 
         <div className="modal-columns" ref={columnsRef}>
           <div className="modal-col">
-            <section className="detail-section">
+            <section className="detail-section detail-section-pinned">
               {/* 똥배는 2026-08-30 '경기지표' 줄(팝업 위쪽)로 옮겼다 — 여기에도 두면
                   같은 값이 화면에 두 번 나온다. */}
               <h3>배당</h3>
               <OddsTable row={row} />
             </section>
-            <section className="detail-section" ref={sampleSectionRef}>
+            <section className="detail-section detail-section-pinned" ref={sampleSectionRef}>
               <h3>
                 <button
                   className="sample-fold-btn"
@@ -1975,7 +1992,12 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                     <span className="detail-section-note detail-h2h-avg">{h2hSig.value_text}</span>
                   )}
                 </span>
-                <span className="detail-section-note detail-h2h-footnote">※ 승점은 홈팀 기준으로 작성되었습니다.</span>
+                {/* 배당 기준을 적어 둔다 — 화면만 봐선 국내인지 해외인지 알 수 없고,
+                    예전엔 국내 우선이었어서 값이 달라진 이유를 나중에 못 찾는다.
+                    해외로 통일한 근거는 HeadToHeadResult.jsx의 favSide 위 주석 참고. */}
+                <span className="detail-section-note detail-h2h-footnote">
+                  ※ 승점은 홈팀 기준 · 배당은 해외배당 기준입니다.
+                </span>
               </h3>
               <HeadToHeadResult
                 scope={scope} code={code} home={ht} away={at} cross

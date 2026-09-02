@@ -195,6 +195,16 @@
   margin-bottom: 0;
 }
 
+/* 배당·지표별 표본 카드 — 위 '승+패 지표'(pick-band-risk-cols, 452px 고정)와 내용
+   폭을 맞춘다. 원래는 modal-col의 flex-stretch를 그대로 받아 창 너비에 따라 흔들렸다
+   (이 창 크기에서 우연히 451이었을 뿐 — 좁아지면 더 줄어든다). 이 팝업은 반응형이
+   필요 없다고 확정했으니 그냥 못박는다: 482px(border-box) − 패딩 28px − 테두리 2px
+   = 안쪽 452px, 승+패 지표 쪽과 정확히 같은 값. flex:none으로 stretch를 끈다. */
+.detail-section-pinned {
+  width: 482px;
+  flex: none;
+}
+
 .detail-section-grow {
   display: flex;
   flex-direction: column;
@@ -442,9 +452,23 @@
   color: var(--text-secondary);
 }
 
-/* 지표별 표본 지표명 칸 — "국/통) 승+무+패" 같은 긴 이름이 줄바꿈되지 않고
-   한 줄로 나오게 한다(펼치기했을 때만 나오는 통합지표 줄에서 발생). */
+/* .sample-table은 부모(밴드 vs 카드)에 따라 폭이 달라(519px vs 444px) — .detail-table의
+   width:100%를 그대로 두면 지정한 칸 폭(아래 row-label 100 / col-hs 등 75 / col-total 50,
+   합 450px)이 남는·모자란 만큼 모든 칸에 비율로 다시 나뉜다(실측: 75 목표가 86.25 /
+   73.41로 갈라짐). width:auto + table-layout:fixed로 표 자체를 "칸 폭의 합(450px)"에
+   맞춰 고정해야 지정한 값이 그대로 나온다 — 그 대신 컨테이너가 450px보다 넓으면
+   표 오른쪽에 빈 공간이 남는다(폭을 맞추는 게 목적이라 감수한다). */
+.sample-table {
+  width: auto;
+  table-layout: fixed;
+}
+
+/* 지표별 표본 지표명 칸 — "국통) 승+무+패" 같은 긴 이름이 줄바꿈되지 않고
+   한 줄로 나오게 한다(펼치기했을 때만 나오는 통합지표 줄에서 발생). 폭 100px은
+   지표별 표본·위 승+패 지표 둘 다 같은 값. table-layout:fixed에서는 폭이 엄격히
+   고정되므로(내용이 넘치면 잘릴 수 있다) white-space:nowrap과 함께 넉넉히 잡는다. */
 .sample-table .row-label {
+  width: 100px;
   white-space: nowrap;
 }
 
@@ -623,6 +647,24 @@
   font-weight: 700;
 }
 
+/* 토탈 칸 폭 50px — 위 핸승/핸무/무/역 75px과 같은 이유(지표별 표본·승+패 지표
+   폭 맞추기). col-total도 col-hs처럼 다른 표(상대전적)와 이름을 공유해서
+   .sample-table로 좁힌다. */
+.sample-table .col-total {
+  width: 50px;
+}
+
+/* 핸승/핸무/무/역 네 칸 폭을 75px로 고정 — 지표별 표본과 위 '승+패 지표'가 서로
+   다른(폭이 다른) 부모 안에 있어도 이 네 칸만큼은 항상 같아 보이게 한다.
+   .sample-table로 좁혀서 다른 표(상대전적 등, HeadToHeadResult.css가 같은 이름의
+   .detail-table .col-hs를 색상 용도로만 재사용한다)에는 번지지 않게 한다. */
+.sample-table .col-hs,
+.sample-table .col-hm,
+.sample-table .col-mu,
+.sample-table .col-yk {
+  width: 75px;
+}
+
 /* 배경 하이라이트 없이 굵은 선 하나로만 "여기서부터 요약 행" 표시 — 회색 배경
    틴트는 지웠다(요청). 그 대신 위쪽 구분선을 분명하게 보이도록 2px로 준다.
    ⚠ 특이도를 .sample-table로 한 단계 높였다 — 그냥 .sample-grand-total td로
@@ -732,16 +774,19 @@
   }
 }
 
-/* ── 경기지표 — 이 경기가 어떤 경기인지(똥배 등)를 뱃지 줄로. 확률 지표 바로 위. ──
-   제목과 뱃지를 '한 줄'로 둔다 — 바로 아래 '확률 지표' 줄(제목 + 방향성 요약)과 같은
-   구조라서, 여기만 두 줄이면 두 지표 줄의 눈높이가 어긋난다. */
+/* ── 경기지표 — 이 경기가 어떤 경기인지(똥배 등)를 뱃지 줄로. 2026-09-02 '확률 지표'
+   칸(RiskCard) 표 바로 밑으로 옮겼다 — 왼쪽 '승+패 지표' 칸과는 무관하게 이 칸
+   안에서만 쌓이므로, 구분선 없이 표 바로 아래 붙인다. */
+.pick-band-match {
+  margin-top: 8px;
+}
+
+/* 제목은 제 줄에 두고 뱃지는 그 아래 줄에 깐다 — 뱃지(똥배·배당차·전적)가 늘어나면서
+   제목 옆에 두면 줄이 넘쳐 흘렀다. 위 '확률 지표' 제목과 같은 크기·색·아래여백. */
 .pick-band-match h3 {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;             /* '확률 지표' 줄의 제목↔요약 간격과 같은 값 */
-  margin: 0;
+  margin: 0 0 8px;
   font-size: 13px;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 
@@ -814,78 +859,6 @@
   cursor: help;
 }
 
-/* ── 승+패 조합 방향성 — 국)플핸무(핸승)78% n=126 ──
-   확률 지표 줄(.dir-*)과 같은 표기 규칙: 시장·구분자는 흐리게, 방향성 이름은
-   밝게, %는 굵게. 다만 여기 괄호는 '배제하는 결과'라 확률 지표의 괄호(최다 결과)와
-   뜻이 다르다 — 그래서 색을 다르게(흐리게) 줘서 같은 것으로 안 읽히게 한다. */
-.combo-row {
-  display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 12px;              /* 초기 묶음 ↔ 배변 묶음 */
-}
-
-.combo-pair {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;               /* 국 ↔ 해 */
-}
-
-.combo-one {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 2px;
-  cursor: help;
-}
-
-.combo-market,
-.combo-sep,
-.combo-excl,
-.combo-n {
-  color: var(--text-muted);
-}
-
-.combo-name {
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.combo-rate {
-  font-weight: 700;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-/* 85% 이상 — 전체 평균(78~80%)보다 뚜렷이 높은 조합만 초록으로 짚어 준다.
-   배당차 뱃지(.gap-rate-best)와 같은 초록을 써서 "좋다"의 뜻을 통일한다. */
-.combo-rate-hi {
-  color: var(--chip-green-fg);
-}
-
-/* 표본 수는 값이 아니라 '얼마나 믿을 수 있나'라서 한 단계 더 작게. */
-.combo-n {
-  font-size: 10px;
-}
-
-/* 표본이 10경기 미만 — 값은 보여주되 흐리게 깔아 "참고만"임을 알린다.
-   n=1이면 무조건 100%가 뜨는데, 그게 초록으로 강조되면 최고의 신호처럼 보인다. */
-.combo-weak {
-  color: var(--text-muted);
-  font-weight: 400;
-}
-
-/* 가장 적게 나온 결과가 동점이라 방향을 하나로 못 정한 경우 — 이름이 '플핸무/정역'
-   처럼 묶여 나온다. 확정된 방향과 구분되게 한 단계 흐리게. */
-.combo-tie {
-  color: var(--text-secondary);
-  font-weight: 400;
-}
-
-.combo-none {
-  color: var(--text-muted);
-  opacity: 0.7;
-}
-
 .gap-market,
 .gap-sep,
 .gap-paren {
@@ -954,14 +927,6 @@
   color: var(--text-muted);
 }
 
-/* 핸승 위험도. 예전엔 위에 '종합 분석' 카드들이 같은 밴드 안에 있어서 구분선으로
-   갈라 뒀는데, 지금은 위에 '경기지표' 줄이 있어 다시 구분선을 둔다. */
-.pick-band-risk {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
 .pick-band-risk h3 {
   display: flex;
   align-items: baseline;
@@ -970,6 +935,25 @@
   margin: 0 0 8px;
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+/* 확률 지표 좌우 분할 — 왼쪽 '승+패 지표'(지표별 표본에서 뽑은 4줄) / 오른쪽 기존
+   '확률 지표'(정승·플핸무·플 표, RiskCard). 각 칸이 자기 제목(h3)을 따로 갖는다
+   (위 .pick-band-risk h3 스타일을 그대로 쓴다).
+   왼쪽 칸은 452px로 고정한다 — 아래 '지표별 표본' 표의 실제 폭(row-label 100 +
+   col-hs 등 75×4 + col-total 50 = 450, 테두리 포함 약 451px)과 맞추는 값이다.
+   grid 트랙 자체를 이 값으로 고정해야 그 안의 표(width:auto, table-layout:fixed)가
+   트랙 폭만큼 늘어나지(grid item 기본 stretch) 않고 딱 이 폭 안에 그대로 앉는다.
+   오른쪽(확률 지표, RiskCard 9칸)은 남는 폭을 전부 가져간다. */
+.pick-band-risk-cols {
+  display: grid;
+  grid-template-columns: 452px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .pick-band-risk-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* 판정 블록 — 결론(플핸무 확률)과 그 기준선(배당)을 한 카드에 */
