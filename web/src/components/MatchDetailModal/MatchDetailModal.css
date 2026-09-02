@@ -774,29 +774,40 @@
   }
 }
 
-/* ── 경기지표 — 이 경기가 어떤 경기인지(똥배 등)를 뱃지 줄로. 2026-09-02 '확률 지표'
-   칸(RiskCard) 표 바로 밑으로 옮겼다 — 왼쪽 '승+패 지표' 칸과는 무관하게 이 칸
-   안에서만 쌓이므로, 구분선 없이 표 바로 아래 붙인다. */
-.pick-band-match {
-  margin-top: 8px;
+/* ── 경기지표 · 배당차 · 시스템 판정 — 확률 지표 밑에 밴드 전체 폭으로 나란히 셋.
+   2026-09-02 이전엔 경기지표+시스템판정이 오른쪽('확률 지표') 칸 안에 세로로
+   쌓여서 줄이 길어지고 왼쪽('승+패 지표') 칸 아래가 비었다 — 그래서 뺐다. */
+.pick-band-bottom-cols {
+  display: grid;
+  grid-template-columns: 0.7fr 1fr 1.3fr;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  align-items: start;
 }
 
-/* 제목은 제 줄에 두고 뱃지는 그 아래 줄에 깐다 — 뱃지(똥배·배당차·전적)가 늘어나면서
-   제목 옆에 두면 줄이 넘쳐 흘렀다. 위 '확률 지표' 제목과 같은 크기·색·아래여백. */
-.pick-band-match h3 {
+@media (max-width: 860px) {
+  .pick-band-bottom-cols { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 경기지표·배당차 제목 — 시스템 판정 제목(.pick-band-risk-col-title 재사용)과
+   크기·색을 맞춘다. */
+.pick-band-match h3,
+.pick-band-gap h3 {
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
 }
 
-/* 성격이 다른 뱃지가 여러 개 늘어서는 줄이라 '나열 항목 사이' 기본 간격(8px).
-   flex gap으로 벌린다 — 텍스트 공백으로 두면 브라우저가 뭉개 간격이 들쭉날쭉해진다
-   (CLAUDE.md 6-2). */
+/* 뱃지(똥배·전적·무)를 한 줄에 하나씩 세로로 쌓는다 — 가로로 늘어놓으면 이 칸
+   폭(0.7fr)에서 줄바꿈이 들쭉날쭉했다. 세로 목록이라도 '나열 항목 사이' 기본
+   간격(8px)을 그대로 쓴다. */
 .match-chip-row {
   display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -835,40 +846,24 @@
   font-weight: 700;
 }
 
-/* 배당차 뱃지 — 국초/해초 · 국배/해배 네 값을 한 칸에.
-   초기 둘·배변 둘을 각각 묶고(gap-pair), 두 묶음 사이는 더 벌려서 어디까지가
-   초기이고 어디부터 배변인지 간격만으로 보이게 한다(확률 지표 줄과 같은 순서).
-   구분자를 텍스트 공백으로 두면 브라우저가 뭉개므로 전부 flex gap이다(CLAUDE.md 6-2). */
-.gap-row {
-  display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 12px;              /* 초기 묶음 ↔ 배변 묶음 */
-}
-
-.gap-pair {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;               /* 국 ↔ / ↔ 해 — 아주 붙은 한 덩어리 */
-}
-
-.gap-one {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 2px;
-  cursor: help;
-}
-
-.gap-market,
-.gap-sep,
-.gap-paren {
-  color: var(--text-muted);
-}
-
 /* '플' / '정' — 이 %가 무엇의 확률인지 알려주는 글자. 국배는 플, 해배는 정처럼
    네 값이 서로 다른 걸 가리킬 때가 있어서, 글자 없이 %만 두면 무엇의 확률인지
    알 수 없다. 그래서 작은 칩으로 눈에 띄게 만든다.
    색은 앱 전체 축 그대로 — 정배 쪽=파랑 / 플핸(무+역) 쪽=빨강(핸디기준점·RT와 같은 축). */
+/* 배당차 표 — 시스템 판정 표와 같은 2x2 꼴(초기/배변 × 국배/해배). 칸 하나에
+   배당차 값·픽·적중률 셋을 담아야 해서 inline-flex로 붙인다. */
+.gap-table td span:not(.dir-none) {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  cursor: help;
+}
+
+.gap-table td b {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 .gap-pick {
   display: inline-block;
   min-width: 13px;
@@ -887,11 +882,6 @@
 .gap-pick-p {
   background: var(--chip-red-bg);
   color: var(--chip-red-fg);
-}
-
-.gap-one b {
-  font-weight: 700;
-  color: var(--text-primary);
 }
 
 /* 플핸무 적중률 — 색을 '% 그 자체'로 정한다(배당차 구간이 아니라).
@@ -956,12 +946,9 @@
   .pick-band-risk-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ── 시스템 판정 — 경기지표 바로 아래. 지표 4칸 + 무 보정을 합친 결론 ── */
-.sys-band {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
+/* ── 시스템 판정 — 경기지표·배당차와 나란히 놓이는 셋째 칸. 지표 4칸 + 무 보정을
+   합친 결론. 예전엔 경기지표 아래에 쌓여서 위 테두리로 갈랐는데, 2026-09-02 셋을
+   나란히 두면서(.pick-band-bottom-cols) 그 구분선은 필요 없어졌다. */
 
 /* 제목 옆 결론 한 줄: [플핸무] ★★★ 86% */
 .sys-head {

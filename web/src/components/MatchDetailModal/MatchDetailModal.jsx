@@ -234,8 +234,8 @@ function gapText(v) {
   return String(Number(v.toFixed(2)))
 }
 
-function gapChips(row) {
-  const parts = GAP_SRC.map(([label, w, l, fb]) => {
+function gapParts(row) {
+  return GAP_SRC.map(([label, w, l, fb]) => {
     const gap = gapOf(row, w, l, fb)
     if (gap === null) return null
     const idx = gapBandIndex(gap)
@@ -251,11 +251,16 @@ function gapChips(row) {
     const tone = rate >= 80 ? 'best' : rate >= 75 ? 'mid' : 'plain'
     return { label, gap, rate, hit, tot, idx, tone, pick, isJm }
   })
-  if (parts.every((p) => p === null)) return []
-  const one = (p) => (p === null ? null : (
+}
+
+// 배당차 — 2026-09-02부터 경기지표 옆 칸에 표로 뺐다(예전엔 칩 하나에 4줄을 욱여넣어
+// 줄이 길어지고 옆 칸엔 빈 공간이 남았다). '시스템 판정' 표와 같은 꼴(초기/배변 ×
+// 국배/해배)로 맞춘다 — GAP_SRC가 이미 [국초,해초,국배,해배] 순서라 그대로 2x2로 접는다.
+function GapTable({ row }) {
+  const [gukcho, haecho, gukbae, haebae] = gapParts(row)
+  if (![gukcho, haecho, gukbae, haebae].some(Boolean)) return <p className="pick-loading">해당 없음</p>
+  const cell = (p) => (p ? (
     <span
-      className="gap-one"
-      key={p.label}
       title={`${p.label} 배당차 ${gapText(p.gap)} → ${GAP_BAND_LABEL[p.idx]} 구간.`
         + ` 6대리그 ${p.tot.toLocaleString()}경기 중`
         + ` ${p.isJm ? '정무' : '플핸무'} 적중 ${p.hit.toLocaleString()}건 (${p.rate}%).`
@@ -264,27 +269,34 @@ function gapChips(row) {
         + ` 배당차를 안 가린 전체 평균은 둘 다 ${GAP_BASE}%.`
         + ' ※ 배당차는 정배배당과 거의 같은 값이라, 확률 지표가 이미 반영한 정보입니다.'}
     >
-      <span className="gap-market">{p.label})</span>
       <b>{gapText(p.gap)}</b>
-      <span className="gap-paren">(</span>
       <span className={`gap-pick gap-pick-${p.isJm ? 'j' : 'p'}`}>{p.pick}</span>
       <span className={`gap-rate gap-rate-${p.tone}`}>{Math.round(p.rate)}%</span>
-      <span className="gap-paren">)</span>
     </span>
-  ))
-  // 초기 둘 / 배변 둘로 묶어 보여준다 — 확률 지표 줄의 '초기 | 배변'과 같은 순서.
-  return [
-    <MatchChip key="gap" label="배당차">
-      <span className="gap-row">
-        <span className="gap-pair">
-          {one(parts[0])}<span className="gap-sep">/</span>{one(parts[1])}
-        </span>
-        <span className="gap-pair">
-          {one(parts[2])}<span className="gap-sep">/</span>{one(parts[3])}
-        </span>
-      </span>
-    </MatchChip>,
-  ]
+  ) : <span className="dir-none">—</span>)
+  return (
+    <table className="detail-table sys-table gap-table">
+      <thead>
+        <tr>
+          <th className="row-label" />
+          <th>국배</th>
+          <th>해배</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="row-label">초기</td>
+          <td>{cell(gukcho)}</td>
+          <td>{cell(haecho)}</td>
+        </tr>
+        <tr>
+          <td className="row-label">배변</td>
+          <td>{cell(gukbae)}</td>
+          <td>{cell(haebae)}</td>
+        </tr>
+      </tbody>
+    </table>
+  )
 }
 
 // ── 상대전적 판정 뱃지 (2026-09-02 실측) ──
@@ -341,9 +353,9 @@ function drawChips(row) {
 }
 
 function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading }) {
-  // 똥배 → 배당차 → 전적 → 무 순.
-  const chips = [...ddongChips(row), ...gapChips(row), ...h2hChips(verdict, h2hLoading),
-    ...drawChips(row)]
+  // 배당차는 2026-09-02부터 옆 칸에 표로 따로 뺐다(GapTable) — 여기 줄은
+  // 똥배 → 전적 → 무만 세로로 쌓는다.
+  const chips = [...ddongChips(row), ...h2hChips(verdict, h2hLoading), ...drawChips(row)]
   return (
     <span className="match-chip-row">
       {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}
@@ -1822,16 +1834,22 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
               <DirectionSummary row={row} scope={scope} />
             </h3>
             <RiskCard row={row} />
-            {/* 경기지표는 왼쪽 '승+패 지표' 칸이 아니라 이 칸(확률 지표) 표 바로
-                밑에만 붙인다 — 왼쪽 칸과는 무관하게 오른쪽 칸 안에서만 쌓인다.
-                뱃지는 제목 옆이 아니라 제목 아래 줄에 깐다(뱃지가 늘어나면 제목
-                옆에서는 줄이 넘쳐 두 줄로 흘렀다). */}
-            <div className="pick-band-match">
-              <h3>경기지표</h3>
-              <MatchIndicators row={row} h2hVerdict={verdict} h2hLoading={h2hLoading} />
-            </div>
-            <SystemVerdict row={row} scope={scope} />
           </div>
+        </div>
+        {/* 2026-09-02 — 경기지표·시스템 판정을 오른쪽('확률 지표') 칸 안에 세로로
+            쌓았더니 줄이 길어지면서 왼쪽('승+패 지표') 칸 아래에 못 쓰는 빈 공간이
+            생겼다. 그래서 위 두 칸과 무관하게 밴드 전체 폭으로 내려, 경기지표(뱃지) ·
+            배당차(표) · 시스템 판정 셋을 나란히 둔다. */}
+        <div className="pick-band-bottom-cols">
+          <div className="pick-band-match">
+            <h3>경기지표</h3>
+            <MatchIndicators row={row} h2hVerdict={verdict} h2hLoading={h2hLoading} />
+          </div>
+          <div className="pick-band-gap">
+            <h3>배당차</h3>
+            <GapTable row={row} />
+          </div>
+          <SystemVerdict row={row} scope={scope} />
         </div>
       </div>
     </section>
