@@ -1834,22 +1834,22 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
               <DirectionSummary row={row} scope={scope} />
             </h3>
             <RiskCard row={row} />
+            {/* 경기지표·배당차·시스템 판정은 왼쪽('승+패 지표') 칸과는 무관하게
+                이 칸(확률 지표) 표 바로 밑에만 붙인다 — 왼쪽 칸 아래로는 안 내려간다.
+                예전엔 이 셋을 세로로 쌓아서 줄이 길어졌는데, 이 칸 폭 안에서
+                가로 3단(뱃지·표·표)으로 접어 줄 수를 줄인다. */}
+            <div className="pick-band-bottom-cols">
+              <div className="pick-band-match">
+                <h3>경기지표</h3>
+                <MatchIndicators row={row} h2hVerdict={verdict} h2hLoading={h2hLoading} />
+              </div>
+              <div className="pick-band-gap">
+                <h3>배당차</h3>
+                <GapTable row={row} />
+              </div>
+              <SystemVerdict row={row} scope={scope} />
+            </div>
           </div>
-        </div>
-        {/* 2026-09-02 — 경기지표·시스템 판정을 오른쪽('확률 지표') 칸 안에 세로로
-            쌓았더니 줄이 길어지면서 왼쪽('승+패 지표') 칸 아래에 못 쓰는 빈 공간이
-            생겼다. 그래서 위 두 칸과 무관하게 밴드 전체 폭으로 내려, 경기지표(뱃지) ·
-            배당차(표) · 시스템 판정 셋을 나란히 둔다. */}
-        <div className="pick-band-bottom-cols">
-          <div className="pick-band-match">
-            <h3>경기지표</h3>
-            <MatchIndicators row={row} h2hVerdict={verdict} h2hLoading={h2hLoading} />
-          </div>
-          <div className="pick-band-gap">
-            <h3>배당차</h3>
-            <GapTable row={row} />
-          </div>
-          <SystemVerdict row={row} scope={scope} />
         </div>
       </div>
     </section>
