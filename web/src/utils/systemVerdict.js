@@ -116,6 +116,27 @@ const GRADE = {
 // 쉬운데, 표본 자체가 다른 별도 측정이라 섞지 않는다.
 const GRADE_FLIP = { 같은편: [81.1, 834], 무관: [77.0, 939], 중립: [77.9, 1629], 상충: [73.0, 274] }
 
+// ── 해외 2칸(해초·해배)만 있을 때 = 국내배당 미등록 경기 (2026-09-02(6) 실측) ──
+// CLAUDE.md 4-1: 한쪽 배당이 없다고 판정을 안 내면 안 된다. 그래서 이 경우를 따로 쟀다.
+// 부분 데이터는 사실상 이 한 패턴이다 — 6대리그 35,970경기 중
+//   4칸 전부 90.52% / 해외 2칸만 8.71% / 나머지 자잘한 패턴 전부 합쳐 0.77%.
+// 그래서 이 표만 만들고, 그 밖의 패턴은 %·별 없이 방향만 보여준다(표본이 없다).
+//
+// ⚠ 여기서 하마터면 틀릴 뻔했다 — 해초·해배가 갈리면 resolveSystemPick이 이미 해배로
+//   뒤집는다. 그러니 그 줄은 '해초 기준'이 아니라 '뒤집힌 뒤(해배) 기준'으로 재야
+//   화면에 뜨는 픽과 %가 같아진다(해초 기준으로 재면 75.7%, 실제로는 79.0%).
+//
+// ⚠ 2칸일 때의 뒤집기는 3:1 다수결이 아니라 1:1 동점이라 의심했는데, 재보니
+//   그래도 해배가 낫다 — 갈린 1,049경기에서 해초 75.69% vs 해배 79.03%
+//   (z=-1.61, 5/6 리그). 근거가 4칸 때(z=3.00)만큼 세지는 않지만 방향은 같다.
+//
+// 국내배당이 없으면 KD도 없어서 무 보정은 '중립'이거나(플핸승이면) '무관'뿐이다
+//   — 실제로 2,872경기 중 같은편·상충은 각각 1건. 그래서 두 칸만 잰다.
+const GRADE_F2 = {
+  일치: { 중립: [83.4, 1333], 무관: [76.1, 490] },
+  뒤집힘: { 중립: [79.0, 735], 무관: [79.5, 312] },
+}
+
 // 별 등급 경계 — 실측 적중률로 자른다(83%↑ / 78%↑ / 그 아래).
 function starsOf(rate) {
   if (rate >= 83) return 3
@@ -123,23 +144,69 @@ function starsOf(rate) {
   return 1
 }
 
+const AGREE_LABEL = { 4: '4칸 만장일치', 3: '3칸 일치', 2: '반반', 1: '1칸만' }
+
 /**
- * 시스템 판정 등급.
+ * 시스템 판정 등급. 등록된 배당이 4칸을 다 못 채워도 판정은 낸다(CLAUDE.md 4-1) —
+ * 다만 실측 표본이 없는 조합이면 적중률·별을 빼고 방향과 일치도만 돌려준다.
+ *
  * @param {string[]} names 4칸 방향성 [국초, 국배, 해초, 해배] — null 가능
  * @param {string}   pick  resolveSystemPick()이 정한 최종 픽(해초 또는 뒤집힌 해배)
  * @param {'무고려'|'무제외'|null} tendency
  * @param {boolean}  measured 6대리그로 잰 값을 이 리그에 써도 되나(K리그는 false)
- * @param {boolean}  flipped resolveSystemPick()의 flipped 값 — 다수결로 뒤집혔는지
+ * @param {boolean}  flipped resolveSystemPick()의 flipped 값 — 뒤집혔는지
+ * @returns {{agree:number, known:number, rel:string, rate:?number, n:?number,
+ *            stars:?number, label:string}|null}
  */
 export function systemGrade(names, pick, tendency, measured = true, flipped = false) {
   const known = names.filter(Boolean)
-  if (!pick || !PICK_SIDE[pick] || known.length < 4) return null
+  if (!pick || !PICK_SIDE[pick] || !known.length) return null
   const agree = known.filter((n) => PICK_SIDE[n] === PICK_SIDE[pick]).length
   const rel = drawRelation(tendency, pick)
-  const cell = flipped ? GRADE_FLIP[rel] : (GRADE[agree] && GRADE[agree][rel])
+
+  // 어떤 표를 쓸 수 있는 모양인가 — 4칸 전부 / 해외 2칸만 / 그 외
+  const full = known.length === 4
+  const foreignOnly = !names[0] && !names[1] && !!names[2] && !!names[3]
+
+  let cell = null
+  let label
+  if (full) {
+    cell = flipped ? GRADE_FLIP[rel] : (GRADE[agree] && GRADE[agree][rel])
+    label = flipped ? '다수결(해초 고립)' : AGREE_LABEL[agree]
+  } else if (foreignOnly) {
+    // 같은편·상충은 이 모양에서 사실상 안 나온다(국내 무배당이 없으니) — 만약 나오면
+    // 잰 적 없는 조합이므로 중립 칸을 대신 쓴다.
+    const t = GRADE_F2[flipped ? '뒤집힘' : '일치']
+    cell = t[rel] || t['중립']
+    label = flipped ? '해외 2칸 · 해배를 따름' : '해외 2칸 일치'
+  } else {
+    label = `${known.length}칸만 등록됨`
+  }
+
   // K1/K2(내 데이터)는 6대리그로만 잰 값이라 숫자를 띄우지 않는다 — 방향과 일치도만.
-  if (!measured || !cell) return { agree, rel, rate: null, n: null, stars: null }
-  return { agree, rel, rate: cell[0], n: cell[1], stars: starsOf(cell[0]) }
+  if (!measured || !cell) return { agree, known: known.length, rel, rate: null, n: null, stars: null, label }
+  return { agree, known: known.length, rel, rate: cell[0], n: cell[1], stars: starsOf(cell[0]), label }
 }
 
-export const AGREE_LABEL = { 4: '4칸 만장일치', 3: '3칸 일치', 2: '반반', 1: '1칸만' }
+// ── 실제 결과 대조 — 시스템 판정(pick)이 이 경기에서 적중/보험/미적 중 뭐였나 ──
+// 정무 = 정(핸승,핸무) + 무   |   정역 = 정(핸승,핸무) + 역
+// 플핸무 = 플(무,역) + 핸무    |   플핸승 = 플(무,역) + 핸승   (directionName 주석과 동일)
+// RT코드: 1=핸승 2=핸무 3=무 4=역. hit/insure에 없는 나머지 하나가 미적(죽는 결과).
+const VERDICT_RULE = {
+  정무: { hit: [1, 2], insure: [3] },
+  정역: { hit: [1, 2], insure: [4] },
+  플핸무: { hit: [3, 4], insure: [2] },
+  플핸승: { hit: [3, 4], insure: [1] },
+}
+
+export function sysPickVerdict(pick, rt) {
+  const rule = VERDICT_RULE[pick]
+  if (!rule) return null
+  const code = Number(rt)
+  if (!Number.isFinite(code) || code < 1 || code > 4) return null
+  if (rule.hit.includes(code)) return '적중'
+  if (rule.insure.includes(code)) return '보험'
+  return '미적'
+}
+
+export const VERDICT_TONE = { 적중: 'yellow', 보험: 'teal', 미적: 'red' }

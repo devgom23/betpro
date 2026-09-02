@@ -7,7 +7,8 @@ import { formatTime, formatDt, scoreClass } from '../../utils/format'
 import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
-import { drawTendency, drawRelation, systemGrade, resolveSystemPick, AGREE_LABEL } from '../../utils/systemVerdict'
+import { drawTendency, drawRelation, systemGrade, resolveSystemPick, sysPickVerdict, VERDICT_TONE } from '../../utils/systemVerdict'
+import { expectedScore } from '../../utils/expectedScore'
 import './MatchDetailModal.css'
 
 
@@ -1815,67 +1816,132 @@ function findSignal(data, key) {
 // K1/K2(내 데이터)는 6대리그로만 잰 값이라 % 와 별을 띄우지 않는다 — 방향과 일치도만.
 // names·pick·flipped는 PickBand가 한 번만 계산해서 내려준다 — 경기지표의 '무' 뱃지도
 // 같은 pick이 필요해서(같은방향/다른방향 표시), 여기서 또 계산하면 두 곳이 따로 놀 수 있다.
-function SystemVerdict({ row, scope, names, pick, flipped }) {
+// 표만 — 경기지표·배당차·예상점수와 같은 grid 줄(pick-band-bottom-cols) 안에 들어간다.
+// 결과 판정 줄(픽·별점·%·적중배지)은 길이가 들쭉날쭉해서 SystemVerdictSummary로
+// 따로 뺐다 — 한 그리드 칸 안에 같이 두면 그 칸이 늘어나 옆 칸(예상점수)까지의
+// 간격이 넓어져 보였다.
+function SystemVerdictTable({ names, flipped }) {
+  const cell = (v) => (v ? <b className="sys-name">{v}</b> : <span className="dir-none">—</span>)
+  return (
+    <table className="detail-table sys-table">
+      <thead>
+        <tr>
+          <th className="row-label">시스템 판정</th>
+          <th>국배</th>
+          <th>해배</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="row-label">초기</td>
+          <td>{cell(names[0])}</td>
+          <td className={flipped ? undefined : 'sys-pick-cell'}>{cell(names[2])}</td>
+        </tr>
+        <tr>
+          <td className="row-label">배변</td>
+          <td>{cell(names[1])}</td>
+          <td className={flipped ? 'sys-pick-cell' : undefined}>{cell(names[3])}</td>
+        </tr>
+      </tbody>
+    </table>
+  )
+}
+
+// 결과 판정 줄 — grid(pick-band-bottom-cols) 바깥, 전체 폭에 걸쳐 따로 한 줄로 둔다.
+function SystemVerdictSummary({ row, scope, names, pick, flipped }) {
+  if (!pick) return null
   const tendency = drawTendency(row)
   const grade = systemGrade(names, pick, tendency, scope !== 'user', flipped)
-  const cell = (v) => (v ? <b className="sys-name">{v}</b> : <span className="dir-none">—</span>)
-  // 뒤집혔을 때는 grade.agree가 늘 3(나머지 셋이 새 pick과 같은 편)으로 나오는데,
-  // 이건 '원래 3칸 일치'와 표본 자체가 다른 별개 측정이라 같은 라벨을 쓰면 안 된다.
-  const agreeLabel = flipped ? '다수결(해초 고립)' : AGREE_LABEL[grade && grade.agree]
+  // 라벨은 systemGrade가 붙여 준다 — 4칸이냐 해외 2칸이냐에 따라 말이 달라야 하는데
+  // (뒤집힘도 4칸은 3:1 다수결, 2칸은 그냥 해배를 따른 것) 밖에서 만들면 어긋난다.
+  const agreeLabel = (grade && grade.label) || ''
+  const verdict = sysPickVerdict(pick, row.RT)
+  // 국내배당이 아직 없으면 '다수결'이 아니라 그냥 해배를 따른 것이다.
+  const foreignOnly = !names[0] && !names[1]
 
   return (
-    <div className="sys-band">
-      <table className="detail-table sys-table">
-        <thead>
-          <tr>
-            <th className="row-label">시스템 판정</th>
-            <th>국배</th>
-            <th>해배</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td className="row-label">초기</td>
-            <td>{cell(names[0])}</td>
-            <td className={flipped ? undefined : 'sys-pick-cell'}>{cell(names[2])}</td>
-          </tr>
-          <tr>
-            <td className="row-label">배변</td>
-            <td>{cell(names[1])}</td>
-            <td className={flipped ? 'sys-pick-cell' : undefined}>{cell(names[3])}</td>
-          </tr>
-        </tbody>
-      </table>
-      {pick && (
-        <p className="sys-head">
-          <b className={`sys-pick sys-pick-${DIR_SIDE[pick] === '정' ? 'j' : 'p'}`}>{pick}</b>
-          {flipped && (
-            <span className="sys-flip" title="해초(해배·초기)가 나머지 3칸(국초·국배·해배)과
-전부 달라서 다수결로 뒤집었다 — 해초를 그대로 따르면 74.6%, 뒤집으면 78.0%(6대리그
-3,676경기, z=3.00).">
-              다수결
-            </span>
-          )}
-          {grade && grade.stars !== null && (
-            <>
-              <span
-                className="sys-stars"
-                title={`${agreeLabel} · 무배당 ${grade.rel}`
-                  + '(경기지표의 \'무\' 뱃지 참고)'}
-              >
-                {'★'.repeat(grade.stars)}{'☆'.repeat(3 - grade.stars)}
-              </span>
-              <span className="sys-rate">{Math.round(grade.rate)}%</span>
-            </>
-          )}
-          {grade && grade.stars === null && (
-            <span className="detail-section-note">
-              {scope === 'user' ? '내 데이터는 적중률을 재지 않았습니다' : agreeLabel}
-            </span>
-          )}
-        </p>
+    <p className="sys-head">
+      <b className={`sys-pick sys-pick-${DIR_SIDE[pick] === '정' ? 'j' : 'p'}`}>{pick}</b>
+      {flipped && (
+        <span
+          className="sys-flip"
+          title={foreignOnly
+            ? '국내배당이 아직 없어 해외 두 칸만 있는데 그 둘이 갈렸다 — 해배를 따랐다.'
+              + '\n해초를 그대로 따르면 75.7%, 해배를 따르면 79.0%(갈린 1,049경기, z=-1.61, 5/6 리그).'
+              + '\n※ 4칸일 때(z=3.00)만큼 근거가 세지는 않지만 방향은 같다.'
+            : '해초(해배·초기)가 나머지 3칸(국초·국배·해배)과 전부 달라서 다수결로 뒤집었다'
+              + ' — 해초를 그대로 따르면 74.6%, 뒤집으면 78.0%(6대리그 3,676경기, z=3.00).'}
+        >
+          {foreignOnly ? '해배' : '다수결'}
+        </span>
       )}
-    </div>
+      {grade && grade.stars !== null && (
+        <>
+          <span
+            className="sys-stars"
+            title={`${agreeLabel} · 무배당 ${grade.rel}`
+              + '(경기지표의 \'무\' 뱃지 참고)'}
+          >
+            {'★'.repeat(grade.stars)}{'☆'.repeat(3 - grade.stars)}
+          </span>
+          <span className="sys-rate">{Math.round(grade.rate)}%</span>
+        </>
+      )}
+      {verdict && (
+        <span
+          className="match-chip match-chip-tone sys-verdict"
+          style={{ background: `var(--chip-${VERDICT_TONE[verdict]}-bg)`, color: `var(--chip-${VERDICT_TONE[verdict]}-fg)` }}
+        >
+          {verdict}
+        </span>
+      )}
+      {grade && grade.stars === null && (
+        <span className="detail-section-note">
+          {scope === 'user' ? '내 데이터는 적중률을 재지 않았습니다' : agreeLabel}
+        </span>
+      )}
+    </p>
+  )
+}
+
+// 예상점수 — 시스템 판정이 낸 픽에 맞는 스코어 한 개를 초기/배변 두 시점으로.
+// 두 줄 다 '그 시점에 등록된 배당 전부'(국배+해배)로 다시 만든다 — CLAUDE.md 4-1.
+function ScoreTable({ row, pick }) {
+  const cell = (final) => {
+    const s = expectedScore(row, pick, final)
+    if (!s) return <span className="dir-none">—</span>
+    return (
+      <b
+        className="score-val"
+        title={`${final ? '배변' : '초기'} 배당 기준 — ${s.markets === 2 ? '국배·해배 둘 다' : '한쪽 배당만'} 반영.`
+          + `\n같은 배당대에서 '${pick}'의 배제(안 나온다고 본 결과)를 지킨 경기 `
+          + `${s.n.toLocaleString()}건 중 이 스코어가 ${s.rate}%로 가장 많았습니다.`
+          + '\n※ 스코어 맞히기는 원래 어렵습니다 — 아무것도 안 보고 1-1을 부르면 11.71%,'
+          + ' 이 표대로 부르면 16.53%(6대리그 35,947경기).'}
+      >
+        {s.home}-{s.away}
+      </b>
+    )
+  }
+  return (
+    <table className="detail-table sys-table score-table">
+      <thead>
+        <tr>
+          <th className="row-label">예상점수</th>
+          <th>홈-원정</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="row-label">초기</td>
+          <td>{cell(false)}</td>
+        </tr>
+        <tr>
+          <td className="row-label">배변</td>
+          <td>{cell(true)}</td>
+        </tr>
+      </tbody>
+    </table>
   )
 }
 
@@ -1908,8 +1974,8 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
             <RiskCard row={row} />
             {/* 경기지표·배당차·시스템 판정은 왼쪽('승+패 지표') 칸과는 무관하게
                 이 칸(확률 지표) 표 바로 밑에만 붙인다 — 왼쪽 칸 아래로는 안 내려간다.
-                예전엔 이 셋을 세로로 쌓아서 줄이 길어졌는데, 이 칸 폭 안에서
-                가로 3단(뱃지·표·표)으로 접어 줄 수를 줄인다. */}
+                예전엔 이 셋을 세로로 쌓아서 줄이 길었는데, 이 칸 폭 안에서 가로
+                3단(뱃지·표·표)으로 접어 줄 수를 줄인다. */}
             <div className="pick-band-bottom-cols">
               <div className="pick-band-match">
                 <h3>경기지표</h3>
@@ -1918,7 +1984,16 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
               <div className="pick-band-gap">
                 <GapTable row={row} />
               </div>
-              <SystemVerdict row={row} scope={scope} names={names} pick={pick} flipped={flipped} />
+              <div className="pick-band-sys">
+                <SystemVerdictTable names={names} flipped={flipped} />
+                {/* 결과 판정 줄은 시스템 판정 표 바로 밑에 무조건 붙는다 — absolute로
+                    빼서 이 줄의 길이·존재가 4단 grid의 폭/높이 계산에 안 들어가게
+                    한다. 옆(경기지표) 칸이 길어져도 이 줄의 위치는 안 흔들린다. */}
+                <SystemVerdictSummary row={row} scope={scope} names={names} pick={pick} flipped={flipped} />
+              </div>
+              <div className="pick-band-score">
+                <ScoreTable row={row} pick={pick} />
+              </div>
             </div>
           </div>
         </div>

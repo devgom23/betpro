@@ -727,7 +727,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-surface-2);
-  padding: 12px 14px 14px;
+  padding: 12px 14px 12px;
   margin: 0 0 18px;
 }
 
@@ -777,15 +777,26 @@
 /* ── 경기지표 · 배당차 · 시스템 판정 — '확률 지표' 표 바로 밑, 그 칸 폭 안에서만
    나란히 셋(왼쪽 '승+패 지표' 칸과는 무관 — 그 칸 아래로는 안 내려간다).
    예전엔 이 셋을 이 칸 안에서 세로로 쌓아 줄이 길었는데, 가로 3단으로 접었다. */
-/* 세 칸 다 내용 폭만큼만 차지하게(max-content) — fr로 나누면 표(국배/해배 51·86px로
+/* 네 칸 다 내용 폭만큼만 차지하게(max-content) — fr로 나누면 표(국배/해배 51·86px로
    고정한) 폭보다 트랙이 넓어져서, gap(10px)을 줄여도 표 사이가 실제로는 훨씬 벌어져
-   보였다. 남는 공간은 그냥 오른쪽에 비워 둔다. */
+   보였다. 남는 공간은 그냥 오른쪽에 비워 둔다.
+   셋째 트랙(시스템 판정)만 210px로 고정한다 — 결과 판정 줄(.sys-head)이 표
+   바로 밑에 같은 흐름(in-flow)으로 붙어 있는데, 이 줄이 absolute가 아니라서
+   grid가 '내용 그대로'로 트랙 폭을 재면 이 줄의 nowrap 폭에 맞춰 칸이 넓어진다.
+   표 자체는 182px(row-label + 51px×2)뿐이지만, 결과 판정 줄에 '다수결'+'보험'
+   처럼 뱃지가 둘 다 붙으면 실측 최대 201px까지 나간다(코번트리 vs 헐시티,
+   '정역 다수결 ★☆☆ 78% 보험') — 182px로 두면 그 줄이 줄바꿈돼 버렸다.
+   예전엔 absolute + padding-bottom으로 자리를 미리 비웠는데, 그러면 경기지표
+   칸이 짧을 때도 항상 같은 여백(28px)을 쓰게 되어 카드가 필요 이상으로 커
+   보였다(왼쪽 '승+패 지표' 칸 271px ↔ 오른쪽 '확률 지표' 칸 292px). in-flow로
+   두면 결과 판정 줄이 실제로 차지하는 만큼만 카드가 커진다. */
 .pick-band-bottom-cols {
   display: grid;
-  grid-template-columns: max-content max-content max-content;
+  grid-template-columns: max-content max-content 210px max-content;
   gap: 10px;
   margin-top: 12px;
   padding-top: 12px;
+  padding-bottom: 0;
   border-top: 1px solid var(--border);
   align-items: start;
 }
@@ -794,8 +805,8 @@
   .pick-band-bottom-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* 경기지표 제목 — 배당차·시스템 판정은 표 안(왼쪽 위 빈 칸)에 이름을 넣는 걸로
-   바뀌어서 더 이상 h3가 없다. */
+/* 경기지표 제목 — 배당차·시스템 판정·예상점수는 표 안(왼쪽 위 칸)에 이름을 넣는
+   걸로 바뀌어서 더 이상 h3가 없다. */
 .pick-band-match h3 {
   margin: 0 0 8px;
   font-size: 13px;
@@ -960,15 +971,25 @@
    합친 결론. 예전엔 경기지표 아래에 쌓여서 위 테두리로 갈랐는데, 2026-09-02 셋을
    나란히 두면서(.pick-band-bottom-cols) 그 구분선은 필요 없어졌다. */
 
-/* 제목 옆 결론 한 줄: [플핸무] ★★★ 86% */
-/* 표 아래 결론 한 줄 — 예전엔 "시스템 판정" 제목과 한 줄에 있었는데, 그 제목을
-   표 안(왼쪽 위 빈 칸)으로 옮기면서 <p>로 뺐다. */
+/* 시스템 판정 표를 담는 칸 — 결과 판정 줄(.sys-head)의 absolute 기준점이 된다. */
+/* 결과 판정 줄: [플핸무] 다수결 ★★★ 86% 적중 — pick-band-bottom-cols의 2행 3열에
+   명시적으로 배치한다(시스템 판정과 같은 열, 그 다음 행). grid-row를 못박아 두면
+   1행의 다른 칸(특히 경기지표 — 뱃지가 2~3개로 늘면 세로로 길어진다)이 아무리
+   길어져도 이 줄은 항상 '1행 다음'이라 절대 그 옆에 나란히 붙어 보이지 않는다. */
+/* 시스템 판정 표를 담는 칸 — 결과 판정 줄(.sys-head)의 absolute 기준점이 된다. */
+/* min-width:0 — grid item 기본값(min-width:auto)은 내용의 min-content 폭 아래로
+   못 줄어들게 막는데, 트랙을 182px로 고정해 놨으니 이 칸도 그 밑으로 줄어들 수
+   있어야 한다(안 그러면 트랙 폭 고정이 무력화된다). */
+.pick-band-sys {
+  min-width: 0;
+}
+
 .sys-head {
+  margin: 6px 0 0;        /* 제목과 부가설명 사이 간격 눈금 — 표 바로 밑 */
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 8px;              /* 나열 항목 사이 기본 간격 */
-  margin: 6px 0 0;        /* 제목과 부가설명 사이 간격 눈금 */
 }
 
 .sys-pick {
@@ -1024,6 +1045,19 @@
 .detail-table.sys-table.gap-table th:not(.row-label),
 .detail-table.sys-table.gap-table td:not(.row-label) {
   width: 86px;
+}
+
+/* 예상점수 표 — 값 칸이 '홈-원정' 머리글을 담아야 해서 시스템 판정(51px)보다 넓다. */
+.detail-table.sys-table.score-table th:not(.row-label),
+.detail-table.sys-table.score-table td:not(.row-label) {
+  width: 58px;
+}
+
+.score-val {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
 }
 
 .sys-table .row-label {
