@@ -504,10 +504,14 @@ def _apply_league_filters(df, season, round, odds_query, team=None, team_side=No
             rival_odds = fl.where(is_home, fw)
             sub = sub[team_odds < rival_odds] if team_fav == "fav" else sub[team_odds > rival_odds]
 
-    # 최신 경기가 위로 오게 정렬한다(시즌·라운드·날짜는 내림차순 — 현재→과거).
-    # 같은 (시즌,라운드,날짜) 안에서는 원래 순서(No 순)를 유지한다 — 여기까지
-    # 뒤집으면 그 라운드 안에서 경기 나열 순서가 부자연스러워진다.
-    if not sub.empty:
+    # 팀·배당값으로 '검색'했을 때만 최신 경기가 위로 오게 정렬한다(현재→과거) —
+    # 시즌·라운드만 지정한 일반 리그 보기는 원래 순서(시간순, 과거→현재) 그대로
+    # 둔다. 처음엔 이 함수를 거치는 모든 조회에 걸었더니, 배당 조건 없이 그냥
+    # 시즌 전체를 훑어보는 '리그별 보기'까지 최신순으로 뒤집혀서 이상해졌다
+    # (2026-09-03 사용자 지적). 같은 (시즌,라운드,날짜) 안에서는 원래 순서(No 순)
+    # 를 유지한다 — 여기까지 뒤집으면 그 라운드 안 경기 나열이 부자연스러워진다.
+    has_search_condition = bool(team) or any(v is not None for v in odds_query.values())
+    if has_search_condition and not sub.empty:
         key = _row_order_sort_key(sub)
         sub = sub.loc[key.sort_values(
             ["S", "_r", "_day", "_order", "_no"],

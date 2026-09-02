@@ -4,19 +4,25 @@ import { RT_CHIP } from '../RtBadge/RtBadge'
 // 아래는 RT_ORDER 로만 순회하므로 조회되지 않는다.
 const RT_ORDER = ['핸승', '핸무', '무', '역']
 
+// 조회 결과가 0건이라 백엔드가 summary를 안 내려줄 때 쓰는 빈 값 — 뱃지 자체가
+// 사라지는 대신 0으로 채워서 항상 보이게 한다(2026-09-03).
+const EMPTY_RT_SUMMARY = { 핸승: 0, 핸무: 0, 무: 0, 역: 0, 총: 0 }
+
+function pct(summary, name) {
+  return summary.총 > 0 ? ((summary[name] / summary.총) * 100).toFixed(1) : '0.0'
+}
+
 // 핸승/핸무/무/역 결과분포를 보여준다. (통합DB탭=카드형 / 리그탭 대시보드=한 줄 색상 배지)
 export default function RtSummaryBar({ summary, inline = false }) {
-  if (!summary) return null
+  const s = summary || EMPTY_RT_SUMMARY
 
   if (inline) {
     return (
       <span className="rt-summary-inline">
         {RT_ORDER.map((name) => (
           <span className="rt-badge-item" key={name} style={RT_CHIP[name]}>
-            {name} {summary[name].toLocaleString()}
-            <span className="rt-badge-pct">
-              ({((summary[name] / summary.총) * 100).toFixed(1)}%)
-            </span>
+            {name} {(s[name] ?? 0).toLocaleString()}
+            <span className="rt-badge-pct">({pct(s, name)}%)</span>
           </span>
         ))}
       </span>
@@ -28,8 +34,8 @@ export default function RtSummaryBar({ summary, inline = false }) {
       {RT_ORDER.map((name) => (
         <div className="rt-metric" key={name}>
           <span className="rt-metric-name">{name}</span>
-          <span className="rt-metric-value">{summary[name].toLocaleString()}</span>
-          <span className="rt-metric-pct">{((summary[name] / summary.총) * 100).toFixed(1)}%</span>
+          <span className="rt-metric-value">{(s[name] ?? 0).toLocaleString()}</span>
+          <span className="rt-metric-pct">{pct(s, name)}%</span>
         </div>
       ))}
     </div>
@@ -45,19 +51,18 @@ const PICK_CHIP = {
   보험: { background: 'var(--chip-teal-bg)', color: 'var(--chip-teal-fg)' },
   미적: { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' },
 }
+const EMPTY_PICK_SUMMARY = { 적중: 0, 보험: 0, 미적: 0, 총: 0 }
 
 // PICK 결과(적중/보험/미적) 분포 배지. 플핸예측 컬럼의 배경색과 동일한 색상을 쓴다.
 // 보험 = 핸승 여부(큰 분류)는 맞혔지만 괄호 안 세부결과(핸무/무/역)는 다르게 나온 경우.
 export function PickSummaryBar({ summary }) {
-  if (!summary) return null
+  const s = summary || EMPTY_PICK_SUMMARY
   return (
     <span className="rt-summary-inline">
       {PICK_ORDER.map((name) => (
         <span className="rt-badge-item" key={name} style={PICK_CHIP[name]}>
-          {name} {summary[name].toLocaleString()}
-          <span className="rt-badge-pct">
-            ({((summary[name] / summary.총) * 100).toFixed(1)}%)
-          </span>
+          {name} {(s[name] ?? 0).toLocaleString()}
+          <span className="rt-badge-pct">({pct(s, name)}%)</span>
         </span>
       ))}
     </span>
