@@ -777,10 +777,13 @@
 /* ── 경기지표 · 배당차 · 시스템 판정 — '확률 지표' 표 바로 밑, 그 칸 폭 안에서만
    나란히 셋(왼쪽 '승+패 지표' 칸과는 무관 — 그 칸 아래로는 안 내려간다).
    예전엔 이 셋을 이 칸 안에서 세로로 쌓아 줄이 길었는데, 가로 3단으로 접었다. */
+/* 세 칸 다 내용 폭만큼만 차지하게(max-content) — fr로 나누면 표(국배/해배 51·86px로
+   고정한) 폭보다 트랙이 넓어져서, gap(10px)을 줄여도 표 사이가 실제로는 훨씬 벌어져
+   보였다. 남는 공간은 그냥 오른쪽에 비워 둔다. */
 .pick-band-bottom-cols {
   display: grid;
-  grid-template-columns: 0.7fr 1fr 1.3fr;
-  gap: 12px;
+  grid-template-columns: max-content max-content max-content;
+  gap: 10px;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
@@ -791,10 +794,9 @@
   .pick-band-bottom-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* 경기지표·배당차 제목 — 시스템 판정 제목(.pick-band-risk-col-title 재사용)과
-   크기·색을 맞춘다. */
-.pick-band-match h3,
-.pick-band-gap h3 {
+/* 경기지표 제목 — 배당차·시스템 판정은 표 안(왼쪽 위 빈 칸)에 이름을 넣는 걸로
+   바뀌어서 더 이상 h3가 없다. */
+.pick-band-match h3 {
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
@@ -959,10 +961,14 @@
    나란히 두면서(.pick-band-bottom-cols) 그 구분선은 필요 없어졌다. */
 
 /* 제목 옆 결론 한 줄: [플핸무] ★★★ 86% */
+/* 표 아래 결론 한 줄 — 예전엔 "시스템 판정" 제목과 한 줄에 있었는데, 그 제목을
+   표 안(왼쪽 위 빈 칸)으로 옮기면서 <p>로 뺐다. */
 .sys-head {
-  display: inline-flex;
+  display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 8px;              /* 나열 항목 사이 기본 간격 */
+  margin: 6px 0 0;        /* 제목과 부가설명 사이 간격 눈금 */
 }
 
 .sys-pick {
@@ -1000,10 +1006,24 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 4칸 표 — 확률 지표 표보다 좁아도 되므로 폭을 내용에 맡긴다(늘어나면 오른쪽이 빈다). */
+/* 4칸 표 — 확률 지표 표보다 좁아도 되므로 폭을 내용에 맡긴다(늘어나면 오른쪽이 빈다).
+   국배/해배 칸은 값이 있을 때(예: "0.57플80%")와 없을 때("—")로 내용 길이가 갈려서,
+   table-layout:auto로 두면 경기마다 표 폭이 들쭉날쭉 흔들렸다 — 값이 있을 때의
+   최대 폭으로 고정해 국배 유무와 상관없이 표 폭이 항상 같게 한다(실측 최대
+   85.45px → 86px). 시스템 판정 표는 칸에 픽 이름만 들어가 더 좁다(51px). */
 .detail-table.sys-table {
   width: auto;
-  table-layout: auto;
+  table-layout: fixed;
+}
+
+.detail-table.sys-table th:not(.row-label),
+.detail-table.sys-table td:not(.row-label) {
+  width: 51px;
+}
+
+.detail-table.sys-table.gap-table th:not(.row-label),
+.detail-table.sys-table.gap-table td:not(.row-label) {
+  width: 86px;
 }
 
 .sys-table .row-label {

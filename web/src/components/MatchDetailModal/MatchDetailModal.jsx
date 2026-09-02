@@ -313,7 +313,7 @@ function GapTable({ row }) {
     <table className="detail-table sys-table gap-table">
       <thead>
         <tr>
-          <th className="row-label" />
+          <th className="row-label">배당차</th>
           <th>국배</th>
           <th>해배</th>
         </tr>
@@ -1825,42 +1825,10 @@ function SystemVerdict({ row, scope, names, pick, flipped }) {
 
   return (
     <div className="sys-band">
-      <h3 className="pick-band-risk-col-title">
-        시스템 판정
-        {pick && (
-          <span className="sys-head">
-            <b className={`sys-pick sys-pick-${DIR_SIDE[pick] === '정' ? 'j' : 'p'}`}>{pick}</b>
-            {flipped && (
-              <span className="sys-flip" title="해초(해배·초기)가 나머지 3칸(국초·국배·해배)과
-전부 달라서 다수결로 뒤집었다 — 해초를 그대로 따르면 74.6%, 뒤집으면 78.0%(6대리그
-3,676경기, z=3.00).">
-                다수결
-              </span>
-            )}
-            {grade && grade.stars !== null && (
-              <>
-                <span
-                  className="sys-stars"
-                  title={`${agreeLabel} · 무배당 ${grade.rel}`
-                    + '(경기지표의 \'무\' 뱃지 참고)'}
-                >
-                  {'★'.repeat(grade.stars)}{'☆'.repeat(3 - grade.stars)}
-                </span>
-                <span className="sys-rate">{Math.round(grade.rate)}%</span>
-              </>
-            )}
-            {grade && grade.stars === null && (
-              <span className="detail-section-note">
-                {scope === 'user' ? '내 데이터는 적중률을 재지 않았습니다' : agreeLabel}
-              </span>
-            )}
-          </span>
-        )}
-      </h3>
       <table className="detail-table sys-table">
         <thead>
           <tr>
-            <th className="row-label" />
+            <th className="row-label">시스템 판정</th>
             <th>국배</th>
             <th>해배</th>
           </tr>
@@ -1878,6 +1846,35 @@ function SystemVerdict({ row, scope, names, pick, flipped }) {
           </tr>
         </tbody>
       </table>
+      {pick && (
+        <p className="sys-head">
+          <b className={`sys-pick sys-pick-${DIR_SIDE[pick] === '정' ? 'j' : 'p'}`}>{pick}</b>
+          {flipped && (
+            <span className="sys-flip" title="해초(해배·초기)가 나머지 3칸(국초·국배·해배)과
+전부 달라서 다수결로 뒤집었다 — 해초를 그대로 따르면 74.6%, 뒤집으면 78.0%(6대리그
+3,676경기, z=3.00).">
+              다수결
+            </span>
+          )}
+          {grade && grade.stars !== null && (
+            <>
+              <span
+                className="sys-stars"
+                title={`${agreeLabel} · 무배당 ${grade.rel}`
+                  + '(경기지표의 \'무\' 뱃지 참고)'}
+              >
+                {'★'.repeat(grade.stars)}{'☆'.repeat(3 - grade.stars)}
+              </span>
+              <span className="sys-rate">{Math.round(grade.rate)}%</span>
+            </>
+          )}
+          {grade && grade.stars === null && (
+            <span className="detail-section-note">
+              {scope === 'user' ? '내 데이터는 적중률을 재지 않았습니다' : agreeLabel}
+            </span>
+          )}
+        </p>
+      )}
     </div>
   )
 }
@@ -1919,7 +1916,6 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
                 <MatchIndicators row={row} h2hVerdict={verdict} h2hLoading={h2hLoading} pick={pick} />
               </div>
               <div className="pick-band-gap">
-                <h3>배당차</h3>
                 <GapTable row={row} />
               </div>
               <SystemVerdict row={row} scope={scope} names={names} pick={pick} flipped={flipped} />
