@@ -91,6 +91,14 @@ function homeIsFav(row) {
   return null
 }
 
+// homeIsFav와 달리 국내·해외를 하나로 합치지 않고 시장별로 따로 본다 — 두 시장이
+// 서로 다른 팀을 정배로 보는 경기가 있는지 알아내는 용도(oddsSplitChips 참고).
+function marketFavHome(w, l) {
+  const a = numOrNull(w)
+  const b = numOrNull(l)
+  return a !== null && b !== null && a !== b ? a < b : null
+}
+
 // 똥배 표시 — 리그 표의 '똥배' 그룹(똥 / 분석 / 똥사)과 같은 값을 배당 제목 옆에 한 줄로.
 // 등급 경계와 색은 columnGroups.js의 DDONG_RISK_CUTS와 맞춰 둔다(계산 근거는
 // api/data_access.py의 _ddong_risk 주석에 6대리그 실측과 함께 있다).
@@ -142,6 +150,31 @@ function ddongChips(row) {
     >
       {ddong}
       {risk !== null && ` · ${label} ${Math.round(risk)}%`}
+    </MatchChip>,
+  ]
+}
+
+// 국내·해외 정배 엇갈림 뱃지 — 두 시장이 같은 경기를 다른 팀이 정배라고 본다.
+// homeIsFav 하나로 화면 곳곳(제목의 (정)/(역), 시스템 판정 화살표 등)이 국내배당을
+// 우선으로 쓰는데, 그러면 해외배당이 실제로는 반대를 가리키고 있다는 걸 화면
+// 어디서도 알 수 없었다(2026-09-02, 선덜랜드 vs 풀럼 사례로 이 뱃지가 필요해짐).
+// '국≠해' — ≠는 두 시장이 다르다는 뜻 그대로.
+function oddsSplitChips(row) {
+  const dom = marketFavHome(row.KW, row.KL)
+  const forr = marketFavHome(row.FW, row.FL)
+  if (dom === null || forr === null || dom === forr) return []
+  return [
+    <MatchChip
+      key="split"
+      label="정배"
+      tone="yellow"
+      title={`국내배당은 ${dom ? '홈' : '원정'}팀을, 해외배당은 ${forr ? '홈' : '원정'}팀을`
+        + ' 정배로 본다 — 두 시장이 이 경기를 다르게 본다는 뜻(6대리그 실측 4.25%,'
+        + ' 16,748경기 중 711건). 화면의 (정)/(역) 표시와 시스템 판정의 전적 관계는'
+        + ' 국내배당을 우선으로 쓴다(homeIsFav) — 해외배당 기준 지표(해초·해배)를'
+        + ' 볼 때는 정배가 반대일 수 있다는 걸 감안해야 한다.'}
+    >
+      국≠해
     </MatchChip>,
   ]
 }
@@ -402,8 +435,9 @@ function drawChips(row, pick) {
 
 function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick }) {
   // 배당차는 2026-09-02부터 옆 칸에 표로 따로 뺐다(GapTable) — 여기 줄은
-  // 똥배 → 전적 → 무만 세로로 쌓는다.
-  const chips = [...ddongChips(row), ...h2hChips(verdict, h2hLoading, row, pick), ...drawChips(row, pick)]
+  // 똥배 → 국/해 엇갈림 → 전적 → 무만 세로로 쌓는다.
+  const chips = [...ddongChips(row), ...oddsSplitChips(row),
+    ...h2hChips(verdict, h2hLoading, row, pick), ...drawChips(row, pick)]
   return (
     <span className="match-chip-row">
       {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}
