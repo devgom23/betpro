@@ -1772,11 +1772,17 @@ function SystemVerdict({ row, scope }) {
           </tr>
         </tbody>
       </table>
+      {/* '무 보정'이라는 이름은 버렸다 — 값이 '중립'일 때 "보정: 중립"처럼 말이
+          꼬여서 헷갈렸다(2026-09-02 피드백). 대신 두 정보를 분리한다:
+            ① 무배당이 어느 쪽으로 치우쳤나(무고려/무제외/보통)
+            ② 그게 지금 판정(pick)과 어울리는지(→ 같은편/상충/무관)
+          치우침이 없으면 ②는 아예 말이 안 되는 질문이라 화살표째로 생략한다. */}
       <div className="sys-note">
-        <span className="sys-note-label">무 보정</span>
+        <span className="sys-note-label">무배당</span>
         {tendency ? (
           <>
             <span className="sys-tend">{tendency}</span>
+            <span className="sys-arrow">→</span>
             <span className={`sys-rel sys-rel-${
               grade && grade.rel === '같은편' ? 'ok'
                 : grade && grade.rel === '상충' ? 'bad' : 'none'}`}
@@ -1785,10 +1791,16 @@ function SystemVerdict({ row, scope }) {
             </span>
           </>
         ) : (
-          <span className="dir-none">중립 (무배당이 한쪽으로 치우치지 않음)</span>
+          <span
+            className="sys-tend sys-tend-neutral"
+            title="국내 무배당 3.20 미만 + 해외 3.40 미만이면 '무고려', 국내 3.80 이상이면
+'무제외'로 표시합니다. 그 사이는 무가 특별히 많지도 적지도 않은 구간이라 '보통'입니다."
+          >
+            보통
+          </span>
         )}
         {grade && grade.rel === '무관' && (
-          <span className="detail-section-note">플핸승은 무배당과 무관합니다</span>
+          <span className="detail-section-note">핸무는 무배당과 무관해 플핸승엔 영향 없음</span>
         )}
       </div>
     </div>

@@ -1031,6 +1031,18 @@
   color: var(--text-secondary);
 }
 
+/* 무배당 치우침이 없을 때 — 강조하지 않는다(치우친 쪽만 눈에 띄면 된다). */
+.sys-tend-neutral {
+  font-weight: 400;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+/* "무고려 → 같은편"처럼 원인→결과를 잇는 화살표. 구분자라 흐리게. */
+.sys-arrow {
+  color: var(--text-muted);
+}
+
 /* 무 보정이 판정과 같은 편인지 — 초록/빨강은 앱의 '좋다/나쁘다' 축을 그대로 쓴다. */
 .sys-rel-ok { color: var(--chip-green-fg); font-weight: 700; }
 .sys-rel-bad { color: var(--chip-red-fg); font-weight: 700; }
