@@ -7,7 +7,7 @@ import { formatTime, formatDt, scoreClass } from '../../utils/format'
 import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
-import { drawTendency, systemGrade, AGREE_LABEL } from '../../utils/systemVerdict'
+import { drawTendency, drawRelation, systemGrade, AGREE_LABEL } from '../../utils/systemVerdict'
 import './MatchDetailModal.css'
 
 
@@ -327,12 +327,18 @@ function h2hChips(verdict, loading) {
 // ── 무 뱃지 (2026-09-02 실측) ──
 // 국내 무배당이 낮으면 무가 시장 예상보다 더 나오고, 높으면 덜 나온다.
 // 기준선과 근거는 utils/systemVerdict.js 주석에 전부 있다.
-function drawChips(row) {
+// 2026-09-02(2) — 시스템 판정 쪽 '무배당' 줄을 없애고, 그게 하던 일(지금 픽과
+// 같은 방향인지)을 이 뱃지 하나로 합쳤다. 같은 값을 두 군데서 다르게 말하지 않는다.
+const DRAW_REL_LABEL = { 같은편: '같은방향', 상충: '다른방향', 무관: '무관' }
+
+function drawChips(row, pick) {
   const t = drawTendency(row)
   if (!t) return []
   const kd = numOrNull(row.KD)
   const fd = numOrNull(row.FD)
   const heavy = t === '무고려'
+  const rel = pick ? drawRelation(t, pick) : null
+  const relLabel = rel ? DRAW_REL_LABEL[rel] : null
   return [
     <MatchChip
       key="draw"
@@ -345,17 +351,25 @@ function drawChips(row) {
             + ' 무를 적중으로 먹는 플핸무가 82.1%로 유리하고, 무가 죽는 정역은 불리하다.'
           : '국내 무배당이 높다 — 이 구간 실제 무 17.2%(시장예상 18.7%).'
             + ' 무가 죽는 정무·정역이 유리하고(정무 89.3%), 무를 먹는 플핸무는 52.0%로 불리하다.')
-        + '\n※ 핸무는 무배당과 무관해서(24% 고정) 플핸승은 이 뱃지의 영향을 받지 않는다.'}
+        + '\n※ 핸무는 무배당과 무관해서(24% 고정) 플핸승은 이 뱃지의 영향을 받지 않는다.'
+        + (relLabel ? `\n지금 시스템 판정(${pick})과는 '${relLabel}'.` : '')}
     >
       {heavy ? '고려' : '제외'}
+      {relLabel && (
+        <span className={`draw-rel draw-rel-${
+          rel === '같은편' ? 'ok' : rel === '상충' ? 'bad' : 'none'}`}
+        >
+          {' '}· {relLabel}
+        </span>
+      )}
     </MatchChip>,
   ]
 }
 
-function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading }) {
+function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick }) {
   // 배당차는 2026-09-02부터 옆 칸에 표로 따로 뺐다(GapTable) — 여기 줄은
   // 똥배 → 전적 → 무만 세로로 쌓는다.
-  const chips = [...ddongChips(row), ...h2hChips(verdict, h2hLoading), ...drawChips(row)]
+  const chips = [...ddongChips(row), ...h2hChips(verdict, h2hLoading), ...drawChips(row, pick)]
   return (
     <span className="match-chip-row">
       {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}
@@ -1726,16 +1740,9 @@ function findSignal(data, key) {
 // 종합 판정은 '해배·초기' 칸을 그대로 쓴다 — 실측에서 그 조합이 가장 정확했다
 // (해배가 국배보다 +1.8%p, 초기가 배변보다 +1.2~1.4%p). 근거는 utils/systemVerdict.js.
 // K1/K2(내 데이터)는 6대리그로만 잰 값이라 % 와 별을 띄우지 않는다 — 방향과 일치도만.
-function SystemVerdict({ row, scope }) {
-  const init = analysisPair(row, scope, false)
-  const fin = analysisPair(row, scope, true)
-  const names = [
-    init.dom ? directionName(init.dom) : null,     // 국초
-    fin.dom ? directionName(fin.dom) : null,       // 국배
-    init.forr ? directionName(init.forr) : null,   // 해초
-    fin.forr ? directionName(fin.forr) : null,     // 해배
-  ]
-  const pick = names[2]                            // 종합 = 해배·초기
+// names·pick은 PickBand가 한 번만 계산해서 내려준다 — 경기지표의 '무' 뱃지도 같은
+// pick이 필요해서(같은방향/다른방향 표시), 여기서 또 계산하면 두 곳이 따로 놀 수 있다.
+function SystemVerdict({ row, scope, names, pick }) {
   const tendency = drawTendency(row)
   const grade = systemGrade(names, pick, tendency, scope !== 'user')
   const cell = (v) => (v ? <b className="sys-name">{v}</b> : <span className="dir-none">—</span>)
@@ -1749,7 +1756,11 @@ function SystemVerdict({ row, scope }) {
             <b className={`sys-pick sys-pick-${DIR_SIDE[pick] === '정' ? 'j' : 'p'}`}>{pick}</b>
             {grade && grade.stars !== null && (
               <>
-                <span className="sys-stars" title={`${AGREE_LABEL[grade.agree]} · 무보정 ${grade.rel}`}>
+                <span
+                  className="sys-stars"
+                  title={`${AGREE_LABEL[grade.agree]} · 무배당 ${grade.rel}`
+                    + '(경기지표의 \'무\' 뱃지 참고)'}
+                >
                   {'★'.repeat(grade.stars)}{'☆'.repeat(3 - grade.stars)}
                 </span>
                 <span className="sys-rate">{Math.round(grade.rate)}%</span>
@@ -1784,42 +1795,23 @@ function SystemVerdict({ row, scope }) {
           </tr>
         </tbody>
       </table>
-      {/* '무 보정'이라는 이름은 버렸다 — 값이 '중립'일 때 "보정: 중립"처럼 말이
-          꼬여서 헷갈렸다(2026-09-02 피드백). 대신 두 정보를 분리한다:
-            ① 무배당이 어느 쪽으로 치우쳤나(무고려/무제외/보통)
-            ② 그게 지금 판정(pick)과 어울리는지(→ 같은편/상충/무관)
-          치우침이 없으면 ②는 아예 말이 안 되는 질문이라 화살표째로 생략한다. */}
-      <div className="sys-note">
-        <span className="sys-note-label">무배당</span>
-        {tendency ? (
-          <>
-            <span className="sys-tend">{tendency}</span>
-            <span className="sys-arrow">→</span>
-            <span className={`sys-rel sys-rel-${
-              grade && grade.rel === '같은편' ? 'ok'
-                : grade && grade.rel === '상충' ? 'bad' : 'none'}`}
-            >
-              {grade ? grade.rel : '—'}
-            </span>
-          </>
-        ) : (
-          <span
-            className="sys-tend sys-tend-neutral"
-            title="국내 무배당 3.20 미만 + 해외 3.40 미만이면 '무고려', 국내 3.80 이상이면
-'무제외'로 표시합니다. 그 사이는 무가 특별히 많지도 적지도 않은 구간이라 '보통'입니다."
-          >
-            보통
-          </span>
-        )}
-        {grade && grade.rel === '무관' && (
-          <span className="detail-section-note">핸무는 무배당과 무관해 플핸승엔 영향 없음</span>
-        )}
-      </div>
     </div>
   )
 }
 
 function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
+  // '경기지표'의 무 뱃지(같은방향/다른방향)와 '시스템 판정' 둘 다 이 pick이
+  // 필요해서 여기서 한 번만 계산해 내려준다.
+  const init = analysisPair(row, scope, false)
+  const fin = analysisPair(row, scope, true)
+  const names = [
+    init.dom ? directionName(init.dom) : null,     // 국초
+    fin.dom ? directionName(fin.dom) : null,       // 국배
+    init.forr ? directionName(init.forr) : null,   // 해초
+    fin.forr ? directionName(fin.forr) : null,     // 해배
+  ]
+  const pick = names[2]                            // 종합 = 해배·초기
+
   return (
     <section className="pick-band">
       <div className="pick-band-risk">
@@ -1841,13 +1833,13 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
             <div className="pick-band-bottom-cols">
               <div className="pick-band-match">
                 <h3>경기지표</h3>
-                <MatchIndicators row={row} h2hVerdict={verdict} h2hLoading={h2hLoading} />
+                <MatchIndicators row={row} h2hVerdict={verdict} h2hLoading={h2hLoading} pick={pick} />
               </div>
               <div className="pick-band-gap">
                 <h3>배당차</h3>
                 <GapTable row={row} />
               </div>
-              <SystemVerdict row={row} scope={scope} />
+              <SystemVerdict row={row} scope={scope} names={names} pick={pick} />
             </div>
           </div>
         </div>

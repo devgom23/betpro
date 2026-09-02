@@ -846,6 +846,14 @@
   font-weight: 700;
 }
 
+/* '무' 뱃지의 '같은방향/다른방향/무관' — 지금 시스템 판정과 같은 편인지.
+   예전엔 시스템 판정 쪽에 따로 있었는데 뱃지 하나로 합쳤다(2026-09-02).
+   초록/빨강은 앱의 '좋다/나쁘다' 축 그대로. font-weight는 부모(strong)가 이미
+   700이라 여기서 굳이 안 준다 — 색만 얹는다. */
+.draw-rel-ok { color: var(--chip-green-fg); }
+.draw-rel-bad { color: var(--chip-red-fg); }
+.draw-rel-none { color: var(--text-muted); }
+
 /* '플' / '정' — 이 %가 무엇의 확률인지 알려주는 글자. 국배는 플, 해배는 정처럼
    네 값이 서로 다른 걸 가리킬 때가 있어서, 글자 없이 %만 두면 무엇의 확률인지
    알 수 없다. 그래서 작은 칩으로 눈에 띄게 만든다.
@@ -999,41 +1007,6 @@
 .sys-table .sys-pick-cell {
   background: rgba(148, 163, 184, 0.14);
 }
-
-.sys-note {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-  font-size: 11px;
-}
-
-.sys-note-label {
-  color: var(--text-muted);
-}
-
-.sys-tend {
-  font-weight: 700;
-  color: var(--text-secondary);
-}
-
-/* 무배당 치우침이 없을 때 — 강조하지 않는다(치우친 쪽만 눈에 띄면 된다). */
-.sys-tend-neutral {
-  font-weight: 400;
-  color: var(--text-muted);
-  cursor: help;
-}
-
-/* "무고려 → 같은편"처럼 원인→결과를 잇는 화살표. 구분자라 흐리게. */
-.sys-arrow {
-  color: var(--text-muted);
-}
-
-/* 무 보정이 판정과 같은 편인지 — 초록/빨강은 앱의 '좋다/나쁘다' 축을 그대로 쓴다. */
-.sys-rel-ok { color: var(--chip-green-fg); font-weight: 700; }
-.sys-rel-bad { color: var(--chip-red-fg); font-weight: 700; }
-.sys-rel-none { color: var(--text-muted); }
 
 /* 판정 블록 — 결론(플핸무 확률)과 그 기준선(배당)을 한 카드에 */
 .pick-verdict-card {
