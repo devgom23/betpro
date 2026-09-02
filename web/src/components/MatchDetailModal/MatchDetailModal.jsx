@@ -344,18 +344,21 @@ function GapTable({ row }) {
 // 순수 사실 표시다 — 픽 방향(정/플)별로 갈라 재보니 값이 없었다(6대리그 재검증,
 // z<1.5). 판단은 사용자가 직접 한다는 요청으로, 등급(★)에는 안 넣고 라벨만 단다.
 //
-// 매핑 기준 — "정"이 홈인지 원정인지는 반드시 homeIsFav(팝업 제목의 (정)/(역)과
-// 같은 기준, 국내배당 우선)로 정한다. 시스템 판정 칸 자체의 방향(해외 지표 기준)을
-// 쓰면 국내·해외가 갈리는 경기(약 4%)에서 제목과 반대로 나온다 — 실측 예시(26-27 2R
-// 선덜랜드 vs 풀럼)로 확인: 제목은 선덜랜드=정인데 해외 지표만 보면 풀럼=정으로
-// 나와 헷갈렸다. homeIsFav 기준으로 맞추면 "정역(선덜랜드 편) + 원정만우세(풀럼이
-// 강함) → 다른방향"이 나온다.
+// 매핑 기준 — "정"이 홈인지 원정인지는 해외배당(FW/FL)으로 정한다. 종합 판정
+// 자체가 '해배·초기' 칸(해외 지표 기준)이라, 관계도 같은 기준이어야 서로 안 어긋난다.
+// 2026-09-02(4) — 처음엔 homeIsFav(국내배당 우선, 팝업 제목의 (정)/(역)과 같은
+// 기준)를 썼는데, 그러면 국내·해외가 갈리는 경기(약 4%)에서 판정 자체의 기준(해외)과
+// 관계 판정 기준(국내)이 서로 달라져 모순이 생긴다 — 실측 예시(26-27 2R 선덜랜드
+// vs 풀럼): 국내는 선덜랜드=정, 해외는 풀럼=정, 전적은 원정만우세(풀럼이 강함).
+// 종합 판정(정역)은 해외 기준이라 이 '정'도 풀럼이어야 맞다 — 그러면 전적(풀럼 지지)과
+// 판정(풀럼 지지)이 '같은방향'이 되는 게 맞다(homeIsFav 기준일 땐 '다른방향'으로
+// 잘못 나왔었다). 국내≠해외로 갈리는 경기는 '정배 국≠해' 뱃지가 따로 알려준다.
 const H2H_HOME_SIDE = { 홈우세: 'home', 홈만우세: 'home', 원정우세: 'away', 원정만우세: 'away' }
 
 function h2hRelation(verdictLabel, row, pick) {
   const side = H2H_HOME_SIDE[verdictLabel]
   if (!side || !pick || !DIR_SIDE[pick]) return null
-  const homeFav = homeIsFav(row)
+  const homeFav = marketFavHome(row.FW, row.FL)
   if (homeFav === null) return null
   const histFavorsMarketFav = (side === 'home') === homeFav
   const pickWantsFav = DIR_SIDE[pick] === '정'
