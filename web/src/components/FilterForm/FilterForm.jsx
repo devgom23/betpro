@@ -5,29 +5,42 @@ const SEASON_ALL = 'ALL'
 const ROUND_ALL = 'ALL'
 
 const ODDS_FIELDS = [
-  { group: '국내 배당', fields: [['kw', 'KW', '홈 배당'], ['kd', 'KD', '무 배당'], ['kl', 'KL', '원정 배당']] },
-  { group: '국내 플핸 배당', fields: [['khw', 'KHW', '홈 배당'], ['khd', 'KHD', '무 배당'], ['khl', 'KHL', '원정 배당']] },
-  { group: '해외 배당', fields: [['fw', 'FW', '홈 배당'], ['fd', 'FD', '무 배당'], ['fl', 'FL', '원정 배당']] },
+  { group: '국내', fields: [['kw', 'KW', '홈 배당'], ['kd', 'KD', '무 배당'], ['kl', 'KL', '원정 배당']] },
+  { group: '국내 플핸', fields: [['khw', 'KHW', '홈 배당'], ['khd', 'KHD', '무 배당'], ['khl', 'KHL', '원정 배당']] },
+  { group: '해외', fields: [['fw', 'FW', '홈 배당'], ['fd', 'FD', '무 배당'], ['fl', 'FL', '원정 배당']] },
 ]
 
 const BLANK_ODDS = { kw: '', kd: '', kl: '', khw: '', khd: '', khl: '', fw: '', fd: '', fl: '' }
 const ODDS_KEYS = ODDS_FIELDS.flatMap(({ fields }) => fields.map(([key]) => key))
 
+const TEAM_SIDE_OPTIONS = [
+  ['all', '전체보기'],
+  ['home', '홈보기'],
+  ['away', '원정보기'],
+]
+
+// 정배/역배는 해외배당(FW/FL) 기준 — HeadToHeadResult의 상대전적 표와 같은 기준.
+// 동배(FW===FL)는 정배·역배 둘 다 아니므로 '전체'에는 잡히지만 정배/역배 필터에는 안 걸린다.
+const TEAM_FAV_OPTIONS = [
+  ['all', '전체'],
+  ['fav', '정배보기'],
+  ['dog', '역배보기'],
+]
+
 function makeDefaultDraft(latest) {
   return {
     season: latest?.season ?? SEASON_ALL,
     round: latest?.round ?? ROUND_ALL,
+    team: '',
+    teamSide: 'all',
+    teamFav: 'all',
     ...BLANK_ODDS,
   }
 }
 
-export default function FilterForm({ filters, leagueKey, onSearch, teams = [], onH2HSearch }) {
+export default function FilterForm({ filters, leagueKey, onSearch, teams = [] }) {
   const [draft, setDraft] = useState(() => makeDefaultDraft(filters?.latest))
   const [warning, setWarning] = useState('')
-
-  const [h2hHome, setH2hHome] = useState('')
-  const [h2hAway, setH2hAway] = useState('')
-  const [h2hCross, setH2hCross] = useState(false)
 
   // 리그(또는 스코프)가 실제로 바뀔 때만 폼을 그 리그의 기본값으로 리셋한다.
   // [filters]에 걸면 저장·크롤링 후 새로고침으로 filters 객체가 새로 만들어질 때마다
@@ -40,18 +53,9 @@ export default function FilterForm({ filters, leagueKey, onSearch, teams = [], o
   }, [leagueKey])
 
   // 팀 목록이 바뀌면(시즌 변경 등) 더는 목록에 없는 선택은 지운다.
-  // 자동으로 팀을 채우지 않고 "홈팀 선택/원정팀 선택" 플레이스홀더 상태로 둔다.
   useEffect(() => {
-    setH2hHome((prev) => (teams.includes(prev) ? prev : ''))
-    setH2hAway((prev) => (teams.includes(prev) ? prev : ''))
+    setDraft((prev) => (teams.includes(prev.team) ? prev : { ...prev, team: '' }))
   }, [teams])
-
-  // 홈팀·원정팀이 모두 선택되면(또는 교차보기를 바꾸면) 별도 버튼 없이 바로 조회한다.
-  useEffect(() => {
-    if (h2hHome && h2hAway && h2hHome !== h2hAway && onH2HSearch) {
-      onH2HSearch({ home: h2hHome, away: h2hAway, cross: h2hCross })
-    }
-  }, [h2hHome, h2hAway, h2hCross])
 
   const seasonOptions = [SEASON_ALL, ...(filters?.seasons ?? [])]
   const roundOptions =
@@ -66,6 +70,11 @@ export default function FilterForm({ filters, leagueKey, onSearch, teams = [], o
 
   function buildQuery(source) {
     const q = { season: source.season, round: source.round }
+    if (source.team) {
+      q.team = source.team
+      if (source.teamSide && source.teamSide !== 'all') q.team_side = source.teamSide
+      if (source.teamFav && source.teamFav !== 'all') q.team_fav = source.teamFav
+    }
     const badFields = []
     for (const { fields } of ODDS_FIELDS) {
       for (const [key, apiKey] of fields) {
@@ -150,33 +159,30 @@ export default function FilterForm({ filters, leagueKey, onSearch, teams = [], o
 
       {teams.length > 0 && (
         <div className="filter-block">
-          <span className="filter-label">상대 전적 조회</span>
-          <div className="filter-row h2h-row">
-            <select value={h2hHome} onChange={(e) => setH2hHome(e.target.value)}>
-              <option value="">홈팀 선택</option>
+          <span className="filter-label">팀 조회</span>
+          <div className="filter-row">
+            <select value={draft.team} onChange={(e) => updateField('team', e.target.value)}>
+              <option value="">전체 팀</option>
               {teams.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
               ))}
             </select>
-            <span className="h2h-vs">vs</span>
-            <select value={h2hAway} onChange={(e) => setH2hAway(e.target.value)}>
-              <option value="">원정팀 선택</option>
-              {teams.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+            <select value={draft.teamSide} onChange={(e) => updateField('teamSide', e.target.value)}>
+              {TEAM_SIDE_OPTIONS.map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
                 </option>
               ))}
             </select>
-            <label className="h2h-cross">
-              <input
-                type="checkbox"
-                checked={h2hCross}
-                onChange={(e) => setH2hCross(e.target.checked)}
-              />
-              홈원 교차보기
-            </label>
+            <select value={draft.teamFav} onChange={(e) => updateField('teamFav', e.target.value)}>
+              {TEAM_FAV_OPTIONS.map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       )}

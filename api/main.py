@@ -444,10 +444,18 @@ def _reorder_postponed_last(df: pd.DataFrame, rt_col: str = "RT", rt_is_label: b
     return df.loc[order]
 
 
-def _apply_league_filters(df, season, round, odds_query):
+def _apply_league_filters(df, season, round, odds_query, team=None, team_side=None, team_fav=None):
     """
-    분석표 조회 필터(시즌·라운드·배당 9종)를 적용한다.
+    분석표 조회 필터(시즌·라운드·배당 9종·팀)를 적용한다.
     화면 표시와 엑셀 다운로드가 반드시 같은 결과를 내도록 두 곳이 공유한다.
+    team은 그 팀이 나온 경기를 남긴다(상대전적 조회를 대체 — 2026-09-02, 팀
+    하나만 골라 시즌·라운드·배당 조건과 함께 쓴다). team_side로 홈/원정만
+    좁힐 수 있다: None(또는 'all')=홈이든 원정이든 / 'home'=홈일 때만 /
+    'away'=원정일 때만. team_fav로 그 팀이 정배/역배였던 경기만 좁힐 수
+    있다(해외배당 FW/FL 기준 — HeadToHeadResult 상대전적 표와 같은 기준):
+    None(또는 'all')=안 가림 / 'fav'=그 팀이 정배였을 때만 / 'dog'=역배였을
+    때만. 동배(FW===FL)는 정배·역배 어느 쪽도 아니라 두 필터 모두에서 빠진다.
+    team_side·team_fav는 독립적인 축이라 함께(AND로) 적용된다.
     반환: (걸러진 DataFrame, 실제 적용된 season, 실제 적용된 round)
     """
     # 기본값: 최근 시즌·최근 라운드. "ALL"이면 해당 축은 필터하지 않는다.
@@ -479,6 +487,32 @@ def _apply_league_filters(df, season, round, odds_query):
         series = pd.to_numeric(sub[col], errors="coerce")
         sub = sub[(series - target).abs() < ODDS_TOLERANCE]
 
+    if team and "HT" in sub.columns and "AT" in sub.columns:
+        is_home = sub["HT"].astype(str) == team
+        if team_side == "home":
+            sub = sub[is_home]
+        elif team_side == "away":
+            sub = sub[sub["AT"].astype(str) == team]
+        else:
+            sub = sub[is_home | (sub["AT"].astype(str) == team)]
+
+        if team_fav in ("fav", "dog") and "FW" in sub.columns and "FL" in sub.columns:
+            is_home = sub["HT"].astype(str) == team   # 위에서 뽑은 sub가 줄었으니 다시 계산
+            fw = pd.to_numeric(sub["FW"], errors="coerce")
+            fl = pd.to_numeric(sub["FL"], errors="coerce")
+            team_odds = fw.where(is_home, fl)
+            rival_odds = fl.where(is_home, fw)
+            sub = sub[team_odds < rival_odds] if team_fav == "fav" else sub[team_odds > rival_odds]
+
+    # 최신 경기가 위로 오게 정렬한다(시즌·라운드·날짜는 내림차순 — 현재→과거).
+    # 같은 (시즌,라운드,날짜) 안에서는 원래 순서(No 순)를 유지한다 — 여기까지
+    # 뒤집으면 그 라운드 안에서 경기 나열 순서가 부자연스러워진다.
+    if not sub.empty:
+        key = _row_order_sort_key(sub)
+        sub = sub.loc[key.sort_values(
+            ["S", "_r", "_day", "_order", "_no"],
+            ascending=[False, False, False, True, True], kind="mergesort").index]
+
     sub = _reorder_postponed_last(sub)
     return sub, season, round
 
@@ -497,6 +531,9 @@ def league_rows(code: str,
                 fw: Optional[float] = None,
                 fd: Optional[float] = None,
                 fl: Optional[float] = None,
+                team: Optional[str] = None,
+                team_side: Optional[str] = None,
+                team_fav: Optional[str] = None,
                 limit: int = 500,
                 offset: int = 0,
                 user: dict = Depends(get_current_user)):
@@ -504,6 +541,7 @@ def league_rows(code: str,
     대형 분석표 데이터. 저장된 값을 '불러오기만' 한다(재계산 없음 — 원칙 6-3).
     season/round 미지정 시 최근 시즌·최근 라운드를 기본 선택. "ALL"이면 그 축은 필터 없음.
     배당 9종(kw~fl)을 넘기면 ±0.005 오차로 근사 일치하는 경기만 추린다(원본 조회 필터와 동일 규칙).
+    team을 넘기면 그 팀이 홈이든 원정이든 나온 경기만 추린다.
     """
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
@@ -522,7 +560,7 @@ def league_rows(code: str,
     sub, season, round = _apply_league_filters(
         df, season, round,
         {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
-         "KHL": khl, "FW": fw, "FD": fd, "FL": fl})
+         "KHL": khl, "FW": fw, "FD": fd, "FL": fl}, team=team, team_side=team_side, team_fav=team_fav)
 
     total = len(sub)
     page = sub.iloc[offset: offset + limit]
@@ -1675,6 +1713,9 @@ def table_excel_download(code: str,
                          fw: Optional[float] = None,
                          fd: Optional[float] = None,
                          fl: Optional[float] = None,
+                         team: Optional[str] = None,
+                         team_side: Optional[str] = None,
+                         team_fav: Optional[str] = None,
                          user: dict = Depends(get_current_user)):
     """
     현재 조회 조건 그대로의 분석표를 엑셀로. 화면과 같은 필터 함수를 쓰므로
@@ -1689,7 +1730,7 @@ def table_excel_download(code: str,
     sub, season, round = _apply_league_filters(
         df, season, round,
         {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
-         "KHL": khl, "FW": fw, "FD": fd, "FL": fl})
+         "KHL": khl, "FW": fw, "FD": fd, "FL": fl}, team=team, team_side=team_side, team_fav=team_fav)
 
     records = DATA.df_to_records(sub)
     _attach_my_picks(records, user["username"], code, scope)

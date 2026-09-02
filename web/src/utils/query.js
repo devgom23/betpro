@@ -11,6 +11,9 @@ export function buildQueryString(base, query) {
   if (query) {
     if (query.season) params.set('season', query.season)
     if (query.round) params.set('round', query.round)
+    if (query.team) params.set('team', query.team)
+    if (query.team_side) params.set('team_side', query.team_side)
+    if (query.team_fav) params.set('team_fav', query.team_fav)
     for (const key of ODDS_KEYS) {
       if (query[key] !== undefined && query[key] !== null) {
         params.set(key, String(query[key]))

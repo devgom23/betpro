@@ -3,7 +3,6 @@ import { api, saveBlob } from '../api/client'
 import LeagueTable, { RiskLegendModal } from '../components/LeagueTable/LeagueTable'
 import { buildColumnGroups, groupKey, splitIndicatorBatches } from '../components/LeagueTable/columnGroups'
 import FilterForm from '../components/FilterForm/FilterForm'
-import HeadToHeadResult from '../components/HeadToHead/HeadToHeadResult'
 import RtSummaryBar, { PickSummaryBar } from '../components/RtSummaryBar/RtSummaryBar'
 import UploadTemplateModal from '../components/UploadTemplateModal/UploadTemplateModal'
 import DeleteMatchesModal from '../components/DeleteMatchesModal/DeleteMatchesModal'
@@ -19,6 +18,12 @@ function describeQuery(query) {
   const parts = []
   if (query.season && query.season !== 'ALL') parts.push(`S=${query.season}`)
   if (query.round && query.round !== 'ALL') parts.push(`R=${query.round}`)
+  if (query.team) {
+    const sideLabel = query.team_side === 'home' ? '홈' : query.team_side === 'away' ? '원정' : ''
+    const favLabel = query.team_fav === 'fav' ? '정배' : query.team_fav === 'dog' ? '역배' : ''
+    const tags = [sideLabel, favLabel].filter(Boolean).join('·')
+    parts.push(`팀=${query.team}${tags ? `(${tags})` : ''}`)
+  }
   for (const key of ODDS_KEYS) {
     if (query[key] !== undefined && query[key] !== null) {
       parts.push(`${key.toUpperCase()}=${query[key]}`)
@@ -33,7 +38,6 @@ export default function LeaguePage({ code, scope }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [teams, setTeams] = useState([])
-  const [h2h, setH2h] = useState(null) // {home, away, cross} | null — 있으면 표 대신 상대전적 표시
   const [reloadKey, setReloadKey] = useState(0)
 
   // 엑셀 다운로드 / 업로드
@@ -102,7 +106,7 @@ export default function LeaguePage({ code, scope }) {
 
   // 리그/스코프가 바뀌면 시즌·라운드 선택지부터 다시 불러온다.
   // reloadKey만 바뀐 경우(저장/삭제 후 새로고침)는 진짜로 리그를 바꾼 게 아니므로
-  // filters/query/h2h를 비우지 않는다 — 그걸 비우면 아래 렌더의 "불러오는 중..." 가드에
+  // filters/query를 비우지 않는다 — 그걸 비우면 아래 렌더의 "불러오는 중..." 가드에
   // 걸려 화면 전체(열려 있는 입력 모달 포함)가 통째로 언마운트됐다가 다시 마운트되면서
   // 모달 안의 상태(저장 완료 안내, 진행 중이던 입력 등)가 날아가 버린다.
   const prevLeagueKeyRef = useRef(`${code}:${scope}`)
@@ -114,7 +118,6 @@ export default function LeaguePage({ code, scope }) {
     if (isNewLeague) {
       setFilters(null)
       setQuery(null)
-      setH2h(null)
     }
     api
       .get(`/api/leagues/${code}/filters?scope=${scope}`)
@@ -320,7 +323,6 @@ export default function LeaguePage({ code, scope }) {
   }, [code, scope, query])
 
   function handleSearch(nextQuery) {
-    setH2h(null) // 조회 조건 필터는 상대전적 모드를 초기화하고 원래 표로 돌아간다
     setQuery(nextQuery)
   }
 
@@ -344,12 +346,10 @@ export default function LeaguePage({ code, scope }) {
         leagueKey={`${code}:${scope}`}
         onSearch={handleSearch}
         teams={teams}
-        onH2HSearch={setH2h}
       />
 
-      {!h2h && (
-        <div className="excel-bar">
-          {data.can_write && (
+      <div className="excel-bar">
+        {data.can_write && (
             <>
               <button
                 className="btn-reset"
@@ -405,7 +405,6 @@ export default function LeaguePage({ code, scope }) {
             {busyExcel === 'table' ? '받는 중...' : '엑셀 다운로드'}
           </button>
         </div>
-      )}
 
       {showTemplateModal && (
         <UploadTemplateModal
@@ -444,89 +443,63 @@ export default function LeaguePage({ code, scope }) {
         </div>
       )}
 
-      {!h2h && (
-        <SeasonStats code={code} scope={scope} season={query?.season} round={query?.round} />
-      )}
+      <SeasonStats code={code} scope={scope} season={query?.season} round={query?.round} />
 
-      {h2h ? (
-        <>
-          <div className="league-summary">
-            <span>
-              🆚 상대전적 조회: {h2h.home} vs {h2h.away}
-              {h2h.cross ? ' (홈원 교차보기)' : ''}
-            </span>
-            <button className="btn-reset" onClick={() => setH2h(null)}>
-              ✕ 표로 돌아가기
+      <div className="league-summary">
+        <span>조회 조건 {describeQuery(query)}</span>
+        <span>
+          경기수 <strong>{data.total.toLocaleString()}</strong> · 국배 등록{' '}
+          <strong>{(data.odds_summary?.국배 ?? 0).toLocaleString()}</strong> · 해배 등록{' '}
+          <strong>{(data.odds_summary?.해배 ?? 0).toLocaleString()}</strong>
+        </span>
+        <RtSummaryBar summary={data.rt_summary} inline />
+        <span className="league-summary-divider" aria-hidden="true" />
+        <PickSummaryBar summary={data.hit_summary} />
+        <div className="league-summary-toolbar">
+          {finalOddsTs && (
+            <span className="final-odds-ts">최신배당({formatFinalOddsTime(finalOddsTs)})</span>
+          )}
+          <button
+            className="batch-fold-btn"
+            onClick={runRefreshFinalOdds}
+            disabled={busyRefreshOdds}
+            title="이 시즌·라운드 경기들의 국내·해외 최종배당(배변 후)만 다시 받습니다. 초기배당은 그대로 둡니다."
+          >
+            {busyRefreshOdds ? '불러오는 중…' : '최신배당 불러오기'}
+          </button>
+          <button
+            className="batch-fold-btn"
+            onClick={() => setShowRiskLegend(true)}
+            title="색상별 구간 참고표"
+          >
+            플핸무 확률 참고
+          </button>
+          {batch1Groups.length > 0 && (
+            <button className="batch-fold-btn" onClick={() => toggleBatch(batch1Groups)}>
+              해외지표 {batch1Groups.every((g) => collapsed.has(groupKey(g))) ? '펼치기' : '접기'}
             </button>
-          </div>
-          <HeadToHeadResult
-            scope={scope}
-            code={code}
-            home={h2h.home}
-            away={h2h.away}
-            cross={h2h.cross}
-            limit={50}
-          />
-        </>
-      ) : (
-        <>
-          <div className="league-summary">
-            <span>조회 조건 {describeQuery(query)}</span>
-            <span>
-              경기수 <strong>{data.total.toLocaleString()}</strong> · 국배 등록{' '}
-              <strong>{(data.odds_summary?.국배 ?? 0).toLocaleString()}</strong> · 해배 등록{' '}
-              <strong>{(data.odds_summary?.해배 ?? 0).toLocaleString()}</strong>
-            </span>
-            <RtSummaryBar summary={data.rt_summary} inline />
-            <span className="league-summary-divider" aria-hidden="true" />
-            <PickSummaryBar summary={data.hit_summary} />
-            <div className="league-summary-toolbar">
-              {finalOddsTs && (
-                <span className="final-odds-ts">최신배당({formatFinalOddsTime(finalOddsTs)})</span>
-              )}
-              <button
-                className="batch-fold-btn"
-                onClick={runRefreshFinalOdds}
-                disabled={busyRefreshOdds}
-                title="이 시즌·라운드 경기들의 국내·해외 최종배당(배변 후)만 다시 받습니다. 초기배당은 그대로 둡니다."
-              >
-                {busyRefreshOdds ? '불러오는 중…' : '최신배당 불러오기'}
-              </button>
-              <button
-                className="batch-fold-btn"
-                onClick={() => setShowRiskLegend(true)}
-                title="색상별 구간 참고표"
-              >
-                플핸무 확률 참고
-              </button>
-              {batch1Groups.length > 0 && (
-                <button className="batch-fold-btn" onClick={() => toggleBatch(batch1Groups)}>
-                  해외지표 {batch1Groups.every((g) => collapsed.has(groupKey(g))) ? '펼치기' : '접기'}
-                </button>
-              )}
-              {batch2Groups.length > 0 && (
-                <button className="batch-fold-btn" onClick={() => toggleBatch(batch2Groups)}>
-                  국내지표 {batch2Groups.every((g) => collapsed.has(groupKey(g))) ? '펼치기' : '접기'}
-                </button>
-              )}
-            </div>
-          </div>
-          {refreshOddsNotice && <p className="recompute-notice">{refreshOddsNotice}</p>}
-          <LeagueTable
-            code={code}
-            columns={data.columns}
-            rows={data.rows}
-            scope={scope}
-            highlightCols={ODDS_KEYS.filter((k) => query?.[k] !== undefined).map((k) => k.toUpperCase())}
-            collapsed={collapsed}
-            onCollapsedChange={setCollapsed}
-            showRiskLegend={showRiskLegend}
-            onShowRiskLegendChange={setShowRiskLegend}
-            hideToolbar
-          />
-          {showRiskLegend && <RiskLegendModal onClose={() => setShowRiskLegend(false)} />}
-        </>
-      )}
+          )}
+          {batch2Groups.length > 0 && (
+            <button className="batch-fold-btn" onClick={() => toggleBatch(batch2Groups)}>
+              국내지표 {batch2Groups.every((g) => collapsed.has(groupKey(g))) ? '펼치기' : '접기'}
+            </button>
+          )}
+        </div>
+      </div>
+      {refreshOddsNotice && <p className="recompute-notice">{refreshOddsNotice}</p>}
+      <LeagueTable
+        code={code}
+        columns={data.columns}
+        rows={data.rows}
+        scope={scope}
+        highlightCols={ODDS_KEYS.filter((k) => query?.[k] !== undefined).map((k) => k.toUpperCase())}
+        collapsed={collapsed}
+        onCollapsedChange={setCollapsed}
+        showRiskLegend={showRiskLegend}
+        onShowRiskLegendChange={setShowRiskLegend}
+        hideToolbar
+      />
+      {showRiskLegend && <RiskLegendModal onClose={() => setShowRiskLegend(false)} />}
 
       {data.can_write && (
         <div style={{ marginTop: 10 }}>
