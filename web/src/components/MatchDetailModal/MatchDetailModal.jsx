@@ -306,14 +306,48 @@ function GapTable({ row }) {
 // 만든다 — 상대전적 카드가 쓰는 것과 같은 값이라 API를 더 부르지 않는다.
 // 아직 안 왔으면(로딩 중) 칸을 비워 두지 않고 '계산 중'으로 자리를 잡아 둔다 —
 // 뱃지가 뒤늦게 끼어들면서 아래 내용이 밀리는 걸 막는다.
-function h2hChips(verdict, loading) {
+//
+// 2026-09-02(3) — '같은방향/다른방향' 라벨을 붙였다. ⚠ 이건 실측 신호가 아니라
+// 순수 사실 표시다 — 픽 방향(정/플)별로 갈라 재보니 값이 없었다(6대리그 재검증,
+// z<1.5). 판단은 사용자가 직접 한다는 요청으로, 등급(★)에는 안 넣고 라벨만 단다.
+//
+// 매핑 기준 — "정"이 홈인지 원정인지는 반드시 homeIsFav(팝업 제목의 (정)/(역)과
+// 같은 기준, 국내배당 우선)로 정한다. 시스템 판정 칸 자체의 방향(해외 지표 기준)을
+// 쓰면 국내·해외가 갈리는 경기(약 4%)에서 제목과 반대로 나온다 — 실측 예시(26-27 2R
+// 선덜랜드 vs 풀럼)로 확인: 제목은 선덜랜드=정인데 해외 지표만 보면 풀럼=정으로
+// 나와 헷갈렸다. homeIsFav 기준으로 맞추면 "정역(선덜랜드 편) + 원정만우세(풀럼이
+// 강함) → 다른방향"이 나온다.
+const H2H_HOME_SIDE = { 홈우세: 'home', 홈만우세: 'home', 원정우세: 'away', 원정만우세: 'away' }
+
+function h2hRelation(verdictLabel, row, pick) {
+  const side = H2H_HOME_SIDE[verdictLabel]
+  if (!side || !pick || !DIR_SIDE[pick]) return null
+  const homeFav = homeIsFav(row)
+  if (homeFav === null) return null
+  const histFavorsMarketFav = (side === 'home') === homeFav
+  const pickWantsFav = DIR_SIDE[pick] === '정'
+  return histFavorsMarketFav === pickWantsFav ? '같은방향' : '다른방향'
+}
+
+function h2hChips(verdict, loading, row, pick) {
   if (loading) {
     return [<MatchChip key="h2h" label="전적">…</MatchChip>]
   }
   if (!verdict) return []
+  const rel = h2hRelation(verdict.label, row, pick)
   return [
-    <MatchChip key="h2h" label="전적" tone={verdict.tone} title={verdict.title}>
+    <MatchChip
+      key="h2h"
+      label="전적"
+      tone={verdict.tone}
+      title={verdict.title + (rel ? `\n지금 시스템 판정(${pick})과는 '${rel}'(사실 표시 — 값이 검증되지 않았다).` : '')}
+    >
       {verdict.label}
+      {rel && (
+        <span className={`draw-rel draw-rel-${rel === '같은방향' ? 'ok' : 'bad'}`}>
+          {' '}· {rel}
+        </span>
+      )}
     </MatchChip>,
   ]
 }
@@ -369,7 +403,7 @@ function drawChips(row, pick) {
 function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick }) {
   // 배당차는 2026-09-02부터 옆 칸에 표로 따로 뺐다(GapTable) — 여기 줄은
   // 똥배 → 전적 → 무만 세로로 쌓는다.
-  const chips = [...ddongChips(row), ...h2hChips(verdict, h2hLoading), ...drawChips(row, pick)]
+  const chips = [...ddongChips(row), ...h2hChips(verdict, h2hLoading, row, pick), ...drawChips(row, pick)]
   return (
     <span className="match-chip-row">
       {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}
