@@ -82,7 +82,10 @@ function teamOdds(m, isHome) {
 //
 // 색은 앱 전체 축을 그대로 따른다(정배 쪽=파랑 / 역배 쪽=빨강 — 핸디기준점·RT와 같은 축).
 function FavMark({ side, me, odds }) {
-  if (!side) return null
+  // 동배(FW===FL)라 정/역을 못 정한 경기 — '값 자체는 보여준다'는 위 주석대로
+  // 배당 숫자만 무채색으로 보여준다. 예전엔 side가 없으면 통째로 null을 반환해서
+  // 배당 숫자까지 안 보였다(25-26 15R 풀럼 vs 크리스탈, FW=FL=2.60에서 발견).
+  if (!side) return odds !== null ? <span className="h2h-fav">({odds.toFixed(2)})</span> : null
   const isFav = side === me
   return (
     <span className={`h2h-fav h2h-fav-${isFav ? 'j' : 'y'}`}>
