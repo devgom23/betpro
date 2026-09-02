@@ -974,6 +974,18 @@
 .sys-pick-j { color: var(--chip-blue-fg); }
 .sys-pick-p { color: var(--chip-red-fg); }
 
+/* 해초가 고립돼 다수결로 뒤집혔을 때 붙는 작은 태그 — 경고색(노랑)으로
+   "기본값이 아니다"를 눈에 띄게 알린다. */
+.sys-flip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  cursor: help;
+}
+
 .sys-stars {
   font-size: 11px;
   color: var(--chip-yellow-fg);

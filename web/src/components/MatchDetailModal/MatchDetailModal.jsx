@@ -7,7 +7,7 @@ import { formatTime, formatDt, scoreClass } from '../../utils/format'
 import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
-import { drawTendency, drawRelation, systemGrade, AGREE_LABEL } from '../../utils/systemVerdict'
+import { drawTendency, drawRelation, systemGrade, resolveSystemPick, AGREE_LABEL } from '../../utils/systemVerdict'
 import './MatchDetailModal.css'
 
 
@@ -262,9 +262,11 @@ function gapBandIndex(gap) {
   return i
 }
 
-// 0.5 → "0.5", 0.15 → "0.15", 1.2100000001 → "1.21"
+// ⚠ 규칙(2026-09-02): 소수점이 나오는 값은 반드시 소수점 둘째 자리까지 채워서
+// 보여준다. 1.2100000001 → "1.21" 은 맞지만, 1.20 → "1.2"(끝자리 0이 잘림)는
+// 틀렸다 — Number()로 되돌리면 끝자리 0이 사라지므로 문자열(toFixed)을 그대로 쓴다.
 function gapText(v) {
-  return String(Number(v.toFixed(2)))
+  return v.toFixed(2)
 }
 
 function gapParts(row) {
@@ -1808,15 +1810,18 @@ function findSignal(data, key) {
 // /api/pick_ai), 시즌전적과 상대전적 문장만 아래 표 쪽으로 옮겨 붙였다.
 // ── 시스템 판정 ──
 // 지표 방향성 4칸(국초·국배·해초·해배)과 무배당 보정을 합쳐 결론 하나와 신뢰도를 낸다.
-// 종합 판정은 '해배·초기' 칸을 그대로 쓴다 — 실측에서 그 조합이 가장 정확했다
-// (해배가 국배보다 +1.8%p, 초기가 배변보다 +1.2~1.4%p). 근거는 utils/systemVerdict.js.
+// 종합 판정은 기본이 '해배·초기' 칸이지만, 그 칸이 나머지 3칸과 전부 다르면(고립)
+// 다수결(해배·배변)로 뒤집는다 — resolveSystemPick, 근거는 utils/systemVerdict.js.
 // K1/K2(내 데이터)는 6대리그로만 잰 값이라 % 와 별을 띄우지 않는다 — 방향과 일치도만.
-// names·pick은 PickBand가 한 번만 계산해서 내려준다 — 경기지표의 '무' 뱃지도 같은
-// pick이 필요해서(같은방향/다른방향 표시), 여기서 또 계산하면 두 곳이 따로 놀 수 있다.
-function SystemVerdict({ row, scope, names, pick }) {
+// names·pick·flipped는 PickBand가 한 번만 계산해서 내려준다 — 경기지표의 '무' 뱃지도
+// 같은 pick이 필요해서(같은방향/다른방향 표시), 여기서 또 계산하면 두 곳이 따로 놀 수 있다.
+function SystemVerdict({ row, scope, names, pick, flipped }) {
   const tendency = drawTendency(row)
-  const grade = systemGrade(names, pick, tendency, scope !== 'user')
+  const grade = systemGrade(names, pick, tendency, scope !== 'user', flipped)
   const cell = (v) => (v ? <b className="sys-name">{v}</b> : <span className="dir-none">—</span>)
+  // 뒤집혔을 때는 grade.agree가 늘 3(나머지 셋이 새 pick과 같은 편)으로 나오는데,
+  // 이건 '원래 3칸 일치'와 표본 자체가 다른 별개 측정이라 같은 라벨을 쓰면 안 된다.
+  const agreeLabel = flipped ? '다수결(해초 고립)' : AGREE_LABEL[grade && grade.agree]
 
   return (
     <div className="sys-band">
@@ -1825,11 +1830,18 @@ function SystemVerdict({ row, scope, names, pick }) {
         {pick && (
           <span className="sys-head">
             <b className={`sys-pick sys-pick-${DIR_SIDE[pick] === '정' ? 'j' : 'p'}`}>{pick}</b>
+            {flipped && (
+              <span className="sys-flip" title="해초(해배·초기)가 나머지 3칸(국초·국배·해배)과
+전부 달라서 다수결로 뒤집었다 — 해초를 그대로 따르면 74.6%, 뒤집으면 78.0%(6대리그
+3,676경기, z=3.00).">
+                다수결
+              </span>
+            )}
             {grade && grade.stars !== null && (
               <>
                 <span
                   className="sys-stars"
-                  title={`${AGREE_LABEL[grade.agree]} · 무배당 ${grade.rel}`
+                  title={`${agreeLabel} · 무배당 ${grade.rel}`
                     + '(경기지표의 \'무\' 뱃지 참고)'}
                 >
                   {'★'.repeat(grade.stars)}{'☆'.repeat(3 - grade.stars)}
@@ -1839,7 +1851,7 @@ function SystemVerdict({ row, scope, names, pick }) {
             )}
             {grade && grade.stars === null && (
               <span className="detail-section-note">
-                {scope === 'user' ? '내 데이터는 적중률을 재지 않았습니다' : AGREE_LABEL[grade.agree]}
+                {scope === 'user' ? '내 데이터는 적중률을 재지 않았습니다' : agreeLabel}
               </span>
             )}
           </span>
@@ -1857,12 +1869,12 @@ function SystemVerdict({ row, scope, names, pick }) {
           <tr>
             <td className="row-label">초기</td>
             <td>{cell(names[0])}</td>
-            <td className="sys-pick-cell">{cell(names[2])}</td>
+            <td className={flipped ? undefined : 'sys-pick-cell'}>{cell(names[2])}</td>
           </tr>
           <tr>
             <td className="row-label">배변</td>
             <td>{cell(names[1])}</td>
-            <td>{cell(names[3])}</td>
+            <td className={flipped ? 'sys-pick-cell' : undefined}>{cell(names[3])}</td>
           </tr>
         </tbody>
       </table>
@@ -1881,7 +1893,7 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
     init.forr ? directionName(init.forr) : null,   // 해초
     fin.forr ? directionName(fin.forr) : null,     // 해배
   ]
-  const pick = names[2]                            // 종합 = 해배·초기
+  const { pick, flipped } = resolveSystemPick(names)   // 기본 해배·초기, 고립되면 다수결로 뒤집힘
 
   return (
     <section className="pick-band">
@@ -1910,7 +1922,7 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
                 <h3>배당차</h3>
                 <GapTable row={row} />
               </div>
-              <SystemVerdict row={row} scope={scope} names={names} pick={pick} />
+              <SystemVerdict row={row} scope={scope} names={names} pick={pick} flipped={flipped} />
             </div>
           </div>
         </div>
