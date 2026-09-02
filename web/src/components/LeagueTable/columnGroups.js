@@ -578,7 +578,9 @@ export function myHitStyle(value) {
 // 픽마다 "적중으로 치는 결과"·"보험(부분 환급)으로 치는 결과"가 다르다 — 나머지는 전부 미적.
 const PICK_VERDICT_MAP = {
   플핸무: { hit: [3, 4], insure: [2] },
+  플핸승: { hit: [3, 4], insure: [1] },
   정무: { hit: [1, 2], insure: [3] },
+  정역: { hit: [1, 2], insure: [4] },
   무핸무: { hit: [2, 3], insure: [] },
   플핸: { hit: [3, 4], insure: [] },
   정: { hit: [1, 2], insure: [] },
@@ -622,8 +624,8 @@ export function pickVerdictStyle(value) {
 
 // 정배 쪽(정무/정/핸승/핸무)과 플핸 쪽(플핸/플핸무/무/역/무핸무)을 셀 색만으로 바로
 // 구분하기 위한 그룹 — RtBadge와 같은 파랑/빨강 축을 그대로 쓴다.
-const MY_PICK_FAV_GROUP = new Set(['정무', '정', '핸승', '핸무'])
-const MY_PICK_DOG_GROUP = new Set(['플핸', '플핸무', '무', '역', '무핸무'])
+const MY_PICK_FAV_GROUP = new Set(['정무', '정역', '정', '핸승', '핸무'])
+const MY_PICK_DOG_GROUP = new Set(['플핸', '플핸무', '플핸승', '무', '역', '무핸무'])
 
 // 내 예측의 "내픽" 칸 색상 — 뱃지가 아니라 칸 전체 배경으로 정배 쪽/플핸 쪽을 구분한다.
 export function myPickStyle(value) {

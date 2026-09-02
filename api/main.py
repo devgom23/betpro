@@ -711,7 +711,9 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
 # 결과"가 다르다. 값 형식: {픽: (적중 RT코드 집합, 보험 RT코드 집합)}.
 _MY_PICK_VERDICT_MAP = {
     "플핸무": ({3, 4}, {2}),
+    "플핸승": ({3, 4}, {1}),
     "정무": ({1, 2}, {3}),
+    "정역": ({1, 2}, {4}),
     "무핸무": ({2, 3}, set()),
     "플핸": ({3, 4}, set()),
     "정": ({1, 2}, set()),
