@@ -2244,7 +2244,16 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
             >
               <h3 className="detail-h2h-title">
                 <span className="detail-h2h-title-left">
-                  상대전적
+                  {/* 배당·승점 기준 안내는 화면에 계속 띄워 두지 않고 제목에 마우스를
+                      올렸을 때만 보이는 툴팁으로 둔다 — 국내 우선이었던 예전 기준과
+                      헷갈리지 않게 근거는 남기되(HeadToHeadResult.jsx의 favSide 위
+                      주석 참고), 상시 노출까진 필요 없다는 판단(2026-09-03). */}
+                  <span
+                    className="detail-h2h-title-text"
+                    title="※ 승점은 홈팀 기준 · 배당은 해외배당 기준입니다."
+                  >
+                    상대전적
+                  </span>
                   <select
                     className={`detail-h2h-period${h2hYears ? ' is-on' : ''}`}
                     value={h2hYears}
@@ -2284,12 +2293,6 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
                   {h2hSig && h2hSig.value_text && (
                     <span className="detail-section-note detail-h2h-avg">{h2hSig.value_text}</span>
                   )}
-                </span>
-                {/* 배당 기준을 적어 둔다 — 화면만 봐선 국내인지 해외인지 알 수 없고,
-                    예전엔 국내 우선이었어서 값이 달라진 이유를 나중에 못 찾는다.
-                    해외로 통일한 근거는 HeadToHeadResult.jsx의 favSide 위 주석 참고. */}
-                <span className="detail-section-note detail-h2h-footnote">
-                  ※ 승점은 홈팀 기준 · 배당은 해외배당 기준입니다.
                 </span>
               </h3>
               <HeadToHeadResult

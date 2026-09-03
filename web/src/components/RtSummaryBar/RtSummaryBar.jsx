@@ -13,18 +13,43 @@ function pct(summary, name) {
 }
 
 // 핸승/핸무/무/역 결과분포를 보여준다. (통합DB탭=카드형 / 리그탭 대시보드=한 줄 색상 배지)
-export default function RtSummaryBar({ summary, inline = false }) {
+// onSelect를 넘기면 배지가 클릭 가능해진다 — 조회 결과 표를 그 결과부터 정렬하는
+// 용도(LeaguePage). onSelect가 없는 자리(리그 대시보드 등 전체 요약)는 예전처럼
+// 그냥 보여주기만 한다.
+export default function RtSummaryBar({ summary, inline = false, onSelect, selected }) {
   const s = summary || EMPTY_RT_SUMMARY
 
   if (inline) {
     return (
       <span className="rt-summary-inline">
-        {RT_ORDER.map((name) => (
-          <span className="rt-badge-item" key={name} style={RT_CHIP[name]}>
-            {name} {(s[name] ?? 0).toLocaleString()}
-            <span className="rt-badge-pct">({pct(s, name)}%)</span>
-          </span>
-        ))}
+        {RT_ORDER.map((name) => {
+          const clickable = !!onSelect
+          const active = clickable && selected === name
+          return (
+            <span
+              className={`rt-badge-item${clickable ? ' rt-badge-item-clickable' : ''}${active ? ' rt-badge-item-active' : ''}`}
+              key={name}
+              style={RT_CHIP[name]}
+              onClick={clickable ? () => onSelect(name) : undefined}
+              onKeyDown={
+                clickable
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onSelect(name)
+                      }
+                    }
+                  : undefined
+              }
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              title={clickable ? `표를 ${name}부터 정렬 (다시 클릭하면 해제)` : undefined}
+            >
+              {name} {(s[name] ?? 0).toLocaleString()}
+              <span className="rt-badge-pct">({pct(s, name)}%)</span>
+            </span>
+          )
+        })}
       </span>
     )
   }

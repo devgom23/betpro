@@ -93,6 +93,28 @@
   font-weight: 700;
 }
 
+/* 상대전적 요약표(전체기준·홈기준) 승/무/패 합계 — 클릭하면 아래 경기 목록을 그
+   결과부터 정렬한다. 밑줄로 "누를 수 있다"는 걸 표시한다 — 점선이 아니라 실선
+   (최근10경기 전적 말풍선의 팀명 밑줄 <u>과 같은 스타일, 2026-09-03). */
+.h2h-total-clickable {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.h2h-total-clickable:hover {
+  filter: brightness(0.94);
+}
+
+.h2h-total-active {
+  box-shadow: 0 0 0 2px currentColor inset;
+}
+
+.h2h-sort-hint {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 .detail-table.match-list {
   margin-top: 10px;
 }

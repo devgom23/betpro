@@ -13,6 +13,10 @@ import SeasonStats from '../components/SeasonStats/SeasonStats'
 import { buildQueryString, ODDS_KEYS } from '../utils/query'
 import { getRoundFinalOddsTime, setRoundFinalOddsTime, formatFinalOddsTime } from '../utils/finalOddsTime'
 
+// 결과요약 배지(핸승/핸무/무/역) 클릭 정렬용 — RT 원본값(1~4)과 배지 이름 대응.
+// columnGroups.js의 RT_DISPLAY와 같은 매핑이다.
+const RT_LABEL_TO_NUM = { 핸승: 1, 핸무: 2, 무: 3, 역: 4 }
+
 function describeQuery(query) {
   if (!query) return ''
   const parts = []
@@ -40,6 +44,17 @@ export default function LeaguePage({ code, scope }) {
   const [teams, setTeams] = useState([])
   const [reloadKey, setReloadKey] = useState(0)
 
+  // 결과요약 배지(핸승/핸무/무/역) 클릭 정렬 — 선택한 결과가 표 위쪽으로 오도록
+  // 지금 조회된 rows만 그 자리에서 다시 배열한다(서버 재조회 없음, 같은 결과 안에서는
+  // 원래 순서 그대로 유지되는 안정 정렬). 새로 조회하면(query가 바뀌면) 해제한다.
+  const [rtSort, setRtSort] = useState(null)
+  useEffect(() => {
+    setRtSort(null)
+  }, [query])
+  function handleRtSortSelect(name) {
+    setRtSort((prev) => (prev === name ? null : name))
+  }
+
   // 엑셀 다운로드 / 업로드
   const fileInputRef = useRef(null)
   const [pendingFile, setPendingFile] = useState(null)   // 업로드 대기 파일(확인 전)
@@ -61,6 +76,20 @@ export default function LeaguePage({ code, scope }) {
   const [showRiskLegend, setShowRiskLegend] = useState(false)
   const groups = useMemo(() => buildColumnGroups(data?.columns || []), [data?.columns])
   const { batch1Groups, batch2Groups } = splitIndicatorBatches(groups)
+
+  // rtSort가 있으면 그 결과(핸승/핸무/무/역)에 해당하는 행을 앞으로 뺀다. 그룹 안에서는
+  // 원래 순서를 그대로 유지한다(정렬이 아니라 앞으로 모으는 것 — sort 대신 분류해서
+  // 이어 붙이면 항상 안정적이다).
+  const sortedRows = useMemo(() => {
+    if (!rtSort || !data?.rows) return data?.rows
+    const target = RT_LABEL_TO_NUM[rtSort]
+    const matched = []
+    const rest = []
+    for (const row of data.rows) {
+      ;(Number(row.RT) === target ? matched : rest).push(row)
+    }
+    return [...matched, ...rest]
+  }, [data?.rows, rtSort])
 
   function toggleBatch(batchGroups) {
     const keys = batchGroups.map(groupKey)
@@ -452,7 +481,15 @@ export default function LeaguePage({ code, scope }) {
           <strong>{(data.odds_summary?.국배 ?? 0).toLocaleString()}</strong> · 해배 등록{' '}
           <strong>{(data.odds_summary?.해배 ?? 0).toLocaleString()}</strong>
         </span>
-        <RtSummaryBar summary={data.rt_summary} inline />
+        <RtSummaryBar
+          summary={data.rt_summary}
+          inline
+          onSelect={handleRtSortSelect}
+          selected={rtSort}
+        />
+        {rtSort && (
+          <span className="rt-sort-hint">{rtSort} 결과부터 정렬 중 (다시 클릭하면 해제)</span>
+        )}
         <span className="league-summary-divider" aria-hidden="true" />
         <PickSummaryBar summary={data.hit_summary} />
         <div className="league-summary-toolbar">
@@ -490,7 +527,7 @@ export default function LeaguePage({ code, scope }) {
       <LeagueTable
         code={code}
         columns={data.columns}
-        rows={data.rows}
+        rows={sortedRows}
         scope={scope}
         highlightCols={ODDS_KEYS.filter((k) => query?.[k] !== undefined).map((k) => k.toUpperCase())}
         collapsed={collapsed}

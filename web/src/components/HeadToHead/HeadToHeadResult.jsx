@@ -179,8 +179,15 @@ function WdlCols() {
   )
 }
 
-function WdlRow({ title, wdl }) {
+const WDL_KO = { W: '승', D: '무', L: '패' }
+
+// scope는 "전체기준"/"홈기준" 중 이 줄이 어느 쪽인지 — 클릭하면 부모(onTotalClick)에
+// scope와 결과(W/D/L)를 같이 올려보낸다. 두 줄 다 클릭 가능하다: 전체기준을 클릭하면
+// (홈/원정 안 가리고) 그 결과인 경기를 앞으로 모으고, 홈기준을 클릭하면 그중 이 팀이
+// 실제로 홈이었던 경기만 앞으로 모은다 — 요약표 숫자와 정확히 같은 대상이 위로 온다.
+function WdlRow({ title, wdl, scope, onTotalClick, activeMode }) {
   if (!wdl) return null
+  const clickable = !!onTotalClick
   return (
     <tr>
       <td className="row-label">{title}</td>
@@ -191,9 +198,35 @@ function WdlRow({ title, wdl }) {
           </td>
         ))
       )}
-      <td className="col-total col-w">{wdl.W.total}</td>
-      <td className="col-total col-d">{wdl.D.total}</td>
-      <td className="col-total col-l">{wdl.L.total}</td>
+      {['W', 'D', 'L'].map((key) => {
+        const isActive = clickable && activeMode?.scope === scope && activeMode?.letter === key
+        return (
+          <td
+            key={key}
+            className={
+              `col-total ${GROUP_COL_CLASS[key]}` +
+              (clickable ? ' h2h-total-clickable' : '') +
+              (isActive ? ' h2h-total-active' : '')
+            }
+            onClick={clickable ? () => onTotalClick(scope, key) : undefined}
+            onKeyDown={
+              clickable
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onTotalClick(scope, key)
+                    }
+                  }
+                : undefined
+            }
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            title={clickable ? `아래 목록을 ${title} ${WDL_KO[key]}부터 정렬 (다시 클릭하면 해제)` : undefined}
+          >
+            {wdl[key].total}
+          </td>
+        )
+      })}
     </tr>
   )
 }
@@ -202,7 +235,7 @@ function WdlRow({ title, wdl }) {
 // 홈이었던 맞대결만)을 같은 표 안에 두 줄로 이어 붙여, 헤더 하나로 바로 비교할 수 있게 한다.
 // 헤더는 한 줄로 압축한다 — W/D/L 접두어 없이 핸승/핸무/무/역만 반복해서 보여주고(그룹
 // 구분은 세로선으로), 맨 뒤 토탈은 승/무/패 세 칸으로 나눠 W/D/L 각각의 합계를 바로 본다.
-function WdlGrid({ wdl, wdlHome }) {
+function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode }) {
   if (!wdl) return null
   return (
     <table className="detail-table h2h-wdl-grid">
@@ -223,8 +256,8 @@ function WdlGrid({ wdl, wdlHome }) {
         </tr>
       </thead>
       <tbody>
-        <WdlRow title="전체기준" wdl={wdl} />
-        <WdlRow title="홈기준" wdl={wdlHome} />
+        <WdlRow title="전체기준" wdl={wdl} scope="all" onTotalClick={onTotalClick} activeMode={activeMode} />
+        <WdlRow title="홈기준" wdl={wdlHome} scope="home" onTotalClick={onTotalClick} activeMode={activeMode} />
       </tbody>
     </table>
   )
@@ -248,6 +281,17 @@ export default function HeadToHeadResult({
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const usePreset = preset !== undefined
+
+  // 요약표(전체기준/홈기준)의 승/무/패 합계 숫자를 클릭하면 아래 경기 목록을 그 결과부터
+  // 정렬한다(서버 재조회 없음 — 지금 보이는 목록 안에서만 앞으로 모은다). { scope: 'all'
+  // | 'home', letter: 'W'|'D'|'L' } 또는 null. 상대 팀이 바뀌면(새 경기를 열면) 해제한다.
+  const [wdlSort, setWdlSort] = useState(null)
+  useEffect(() => {
+    setWdlSort(null)
+  }, [home, away])
+  function handleWdlSortSelect(scope, letter) {
+    setWdlSort((prev) => (prev && prev.scope === scope && prev.letter === letter ? null : { scope, letter }))
+  }
 
   useEffect(() => {
     if (usePreset) return undefined
@@ -299,6 +343,36 @@ export default function HeadToHeadResult({
   const wdlHome = recomputed ? wdlBreakdown(favMatches, home, true) : effData.wdl_summary_home
   // '홈보기' — 위 요약표 '홈기준' 줄과 같은 기준(home팀이 실제로 홈이었던 경기만).
   const shownMatches = homeOnly ? favMatches.filter((m) => m.HT === home) : favMatches
+  // 승/무/패 정렬 — 선택한 결과(homePoints 기준)에 해당하는 경기를 앞으로 뺀다.
+  // scope='all'(전체기준)은 2단계: [그 결과인 경기] → [나머지].
+  // scope='home'(홈기준)은 3단계: [홈경기 중 그 결과] → [홈경기 중 나머지] →
+  // [원정경기] — "홈기준으로 먼저 모으고, 그 안에서 승(선택한 결과)부터"라는
+  // 요청대로, 홈경기 전체가 원정경기보다 항상 위에 오도록 먼저 홈/원정으로 나눈
+  // 다음 그 안에서 결과로 다시 가른다. 각 단계 안에서는 원래 순서(최신순) 유지.
+  const sortedMatches = wdlSort
+    ? (() => {
+        const target = wdlSort.letter
+        if (wdlSort.scope === 'home') {
+          const homeHit = []
+          const homeRest = []
+          const away = []
+          shownMatches.forEach((m) => {
+            const letter = { 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]
+            if (m.HT !== home) away.push(m)
+            else if (letter === target) homeHit.push(m)
+            else homeRest.push(m)
+          })
+          return [...homeHit, ...homeRest, ...away]
+        }
+        const matched = []
+        const rest = []
+        shownMatches.forEach((m) => {
+          const letter = { 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]
+          ;(letter === target ? matched : rest).push(m)
+        })
+        return [...matched, ...rest]
+      })()
+    : shownMatches
   // 지금 걸려 있는 조건을 한 줄로 — 기간·정/역 어느 것이든 걸리면 요약표까지 그
   // 조건만으로 바뀌므로, 무엇을 보고 있는지 반드시 밝혀야 전체 전적과 안 헷갈린다.
   const filterLabel = [
@@ -312,7 +386,13 @@ export default function HeadToHeadResult({
 
   return (
     <>
-      <WdlGrid wdl={wdl} wdlHome={wdlHome} />
+      <WdlGrid wdl={wdl} wdlHome={wdlHome} onTotalClick={handleWdlSortSelect} activeMode={wdlSort} />
+      {wdlSort && (
+        <p className="h2h-more h2h-sort-hint">
+          {wdlSort.scope === 'home' ? '홈기준 ' : ''}
+          {WDL_KO[wdlSort.letter]} 결과부터 정렬 중 (숫자를 다시 클릭하면 해제)
+        </p>
+      )}
 
       {shownMatches.length === 0 ? (
         <p className="detail-empty">
@@ -336,8 +416,10 @@ export default function HeadToHeadResult({
               </tr>
             </thead>
             <tbody>
-              {shownMatches.map((m, i) => {
-                const seasonStart = i > 0 && m.S !== shownMatches[i - 1].S
+              {sortedMatches.map((m, i) => {
+                // 정렬(승/무/패 클릭) 중에는 시간순이 아니라 시즌 경계 구분선이
+                // 뜬금없이 여기저기 나타나므로 정렬 중엔 끈다.
+                const seasonStart = !wdlSort && i > 0 && m.S !== sortedMatches[i - 1].S
                 const fav = favSide(m)
                 return (
                   <tr key={i} className={seasonStart ? 'season-start' : undefined}>

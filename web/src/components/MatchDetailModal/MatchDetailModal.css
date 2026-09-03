@@ -347,13 +347,21 @@
 }
 
 
-/* 상대전적 제목 줄 — 평균득점 문구는 왼쪽에 붙여 강조하고, 승점 기준 안내문은
-   같은 줄 오른쪽 끝으로 밀어낸다(공백만으로는 안 밀리므로 flex로 양끝 정렬). */
 .detail-h2h-title {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 8px;
+}
+
+/* '상대전적' 글자에 마우스를 올리면 배당·승점 기준 안내(title 속성)가 뜬다 —
+   예전엔 이 문구를 제목 줄에 상시 노출했는데(→ .detail-h2h-footnote, 2026-09-03
+   삭제), 자주 안 보는 안내문이라 늘 띄워 두는 대신 훑어보고 싶을 때만 보이게 뺐다.
+   밑줄(실선)로 "가리키면 뭔가 더 있다"는 걸 알려준다 — 최근10경기 전적 말풍선의
+   팀명 밑줄 <u>과 같은 스타일. */
+.detail-h2h-title-text {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: help;
 }
 
 /* 상대전적 / 홈보기 / 평균득점 — 예전엔 텍스트 공백({' '})으로만 벌려 놔서
@@ -421,10 +429,6 @@
 .detail-h2h-avg {
   color: var(--text-primary);
   font-weight: 700;
-}
-
-.detail-h2h-footnote {
-  white-space: nowrap;
 }
 
 .detail-table {
@@ -1422,10 +1426,12 @@
 }
 
 /* 마우스를 올리면 그 경기 정보가 뜨는 칸 — 올릴 수 있다는 걸 커서와 밑줄로 알린다.
-   (빈 칸에는 안 붙는다) */
+   (빈 칸에는 안 붙는다) 점선이 아니라 실선 — 상대전적 승/무/패 클릭 밑줄과 같은
+   스타일로 통일한다(2026-09-03). */
 .recent-cell-tip {
   cursor: help;
-  text-decoration: underline dotted var(--text-muted-2);
+  text-decoration: underline;
+  text-decoration-color: var(--text-muted-2);
   text-underline-offset: 2px;
 }
 
