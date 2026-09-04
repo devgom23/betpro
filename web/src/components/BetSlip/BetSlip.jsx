@@ -58,10 +58,8 @@ export function oddsForPick(row, pick) {
 
 const matchKey = (r) => `${r.L}|${r.S}|${r.R}|${r.No}|${r.HT}|${r.AT}`
 const legKey = (l) => `${matchKey(l.row)}|${l.pick}`
-// 부동소수점 오차 때문에 6.05 같은 값이 toFixed(1)에서 6.0으로 내려가 버리는 걸
-// 막으려고 아주 작은 값을 더해 반올림한다.
-// 소수 1자리 반올림은 아래쪽 조합 배당(다리 배당끼리 곱한 값, combos의 odds)에만 쓴다 —
-// 그 값이 당첨금·수익금 계산과 화면 표시가 어긋나지 않게 맞추는 기준이기 때문이다.
+// combos의 odds는 이미 소수 1자리로 전체올림해서 확정된 값이라(아래 combos 참고),
+// 여기서는 그 값을 그대로 소수 1자리 문자열로만 바꾼다.
 // 선택 1/2 목록에 나오는 다리 하나짜리 배당은 원본 그대로 소수 2자리로 보여준다.
 const fmtOdds = (v) => (v == null ? '-' : (Math.round((v + Number.EPSILON) * 10) / 10).toFixed(1))
 const fmtLegOdds = (v) => (v == null ? '-' : (Math.round((v + Number.EPSILON) * 100) / 100).toFixed(2))
@@ -177,10 +175,14 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
       acc = next
     }
     return acc.map((legs) => {
-      // 화면에 보이는 배당(소수 1자리)과 당첨금·수익금·수익률 계산이 서로 어긋나지
-      // 않도록, 배당 자체를 소수 1자리로 반올림해서 쓴다(부동소수점 오차 보정 포함).
+      // 조합 배당(다리 배당끼리 곱한 값)은 프로토 방식대로 소수 1자리로 "전체올림"한다
+      // (예: 1.8×1.62=2.916 → 2.9가 아니라 3.0). 반올림이 아니라서 2.9x는 크기와
+      // 상관없이 전부 3.0이 된다. 화면 표시와 당첨금·수익금 계산이 어긋나지 않도록
+      // 배당 자체를 이 값으로 확정해서 쓴다. EPSILON은 부동소수점 오차 때문에 딱
+      // 떨어지는 값(예: 1.8×1.0=1.8)이 1.8000000000000003처럼 계산돼 다음 단위로
+      // 잘못 올림되는 걸 막는다.
       const odds = legs.every((l) => l.odds != null)
-        ? Math.round((legs.reduce((p, l) => p * l.odds, 1) + Number.EPSILON) * 10) / 10
+        ? Math.ceil(legs.reduce((p, l) => p * l.odds, 1) * 10 - Number.EPSILON) / 10
         : null
       return { key: legs.map(legKey).join('::'), legs, odds }
     })
