@@ -195,11 +195,11 @@
   margin-bottom: 0;
 }
 
-/* 배당·지표별 표본 카드 — 위 '승+패 지표'(pick-band-risk-cols, 452px 고정)와 내용
-   폭을 맞춘다. 원래는 modal-col의 flex-stretch를 그대로 받아 창 너비에 따라 흔들렸다
-   (이 창 크기에서 우연히 451이었을 뿐 — 좁아지면 더 줄어든다). 이 팝업은 반응형이
-   필요 없다고 확정했으니 그냥 못박는다: 482px(border-box) − 패딩 28px − 테두리 2px
-   = 안쪽 452px, 승+패 지표 쪽과 정확히 같은 값. flex:none으로 stretch를 끈다. */
+/* 지표별 표본 카드 — 위 PickBand 왼쪽 칸(배당, pick-band-risk-cols, 452px 고정)과
+   내용 폭을 맞춘다. 원래는 modal-col의 flex-stretch를 그대로 받아 창 너비에 따라
+   흔들렸다(이 창 크기에서 우연히 451이었을 뿐 — 좁아지면 더 줄어든다). 이 팝업은
+   반응형이 필요 없다고 확정했으니 그냥 못박는다: 482px(border-box) − 패딩 28px −
+   테두리 2px = 안쪽 452px, 위 칸과 정확히 같은 값. flex:none으로 stretch를 끈다. */
 .detail-section-pinned {
   width: 482px;
   flex: none;
@@ -468,9 +468,9 @@
 }
 
 /* 지표별 표본 지표명 칸 — "국통) 승+무+패" 같은 긴 이름이 줄바꿈되지 않고
-   한 줄로 나오게 한다(펼치기했을 때만 나오는 통합지표 줄에서 발생). 폭 100px은
-   지표별 표본·위 승+패 지표 둘 다 같은 값. table-layout:fixed에서는 폭이 엄격히
-   고정되므로(내용이 넘치면 잘릴 수 있다) white-space:nowrap과 함께 넉넉히 잡는다. */
+   한 줄로 나오게 한다(펼치기했을 때만 나오는 통합지표 줄에서 발생).
+   table-layout:fixed에서는 폭이 엄격히 고정되므로(내용이 넘치면 잘릴 수 있다)
+   white-space:nowrap과 함께 넉넉히 100px을 잡는다. */
 .sample-table .row-label {
   width: 100px;
   white-space: nowrap;
@@ -651,17 +651,17 @@
   font-weight: 700;
 }
 
-/* 토탈 칸 폭 50px — 위 핸승/핸무/무/역 75px과 같은 이유(지표별 표본·승+패 지표
-   폭 맞추기). col-total도 col-hs처럼 다른 표(상대전적)와 이름을 공유해서
-   .sample-table로 좁힌다. */
+/* 토탈 칸 폭 50px — 위 핸승/핸무/무/역 75px과 같은 이유(지표별 표본 폭 맞추기).
+   col-total도 col-hs처럼 다른 표(상대전적)와 이름을 공유해서 .sample-table로
+   좁힌다. */
 .sample-table .col-total {
   width: 50px;
 }
 
-/* 핸승/핸무/무/역 네 칸 폭을 75px로 고정 — 지표별 표본과 위 '승+패 지표'가 서로
-   다른(폭이 다른) 부모 안에 있어도 이 네 칸만큼은 항상 같아 보이게 한다.
-   .sample-table로 좁혀서 다른 표(상대전적 등, HeadToHeadResult.css가 같은 이름의
-   .detail-table .col-hs를 색상 용도로만 재사용한다)에는 번지지 않게 한다. */
+/* 핸승/핸무/무/역 네 칸 폭을 75px로 고정 — 지표별 표본 표의 폭을 항상 같아
+   보이게 한다. .sample-table로 좁혀서 다른 표(상대전적 등, HeadToHeadResult.css가
+   같은 이름의 .detail-table .col-hs를 색상 용도로만 재사용한다)에는 번지지
+   않게 한다. */
 .sample-table .col-hs,
 .sample-table .col-hm,
 .sample-table .col-mu,
@@ -779,7 +779,7 @@
 }
 
 /* ── 경기지표 · 배당차 · 시스템 판정 — '확률 지표' 표 바로 밑, 그 칸 폭 안에서만
-   나란히 셋(왼쪽 '승+패 지표' 칸과는 무관 — 그 칸 아래로는 안 내려간다).
+   나란히 셋(왼쪽 '배당' 칸과는 무관 — 그 칸 아래로는 안 내려간다).
    예전엔 이 셋을 이 칸 안에서 세로로 쌓아 줄이 길었는데, 가로 3단으로 접었다. */
 /* 네 칸 다 내용 폭만큼만 차지하게(max-content) — fr로 나누면 표(국배/해배 51·86px로
    고정한) 폭보다 트랙이 넓어져서, gap(10px)을 줄여도 표 사이가 실제로는 훨씬 벌어져
@@ -795,11 +795,11 @@
    ★★★ + 3자리% + 적중/보험/미적)도 넉넉히 들어가게 240px로 여유를 뒀다.
    예전엔 absolute + padding-bottom으로 자리를 미리 비웠는데, 그러면 경기지표
    칸이 짧을 때도 항상 같은 여백(28px)을 쓰게 되어 카드가 필요 이상으로 커
-   보였다(왼쪽 '승+패 지표' 칸 271px ↔ 오른쪽 '확률 지표' 칸 292px). in-flow로
-   두면 결과 판정 줄이 실제로 차지하는 만큼만 카드가 커진다. */
+   보였다(왼쪽 칸과 오른쪽 '확률 지표' 칸의 실측 높이가 서로 달랐던 사례).
+   in-flow로 두면 결과 판정 줄이 실제로 차지하는 만큼만 카드가 커진다. */
 .pick-band-bottom-cols {
   display: grid;
-  grid-template-columns: max-content max-content 240px max-content;
+  grid-template-columns: max-content max-content 240px;
   gap: 10px;
   margin-top: 12px;
   padding-top: 12px;
@@ -812,7 +812,7 @@
   .pick-band-bottom-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* 경기지표 제목 — 배당차·시스템 판정·예상점수는 표 안(왼쪽 위 칸)에 이름을 넣는
+/* 경기지표 제목 — 배당차·시스템 판정은 표 안(왼쪽 위 칸)에 이름을 넣는
    걸로 바뀌어서 더 이상 h3가 없다. */
 .pick-band-match h3 {
   margin: 0 0 8px;
@@ -955,11 +955,12 @@
   color: var(--text-secondary);
 }
 
-/* 확률 지표 좌우 분할 — 왼쪽 '승+패 지표'(지표별 표본에서 뽑은 4줄) / 오른쪽 기존
-   '확률 지표'(정승·플핸무·플 표, RiskCard). 각 칸이 자기 제목(h3)을 따로 갖는다
-   (위 .pick-band-risk h3 스타일을 그대로 쓴다).
+/* 확률 지표 좌우 분할 — 왼쪽 '배당'(OddsTable, 2026-09-04부터 '승+패 지표' 대신
+   여기로 옮겨왔다) / 오른쪽 기존 '확률 지표'(정승·플핸무·플 표, RiskCard). 각 칸이
+   자기 제목(h3)을 따로 갖는다(위 .pick-band-risk h3 스타일을 그대로 쓴다).
    왼쪽 칸은 452px로 고정한다 — 아래 '지표별 표본' 표의 실제 폭(row-label 100 +
-   col-hs 등 75×4 + col-total 50 = 450, 테두리 포함 약 451px)과 맞추는 값이다.
+   col-hs 등 75×4 + col-total 50 = 450, 테두리 포함 약 451px)과 맞추던 값을 그대로
+   물려받았다(OddsTable도 이 폭에 맞게 4등분 표라 잘 맞는다).
    grid 트랙 자체를 이 값으로 고정해야 그 안의 표(width:auto, table-layout:fixed)가
    트랙 폭만큼 늘어나지(grid item 기본 stretch) 않고 딱 이 폭 안에 그대로 앉는다.
    오른쪽(확률 지표, RiskCard 9칸)은 남는 폭을 전부 가져간다. */
@@ -1052,19 +1053,6 @@
 .detail-table.sys-table.gap-table th:not(.row-label),
 .detail-table.sys-table.gap-table td:not(.row-label) {
   width: 86px;
-}
-
-/* 예상점수 표 — 값 칸이 '홈-원정' 머리글을 담아야 해서 시스템 판정(51px)보다 넓다. */
-.detail-table.sys-table.score-table th:not(.row-label),
-.detail-table.sys-table.score-table td:not(.row-label) {
-  width: 58px;
-}
-
-.score-val {
-  font-weight: 700;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  cursor: help;
 }
 
 .sys-table .row-label {

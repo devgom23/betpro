@@ -8,7 +8,6 @@ import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
 import { drawTendency, drawRelation, systemGrade, resolveSystemPick, sysPickVerdict, VERDICT_TONE } from '../../utils/systemVerdict'
-import { expectedScore } from '../../utils/expectedScore'
 import './MatchDetailModal.css'
 
 
@@ -1441,70 +1440,6 @@ function DirectionSummary({ row, scope }) {
   )
 }
 
-// '확률 지표' 밴드 왼쪽 칸 — 지표별 표본(아래 SampleTable)의 승+패 4줄(국)승+패·
-// 국통)승+패·해)승+패·해통)승+패)만 그대로 뽑아 보여준다. 승·패 각각의 방향(정배가
-// 홈인지 원정인지)과 달리 승+패는 방향 무관 지표라 이 경기와 늘 관련이 있다(favSampleCodes
-// 주석 참고) — 그래서 여기서는 대상 거르기 없이 네 줄을 고정으로 보여준다.
-// scope==='user'일 때 TK-/TF-를 빼는 것도 SampleTable과 같은 이유(내 데이터는 리그
-// 하나뿐이라 통합 지표가 국내·해외 지표와 완전히 같아져 의미 없는 중복이 된다).
-const WL_CODES = ['K-WL', 'TK-WL', 'F-WL', 'TF-WL']
-
-function WlIndicatorTable({ row, scope }) {
-  const codes = scope === 'user' ? WL_CODES.filter((c) => !c.startsWith('T')) : WL_CODES
-  const cnt = (v) => {
-    const n = Number(v)
-    return Number.isNaN(n) ? 0 : Math.trunc(n)
-  }
-  const lines = codes.map((code) => {
-    const label = SAMPLE_INDICATORS.find(([c]) => c === code)[1]
-    const vals = [1, 2, 3, 4].map((i) => cnt(row[`${code} ${i}`]))
-    const eRaw = [1, 2, 3, 4].map((i) => row[`E_${code} ${i}`])
-    const hasE = eRaw.some((v) => v !== null && v !== undefined && v !== '')
-    const eVals = hasE ? eRaw.map(cnt) : null
-    return {
-      code, label, vals,
-      total: vals.reduce((a, b) => a + b, 0),
-      eVals,
-      eTotal: eVals ? eVals.reduce((a, b) => a + b, 0) : 0,
-    }
-  })
-  const isForeignCode = (c) => /^(F|TF)-/.test(c)
-  return (
-    <table className="detail-table sample-table wl-indicator-table">
-      <thead>
-        <tr>
-          <th className="row-label">지표</th>
-          <th className="col-hs">핸승</th>
-          <th className="col-hm">핸무</th>
-          <th className="col-mu">무</th>
-          <th className="col-yk">역</th>
-          <th className="col-total">토탈</th>
-        </tr>
-      </thead>
-      <tbody>
-        {lines.map((l, li) => {
-          const prev = li > 0 ? lines[li - 1] : null
-          const groupStart = prev && isForeignCode(l.code) && !isForeignCode(prev.code)
-          return (
-            <Fragment key={l.code}>
-              <tr className={groupStart ? 'sample-group-start' : undefined}>
-                <td className="row-label">{l.label}</td>
-                {l.vals.map((v, i) => (
-                  <td key={i} className={maxCellClass(l.vals, i)}>
-                    {l.total > 0 ? `${Math.round((v / l.total) * 100)}% (${v})` : '-'}
-                  </td>
-                ))}
-                <td className="col-total">{l.total}</td>
-              </tr>
-              <SampleFinalRow vals={l.eVals} total={l.eTotal} />
-            </Fragment>
-          )
-        })}
-      </tbody>
-    </table>
-  )
-}
-
 // expanded=false(기본)면 판단에 쓰는 9줄만 보여준다. 그때는 보이는 게 전부 대상이라
 // 테두리 강조를 걸지 않는다 — 다 강조하면 강조가 아니게 되기 때문. 펼쳐서 27줄을
 // 다 보여줄 때만 그 9줄에 테두리를 둘러 어느 것이 대상인지 구분해 준다.
@@ -1816,10 +1751,10 @@ function findSignal(data, key) {
 // K1/K2(내 데이터)는 6대리그로만 잰 값이라 % 와 별을 띄우지 않는다 — 방향과 일치도만.
 // names·pick·flipped는 PickBand가 한 번만 계산해서 내려준다 — 경기지표의 '무' 뱃지도
 // 같은 pick이 필요해서(같은방향/다른방향 표시), 여기서 또 계산하면 두 곳이 따로 놀 수 있다.
-// 표만 — 경기지표·배당차·예상점수와 같은 grid 줄(pick-band-bottom-cols) 안에 들어간다.
+// 표만 — 경기지표·배당차와 같은 grid 줄(pick-band-bottom-cols) 안에 들어간다.
 // 결과 판정 줄(픽·별점·%·적중배지)은 길이가 들쭉날쭉해서 SystemVerdictSummary로
-// 따로 뺐다 — 한 그리드 칸 안에 같이 두면 그 칸이 늘어나 옆 칸(예상점수)까지의
-// 간격이 넓어져 보였다.
+// 따로 뺐다 — 한 그리드 칸 안에 같이 두면 그 칸이 늘어나 옆 칸까지의 간격이
+// 넓어져 보였다.
 function SystemVerdictTable({ names, flipped }) {
   const cell = (v) => (v ? <b className="sys-name">{v}</b> : <span className="dir-none">—</span>)
   return (
@@ -1904,47 +1839,6 @@ function SystemVerdictSummary({ row, scope, names, pick, flipped }) {
   )
 }
 
-// 예상점수 — 시스템 판정이 낸 픽에 맞는 스코어 한 개를 초기/배변 두 시점으로.
-// 두 줄 다 '그 시점에 등록된 배당 전부'(국배+해배)로 다시 만든다 — CLAUDE.md 4-1.
-function ScoreTable({ row, pick }) {
-  const cell = (final) => {
-    const s = expectedScore(row, pick, final)
-    if (!s) return <span className="dir-none">—</span>
-    return (
-      <b
-        className="score-val"
-        title={`${final ? '배변' : '초기'} 배당 기준 — ${s.markets === 2 ? '국배·해배 둘 다' : '한쪽 배당만'} 반영.`
-          + `\n같은 배당대에서 '${pick}'의 배제(안 나온다고 본 결과)를 지킨 경기 `
-          + `${s.n.toLocaleString()}건 중 이 스코어가 ${s.rate}%로 가장 많았습니다.`
-          + '\n※ 스코어 맞히기는 원래 어렵습니다 — 아무것도 안 보고 1-1을 부르면 11.71%,'
-          + ' 이 표대로 부르면 16.53%(6대리그 35,947경기).'}
-      >
-        {s.home}-{s.away}
-      </b>
-    )
-  }
-  return (
-    <table className="detail-table sys-table score-table">
-      <thead>
-        <tr>
-          <th className="row-label">예상점수</th>
-          <th>홈-원정</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td className="row-label">초기</td>
-          <td>{cell(false)}</td>
-        </tr>
-        <tr>
-          <td className="row-label">배변</td>
-          <td>{cell(true)}</td>
-        </tr>
-      </tbody>
-    </table>
-  )
-}
-
 function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
   // '경기지표'의 무 뱃지(같은방향/다른방향)와 '시스템 판정' 둘 다 이 pick이
   // 필요해서 여기서 한 번만 계산해 내려준다.
@@ -1963,8 +1857,8 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
       <div className="pick-band-risk">
         <div className="pick-band-risk-cols">
           <div className="pick-band-risk-col">
-            <h3 className="pick-band-risk-col-title">승+패 지표</h3>
-            <WlIndicatorTable row={row} scope={scope} />
+            <h3 className="pick-band-risk-col-title">배당</h3>
+            <OddsTable row={row} />
           </div>
           <div className="pick-band-risk-col">
             <h3 className="pick-band-risk-col-title">
@@ -1972,7 +1866,7 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
               <DirectionSummary row={row} scope={scope} />
             </h3>
             <RiskCard row={row} />
-            {/* 경기지표·배당차·시스템 판정은 왼쪽('승+패 지표') 칸과는 무관하게
+            {/* 경기지표·배당차·시스템 판정은 왼쪽('배당') 칸과는 무관하게
                 이 칸(확률 지표) 표 바로 밑에만 붙인다 — 왼쪽 칸 아래로는 안 내려간다.
                 예전엔 이 셋을 세로로 쌓아서 줄이 길었는데, 이 칸 폭 안에서 가로
                 3단(뱃지·표·표)으로 접어 줄 수를 줄인다. */}
@@ -1990,9 +1884,6 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
                     빼서 이 줄의 길이·존재가 4단 grid의 폭/높이 계산에 안 들어가게
                     한다. 옆(경기지표) 칸이 길어져도 이 줄의 위치는 안 흔들린다. */}
                 <SystemVerdictSummary row={row} scope={scope} names={names} pick={pick} flipped={flipped} />
-              </div>
-              <div className="pick-band-score">
-                <ScoreTable row={row} pick={pick} />
               </div>
             </div>
           </div>
@@ -2172,12 +2063,8 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
 
         <div className="modal-columns" ref={columnsRef}>
           <div className="modal-col">
-            <section className="detail-section detail-section-pinned">
-              {/* 똥배는 2026-08-30 '경기지표' 줄(팝업 위쪽)로 옮겼다 — 여기에도 두면
-                  같은 값이 화면에 두 번 나온다. */}
-              <h3>배당</h3>
-              <OddsTable row={row} />
-            </section>
+            {/* 배당 표는 2026-09-04부터 위쪽 PickBand 왼쪽 칸('승+패 지표' 자리)으로
+                옮겼다 — 여기 두면 같은 표가 화면에 두 번 나온다. */}
             <section className="detail-section detail-section-pinned" ref={sampleSectionRef}>
               <h3>
                 <button
