@@ -270,6 +270,14 @@ td.sticky-col {
   font-weight: 700;
 }
 
+/* 동배당 — 같은 회차에 다른 경기와 국내 정배배당 숫자가 똑같은 칸에 2중 밑줄.
+   신호가 아니라 그냥 눈에 띄게 하는 표시라 배경·글자색은 안 건드린다(상세보기
+   '경기지표' 줄의 동배당 뱃지와 같은 이유 — MatchDetailModal.jsx 참고). */
+.league-table td.odds-dup-fav {
+  text-decoration: underline double;
+  text-underline-offset: 3px;
+}
+
 /* ── 내 예측(중요 별표 / 내픽) ──
    별표 버튼(.star-btn) 자체 스타일은 components/StarButton/StarButton.css로
    옮겼다(LeagueTable·MatchDetailModal 둘 다 그 컴포넌트를 쓴다). */

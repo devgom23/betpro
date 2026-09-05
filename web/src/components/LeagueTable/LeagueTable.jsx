@@ -11,6 +11,59 @@ import { api } from '../../api/client'
 import { useFontSize } from '../../context/FontSizeContext'
 import './LeagueTable.css'
 
+// ── 동배당 뱃지용 ────────────────────────────────────────────────────────
+// 같은 베팅 회차(금~월 4일)에 정배배당(승/패 중 낮은 쪽) 숫자가 똑같이 뜬 다른
+// 경기를 찾아 상세보기 '경기지표' 줄에 알려준다. 지금 이 표가 들고 있는 경기끼리만
+// 본다 — 이번주 리스트는 하루치가 전 리그 한 표라 리그를 넘나드는 중복까지 잡히고,
+// 리그 화면에서는 그 리그 안에서만 잡힌다.
+// ⚠ 이건 신호가 아니라 그냥 알림이다. "같은 배당이 두 번 뜨면 하나는 깨진다"는
+// 속설은 6대리그 36,212경기 전수조사에서 사실이 아닌 것으로 나왔다(2026-09-04 —
+// 갈림 47.7% vs 서로 상관없어도 47.7%, z=-0.13, 같은 회차 기준). 그래서 색(tone)을
+// 입히지 않는다.
+// 국내배당(KW/KL)만 본다 — 해외배당은 값이 잘게 쪼개져 있어 중복이 너무 많이 잡힌다.
+const SAME_ODDS_W = 'KW'
+const SAME_ODDS_L = 'KL'
+
+// 여러 리그를 한 표에 모은 화면(이번주 리스트 등)에서는 row.L이 리그 코드라 그대로
+// 쓰면 'LIGUE1'처럼 나온다 — 표의 '리그' 칸과 같은 말로 바꿔서 보여준다.
+const LEAGUE_LABELS = {
+  EPL: 'EPL', LALIGA: '라리가', SERIEA: '세리에',
+  BUNDES: '분데스', EREDIVISIE: '에레디', LIGUE1: '리그1',
+}
+
+// 동배(승=패)는 어느 쪽이 정배인지 못 가리므로 뺀다.
+function favOddsKey(row, wk, lk) {
+  const w = Number(row?.[wk])
+  const l = Number(row?.[lk])
+  if (!Number.isFinite(w) || !Number.isFinite(l) || w <= 0 || l <= 0 || w === l) return null
+  return Math.min(w, l).toFixed(2)
+}
+
+// DT('YY-MM-DD (Xxx)')가 속한 베팅 회차의 첫날(금요일)을 키로 돌려준다 —
+// api/bet_slips.py의 _round_range와 완전히 같은 규칙(화/수/목 경기는 다가올
+// 금~월로 귀속). 회차 단위 조회(이번주 리스트 등)는 이미 같은 회차 행만 모아
+// 넘겨주므로 사실상 항상 같은 값이 나오지만, 리그 화면처럼 여러 회차가 섞인
+// 표에서도 회차를 넘나드는 오탐이 안 생기게 여기서도 정확히 가른다.
+function roundKey(dt) {
+  const m = /(\d{2})-(\d{2})-(\d{2})/.exec(String(dt || ''))
+  if (!m) return null
+  const [, yy, mm, dd] = m
+  const d = new Date(2000 + Number(yy), Number(mm) - 1, Number(dd))
+  if (Number.isNaN(d.getTime())) return null
+  const wd = d.getDay()   // Sun=0 ... Sat=6
+  let fri
+  if (wd === 5 || wd === 6 || wd === 0) fri = d.getDate() - ((wd + 2) % 7)       // 금·토·일
+  else if (wd === 1) fri = d.getDate() - 3                                       // 월
+  else fri = d.getDate() + (5 - wd)                                              // 화·수·목 → 다가올 금
+  // toISOString()은 UTC로 바꾸면서 자정 근처 날짜가 하루 밀릴 수 있어(KST는 UTC+9)
+  // 쓰지 않는다 — 로컬 연/월/일을 그대로 문자열로 만든다.
+  const f = new Date(d.getFullYear(), d.getMonth(), fri)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${f.getFullYear()}-${pad(f.getMonth() + 1)}-${pad(f.getDate())}`
+}
+
+const matchIdent = (r) => `${r?.L}|${r?.S}|${r?.R}|${r?.No}|${r?.HT}|${r?.AT}`
+
 const VISIBLE_ROWS = 20
 // 화면 위아래로 미리 그려둘 여유 행수. 스크롤할 때 빈 칸이 스치는 걸 막아준다.
 const OVERSCAN = 10
@@ -82,6 +135,57 @@ export default function LeagueTable({
   const rowScope = (row) => row?.scope || scope
   const groups = useMemo(() => buildColumnGroups(columns || [], { hideIndicators }), [columns, hideIndicators])
   const [detailRow, setDetailRow] = useState(null)
+  // '회차|국내 정배배당' → 그 배당으로 뜬 경기들. 행 전체를 한 번만 훑는다.
+  const sameOddsIndex = useMemo(() => {
+    const idx = new Map()
+    for (const r of rows || []) {
+      const rk = roundKey(r?.DT)
+      if (rk === null) continue
+      const v = favOddsKey(r, SAME_ODDS_W, SAME_ODDS_L)
+      if (v === null) continue
+      const key = `${rk}|${v}`
+      const arr = idx.get(key)
+      if (arr) arr.push(r)
+      else idx.set(key, [r])
+    }
+    return idx
+  }, [rows])
+  // 표에서 그 숫자에 2중 밑줄을 긋기 위한 색인 — 행 객체 → 정배가 어느 칸(KW/KL)인지.
+  // 행 객체를 그대로 키로 쓴다(rows.slice()는 참조를 그대로 넘긴다) — 칸마다 문자열을
+  // 새로 만들지 않으려는 것. 표는 행 수백~수천 × 칸 130개라 칸당 비용이 그대로 곱해진다.
+  const dupFavCol = useMemo(() => {
+    const out = new Map()
+    for (const group of sameOddsIndex.values()) {
+      if (group.length < 2) continue
+      for (const r of group) {
+        out.set(r, Number(r[SAME_ODDS_W]) < Number(r[SAME_ODDS_L]) ? SAME_ODDS_W : SAME_ODDS_L)
+      }
+    }
+    return out
+  }, [sameOddsIndex])
+  // 지금 열어 둔 경기와 같은 회차·같은 국내 정배배당인 다른 경기들.
+  const sameOdds = useMemo(() => {
+    if (!detailRow) return null
+    const rk = roundKey(detailRow.DT)
+    const odds = favOddsKey(detailRow, SAME_ODDS_W, SAME_ODDS_L)
+    if (rk === null || odds === null) return null
+    const self = matchIdent(detailRow)
+    const others = (sameOddsIndex.get(`${rk}|${odds}`) || [])
+      .filter((r) => matchIdent(r) !== self)
+      .map((r) => {
+        const raw = String(r.L || '').trim()
+        return {
+          league: LEAGUE_LABELS[raw] || raw,
+          round: String(r.R || '').trim(),
+          dt: r.DT,
+          tm: r.TM,
+          home: String(r.HT || '').trim(),
+          away: String(r.AT || '').trim(),
+          homeFav: Number(r[SAME_ODDS_W]) < Number(r[SAME_ODDS_L]),
+        }
+      })
+    return others.length ? { odds, others } : null
+  }, [detailRow, sameOddsIndex])
   // 별표/내픽/메모 클릭 즉시 반영용 오버레이. 새로 조회하면(rows가 바뀌면) 서버가 다시
   // 내려준 최신값으로 자연히 대체되므로 초기화한다.
   // ref로도 같은 값을 들고 있는 이유: React state 갱신은 비동기라 "별표 클릭 직후 곧바로
@@ -657,11 +761,15 @@ export default function LeagueTable({
                       // 별표(중요) 행의 금색 배경은 배당 칸까지 덮으면 배당 적중·배변 화살표
                       // 배경(oddsHitSide 등)이 묻혀 안 보인다 — 국내배당/해외배당 칸만 빼둔다.
                       const isOddsGroup = g.label1 === '국내배당' || g.label1 === '해외배당'
+                      // 같은 날 다른 경기와 국내 정배배당 숫자가 똑같으면 그 칸에 2중 밑줄.
+                      // 아랫줄(배변)은 다른 행 객체라 자연히 안 걸린다 — 초기 배당만 표시.
+                      const isDupFav = dupFavCol.get(row) === c.key
                       const classNames = [
                         isHighlighted ? 'cell-highlight' : '',
                         isLastCol ? dividerClass(g, isLastGroup).trim() : '',
                         riskColClass(g, c).trim(),
                         isOddsGroup ? 'odds-group-cell' : '',
+                        isDupFav ? 'odds-dup-fav' : '',
                       ].filter(Boolean).join(' ')
                       const text = formatCell(g, c, value, row)
                       // 폼(PPG) 칸 — 상세보기 팝업의 폼 지표와 같은 스타일로, 뱃지가 아니라
@@ -754,6 +862,7 @@ export default function LeagueTable({
               REASON_TAG: effectivePick(detailRow).reasonTag,
             }}
             scope={rowScope(detailRow)}
+            sameOdds={sameOdds}
             onClose={() => setDetailRow(null)}
             onSavePick={(patch) => savePick(detailRow, patch)}
           />
