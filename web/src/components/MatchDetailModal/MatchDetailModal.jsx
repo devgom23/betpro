@@ -2320,8 +2320,8 @@ function NewSystemVerdictLegend({ onClose }) {
             {bucketLabels.map((lbl, i) => (
               <tr key={lbl}>
                 <td><b>{lbl}</b></td>
-                <td>{ODDS_PHASE_WEIGHTED_GRADE.초기[i].rate.toFixed(1)}% ({ODDS_PHASE_WEIGHTED_GRADE.초기[i].n.toLocaleString()})</td>
-                <td>{ODDS_PHASE_WEIGHTED_GRADE.배변[i].rate.toFixed(1)}% ({ODDS_PHASE_WEIGHTED_GRADE.배변[i].n.toLocaleString()})</td>
+                <td>{ODDS_PHASE_WEIGHTED_GRADE.초기[i].rate.toFixed(2)}% ({ODDS_PHASE_WEIGHTED_GRADE.초기[i].n.toLocaleString()})</td>
+                <td>{ODDS_PHASE_WEIGHTED_GRADE.배변[i].rate.toFixed(2)}% ({ODDS_PHASE_WEIGHTED_GRADE.배변[i].n.toLocaleString()})</td>
               </tr>
             ))}
           </tbody>
@@ -2402,7 +2402,7 @@ function NewSystemVerdict({ row, init, fin }) {
         {v.stars !== null && (
           <>
             <span className="sys-stars">{'★'.repeat(v.stars)}{'☆'.repeat(3 - v.stars)}</span>
-            <span className="sys-rate">{Math.round(v.rate)}%</span>
+            <span className="sys-rate">{v.rate.toFixed(2)}%</span>
           </>
         )}
       </span>
