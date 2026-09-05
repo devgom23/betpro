@@ -16,6 +16,9 @@ import './LeagueTable.css'
 // 경기를 찾아 상세보기 '경기지표' 줄에 알려준다. 지금 이 표가 들고 있는 경기끼리만
 // 본다 — 이번주 리스트는 하루치가 전 리그 한 표라 리그를 넘나드는 중복까지 잡히고,
 // 리그 화면에서는 그 리그 안에서만 잡힌다.
+// ⚠ 2026-09-05 — 6대리그로만 잰다(MAJOR_LEAGUES). K1/K2(내 데이터)는 배당 형성
+// 방식이 달라 섞으면 안 된다는 지적을 받아 뺐다 — K1/K2끼리의 겹침은 별도로 잰다
+// (아직 미착수). 그래서 K1/K2 경기는 이 뱃지가 전혀 뜨지 않는다(정상 동작).
 // ⚠ 이건 신호가 아니라 그냥 알림이다. "같은 배당이 두 번 뜨면 하나는 깨진다"는
 // 속설은 6대리그 36,212경기 전수조사에서 사실이 아닌 것으로 나왔다(2026-09-04 —
 // 갈림 47.7% vs 서로 상관없어도 47.7%, z=-0.13, 같은 회차 기준). 그래서 색(tone)을
@@ -30,6 +33,9 @@ const LEAGUE_LABELS = {
   EPL: 'EPL', LALIGA: '라리가', SERIEA: '세리에',
   BUNDES: '분데스', EREDIVISIE: '에레디', LIGUE1: '리그1',
 }
+// 동배당 측정은 6대리그로만 한다(2026-09-05, 사용자 지정) — K1/K2(내 데이터)는
+// 배당 형성 방식이 달라 섞으면 안 되고, 필요하면 K1/K2끼리 따로 재야 한다.
+const MAJOR_LEAGUES = new Set(Object.keys(LEAGUE_LABELS))
 
 // 동배(승=패)는 어느 쪽이 정배인지 못 가리므로 뺀다.
 function favOddsKey(row, wk, lk) {
@@ -139,6 +145,7 @@ export default function LeagueTable({
   const sameOddsIndex = useMemo(() => {
     const idx = new Map()
     for (const r of rows || []) {
+      if (!MAJOR_LEAGUES.has(rowCode(r))) continue   // K1/K2는 빼고 6대리그끼리만 겹침을 본다
       const rk = roundKey(r?.DT)
       if (rk === null) continue
       const v = favOddsKey(r, SAME_ODDS_W, SAME_ODDS_L)
@@ -149,7 +156,11 @@ export default function LeagueTable({
       else idx.set(key, [r])
     }
     return idx
-  }, [rows])
+    // rowCode는 매 렌더 새로 만들어지는 함수라 그대로 deps에 넣으면 이 루프가
+    // (rows가 안 바뀌어도) 렌더마다 돈다 — rowCode가 실제로 캡처하는 건 code prop
+    // 하나뿐이라 그걸 대신 넣는다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, code])
   // 표에서 그 숫자에 2중 밑줄을 긋기 위한 색인 — 행 객체 → 정배가 어느 칸(KW/KL)인지.
   // 행 객체를 그대로 키로 쓴다(rows.slice()는 참조를 그대로 넘긴다) — 칸마다 문자열을
   // 새로 만들지 않으려는 것. 표는 행 수백~수천 × 칸 130개라 칸당 비용이 그대로 곱해진다.

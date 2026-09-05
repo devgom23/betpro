@@ -353,7 +353,11 @@ def get_samples_fast(cache, logic, row):
         # 언더독이냐"(역할 기준)로 찾는다 — 같은 1.53이라도 홈이 언더독일 때와 원정이
         # 언더독일 때를 섞지 않는 게 이 지표의 핵심이라 두 조건을 반드시 함께 건다.
         # 정배 판정은 min(KW, KL) 기준으로, 같은 파일 compute_domestic_nh_share()와 맞춘다.
-        elif logic == 'K-PL':
+        # TK-PL(국통)플핸)은 계산식이 K-PL과 한 글자도 다르지 않다 — 넘어오는 캐시가
+        # 그 리그(db_cache)냐 6대리그 전체(total_cache)냐만 다르다. 다른 통합지표
+        # (TK-W 등)는 같은 식을 한 줄씩 따로 적어 뒀지만, 이 블록은 10줄짜리라
+        # 복붙하면 한쪽만 고치는 사고가 난다(2026-09-06 추가).
+        elif logic in ('K-PL', 'TK-PL'):
             if kw <= 0 or kl <= 0 or kw == kl:
                 return [0, 0, 0, 0]          # 정배를 못 가리면(배당 없음/동률) 표본도 없다
             home_dog = kw > kl               # 홈 배당이 더 높다 = 홈이 언더독
@@ -486,10 +490,13 @@ def analyze_row(row, db, total_db, db_cache=None, total_cache=None, dom_cache=No
         c = get_samples_fast(db_cache, l, rd)
         for i in range(4): res[f'{l} {i+1}'] = c[i]
 
-    # 통합DB 대상 (해외통합 10~13, 국내통합 23~26)
+    # 통합DB 대상 (해외통합 10~13, 국내통합 23~26, 28번 국통)플핸)
+    # 28번 TK-PL은 2026-09-06에 추가했다 — 27번(K-PL)이 리그별로만 있어서 통합 쪽에
+    # 플핸 지표가 아예 없던 빈칸을 메운다. 계산식은 K-PL과 같고 표본 풀만 통합DB다.
     logics_new_total = [
         'TF-W', 'TF-L', 'TF-WL', 'TF-WDL',
         'TK-W', 'TK-L', 'TK-WL', 'TK-WDL',
+        'TK-PL',
     ]
     for l in logics_new_total:
         c = get_samples_fast(total_cache, l, rd)

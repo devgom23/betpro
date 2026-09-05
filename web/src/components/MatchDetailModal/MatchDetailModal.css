@@ -476,6 +476,14 @@
   white-space: nowrap;
 }
 
+/* '방향성 (검토용)' 표가 그대로 쓰는 8줄(국)·국통)·해)·해통) 승+패/승+무+패) — 판정이
+   쓰는 나머지 지표와는 다른 계산(다른 표)의 재료라는 걸 이름 색으로 구분한다.
+   ⚠ .detail-table .row-label(클래스 2개, 특이도가 더 높다)이 먼저 색을 정하므로
+     .row-label과 겹쳐 써야 이긴다 — .sample-scope-label 단독으로는 안 먹는다. */
+.row-label.sample-scope-label {
+  color: var(--chip-purple-fg);
+}
+
 /* 핸승 위험도 8칸 — 값(정승/플핸무/플)으로 묶은 2줄 헤더. 리그 표와 같은 구성이라
    묶음 경계를 굵은 선으로 갈라 어느 칸이 어느 묶음인지 바로 보이게 한다. */
 .detail-table.risk-table thead th.risk-group {
@@ -778,28 +786,14 @@
   }
 }
 
-/* ── 경기지표 · 배당차 · 시스템 판정 — '확률 지표' 표 바로 밑, 그 칸 폭 안에서만
-   나란히 셋(왼쪽 '배당' 칸과는 무관 — 그 칸 아래로는 안 내려간다).
-   예전엔 이 셋을 이 칸 안에서 세로로 쌓아 줄이 길었는데, 가로 3단으로 접었다. */
-/* 네 칸 다 내용 폭만큼만 차지하게(max-content) — fr로 나누면 표(국배/해배 51·86px로
-   고정한) 폭보다 트랙이 넓어져서, gap(10px)을 줄여도 표 사이가 실제로는 훨씬 벌어져
-   보였다. 남는 공간은 그냥 오른쪽에 비워 둔다.
-   셋째 트랙(시스템 판정)만 240px로 고정한다 — 결과 판정 줄(.sys-head)이 표
-   바로 밑에 같은 흐름(in-flow)으로 붙어 있는데, 이 줄이 absolute가 아니라서
-   grid가 '내용 그대로'로 트랙 폭을 재면 이 줄의 nowrap 폭에 맞춰 칸이 넓어진다.
-   표 자체는 182px(row-label + 51px×2)뿐이지만, 결과 판정 줄은 '픽 이름(최대
-   플핸무/플핸승 3글자) + 다수결/해배 + 별 + % + 적중/보험/미적' 조합이라 케이스
-   마다 실측 폭이 다르다 — 정역 다수결 ★☆☆ 78% 보험(코번트리 vs 헐시티) 201px,
-   플핸무 다수결 ★★☆ 81% 보험(선덜랜드 vs 풀럼) 214px. 210px로는 후자가
-   줄바꿈됐다 — 매번 케이스별로 재느니, 가장 긴 조합(플핸무/플핸승 + 다수결 +
-   ★★★ + 3자리% + 적중/보험/미적)도 넉넉히 들어가게 240px로 여유를 뒀다.
-   예전엔 absolute + padding-bottom으로 자리를 미리 비웠는데, 그러면 경기지표
-   칸이 짧을 때도 항상 같은 여백(28px)을 쓰게 되어 카드가 필요 이상으로 커
-   보였다(왼쪽 칸과 오른쪽 '확률 지표' 칸의 실측 높이가 서로 달랐던 사례).
-   in-flow로 두면 결과 판정 줄이 실제로 차지하는 만큼만 카드가 커진다. */
+/* ── 경기지표 · 방향성·배당 — '확률 지표' 표 바로 밑, 그 칸 폭 안에서만 나란히
+   둘(왼쪽 '배당' 칸과는 무관 — 그 칸 아래로는 안 내려간다). */
 .pick-band-bottom-cols {
   display: grid;
-  grid-template-columns: max-content max-content 240px;
+  /* 2026-09-06 — 방향성·배당 두 표를 한 칸(.pick-band-dscope-sys-wrap)으로 묶으면서
+     트랙이 3개→2개로 줄었다. 그 칸 안의 실제 폭 배분(표 172px + 표 260px+)은
+     .pick-band-dscope-sys-row가 flex로 알아서 맡는다. */
+  grid-template-columns: max-content max-content;
   gap: 10px;
   margin-top: 12px;
   padding-top: 12px;
@@ -810,6 +804,47 @@
 
 @media (max-width: 860px) {
   .pick-band-bottom-cols { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 방향성 표 + 배당 표를 나란히 두고, 그 아래에 구분선 + 시스템 판정(새) 줄을
+   붙인다 — 경기지표 칸까지는 안 걸치고 이 두 표의 합친 폭만큼만 차지한다. */
+.pick-band-dscope-sys-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+@media (max-width: 860px) {
+  .pick-band-dscope-sys-row { flex-wrap: wrap; }
+}
+
+/* 시스템 판정(새) 줄 — 방향성·배당 표 밑에 구분선을 긋고 그 아래 한 줄로 둔다.
+   '초기 [픽] ★★☆ 84%  →  배변 [픽] ★★★ 87% 적중' 꼴. 표가 아니라 문장형이라
+   표 폭에 안 맞추고 자유롭게 줄바꿈되게 둔다. */
+.pick-band-newverdict {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;              /* 나열 항목 사이 기본 간격(6-1장) */
+  font-size: 13px;
+}
+
+.newv-part {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;               /* 라벨+값 한 덩어리 */
+}
+
+.newv-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.newv-arrow {
+  color: var(--text-muted);
 }
 
 /* 경기지표 제목 — 방향성·시스템 판정은 표 안(왼쪽 위 칸)에 이름을 넣는
@@ -910,50 +945,14 @@
   .pick-band-risk-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ── 시스템 판정 — 경기지표·배당차와 나란히 놓이는 셋째 칸. 지표 4칸 + 무 보정을
-   합친 결론. 예전엔 경기지표 아래에 쌓여서 위 테두리로 갈랐는데, 2026-09-02 셋을
-   나란히 두면서(.pick-band-bottom-cols) 그 구분선은 필요 없어졌다. */
-
-/* 시스템 판정 표를 담는 칸 — 결과 판정 줄(.sys-head)의 absolute 기준점이 된다. */
-/* 결과 판정 줄: [플핸무] 다수결 ★★★ 86% 적중 — pick-band-bottom-cols의 2행 3열에
-   명시적으로 배치한다(시스템 판정과 같은 열, 그 다음 행). grid-row를 못박아 두면
-   1행의 다른 칸(특히 경기지표 — 뱃지가 2~3개로 늘면 세로로 길어진다)이 아무리
-   길어져도 이 줄은 항상 '1행 다음'이라 절대 그 옆에 나란히 붙어 보이지 않는다. */
-/* 시스템 판정 표를 담는 칸 — 결과 판정 줄(.sys-head)의 absolute 기준점이 된다. */
-/* min-width:0 — grid item 기본값(min-width:auto)은 내용의 min-content 폭 아래로
-   못 줄어들게 막는데, 트랙을 182px로 고정해 놨으니 이 칸도 그 밑으로 줄어들 수
-   있어야 한다(안 그러면 트랙 폭 고정이 무력화된다). */
+/* ── 방향성·배당 표를 담는 칸. */
 .pick-band-sys {
   min-width: 0;
-}
-
-.sys-head {
-  margin: 6px 0 0;        /* 제목과 부가설명 사이 간격 눈금 — 표 바로 밑 */
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;              /* 나열 항목 사이 기본 간격 */
 }
 
 .sys-pick {
   font-size: 13px;
   font-weight: 700;
-}
-
-/* 정 쪽=파랑 / 플 쪽=빨강 — 앱 전체 축 그대로(핸디기준점·RT와 같다) */
-.sys-pick-j { color: var(--chip-blue-fg); }
-.sys-pick-p { color: var(--chip-red-fg); }
-
-/* 해초가 고립돼 다수결로 뒤집혔을 때 붙는 작은 태그 — 경고색(노랑)으로
-   "기본값이 아니다"를 눈에 띄게 알린다. */
-.sys-flip {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--chip-yellow-bg);
-  color: var(--chip-yellow-fg);
-  cursor: help;
 }
 
 .sys-stars {
@@ -1025,6 +1024,12 @@
      방향 표시로는 오해를 부르기 때문이다. */
 .dscope-side-p b { color: var(--chip-green-fg); }
 .dscope-side-j b { color: var(--chip-blue-fg); }
+
+/* 위 두 규칙은 표 셀(td b) 전용이다 — 표 밖(시스템 판정 줄 등)에서 같은 색을 쓸
+   때는 이 범용 버전을 쓴다. help-legend-card 안에서만 쓰던 걸 2026-09-06부터
+   .pick-band-newverdict에서도 쓰게 되어 범위를 넓혔다. */
+.dscope-side-p-ink { color: var(--chip-green-fg); }
+.dscope-side-j-ink { color: var(--chip-blue-fg); }
 
 /* ── 색 기준 참고표 ─────────────────────────────────────────────────────
    표 이름 칸('방향성')이 곧 버튼이다 — 표가 좁아 물음표 아이콘을 따로 놓을

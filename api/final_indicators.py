@@ -33,7 +33,8 @@ IND_LEAGUE_CODES = ['F-W', 'F-L', 'F-WL', 'F-WDL', 'F-W-HW',
                     'K-W-HT', 'K-L-AT', 'K-WL-HT', 'K-WL-AT',
                     'K-PL']
 IND_TOTAL_CODES = ['TF-W', 'TF-L', 'TF-WL', 'TF-WDL',
-                   'TK-W', 'TK-L', 'TK-WL', 'TK-WDL']
+                   'TK-W', 'TK-L', 'TK-WL', 'TK-WDL',
+                   'TK-PL']   # 28번(2026-09-06 추가) — K-PL의 통합판
 IND_CODES = IND_LEAGUE_CODES + IND_TOTAL_CODES
 
 # 최종배당 → 그 자리에 끼울 초기배당 칸. get_samples_fast()가 실제로 읽는 9칸만 있으면

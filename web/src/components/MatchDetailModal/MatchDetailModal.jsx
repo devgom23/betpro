@@ -8,8 +8,7 @@ import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
 import {
-  drawTendency, drawRelation, systemGrade, resolveSystemPick, sysPickVerdict, VERDICT_TONE,
-  GRADE, GRADE_FLIP, GRADE_F2, AGREE_LABEL, DRAW_HEAVY_K, DRAW_HEAVY_F, DRAW_LIGHT_K,
+  drawTendency, drawRelation, sysPickVerdict, VERDICT_TONE,
 } from '../../utils/systemVerdict'
 import './MatchDetailModal.css'
 
@@ -63,19 +62,35 @@ function formStyle(v) {
   return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
 }
 
+// ⚠ 순서가 계산에 영향을 준다 — weightedAnalysis는 '이 배열에서 살아남은 순서'로
+// 가중치를 매긴다(뒤에 있을수록 더 큼). 단, 국통)·해통) 승+패/승+무+패(TK-WL 등)는
+// 판단 9줄(favSampleCodes)에 아예 없어 그 계산에서 항상 걸러지므로, 이 넷의 자리를
+// 옮겨도(2026-09-05, 지표별 표본 기본 화면에 보여주려고) 나머지 9줄의 상대 순서·
+// 가중치는 그대로다 — filter는 걸러지는 원소와 무관하게 남는 원소의 순서를 지킨다.
 const SAMPLE_INDICATORS = [
   ['K-W', '국) 승'], ['K-L', '국) 패'],
   // 27번 — 플핸측(언더독) 핸디배당이 같고 플핸측이 같은 편(홈/원정)인 과거 경기만.
   // 승·패 바로 아래에 둔다 — 셋 다 '이 경기 배당 하나'로 찾는 단일 조건 지표라
   // 두 배당을 동시에 맞추는 승+패·승+무+패보다 먼저 읽는 게 순서가 맞다.
   ['K-PL', '국) 플핸'],
-  ['K-WL', '국) 승+패'], ['K-WDL', '국) 승+무+패'],
+  ['K-WL', '국) 승+패'], ['TK-WL', '국통) 승+패'],
+  ['K-WDL', '국) 승+무+패'], ['TK-WDL', '국통) 승+무+패'],
   ['K-W-HT', '국) 승=홈팀'], ['K-L-AT', '국) 패=원정팀'],
-  ['TK-W', '국통) 승'], ['TK-L', '국통) 패'], ['TK-WL', '국통) 승+패'], ['TK-WDL', '국통) 승+무+패'],
-  ['F-W', '해) 승'], ['F-L', '해) 패'], ['F-WL', '해) 승+패'], ['F-WDL', '해) 승+무+패'],
+  ['TK-W', '국통) 승'], ['TK-L', '국통) 패'],
+  ['F-W', '해) 승'], ['F-L', '해) 패'],
+  ['F-WL', '해) 승+패'], ['TF-WL', '해통) 승+패'],
+  ['F-WDL', '해) 승+무+패'], ['TF-WDL', '해통) 승+무+패'],
   ['F-W-HT', '해) 승=홈팀'], ['F-L-AT', '해) 패=원정팀'],
-  ['TF-W', '해통) 승'], ['TF-L', '해통) 패'], ['TF-WL', '해통) 승+패'], ['TF-WDL', '해통) 승+무+패'],
+  ['TF-W', '해통) 승'], ['TF-L', '해통) 패'],
 ]
+// 지표별 표본 기본 화면(접힘)에서 판단 9줄과 함께 항상 보여주는 4줄 — 판정 계산에는
+// 안 쓴다(판단 9줄에 못 들어감). '국)분석/해)분석' 줄은 이 4줄과 무관하게 계산해야
+// 화면 숫자가 실제 방향성·판정과 어긋나지 않는다(SampleTable의 calcLines 참고).
+const SAMPLE_DEFAULT_EXTRA = new Set(['TK-WL', 'TK-WDL', 'TF-WL', 'TF-WDL'])
+// 이 8줄이 '방향성 (검토용)' 표(DirectionScopeTable의 SCOPE_CODES)가 그대로 쓰는
+// 재료다 — 판정(9줄)이 쓰는 지표와는 다른 계산이라, 이름을 보라색으로 구분해
+// 어느 지표가 어느 표에 쓰이는지 한눈에 갈리게 한다(2026-09-05).
+const SAMPLE_SCOPE_CODES = new Set(['K-WL', 'K-WDL', 'TK-WL', 'TK-WDL', 'F-WL', 'F-WDL', 'TF-WL', 'TF-WDL'])
 
 function numOrNull(v) {
   if (v === null || v === undefined || v === '') return null
@@ -1355,7 +1370,14 @@ function SampleTable({ row, scope, expanded }) {
       eTotal: eVals ? eVals.reduce((a, b) => a + b, 0) : 0,
     }
   })
-  const lines = expanded ? allLines : allLines.filter((l) => favCodes.has(l.code))
+  // 화면에 그릴 줄 — 접었을 때는 판단 9줄 + 국통)·해통) 승+패/승+무+패 4줄(2026-09-05
+  // 추가, SAMPLE_DEFAULT_EXTRA)까지 보여준다. '국)분석/해)분석' 줄은 이 4줄과 무관하게
+  // calcLines(판단 9줄만)로 따로 계산한다 — 안 그러면 이 표의 %가 analysisPair()가
+  // 만드는 실제 방향성 4칸·판정과 어긋나 보인다(같은 경기인데 표는 A%, 판정은 B%).
+  const lines = expanded
+    ? allLines
+    : allLines.filter((l) => favCodes.has(l.code) || SAMPLE_DEFAULT_EXTRA.has(l.code))
+  const calcLines = allLines.filter((l) => favCodes.has(l.code))
 
   // 토탈은 '지금 화면에 보이는 줄'의 합이다 — 접었을 때 안 보이는 줄까지 더하면
   // 눈에 보이는 숫자와 합이 안 맞아 읽는 사람이 검산할 수 없다.
@@ -1368,25 +1390,27 @@ function SampleTable({ row, scope, expanded }) {
     ? [0, 1, 2, 3].map((i) => lines.reduce((sum, l) => sum + (l.eVals ? l.eVals[i] : 0), 0))
     : null
   const eGrandTotal = eGrandVals ? eGrandVals.reduce((a, b) => a + b, 0) : 0
-  // 분석 줄의 배변은 같은 가중평균을 최종배당 표본으로 한 번 더 돌린다.
-  const eLines = lines.map((l) => ({ ...l, vals: l.eVals || [0, 0, 0, 0], total: l.eTotal }))
 
   // 접었을 때만 국내/해외 블록 끝에 '분석' 줄을 붙인다. 펼치면 통합지표까지 섞여
   // 들어와 '리그 지표만 본다'는 전제가 깨지므로 그때는 계산하지 않는다(그때는 null).
   // 접혔는데 표본 자체가 없어 null이 나온 경우는 AnalysisRow가 빈칸으로 그려준다.
+  // ⚠ 반드시 calcLines(판단 9줄)로만 계산한다 — lines(화면 표시용)를 쓰면 안 된다.
   const isForeignCode = (c) => /^(F|TF)-/.test(c)
-  const domAnalysis = expanded ? null : weightedAnalysis(lines.filter((l) => !isForeignCode(l.code)))
-  const forAnalysis = expanded ? null : weightedAnalysis(lines.filter((l) => isForeignCode(l.code)))
+  const domAnalysis = expanded ? null : weightedAnalysis(calcLines.filter((l) => !isForeignCode(l.code)))
+  const forAnalysis = expanded ? null : weightedAnalysis(calcLines.filter((l) => isForeignCode(l.code)))
   // 토탈 = 국내 분석과 해외 분석의 평균(한쪽만 있으면 그쪽만).
   const bothAnalysis = [domAnalysis, forAnalysis].filter(Boolean)
   const totalAnalysis = bothAnalysis.length
     ? [0, 1, 2, 3].map((i) => bothAnalysis.reduce((s, a) => s + a[i], 0) / bothAnalysis.length)
     : null
 
-  const eDomAnalysis = expanded || !anyFinal
-    ? null : weightedAnalysis(eLines.filter((l) => !isForeignCode(l.code)))
-  const eForAnalysis = expanded || !anyFinal
-    ? null : weightedAnalysis(eLines.filter((l) => isForeignCode(l.code)))
+  // 분석 줄의 배변도 같은 가중평균을 최종배당 표본으로, 역시 calcLines 기준으로 돈다.
+  const anyFinalCalc = calcLines.some((l) => l.eVals)
+  const eCalcLines = calcLines.map((l) => ({ ...l, vals: l.eVals || [0, 0, 0, 0], total: l.eTotal }))
+  const eDomAnalysis = expanded || !anyFinalCalc
+    ? null : weightedAnalysis(eCalcLines.filter((l) => !isForeignCode(l.code)))
+  const eForAnalysis = expanded || !anyFinalCalc
+    ? null : weightedAnalysis(eCalcLines.filter((l) => isForeignCode(l.code)))
   const eBoth = [eDomAnalysis, eForAnalysis].filter(Boolean)
   const eTotalAnalysis = eBoth.length
     ? [0, 1, 2, 3].map((i) => eBoth.reduce((s, a) => s + a[i], 0) / eBoth.length)
@@ -1425,7 +1449,9 @@ function SampleTable({ row, scope, expanded }) {
                 </>
               )}
               <tr className={cls || undefined}>
-                <td className="row-label">{l.label}</td>
+                <td className={`row-label${SAMPLE_SCOPE_CODES.has(l.code) ? ' sample-scope-label' : ''}`}>
+                  {l.label}
+                </td>
                 {/* "비율 (건수)" 한 줄로 — 예: 45% (12) */}
                 {l.vals.map((v, i) => (
                   <td key={i} className={maxCellClass(l.vals, i)}>
@@ -1633,255 +1659,6 @@ function findSignal(data, key) {
 // 확률 지표 밴드. 예전에는 이 위에 '종합 분석' 카드 4장(플핸무 확률·해외지표·국내지표·
 // 상대전적)이 같이 있었는데 화면에서 뺐다 — 계산은 그대로 남아 있고(api/pick_ai.py,
 // /api/pick_ai), 시즌전적과 상대전적 문장만 아래 표 쪽으로 옮겨 붙였다.
-// ── 시스템 판정 ──
-// 지표 방향성 4칸(국초·국배·해초·해배)과 무배당 보정을 합쳐 결론 하나와 신뢰도를 낸다.
-// 종합 판정은 기본이 '해배·초기' 칸이지만, 그 칸이 나머지 3칸과 전부 다르면(고립)
-// 다수결(해배·배변)로 뒤집는다 — resolveSystemPick, 근거는 utils/systemVerdict.js.
-// K1/K2(내 데이터)는 6대리그로만 잰 값이라 % 와 별을 띄우지 않는다 — 방향과 일치도만.
-// names·pick·flipped는 PickBand가 한 번만 계산해서 내려준다 — 경기지표의 '무' 뱃지도
-// 같은 pick이 필요해서(같은방향/다른방향 표시), 여기서 또 계산하면 두 곳이 따로 놀 수 있다.
-// 표만 — 경기지표·배당차와 같은 grid 줄(pick-band-bottom-cols) 안에 들어간다.
-// 결과 판정 줄(픽·별점·%·적중배지)은 길이가 들쭉날쭉해서 SystemVerdictSummary로
-// 따로 뺐다 — 한 그리드 칸 안에 같이 두면 그 칸이 늘어나 옆 칸까지의 간격이
-// 넓어져 보였다.
-// ── 판정 참고표 (표 이름 칸을 누르면 뜬다) ──
-// 방향성 참고표(DirectionScopeLegend)와 같은 구성: 재료 → 어느 칸을 쓰나 → 일치했을
-// 때의 확률 → 별점. 적중률 표는 systemVerdict.js의 GRADE/GRADE_FLIP/GRADE_F2를
-// 그대로 읽어 그린다(복사해 두면 실측을 갱신했을 때 계산과 도움말이 갈린다).
-const VERDICT_MATERIAL = [
-  ['국) 승+패 · 국) 승+무+패', '항상'],
-  ['해) 승+패 · 해) 승+무+패', '항상'],
-  ['국) 플핸', '항상'],
-  ['국) 승 또는 국) 패', '정배가 홈이면 승, 원정이면 패'],
-  ['국) 승=홈팀 또는 국) 패=원정팀', '위와 같은 기준'],
-  ['해) 승 또는 해) 패', '정배 방향 따라'],
-  ['해) 승=홈팀 또는 해) 패=원정팀', '정배 방향 따라'],
-]
-const REL_MEANING = [
-  ['같은편', `무배당이 픽을 밀어준다 (국배 ${DRAW_HEAVY_K.toFixed(2)} 미만 + 해배 ${DRAW_HEAVY_F.toFixed(2)} 미만이면 무가 많고, 국배 ${DRAW_LIGHT_K.toFixed(2)} 이상이면 무가 적다)`],
-  ['중립', '무배당이 어느 쪽도 아니다'],
-  ['무관', '픽이 플핸승 — 핸무는 무배당과 상관없이 24%로 고정이라 영향이 없다'],
-  ['상충', '무배당이 픽과 반대로 민다'],
-]
-const STAR_RULE = [['★★★', '83% 이상'], ['★★', '78% 이상'], ['★', '78% 미만']]
-
-function SystemVerdictLegend({ onClose }) {
-  useEffect(() => {
-    function onKey(e) {
-      if (e.key !== 'Escape') return
-      e.stopPropagation()
-      onClose()
-    }
-    document.addEventListener('keydown', onKey, true)
-    return () => document.removeEventListener('keydown', onKey, true)
-  }, [onClose])
-
-  const rels = ['같은편', '중립', '무관', '상충']
-  return (
-    <div className="modal-backdrop help-legend-back" onClick={onClose}>
-      <div className="modal-card help-legend-card" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
-        <h2 className="modal-title">⚖ 판정 — 무엇으로 정하고, 확률은 어떻게 되나</h2>
-
-        <p className="help-legend-title">이 표가 쓰는 재료 — 9줄을 표본 크기로 가중평균합니다</p>
-        <table className="detail-table help-legend-table">
-          <thead><tr><th>쓰는 줄</th><th>언제 쓰나</th></tr></thead>
-          <tbody>
-            {VERDICT_MATERIAL.map(([line, when]) => (
-              <tr key={line}><td><b>{line}</b></td><td>{when}</td></tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="help-legend-note">
-          이 9줄로 <b>국내·해외 × 초기·배변 4칸</b>을 만듭니다. 통합지표(국통·해통)는
-          일부러 뺍니다 — 리그 밖 표본까지 섞으면 이 리그의 배당 성격이 묻힙니다.
-        </p>
-
-        <p className="help-legend-title">4칸 중 어느 칸을 결론으로 쓰나</p>
-        <table className="detail-table help-legend-table">
-          <thead><tr><th>상황</th><th>결론으로 쓰는 칸</th><th>근거</th></tr></thead>
-          <tbody>
-            <tr>
-              <td>보통</td><td><b>해외 · 초기</b></td>
-              <td>해배가 국배보다 +1.8%p · 초기가 배변보다 +1.2~1.4%p</td>
-            </tr>
-            <tr>
-              <td>그 칸만 혼자 다를 때</td><td><b>해외 · 배변으로 뒤집음</b></td>
-              <td>고립 시 해초 74.6% vs 다수결 78.0% (z=3.00, 5/6 리그)</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <p className="help-legend-title">4칸이 일치할수록 당첨률이 오릅니다 (× 무배당 보정)</p>
-        <table className="detail-table help-legend-table">
-          <thead>
-            <tr><th>일치도</th>{rels.map((r) => <th key={r}>{r}</th>)}</tr>
-          </thead>
-          <tbody>
-            {[4, 3, 2, 1].map((a) => (
-              <tr key={a}>
-                <td><b>{AGREE_LABEL[a]}</b></td>
-                {rels.map((r) => (
-                  <td key={r}>{GRADE[a][r] ? `${GRADE[a][r][0].toFixed(1)}%` : '-'}</td>
-                ))}
-              </tr>
-            ))}
-            <tr>
-              <td><b>다수결로 뒤집힘</b></td>
-              {rels.map((r) => (
-                <td key={r}>{GRADE_FLIP[r] ? `${GRADE_FLIP[r][0].toFixed(1)}%` : '-'}</td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
-        <p className="help-legend-note">
-          최고 <b>86.4%</b>(만장일치+같은편) ↔ 최저 <b>71.8%</b>(1칸+상충)로 폭이 14.6%p입니다.
-          두 신호가 따로 더해집니다 — 같은편이면 어느 일치도에서든 +4.4~6.2%p, 상충이면 −3.0~−6.5%p.
-        </p>
-
-        <p className="help-legend-title">무배당 보정이 무슨 뜻인가</p>
-        <table className="detail-table help-legend-table">
-          <thead><tr><th>관계</th><th>뜻</th></tr></thead>
-          <tbody>
-            {REL_MEANING.map(([k, v]) => (
-              <tr key={k}><td><b>{k}</b></td><td>{v}</td></tr>
-            ))}
-          </tbody>
-        </table>
-
-        <p className="help-legend-title">별점 기준</p>
-        <table className="detail-table help-legend-table">
-          <thead><tr><th>별</th><th>당첨률</th></tr></thead>
-          <tbody>
-            {STAR_RULE.map(([s, r]) => (
-              <tr key={s}><td><b>{s}</b></td><td>{r}</td></tr>
-            ))}
-          </tbody>
-        </table>
-
-        <p className="help-legend-title">국내배당이 없어 해외 2칸만 있을 때</p>
-        <table className="detail-table help-legend-table">
-          <thead><tr><th>상황</th><th>중립</th><th>무관</th></tr></thead>
-          <tbody>
-            <tr>
-              <td><b>두 칸이 일치</b></td>
-              <td>{GRADE_F2['일치']['중립'][0].toFixed(1)}%</td><td>{GRADE_F2['일치']['무관'][0].toFixed(1)}%</td>
-            </tr>
-            <tr>
-              <td><b>갈려서 해배를 따름</b></td>
-              <td>{GRADE_F2['뒤집힘']['중립'][0].toFixed(1)}%</td><td>{GRADE_F2['뒤집힘']['무관'][0].toFixed(1)}%</td>
-            </tr>
-          </tbody>
-        </table>
-        <p className="help-legend-note">
-          K1·K2(내 데이터)는 6대리그로만 잰 값이라 <b>%와 별을 띄우지 않습니다</b> —
-          방향과 일치도만 보여줍니다.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function SystemVerdictTable({ names, flipped }) {
-  const [showLegend, setShowLegend] = useState(false)
-  const cell = (v) => (v ? <b className="sys-name">{v}</b> : <span className="dir-none">—</span>)
-  const table = (
-    <table className="detail-table sys-table">
-      <thead>
-        <tr>
-          <th className="row-label">
-            <button
-              type="button"
-              className="help-btn"
-              onClick={() => setShowLegend(true)}
-              title="판정 기준 보기 — 무엇으로 정하고, 일치했을 때 확률은 얼마인지"
-            >
-              판정 <span className="help-mark">?</span>
-            </button>
-          </th>
-          <th>국배</th>
-          <th>해배</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td className="row-label">초기</td>
-          <td>{cell(names[0])}</td>
-          <td className={flipped ? undefined : 'sys-pick-cell'}>{cell(names[2])}</td>
-        </tr>
-        <tr>
-          <td className="row-label">배변</td>
-          <td>{cell(names[1])}</td>
-          <td className={flipped ? 'sys-pick-cell' : undefined}>{cell(names[3])}</td>
-        </tr>
-      </tbody>
-    </table>
-  )
-  return (
-    <>
-      {table}
-      {showLegend && <SystemVerdictLegend onClose={() => setShowLegend(false)} />}
-    </>
-  )
-}
-
-// 결과 판정 줄 — grid(pick-band-bottom-cols) 바깥, 전체 폭에 걸쳐 따로 한 줄로 둔다.
-function SystemVerdictSummary({ row, scope, names, pick, flipped }) {
-  if (!pick) return null
-  const tendency = drawTendency(row)
-  const grade = systemGrade(names, pick, tendency, scope !== 'user', flipped)
-  // 라벨은 systemGrade가 붙여 준다 — 4칸이냐 해외 2칸이냐에 따라 말이 달라야 하는데
-  // (뒤집힘도 4칸은 3:1 다수결, 2칸은 그냥 해배를 따른 것) 밖에서 만들면 어긋난다.
-  const agreeLabel = (grade && grade.label) || ''
-  const verdict = sysPickVerdict(pick, row.RT)
-  // 국내배당이 아직 없으면 '다수결'이 아니라 그냥 해배를 따른 것이다.
-  const foreignOnly = !names[0] && !names[1]
-
-  return (
-    <p className="sys-head">
-      <b className={`sys-pick sys-pick-${DIR_SIDE[pick] === '정' ? 'j' : 'p'}`}>{pick}</b>
-      {flipped && (
-        <span
-          className="sys-flip"
-          title={foreignOnly
-            ? '국내배당이 아직 없어 해외 두 칸만 있는데 그 둘이 갈렸다 — 해배를 따랐다.'
-              + '\n해초를 그대로 따르면 75.7%, 해배를 따르면 79.0%(갈린 1,049경기, z=-1.61, 5/6 리그).'
-              + '\n※ 4칸일 때(z=3.00)만큼 근거가 세지는 않지만 방향은 같다.'
-            : '해초(해배·초기)가 나머지 3칸(국초·국배·해배)과 전부 달라서 다수결로 뒤집었다'
-              + ' — 해초를 그대로 따르면 74.6%, 뒤집으면 78.0%(6대리그 3,676경기, z=3.00).'}
-        >
-          {foreignOnly ? '해배' : '다수결'}
-        </span>
-      )}
-      {grade && grade.stars !== null && (
-        <>
-          <span
-            className="sys-stars"
-            title={`${agreeLabel} · 무배당 ${grade.rel}`
-              + '(경기지표의 \'무\' 뱃지 참고)'}
-          >
-            {'★'.repeat(grade.stars)}{'☆'.repeat(3 - grade.stars)}
-          </span>
-          <span className="sys-rate">{Math.round(grade.rate)}%</span>
-        </>
-      )}
-      {verdict && (
-        <span
-          className="match-chip match-chip-tone sys-verdict"
-          style={{ background: `var(--chip-${VERDICT_TONE[verdict]}-bg)`, color: `var(--chip-${VERDICT_TONE[verdict]}-fg)` }}
-        >
-          {verdict}
-        </span>
-      )}
-      {grade && grade.stars === null && (
-        <span className="detail-section-note">
-          {scope === 'user' ? '내 데이터는 적중률을 재지 않았습니다' : agreeLabel}
-        </span>
-      )}
-    </p>
-  )
-}
-
 // ── 방향성 검토표 (2026-09-05) ───────────────────────────────────────────
 // 승+패·승+무+패 **두 줄만**으로 리그/통합 × 국/해 × 초기/배변 8칸을 만든다.
 // 지금 화면이 쓰는 방향성 4칸(analysisPair — 정배 방향에 따라 고른 9줄 가중평균)과
@@ -2197,18 +1974,617 @@ function DirectionScopeTable({ row }) {
   )
 }
 
+// ── 배당(판정 자매표, 2026-09-06) ────────────────────────────────────────
+// 판정이 쓰는 9줄 중 방향성(DirectionScopeTable)이 이미 쓰는 승+패·승+무+패
+// (K-WL/K-WDL/F-WL/F-WDL) 4줄을 빼면 남는 나머지 5줄을 같은 꼴(리)국·리)해·
+// 통)국·통)해 × 초기·배변)로 보여준다. 판정 자체(최종 픽·별점)는 그대로 두고,
+// 이 표는 그 재료 중 방향성에 없는 몫만 따로 뜯어보는 참고표다(판정에는 안 쓴다).
+//
+//   리)국 = 국)승 또는 국)패(정배 방향대로 하나) + 국)플핸(K-PL, 항상) +
+//           승=홈팀 또는 패=원정팀(국내, 정배 방향대로 하나)
+//   리)해 = 해)승 또는 해)패(정배 방향대로 하나) +
+//           승=홈팀 또는 패=원정팀(해외, 정배 방향대로 하나)
+//   통)국 = 국통)승 또는 국통)패 + 국통)플핸(TK-PL)
+//   통)해 = 해통)승 또는 해통)패만
+//
+// ⚠ 통)해가 1줄뿐인 건 DB에 그 컬럼이 없어서다 — 통합으로 만든 건 승·패·승+패·
+//   승+무+패 4종류뿐이고 승=홈팀/패=원정팀은 리그별로만 있다(engine.py의
+//   logics_new_individual). 통)국의 플핸은 2026-09-06에 28번 지표(TK-PL)로 새로
+//   만들어 6대리그 과거 19,393경기를 백필했다(K-PL과 계산식이 같고 표본 풀만 통합).
+function oddsScopeCodes(row) {
+  const dirOf = (wKey, lKey) => {
+    const w = numOrNull(row[wKey])
+    const l = numOrNull(row[lKey])
+    return (w === null || l === null || w === l) ? null : (w < l ? 'W' : 'L')
+  }
+  const dom = dirOf('KW', 'KL')
+  const forr = dirOf('FW', 'FL')
+  return {
+    리국: [dom && `K-${dom}`, 'K-PL', dom && `K-${dom === 'W' ? 'W-HT' : 'L-AT'}`].filter(Boolean),
+    리해: [forr && `F-${forr}`, forr && `F-${forr === 'W' ? 'W-HT' : 'L-AT'}`].filter(Boolean),
+    통국: [dom && `TK-${dom}`, 'TK-PL'].filter(Boolean),
+    통해: [forr && `TF-${forr}`].filter(Boolean),
+  }
+}
+
+// ── 배당 표 참고표 (2026-09-06 실측, 6대리그 35,985경기) ──
+// 방향성 참고표(DirectionScopeLegend)와 같은 구성 — 재료 → 4칸 일치도별 당첨률 →
+// 만장일치 이름별 당첨률 → 색 기준(15건) → 왜 15건인가 → 칸별 색 빈도.
+const ODDS_WHAT = [
+  ['리)국', '이 리그 안에서만', '국내배당', '국)승 또는 패 + 국)플핸 + 승=홈/패=원정'],
+  ['리)해', '이 리그 안에서만', '해외배당', '해)승 또는 패 + 승=홈/패=원정'],
+  ['통)국', '6대리그 전체', '국내배당', '국통)승 또는 패 + 국통)플핸'],
+  ['통)해', '6대리그 전체', '해외배당', '해통)승 또는 패만 (홈원정 버전 없음)'],
+]
+// 4칸(리국·리해·통국·통해, 초기 기준)이 같은 방향(정/플)을 보는 개수별 당첨률.
+// 만장일치가 반반보다 +5.34%p. 아래 숫자는 28번(TK-PL)을 통)국에 넣은 뒤 다시 잰 값이다.
+const ODDS_AGREE_RATE = [
+  ['4/4 (만장일치)', '15,568', '50.5%', '84.31%'],
+  ['3/4', '10,867', '35.2%', '81.14%'],
+  ['2/4 (반반)', '4,403', '14.3%', '78.97%'],
+]
+// 만장일치일 때 이름별 당첨률 — 정무가 가장 높다(방향성 때와 같은 패턴).
+const ODDS_UNANIM_NAME = [
+  ['정무', 'j', '8,048', '87.09%'],
+  ['정역', 'j', '291', '73.20%'],
+  ['플핸무', 'p', '5,820', '81.91%'],
+  ['플핸승', 'p', '1,409', '80.70%'],
+]
+// 표본별 적중률 — 승 하나만 맞으면 되는 지표라 방향성(승+패 두 줄)보다 훨씬 넓게
+// 과거 경기를 찾는다. 그래도 15건을 넘으면 82%대로 안정되는 건 방향성과 같다.
+const ODDS_TONE_WHY = [
+  ['1 ~ 4건', '91.8%*', '66.5%'],
+  ['5 ~ 14건', '84.1%', '25.8%'],
+  ['15 ~ 39건', '82.0%', '14.5%'],
+  ['40건 이상', '82~82.6%', '1.3~9.0%'],
+]
+// 칸마다 색 붙는 빈도 — 방향성의 리)국(3.5%)과 달리 여기 리)국도 83%가 색이다.
+// 승 하나만 맞아도 과거 경기가 잡혀서 표본이 훨씬 잘 쌓인다(중앙값 30건대).
+const ODDS_TONE_FREQ = [
+  ['리)국', '83.3%', '82.2%', '33건'],
+  ['리)해', '96.7%', '95.0%', '93건'],
+  ['통)국', '90.8%', '90.6%', '174건'],
+  ['통)해', '99.0%', '98.5%', '511건'],
+]
+
+function OddsScopeLegend({ onClose }) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop help-legend-back" onClick={onClose}>
+      <div className="modal-card help-legend-card" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
+        <h2 className="modal-title">💰 배당 — 무엇으로 만들고, 색은 무슨 뜻인가</h2>
+
+        <p className="help-legend-title">
+          이 표가 쓰는 재료 — 판정(9줄) 중 방향성이 이미 쓰는 승+패·승+무+패 4줄을
+          빼면 남는 나머지, 칸마다 세는 범위가 다릅니다
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>칸</th><th>어디서 세나</th><th>어느 배당</th><th>쓰는 지표</th></tr>
+          </thead>
+          <tbody>
+            {ODDS_WHAT.map(([k, where, mkt, code]) => (
+              <tr key={k}>
+                <td><b>{k}</b></td><td>{where}</td><td>{mkt}</td>
+                <td className="help-legend-code">{code}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-title">4칸이 같은 방향을 보는 개수별 당첨률</p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>같은 방향</th><th>경기 수</th><th>비율</th><th>당첨률</th></tr>
+          </thead>
+          <tbody>
+            {ODDS_AGREE_RATE.map(([k, n, pct, rate]) => (
+              <tr key={k}>
+                <td><b>{k}</b></td><td>{n}</td><td>{pct}</td><td><b>{rate}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <p className="help-legend-title">4칸 만장일치일 때, 그 이름별 당첨률</p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>이름</th><th>경기 수</th><th>당첨률</th></tr>
+          </thead>
+          <tbody>
+            {ODDS_UNANIM_NAME.map(([name, side, n, rate]) => (
+              <tr key={name}>
+                <td><b className={`dscope-side-${side}-ink`}>{name}</b></td>
+                <td>{n}</td><td><b>{rate}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <p className="help-legend-title">① 색이 붙느냐 — 과거 표본이 15건을 넘는가</p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>과거 표본</th><th>화면</th><th>뜻</th></tr>
+          </thead>
+          <tbody>
+            {TONE_RULE.map(([n, view, mean, cls]) => (
+              <tr key={n}>
+                <td>{n}</td>
+                <td className={`dscope-${cls}`}>
+                  {cls === 'ok'
+                    ? (
+                      <>
+                        <b className="dscope-side-p-ink">플핸무</b>
+                        {' / '}
+                        <b className="dscope-side-j-ink">정무</b>
+                      </>
+                    )
+                    : <b>{view}</b>}
+                </td>
+                <td>{mean}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <p className="help-legend-title">② 무슨 색이냐 — 그 이름이 어느 편인가</p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>색</th><th>방향성 이름</th><th>무슨 주장인가</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b className="dscope-side-p-ink">초록</b></td>
+              <td><b className="dscope-side-p-ink">플핸무 · 플핸승 · 플</b></td>
+              <td><b>핸승은 안 나온다</b></td>
+            </tr>
+            <tr>
+              <td><b className="dscope-side-j-ink">파랑</b></td>
+              <td><b className="dscope-side-j-ink">정무 · 정역 · 정</b></td>
+              <td><b>역은 안 나온다</b></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p className="help-legend-title">왜 하필 15건인가 — 표본별 실측</p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>과거 표본</th><th>적중률</th><th>&apos;정&apos;·&apos;플&apos; 단독이 나오는 비율</th></tr>
+          </thead>
+          <tbody>
+            {ODDS_TONE_WHY.map(([n, rate, solo]) => (
+              <tr key={n}><td>{n}</td><td>{rate}</td><td>{solo}</td></tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          *1~4건 구간은 표본이 365건뿐이라 우연히 높게 나왔을 수 있습니다 — 대신
+          단독이름 비율(65.2%→1.5%)이 꾸준히 줄어드는 게 더 믿을 만한 근거입니다.
+          이 지표는 승 하나만 맞아도 과거 경기가 잡혀서, 15건을 넘으면 방향성보다
+          더 빨리(더 안정적으로) 82%대에 자리 잡습니다.
+        </p>
+
+        <p className="help-legend-title">칸마다 색이 붙는 빈도가 다릅니다</p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>칸</th><th>초기에 색 붙음</th><th>배변에 색 붙음</th><th>표본 중앙값</th></tr>
+          </thead>
+          <tbody>
+            {ODDS_TONE_FREQ.map(([k, a, b, med]) => (
+              <tr key={k}><td>{k}</td><td>{a}</td><td>{b}</td><td>{med}</td></tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          방향성의 리)국(3.5%)과 달리 여기 리)국은 83%가 색입니다 — 승 하나만
+          맞아도 과거 경기가 잡히는 지표라 표본이 훨씬 잘 쌓이기 때문입니다.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function OddsScopeTable({ row }) {
+  const [showLegend, setShowLegend] = useState(false)
+  const codes = oddsScopeCodes(row)
+  const cell = (key, final, edge) => {
+    const list = codes[key]
+    const { name, total } = scopeCell(row, list, final)
+    const [, tone, toneLabel] = SCOPE_TONES.find(([cut]) => total >= cut) || [0, 'none', '표본 없음']
+    const side = tone === 'ok' ? SCOPE_SIDE[name] : null
+    return (
+      <td
+        className={`dscope-${tone}${side ? ` dscope-side-${side}` : ''}${edge ? ' dscope-edge' : ''}`}
+        title={`${key} · ${final ? '배변' : '초기'}\n`
+          + `쓰는 지표: ${list.length ? list.join(' · ') : '(배당 없음)'}\n`
+          + `과거 표본 ${total.toLocaleString()}건 — ${toneLabel}`
+          + `${side ? ' (그래서 색을 넣었습니다)' : ' (표본이 얇아 색을 넣지 않았습니다)'}.\n`
+          + '※ 검토용 표입니다. 판정에는 쓰이지 않습니다.'}
+      >
+        {name ? <b className="sys-name">{name}</b> : <span className="dir-none">—</span>}
+      </td>
+    )
+  }
+  const table = (
+    <table className="detail-table sys-table dscope-table">
+      <thead>
+        <tr>
+          <th className="row-label">
+            <button
+              type="button"
+              className="help-btn"
+              onClick={() => setShowLegend(true)}
+              title="색 기준 보기 — 색이 붙는 조건(표본 15건+)과 초록/파랑의 뜻"
+            >
+              배당 <span className="help-mark">?</span>
+            </button>
+          </th>
+          <th>리)국</th>
+          <th className="dscope-edge">리)해</th>
+          <th>통)국</th>
+          <th>통)해</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="row-label">초기</td>
+          {cell('리국', false)}{cell('리해', false, true)}
+          {cell('통국', false)}{cell('통해', false)}
+        </tr>
+        <tr>
+          <td className="row-label">배변</td>
+          {cell('리국', true)}{cell('리해', true, true)}
+          {cell('통국', true)}{cell('통해', true)}
+        </tr>
+      </tbody>
+    </table>
+  )
+  return (
+    <>
+      {table}
+      {showLegend && <OddsScopeLegend onClose={() => setShowLegend(false)} />}
+    </>
+  )
+}
+
+// ── 시스템 판정(새) — 2026-09-06 ────────────────────────────────────────
+// 지금 판정(9줄, 리그만, 해초 기준)은 배당 표 대표값(통합·해외) 하나보다도 못하다는
+// 게 실측으로 나왔다(82.46% vs 79.79%, z=8.24, 6/6 리그) — 그래서 픽은 배당 표의
+// 4칸(리)국·리)해·통)국·통)해)에서, 신뢰도는 방향성 8칸 일치도에서 따로 가져온다.
+// (방향성+배당을 그냥 합쳐서 하나로 쓰면 오히려 손해라는 것도 실측으로 확인했다
+// — 배당 100%가 82.46%, 방향성을 조금이라도 섞으면 그보다 무조건 낮아진다.)
+//
+// CLAUDE.md 4-1(판정은 그 시점 배당 전부로 다시 만든다)에 맞춰 초기·배변을 완전히
+// 따로 계산한다(시점을 섞지 않는다) — 섞은 버전과 비교해도 초기는 거의 같고
+// (82.27% vs 82.29%) 배변은 시점을 분리하는 쪽이 약간 낮지만(81.55% vs 82.02%,
+// −0.59%p, z=−2.99) 그래도 지금 판정보다는 확실히 낫다(+1.40%p, z=5.27, 6/6 리그).
+//
+// 픽: 그 시점의 배당 4칸([리국,리해,통국,통해]) 중 통)해를 기본으로, 나머지 3칸과
+//   전부 다르면(고립) 리)해로 뒤집는다 — resolveSystemPick과 같은 모양, 재료만 교체.
+// 신뢰도: 방향성 8칸(리그/통합 × 국/해 × 초기/배변, 시점을 안 가린다) 중 이 픽과
+//   같은 편(정/플)인 비율 — 다만 칸마다 1표로 똑같이 세지 않고, 그 칸의 표본 수만큼
+//   가중치를 준다(2026-09-06(2)). 표본 2건짜리 칸과 200건짜리 칸을 똑같이 취급하면
+//   안 된다는 지적으로 다시 쟀더니, 가중을 주는 쪽이 신호도 더 세고 무엇보다
+//   '8칸이 전부 채워져야만 신뢰도를 낸다'는 조건이 없어져 커버리지가 59.3~59.7%에서
+//   99.9%로 뛰었다(6대리그 실측). 한 칸이 표본을 몰아서 혼자 결과를 좌우하지
+//   못하게 칸당 표본은 상한을 둔다 — 상한값 자체도 5~100/상한없음을 스윕해서
+//   골랐다(2026-09-06(3)): 상한 없음(점이연 상관 0.040~0.060)보다 상한을 두는 쪽이
+//   대체로 낫고, 처음 썼던 15는 그중 최적이 아니었다 — 40 근방이 초기·배변 둘 다
+//   최고점(0.047/0.064)이라 40으로 잡는다.
+const SINGLE_DIR_NAMES = new Set(['정무', '정역', '플핸무', '플핸승'])
+const DIR_CAP_N = 40
+
+function resolveOddsPhasePick(row, final) {
+  const codes = oddsScopeCodes(row)
+  const nameOf = (key) => scopeCell(row, codes[key], final).name
+  const names = { 리국: nameOf('리국'), 리해: nameOf('리해'), 통국: nameOf('통국'), 통해: nameOf('통해') }
+  const base = names.통해
+  if (!base || !DIR_SIDE[base]) return { pick: null, flipped: false }
+  const others = [names.리국, names.리해, names.통국]
+  const agree = others.filter((n) => n && DIR_SIDE[n] === DIR_SIDE[base]).length
+  if (agree === 0 && names.리해 && SINGLE_DIR_NAMES.has(names.리해)) {
+    return { pick: names.리해, flipped: true }   // 고립 → 리)해로 뒤집음(해외 우선 원칙 유지)
+  }
+  return { pick: base, flipped: false }
+}
+
+// 방향성 8칸(시점 안 가림) 중 이 픽과 같은 편인 '표본 가중 비율'(0~1) — 칸마다
+// 1표가 아니라 그 칸의 표본 수(15에서 상한)만큼 가중해서 더한다. 표본이 있는 칸이
+// 하나도 없으면(극히 드묾, 0.1%) null을 돌려주고, 그때만 별점 없이 픽만 보여준다.
+function oddsPhaseWeightedRatio(row, pick) {
+  if (!pick || !DIR_SIDE[pick]) return null
+  let num = 0
+  let den = 0
+  for (const sc of ['리그', '통합']) {
+    for (const mkt of ['국', '해']) {
+      for (const final of [false, true]) {
+        const { name, total } = scopeCell(row, SCOPE_CODES[sc][mkt], final)
+        if (name && DIR_SIDE[name] && total > 0) {
+          const w = Math.min(total, DIR_CAP_N)
+          den += w
+          if (DIR_SIDE[name] === DIR_SIDE[pick]) num += w
+        }
+      }
+    }
+  }
+  return den > 0 ? num / den : null
+}
+
+// [하한, 적중률%, 표본] — 표본 가중 일치 비율 구간별. 초기/배변 따로 쟀다(구간 경계는
+// 사람이 읽기 쉬운 값으로 잡았다 — qcut으로 자르면 0.348 같은 숫자가 나와 화면에
+// 못 쓴다). 6대리그 실측, 커버리지 99.9%(옛 방식의 known==8 요구 때는 59% 남짓이었다).
+const ODDS_PHASE_WEIGHTED_GRADE = {
+  초기: [
+    { min: 0.90, rate: 84.55, n: 10854 },
+    { min: 0.80, rate: 82.93, n: 4769 },
+    { min: 0.65, rate: 82.11, n: 6338 },
+    { min: 0.40, rate: 80.40, n: 7205 },
+    { min: 0, rate: 79.49, n: 4778 },
+  ],
+  배변: [
+    { min: 0.90, rate: 84.32, n: 10622 },
+    { min: 0.80, rate: 83.06, n: 4686 },
+    { min: 0.65, rate: 81.26, n: 6250 },
+    { min: 0.40, rate: 79.40, n: 7120 },
+    { min: 0, rate: 77.52, n: 4863 },
+  ],
+}
+
+function weightedGradeOf(label, ratio) {
+  const rows = ODDS_PHASE_WEIGHTED_GRADE[label]
+  for (const row of rows) {
+    if (ratio >= row.min) return row
+  }
+  return rows[rows.length - 1]
+}
+
+function starsOfNew(rate) {
+  if (rate >= 83) return 3
+  if (rate >= 78) return 2
+  return 1
+}
+
+function phaseVerdict(row, final, label) {
+  const { pick, flipped } = resolveOddsPhasePick(row, final)
+  if (!pick) return { label, pick: null }
+  const ratio = oddsPhaseWeightedRatio(row, pick)
+  const cell = ratio !== null ? weightedGradeOf(label, ratio) : null
+  const rate = cell ? cell.rate : null
+  const n = cell ? cell.n : null
+  const stars = rate !== null ? starsOfNew(rate) : null
+  const verdict = sysPickVerdict(pick, row.RT)
+  return { label, pick, flipped, ratio, rate, n, stars, verdict }
+}
+
+function NewSystemVerdictLegend({ onClose }) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+
+  const bucketLabels = ['90% 이상', '80% 이상', '65% 이상', '40% 이상', '40% 미만']
+  return (
+    <div className="modal-backdrop help-legend-back" onClick={onClose}>
+      <div className="modal-card help-legend-card" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
+        <h2 className="modal-title">🏁 시스템 판정 — 무엇으로 정하고, 확률은 어떻게 되나</h2>
+
+        <p className="help-legend-title">이 판정이 쓰는 재료 세 가지</p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>재료</th><th>어디에 쓰나</th><th>왜</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>배당</b>(4칸)</td><td>픽 자체(정무·플핸무 같은 이름)</td>
+              <td>초기 4칸·배변 4칸을 그 시점 것만 따로 종합해 판단</td>
+            </tr>
+            <tr>
+              <td><b>방향성</b>(8칸, 표본 가중)</td><td>신뢰도(별점) — 픽 이름에는 영향 없음</td>
+              <td>픽에 섞으면 오히려 손해(82.46%→79.34%), 신뢰도로만·표본 가중해서 쓰면 이득</td>
+            </tr>
+            <tr>
+              <td>전적(상대전적)</td><td>어디에도 안 씀 — 참고 배지만</td>
+              <td>방향(정/플)별로 갈라 재도 값이 없음(z&lt;1.5) — 판단은 직접 하시라고 남겨둠</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p className="help-legend-title">픽 — 배당 표 4칸 중에서, 그 시점 것만 씁니다</p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>상황</th><th>픽으로 쓰는 칸</th><th>근거</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>보통</td><td><b>통)해</b>(통합·해외)</td>
+              <td>배당 표 4칸 중 실측 당첨률이 82.46%로 가장 높은 칸</td>
+            </tr>
+            <tr>
+              <td>그 칸만 혼자 다를 때</td><td><b>리)해로 뒤집음</b></td>
+              <td>나머지 3칸과 전부 다르면(고립) 해외를 우선해 뒤집음</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          초기·배변을 완전히 따로 계산합니다(그 시점 배당만 씁니다) — 시점을 섞은
+          것과 대조해 보니 배변은 오히려 −0.59%p였습니다. 시점을 안 섞는 쪽이
+          "그 시점에 등록된 배당 전부로 다시 만든다"는 원칙에도 맞습니다.
+        </p>
+
+        <p className="help-legend-title">신뢰도 — 방향성 8칸을 표본 크기로 가중한 일치 비율</p>
+        <p className="help-legend-note">
+          방향성(승+패·승+무+패)을 픽 자체에 섞으면 손해였지만(배당 100%가 최고),
+          &apos;맞을지 아닐지&apos;를 가리는 신뢰도로만 쓰면 도움이 됩니다. 8칸을 그냥
+          1표씩 똑같이 세지 않고, 그 칸의 표본 수만큼 가중치를 줍니다(표본 2건짜리와
+          200건짜리를 같은 무게로 취급하지 않는다는 뜻) — 다만 한 칸이 표본을 몰아서
+          혼자 결과를 좌우하지 못하게 칸당 표본은 상한을 둡니다. 이 상한값(40)도
+          감으로 정하지 않고 5~100(및 상한 없음)까지 스윕해서 실제 예측력(점이연
+          상관계수)이 가장 좋은 지점을 찾았습니다 — 상한 없음(0.040/0.060)보다는
+          상한을 두는 쪽이 낫고, 처음 썼던 15(0.045/0.060)보다 40(0.047/0.064) 근방이
+          더 좋았습니다.
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th></th><th>내용</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>계산식</td>
+              <td>가중 일치 비율 = (같은 편 칸들의 표본수 합) ÷ (표본 있는 칸들의 표본수 합)
+                — 칸당 표본은 40에서 자릅니다.</td>
+            </tr>
+            <tr>
+              <td>예시</td>
+              <td>리)국초기(정무·3건)·통)해배변(정무·8건)은 픽과 같은 편, 리)해초기(플핸무·
+                90건→40으로 자름)만 다른 편이면 → (3+8) ÷ (3+8+40) = 11/51 ≈ <b>22%</b>.
+                칸 개수만 세면 2/3(67%)이지만, 표본 큰 칸의 반대 의견 하나 때문에 22%까지
+                떨어집니다 — 이게 표본 가중이 하는 일입니다.</td>
+            </tr>
+          </tbody>
+        </table>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>가중 일치율</th><th>초기 판정 당첨률</th><th>배변 판정 당첨률</th></tr></thead>
+          <tbody>
+            {bucketLabels.map((lbl, i) => (
+              <tr key={lbl}>
+                <td><b>{lbl}</b></td>
+                <td>{ODDS_PHASE_WEIGHTED_GRADE.초기[i].rate.toFixed(1)}% ({ODDS_PHASE_WEIGHTED_GRADE.초기[i].n.toLocaleString()})</td>
+                <td>{ODDS_PHASE_WEIGHTED_GRADE.배변[i].rate.toFixed(1)}% ({ODDS_PHASE_WEIGHTED_GRADE.배변[i].n.toLocaleString()})</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          예전에는(칸마다 동일 취급 + 8칸이 전부 채워져야만) 이 신뢰도를 낼 수 있는
+          경기가 59% 남짓이었습니다. 표본 가중으로 바꾸면서 몇 칸이 비어도 있는 칸만으로
+          계산할 수 있게 되어, 적용 대상이 <b>99.9%</b>로 늘었습니다. 위 표에서도
+          90% 이상 구간과 40% 미만 구간 사이에 5~7%p 차이가 뚜렷합니다.
+        </p>
+
+        <p className="help-legend-title">별점 기준</p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>별</th><th>당첨률</th></tr></thead>
+          <tbody>
+            <tr><td><b>★★★</b></td><td>83% 이상</td></tr>
+            <tr><td><b>★★</b></td><td>78% 이상</td></tr>
+            <tr><td><b>★</b></td><td>78% 미만</td></tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          방향성 8칸에 표본 있는 칸이 하나도 없으면(극히 드묾, 0.1%) 별점 없이 픽만
+          보여줍니다 — 못 잰 조합에 실측값을 억지로 붙이지 않습니다.
+        </p>
+
+        <p className="help-legend-title">전체 평균 당첨률</p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th></th><th>당첨률</th></tr></thead>
+          <tbody>
+            <tr><td><b>초기 판정</b></td><td><b>82.27%</b></td></tr>
+            <tr><td><b>배변 판정</b></td><td><b>81.54%</b></td></tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          위 신뢰도 표(일치도별 당첨률)를 전부 합쳐 평균 낸 값입니다.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function NewSystemVerdict({ row, init, fin }) {
+  const [showLegend, setShowLegend] = useState(false)
+  // 확률 지표(DirectionPart)와 같은 규칙 — 픽 이름을 조각으로 쪼개서, 실제 결과를
+  // '덮는' 조각 하나만 노란 글씨(.dir-name-hit)로 켠다. 정무 → [정, 무]로 쪼개지고
+  // 실제 결과가 핸승·핸무면 '정'만, 무면 '무'만 켜진다(DIR_PARTS 주석 참고) — 배경을
+  // 칠하는 게 아니라 글자색만 바꾸고, 픽 전체가 아니라 그 한 글자만 바뀐다.
+  const rtText = rtLabel(row.RT)
+  const actual = ['핸승', '핸무', '무', '역'].includes(rtText) ? rtText : null
+
+  const part = (v) => {
+    if (!v.pick) {
+      return (
+        <span className="newv-part">
+          <span className="newv-label">{v.label}</span>
+          <span className="dir-none">—</span>
+        </span>
+      )
+    }
+    return (
+      <span
+        className="newv-part"
+        title={`${v.label} 판정: ${v.pick}${v.flipped ? ' (고립 → 리)해로 뒤집음)' : ''}\n`
+          + (v.ratio !== null
+            ? `방향성 8칸 표본 가중 일치율 ${Math.round(v.ratio * 100)}% — 과거 ${v.n?.toLocaleString()}경기 중 ${v.rate}%.`
+            : '방향성 8칸에 표본 있는 칸이 하나도 없어 신뢰도를 못 매겼습니다.')}
+      >
+        <span className="newv-label">{v.label}</span>
+        {/* 색은 sys-pick-j/p(빨강/파랑, 옛 판정 축)이 아니라 방향성·배당 표와 같은
+            dscope-side-*-ink(초록/파랑)를 쓴다 — 이 줄이 그 두 표와 한 묶음이라서다. */}
+        <b className={`sys-pick dscope-side-${DIR_SIDE[v.pick] === '정' ? 'j' : 'p'}-ink`}>
+          {(DIR_PARTS[v.pick] || [[v.pick, []]]).map(([piece, covers]) => (
+            <span key={piece} className={actual && covers.includes(actual) ? 'dir-name-hit' : undefined}>
+              {piece}
+            </span>
+          ))}
+        </b>
+        {v.stars !== null && (
+          <>
+            <span className="sys-stars">{'★'.repeat(v.stars)}{'☆'.repeat(3 - v.stars)}</span>
+            <span className="sys-rate">{Math.round(v.rate)}%</span>
+          </>
+        )}
+      </span>
+    )
+  }
+
+  if (!init.pick && !fin.pick) return null
+  return (
+    <div className="pick-band-newverdict">
+      <button
+        type="button"
+        className="help-btn"
+        onClick={() => setShowLegend(true)}
+        title="시스템 판정(새) 기준 보기 — 픽은 배당, 신뢰도는 방향성에서 옵니다"
+      >
+        시스템 판정 <span className="help-mark">?</span>
+      </button>
+      {part(init)}
+      <span className="newv-arrow">→</span>
+      {part(fin)}
+      {fin.verdict && (
+        <span
+          className="match-chip match-chip-tone sys-verdict"
+          style={{
+            background: `var(--chip-${VERDICT_TONE[fin.verdict]}-bg)`,
+            color: `var(--chip-${VERDICT_TONE[fin.verdict]}-fg)`,
+            fontWeight: 700,
+          }}
+        >
+          {fin.verdict}
+        </span>
+      )}
+      {showLegend && <NewSystemVerdictLegend onClose={() => setShowLegend(false)} />}
+    </div>
+  )
+}
+
 function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds }) {
-  // '경기지표'의 무 뱃지(같은방향/다른방향)와 '시스템 판정' 둘 다 이 pick이
-  // 필요해서 여기서 한 번만 계산해 내려준다.
-  const init = analysisPair(row, scope, false)
-  const fin = analysisPair(row, scope, true)
-  const names = [
-    init.dom ? directionName(init.dom) : null,     // 국초
-    fin.dom ? directionName(fin.dom) : null,       // 국배
-    init.forr ? directionName(init.forr) : null,   // 해초
-    fin.forr ? directionName(fin.forr) : null,     // 해배
-  ]
-  const { pick, flipped } = resolveSystemPick(names)   // 기본 해배·초기, 고립되면 다수결로 뒤집힘
+  // '경기지표'의 무·전적 뱃지와 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
+  // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
+  // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
+  // 같이 걷어냈다. 배지는 배변 판정을 우선하고, 배변이 아직 없으면 초기 판정을 쓴다.
+  const init = phaseVerdict(row, false, '초기')
+  const fin = phaseVerdict(row, true, '배변')
+  const pick = fin.pick ?? init.pick
 
   return (
     <section className="pick-band">
@@ -2239,15 +2615,24 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds }) {
                   sameOdds={sameOdds}
                 />
               </div>
-              <div className="pick-band-dscope">
-                <DirectionScopeTable row={row} />
-              </div>
-              <div className="pick-band-sys">
-                <SystemVerdictTable names={names} flipped={flipped} />
-                {/* 결과 판정 줄은 시스템 판정 표 바로 밑에 무조건 붙는다 — absolute로
-                    빼서 이 줄의 길이·존재가 4단 grid의 폭/높이 계산에 안 들어가게
-                    한다. 옆(경기지표) 칸이 길어져도 이 줄의 위치는 안 흔들린다. */}
-                <SystemVerdictSummary row={row} scope={scope} names={names} pick={pick} flipped={flipped} />
+              {/* 방향성·배당 두 표를 한 덩어리로 묶고, 그 아래에 구분선 + 시스템
+                  판정(새) 줄을 붙인다(2026-09-06, 사용자가 고른 '안 2') — 경기지표
+                  칸까지는 안 내려가고 이 두 표의 폭만큼만 걸친다. */}
+              <div className="pick-band-dscope-sys-wrap">
+                <div className="pick-band-dscope-sys-row">
+                  <div className="pick-band-dscope">
+                    <DirectionScopeTable row={row} />
+                  </div>
+                  <div className="pick-band-sys">
+                    {/* 2026-09-06 — 여기 있던 '판정' 표(국배/해배 이름 2칸)를 '배당' 표로
+                        바꿨다. 판정이 쓰는 9줄 중 방향성이 이미 보여주는 승+패·승+무+패를
+                        뺀 나머지를 방향성과 같은 꼴로 본다. 예전 결과 판정 줄(9줄, 리그만
+                        계산)은 구분선 아래 '시스템 판정' 줄로 완전히 교체하고 지웠다
+                        (실측: 82.46% vs 79.79%, NewSystemVerdictLegend 참고). */}
+                    <OddsScopeTable row={row} />
+                  </div>
+                </div>
+                <NewSystemVerdict row={row} init={init} fin={fin} />
               </div>
             </div>
           </div>
