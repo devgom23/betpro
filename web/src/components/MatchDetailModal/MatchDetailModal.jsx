@@ -8,8 +8,12 @@ import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
 import {
-  drawTendency, drawRelation, sysPickVerdict, VERDICT_TONE,
+  drawTendency, drawRelation, VERDICT_TONE,
 } from '../../utils/systemVerdict'
+import {
+  DIR_SIDE, SCOPE_CODES, scopeCell, oddsScopeCodes, directionName, weightedAnalysis,
+  ODDS_PHASE_WEIGHTED_GRADE, phaseVerdict,
+} from '../../utils/verdictCalc'
 import './MatchDetailModal.css'
 
 
@@ -373,7 +377,9 @@ function OddsTable({ row }) {
   const at = String(row.AT || '').trim()
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
   const homeFav = homeIsFav(row)
-  // 해외 배당이 크게 움직인 경기인가 — 리그 표 '지표 > 배변' 칸과 같은 값을 쓴다.
+  // 해외 배당이 크게 움직인 경기인가 — '해외 배당' 표 제목 옆 (강)/(약) 표시.
+  // 2026-09-07에 리그 표 '지표 > 배변' 칸은 '판정'으로 바뀌어 이 값을 더 이상
+  // 안 보여준다(그쪽엔 시스템 판정이 대신 들어간다) — 이 배지만 남았다.
   const moveGrade = oddsMoveGrade(row)
   const moveTitle = oddsMoveTitle(row)
   // 순위 — 배당표는 칸이 좁아 '위'를 떼고 숫자만 쓴다(팝업 제목 줄은 (3위) 그대로).
@@ -899,9 +905,6 @@ function favSampleCodes(row) {
   return out
 }
 
-// 표본이 이만큼이면 그 줄을 '절반쯤' 믿는다. 아래 SAMPLE_SHRINK 주석 참고.
-const SAMPLE_SHRINK = 10
-
 // 국내·해외 블록 끝에 붙는 '분석' 줄. 가중평균이라 건수가 없어 %만 보여준다.
 // vals가 null이면(그 블록에 표본이 하나도 없음 — 예: 내 데이터에서 국내배당이
 // 없는 리그) 줄 자체를 숨기지 않고 빈칸(-)으로 채워서, 있으나 없으나 표 모양이
@@ -952,31 +955,6 @@ function SampleFinalRow({ vals, total = 0, kind = 'count', top1Only = false }) {
   )
 }
 
-// 접힌 표의 국내·해외 블록 끝에 붙는 '분석' 줄을 만든다.
-//
-// 무게 = 단계 가중치 × 표본 신뢰도
-//   단계 가중치   위에서 아래로 1,2,3,4,5 — 아래로 갈수록 조건이 좁아(이 경기와 더 닮아)
-//                 무겁게 본다.
-//   표본 신뢰도   n / (n + 10) — 조건이 좁아질수록 표본도 같이 줄기 때문에 단계 가중치만
-//                 쓰면 1건짜리가 9건짜리보다 3~4배 무거워진다. 실제로 그렇게 계산해 보면
-//                 41건이 '무 39%'라고 말하는데 1건짜리 '역 100%' 두 줄에 밀려 결론이
-//                 '역'으로 뒤집혔다(시타르트 vs 알크마르 실측). 표본이 쌓이면 이 값이
-//                 1에 가까워져 단계 가중치가 원래대로 작동한다.
-//
-// 표본이 0인 줄은 무게가 0이라 자동으로 빠진다.
-function weightedAnalysis(lines) {
-  const acc = [0, 0, 0, 0]
-  let wSum = 0
-  lines.forEach((l, i) => {
-    if (l.total <= 0) return
-    const w = (i + 1) * (l.total / (l.total + SAMPLE_SHRINK))
-    wSum += w
-    for (let k = 0; k < 4; k += 1) acc[k] += (l.vals[k] / l.total) * 100 * w
-  })
-  if (wSum <= 0) return null
-  return acc.map((v) => v / wSum)
-}
-
 // ── 방향성 요약 (확률 지표 제목 옆 한 줄) ──
 // 지표별 표본의 '국) 분석 / 해) 분석' 줄과 정확히 같은 4칸(핸승/핸무/무/역 %)에서,
 // 사용자가 실제로 거는 "3개 중 1개 배제" 형태의 이름 하나를 뽑는다(CLAUDE.md 5-1).
@@ -990,16 +968,8 @@ function weightedAnalysis(lines) {
 // 그래서 한쪽 쌍이 압도적일 때만 정·플을 먼저 집는 단계를 앞에 뒀다.
 // 기준선 80%는 실측으로 골랐다 — 70%면 정이 26.3%로 정무보다 흔해지고, 90%면 플이
 // 1.9%로 거의 안 나온다. 80%에서 정 14.1% / 플 5.4%로 "가끔 나오는 신호"가 된다.
-const DIR_PAIR_CUT = 80
-
-function directionName(v) {
-  if (!v) return null
-  const [hs, hm, mu, yk] = v
-  if (hs + hm >= DIR_PAIR_CUT) return '정'
-  if (mu + yk >= DIR_PAIR_CUT) return '플'
-  const cand = [['플핸무', hs], ['플핸승', hm], ['정역', mu], ['정무', yk]]
-  return cand.reduce((best, c) => (c[1] < best[1] ? c : best))[0]
-}
+// (directionName·weightedAnalysis는 utils/verdictCalc.js로 옮겨 리그표 '판정' 칸과
+// 같이 쓴다 — 이 파일 맨 위 import 참고.)
 
 // 방향성 이름은 실제로 두 조각의 합성어다 — '정'(핸승+핸무를 묶어 부르는 이름)
 // '플'(무+역을 묶어 부르는 이름) + 나머지 하나(무/역/핸무/핸승 그대로).
@@ -1139,8 +1109,8 @@ const DIR_HIT = {
   },
 }
 
-/** 이름 -> 방향. 첫 조각(DIR_PARTS의 '정'/'플')이 곧 방향이다. */
-const DIR_SIDE = { 정무: '정', 정역: '정', 정: '정', 플핸무: '플', 플핸승: '플', 플: '플' }
+// DIR_SIDE(이름 -> 방향, 첫 조각이 곧 방향)는 utils/verdictCalc.js에서 가져온다
+// (파일 맨 위 import) — 리그표 '판정' 칸과 같은 값을 써야 한다.
 
 // ⚠ 2026-08-29에 '초기 -> 배변으로 방향이 뒤집히면 경고(⚠)'를 넣었다가 하루 만에
 //   뺐다(2026-08-30). 그때는 뒤집힌 경기에서 배변 쪽을 따르면 51%, 초기 쪽을 따르면
@@ -1676,22 +1646,7 @@ function findSignal(data, key) {
 //   리그 지표는 표본이 안 모인다 — 국내는 표본 4건 이하가 81~94%,
 //   해외도 표본 15건 넘는 경기가 절반뿐. 표본이 얇으면 '정'·'플' 단독이
 //   남발되고(4건 이하에서 51.7%) 적중률이 66.9%로 떨어진다.
-const SCOPE_CODES = {
-  리그: { 국: ['K-WL', 'K-WDL'], 해: ['F-WL', 'F-WDL'] },
-  통합: { 국: ['TK-WL', 'TK-WDL'], 해: ['TF-WL', 'TF-WDL'] },
-}
-
-function scopeCell(row, codes, final) {
-  const lines = codes.map((code) => {
-    const vals = [1, 2, 3, 4].map((i) => {
-      const v = numOrNull(row[`${final ? 'E_' : ''}${code} ${i}`])
-      return v === null ? 0 : Math.trunc(v)
-    })
-    return { vals, total: vals.reduce((a, b) => a + b, 0) }
-  })
-  const v = weightedAnalysis(lines)
-  return { name: v ? directionName(v) : null, total: lines.reduce((a, l) => a + l.total, 0) }
-}
+// SCOPE_CODES·scopeCell도 utils/verdictCalc.js에서 가져온다(파일 맨 위 import).
 
 // 표본이 얼마나 되면 믿을 만한가 — 실측 적중률 곡선 그대로.
 // 15건+ 79~81% / 5~14건 71~76% / 1~4건 61~67%
@@ -1991,21 +1946,9 @@ function DirectionScopeTable({ row }) {
 //   승+무+패 4종류뿐이고 승=홈팀/패=원정팀은 리그별로만 있다(engine.py의
 //   logics_new_individual). 통)국의 플핸은 2026-09-06에 28번 지표(TK-PL)로 새로
 //   만들어 6대리그 과거 19,393경기를 백필했다(K-PL과 계산식이 같고 표본 풀만 통합).
-function oddsScopeCodes(row) {
-  const dirOf = (wKey, lKey) => {
-    const w = numOrNull(row[wKey])
-    const l = numOrNull(row[lKey])
-    return (w === null || l === null || w === l) ? null : (w < l ? 'W' : 'L')
-  }
-  const dom = dirOf('KW', 'KL')
-  const forr = dirOf('FW', 'FL')
-  return {
-    리국: [dom && `K-${dom}`, 'K-PL', dom && `K-${dom === 'W' ? 'W-HT' : 'L-AT'}`].filter(Boolean),
-    리해: [forr && `F-${forr}`, forr && `F-${forr === 'W' ? 'W-HT' : 'L-AT'}`].filter(Boolean),
-    통국: [dom && `TK-${dom}`, 'TK-PL'].filter(Boolean),
-    통해: [forr && `TF-${forr}`].filter(Boolean),
-  }
-}
+//
+// oddsScopeCodes 함수 자체는 utils/verdictCalc.js로 옮겼다(파일 맨 위 import) —
+// 리그표 '판정' 칸의 픽 계산도 같은 4칸 재료를 써야 해서다.
 
 // ── 배당 표 참고표 (2026-09-06 실측, 6대리그 35,985경기) ──
 // 방향성 참고표(DirectionScopeLegend)와 같은 구성 — 재료 → 4칸 일치도별 당첨률 →
@@ -2280,90 +2223,10 @@ function OddsScopeTable({ row }) {
 //   골랐다(2026-09-06(3)): 상한 없음(점이연 상관 0.040~0.060)보다 상한을 두는 쪽이
 //   대체로 낫고, 처음 썼던 15는 그중 최적이 아니었다 — 40 근방이 초기·배변 둘 다
 //   최고점(0.047/0.064)이라 40으로 잡는다.
-const SINGLE_DIR_NAMES = new Set(['정무', '정역', '플핸무', '플핸승'])
-const DIR_CAP_N = 40
-
-function resolveOddsPhasePick(row, final) {
-  const codes = oddsScopeCodes(row)
-  const nameOf = (key) => scopeCell(row, codes[key], final).name
-  const names = { 리국: nameOf('리국'), 리해: nameOf('리해'), 통국: nameOf('통국'), 통해: nameOf('통해') }
-  const base = names.통해
-  if (!base || !DIR_SIDE[base]) return { pick: null, flipped: false }
-  const others = [names.리국, names.리해, names.통국]
-  const agree = others.filter((n) => n && DIR_SIDE[n] === DIR_SIDE[base]).length
-  if (agree === 0 && names.리해 && SINGLE_DIR_NAMES.has(names.리해)) {
-    return { pick: names.리해, flipped: true }   // 고립 → 리)해로 뒤집음(해외 우선 원칙 유지)
-  }
-  return { pick: base, flipped: false }
-}
-
-// 방향성 8칸(시점 안 가림) 중 이 픽과 같은 편인 '표본 가중 비율'(0~1) — 칸마다
-// 1표가 아니라 그 칸의 표본 수(15에서 상한)만큼 가중해서 더한다. 표본이 있는 칸이
-// 하나도 없으면(극히 드묾, 0.1%) null을 돌려주고, 그때만 별점 없이 픽만 보여준다.
-function oddsPhaseWeightedRatio(row, pick) {
-  if (!pick || !DIR_SIDE[pick]) return null
-  let num = 0
-  let den = 0
-  for (const sc of ['리그', '통합']) {
-    for (const mkt of ['국', '해']) {
-      for (const final of [false, true]) {
-        const { name, total } = scopeCell(row, SCOPE_CODES[sc][mkt], final)
-        if (name && DIR_SIDE[name] && total > 0) {
-          const w = Math.min(total, DIR_CAP_N)
-          den += w
-          if (DIR_SIDE[name] === DIR_SIDE[pick]) num += w
-        }
-      }
-    }
-  }
-  return den > 0 ? num / den : null
-}
-
-// [하한, 적중률%, 표본] — 표본 가중 일치 비율 구간별. 초기/배변 따로 쟀다(구간 경계는
-// 사람이 읽기 쉬운 값으로 잡았다 — qcut으로 자르면 0.348 같은 숫자가 나와 화면에
-// 못 쓴다). 6대리그 실측, 커버리지 99.9%(옛 방식의 known==8 요구 때는 59% 남짓이었다).
-const ODDS_PHASE_WEIGHTED_GRADE = {
-  초기: [
-    { min: 0.90, rate: 84.55, n: 10854 },
-    { min: 0.80, rate: 82.93, n: 4769 },
-    { min: 0.65, rate: 82.11, n: 6338 },
-    { min: 0.40, rate: 80.40, n: 7205 },
-    { min: 0, rate: 79.49, n: 4778 },
-  ],
-  배변: [
-    { min: 0.90, rate: 84.32, n: 10622 },
-    { min: 0.80, rate: 83.06, n: 4686 },
-    { min: 0.65, rate: 81.26, n: 6250 },
-    { min: 0.40, rate: 79.40, n: 7120 },
-    { min: 0, rate: 77.52, n: 4863 },
-  ],
-}
-
-function weightedGradeOf(label, ratio) {
-  const rows = ODDS_PHASE_WEIGHTED_GRADE[label]
-  for (const row of rows) {
-    if (ratio >= row.min) return row
-  }
-  return rows[rows.length - 1]
-}
-
-function starsOfNew(rate) {
-  if (rate >= 83) return 3
-  if (rate >= 78) return 2
-  return 1
-}
-
-function phaseVerdict(row, final, label) {
-  const { pick, flipped } = resolveOddsPhasePick(row, final)
-  if (!pick) return { label, pick: null }
-  const ratio = oddsPhaseWeightedRatio(row, pick)
-  const cell = ratio !== null ? weightedGradeOf(label, ratio) : null
-  const rate = cell ? cell.rate : null
-  const n = cell ? cell.n : null
-  const stars = rate !== null ? starsOfNew(rate) : null
-  const verdict = sysPickVerdict(pick, row.RT)
-  return { label, pick, flipped, ratio, rate, n, stars, verdict }
-}
+//
+// resolveOddsPhasePick·oddsPhaseWeightedRatio·ODDS_PHASE_WEIGHTED_GRADE·phaseVerdict는
+// utils/verdictCalc.js로 옮겼다(파일 맨 위 import) — 2026-09-07, 리그표에 '판정' 칸을
+// 추가하면서 모달과 표가 같은 계산을 쓰게 만들었다.
 
 function NewSystemVerdictLegend({ onClose }) {
   useEffect(() => {

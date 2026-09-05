@@ -3,7 +3,16 @@
 // 산출 로직은 건드리지 않고, "표시 순서·라벨·색상"만 그대로 재현한다.
 
 import { formatDt } from '../../utils/format'
-import { ODDS_GRADE_KEY, oddsMoveGrade } from '../../utils/oddsMove'
+import { DIR_SIDE } from '../../utils/verdictCalc'
+
+// '판정' 칸 — 저장된 컬럼이 아니라 그때그때 계산하는 값이라 가짜 컬럼 키로 둔다.
+// 초기·배변을 좌우 두 칸이 아니라 국내배당·해외배당처럼 위/아래 두 줄로 보여준다 —
+// 그래서 LeagueTable.jsx가 이 키를 FINAL_FIELD에 등록해 '위/아래로 갈리는 칸'으로
+// 다루면서도, 값 자체는 (KW→EKW처럼 컬럼을 바꿔 끼우는 게 아니라) 매번 원본 row +
+// isFinal로 직접 계산한다 — 국내배당처럼 EKW를 끼워 넣으면 방향(정/플) 계산에 쓰는
+// KW/FW까지 바뀌어(그 컬럼들도 FINAL_FIELD에 있다) 상세보기 '시스템 판정'과
+// 다른 답이 나올 수 있어서다(항상 원본 배당으로 방향을 잡아야 모달과 일치한다).
+export const VERDICT_KEY = 'VERDICT'
 
 const GEN_COLS = ['L', 'S', 'R', 'No', 'DT', 'TM']
 // 그 경기 '직전까지'의 시즌 성적. 백엔드가 조회 시 계산해 붙여준다.
@@ -66,6 +75,10 @@ export const FINAL_FIELD = {
   // 국)지·해)지 — 최종배당으로 다시 센 27개 지표에서 나온다.
   // (지표 4칸 자체도 두 줄로 갈린다 — GROUP_DEFS 아래에서 한꺼번에 등록한다)
   NH_KI: 'E_NH_KI', NH_FI: 'E_NH_FI', PL_KI: 'E_PL_KI', PL_FI: 'E_PL_FI',
+  // 판정 — '위/아래로 갈린다'는 표시만 필요하고 실제 값은 안 읽는다(LeagueTable.jsx가
+  // 원본 row + isFinal로 직접 계산한다). null이라 toFinalRow가 아랫줄에 그대로
+  // null을 채워도 무해하다.
+  [VERDICT_KEY]: null,
 }
 
 /** 이 칸이 위/아래 두 줄로 갈리는가. (값이 null인 항목도 갈라지므로 in으로 본다) */
@@ -274,13 +287,16 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
     groups.push({ label1: '똥배', label2: '', kind: 'flat', cols: ddongLeaves })
   }
 
-  // 지표 — 지금은 '배변' 한 칸뿐이다. 저장된 컬럼이 아니라 해외배당(FW/FL·EFW/EFL)에서
-  // 그때그때 계산하는 값이라(utils/oddsMove.js) available에 없다. 해외 초기배당이
-  // 있는 표에서만 낸다 — 최종배당이 아직 없으면 값은 빈칸으로 나온다.
+  // 판정 — 시스템 판정(새)의 픽. 위(초기)/아래(배변) 두 줄로 갈린다(국내배당·해외배당과
+  // 같은 꼴). 저장된 컬럼이 아니라 그때그때 계산한다(utils/verdictCalc.js — 상세보기
+  // '시스템 판정' 줄과 완전히 같은 계산이다. 둘이 따로 놀지 않게 한 파일을 같이 쓴다).
+  // CLAUDE.md 4-1: 판정은 그 시점 배당 전부로 매번 다시 만든다 — 그래서 저장하지 않고
+  // 매 렌더마다 다시 계산한다. 해외 초기배당이 있는 표에서만 낸다(배당 표 4칸의
+  // 리)해·통)해 재료가 필요하다).
   if (available.has('FW') && available.has('FL')) {
     groups.push({
-      label1: '지표', label2: '', kind: 'flat',
-      cols: [{ key: ODDS_GRADE_KEY, sub: '배변' }],
+      label1: '판정', label2: '', kind: 'flat',
+      cols: [{ key: VERDICT_KEY, sub: '판정' }],
     })
   }
 
@@ -337,7 +353,9 @@ const COL_WIDTH = {
   KW: 59, KD: 59, KL: 59, KH: 36, KHW: 59, KHD: 59, KHL: 59,
   FW: 59, FD: 59, FL: 59, FH: 36,
   DDONG: 40, DDONG_RISK: 50, DDONGSA: 40,
-  [ODDS_GRADE_KEY]: 40,          // '강'/'약' 한 글자 — 똥배 순번 칸(40)과 같은 폭
+  // 정무·정역·플핸무·플핸승(2~3글자) — 실측 안 하고 감으로 잡았다(새 칸이라 아직
+  // DB 값 분포를 캔버스로 잴 대상이 없다). 필요하면 나중에 실측해서 고칠 것.
+  [VERDICT_KEY]: 54,
   WIN_RISK: 50, WIN_RISK_F: 50,
   NH_KO: 50, NH_KI: 50, NH_FI: 50,
   PL_KO: 50, PL_KI: 50, PL_FI: 50,
@@ -426,8 +444,8 @@ export function formatCell(group, col, value, row) {
     const n = toNum(value)
     return n === null ? '' : `${Math.round(n)}%`
   }
-  // 배변 신뢰등급 — 저장된 값이 없어 value는 늘 undefined다. 행에서 직접 계산한다.
-  if (g1 === '지표' && sub === '배변') return oddsMoveGrade(row)
+  // 판정은 LeagueTable.jsx가 직접 그린다(formatCell을 안 거친다) — 위 VERDICT_KEY
+  // 주석 참고. 여기 분기가 없다.
   if (g1 === '경기정보' && sub === 'RT') return rtToText(value)
   if (g1 === '경기정보' && (sub === 'HS' || sub === 'AS')) {
     const n = toNum(value)
@@ -648,6 +666,16 @@ export function formStyle(value) {
   return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
 }
 
+// 판정 칸 글자색 — 별 3개(83%+)일 때만 색을 준다. 좁은 칸에 별 아이콘을 다 넣는
+// 대신, "이 픽은 믿을 만하다"는 신호를 색 하나로 압축한다(2026-09-07). 3개가 안
+// 되면 강조하지 않는다 — 색이 있고 없고 자체가 "3성이냐 아니냐"를 말해 준다.
+// 색은 방향성·배당 표·상세보기 '시스템 판정' 줄과 같은 축(정=파랑/플=초록).
+export function verdictCellStyle(pick, stars) {
+  if (!pick || stars !== 3) return undefined
+  const tone = DIR_SIDE[pick] === '정' ? 'blue' : 'green'
+  return { color: `var(--chip-${tone}-fg)`, fontWeight: 700 }
+}
+
 // ── 셀 배경/글자색 (인라인 style 객체로 반환) ──
 // row는 HS/AS처럼 '이 행의 다른 컬럼 값'을 봐야 할 때만 쓴다(예: 이긴 팀 점수 강조).
 function cellStyleImpl(group, col, value, row) {
@@ -678,18 +706,7 @@ function cellStyleImpl(group, col, value, row) {
     }
   }
 
-  // 배변 신뢰등급 — 똥배 '분석'과 같은 칩 톤(옅은 배경 + 진한 글씨)으로 맞춘다.
-  // 강은 눈에 들어오는 파랑, 약은 한 톤 죽인 회색. 빈칸은 아무 색도 주지 않는다.
-  if (g1 === '지표' && sub === '배변') {
-    const grade = oddsMoveGrade(row)
-    if (!grade) return undefined
-    const tone = grade === '강' ? 'blue' : 'gray'
-    return {
-      background: `var(--chip-${tone}-bg)`,
-      color: `var(--chip-${tone}-fg)`,
-      fontWeight: 700,
-    }
-  }
+  // 판정도 LeagueTable.jsx가 직접 그린다 — verdictCellStyle(아래 export)을 거기서 쓴다.
 
   // 배당 적중 표시 — '적중'(PH_STATUS) 칸과 같은 노란 배경으로 표시한다.
   // 예정 경기(스코어 없음)는 표시 없음. 그 칸 자체에 배당값이 없으면(공란) 적중

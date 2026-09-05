@@ -3,7 +3,9 @@ import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
   collapsedWidth, splitsOnFinal, oddsMoveDir, riskMoveDir, toFinalRow, rtToText,
+  VERDICT_KEY, verdictCellStyle,
 } from './columnGroups'
+import { phaseVerdict } from '../../utils/verdictCalc'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
@@ -481,9 +483,9 @@ export default function LeagueTable({
                       </th>
                     ))
                   }
-                  // '지표'는 원래 칸이 하나뿐이라 접어도 숨겨지는 게 없다 — '···'
+                  // '판정'은 원래 칸이 하나뿐이라 접어도 숨겨지는 게 없다 — '···'
                   // 대신 컬럼명을 그대로 두어 접힌 채로도 무슨 칸인지 알 수 있게 한다.
-                  if (g.label1 === '지표') {
+                  if (g.label1 === '판정') {
                     return [
                       <th
                         key={`${gi}-c`}
@@ -669,20 +671,21 @@ export default function LeagueTable({
                         cellKeys = hasLeagueLabel
                           ? ['__merge', '__merge', '__merge']
                           : ['__merge', '__merge']
-                      } else if (g.label1 === '지표') {
-                        // 지표는 칸이 하나뿐이라 접어도 펼친 것과 똑같이 그린다 —
-                        // 값(강/약)과 칩 색까지 그대로 살린다.
-                        const c0 = g.cols[0]
+                      } else if (g.label1 === '판정') {
+                        // 판정은 칸이 하나뿐이라 접어도 펼친 것과 똑같이 그린다 —
+                        // 값(픽)과 색까지 그대로 살린다. 위/아래 두 줄로 갈리므로
+                        // (VERDICT_KEY 주석 참고) 항상 원본 row(baseRow)로 계산한다.
+                        const v = phaseVerdict(baseRow, isFinal, isFinal ? '배변' : '초기')
                         cells = [
                           <td
                             key={`${gi}-c`}
                             className={`collapsed-cell${dividerClass(g, isLastGroup)}`}
-                            style={cellStyle(g, c0, row[c0.key], row) || undefined}
+                            style={verdictCellStyle(v.pick, v.stars) || undefined}
                           >
-                            {formatCell(g, c0, row[c0.key], row)}
+                            {v.pick || ''}
                           </td>,
                         ]
-                        cellKeys = ['__merge']
+                        cellKeys = [VERDICT_KEY]
                       } else {
                         cells = [
                           <td key={`${gi}-c`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
@@ -761,6 +764,22 @@ export default function LeagueTable({
                           </td>
                         )
                       })
+                    } else if (g.label1 === '판정') {
+                      // 판정 — 좌우가 아니라 국내배당·해외배당처럼 위(초기)/아래(배변)로
+                      // 갈린다. VERDICT_KEY 주석 참고: 항상 원본 row(baseRow)로 계산해야
+                      // 상세보기 '시스템 판정'과 같은 답이 나온다(EKW/EFW로 바뀐 srcRow를
+                      // 쓰면 방향 계산이 달라질 수 있다).
+                      cellKeys = [VERDICT_KEY]
+                      const v = phaseVerdict(baseRow, isFinal, isFinal ? '배변' : '초기')
+                      cells = [
+                        <td
+                          key={`${gi}-c`}
+                          className={isLastGroup ? undefined : dividerClass(g, isLastGroup).trim() || undefined}
+                          style={verdictCellStyle(v.pick, v.stars) || undefined}
+                        >
+                          {v.pick || ''}
+                        </td>,
+                      ]
                     } else {
                       cellKeys = g.cols.map((c) => c.key)
                       cells = g.cols.map((c, ci) => {
