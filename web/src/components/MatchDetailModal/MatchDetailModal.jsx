@@ -194,146 +194,6 @@ function DdongsaBadge({ row }) {
   )
 }
 
-// ── 배당차 뱃지 (2026-08-30 실측) ──
-// 배당차 = |승배당 − 패배당| = 역배 − 정배. 괄호 안은 그 구간의 '플핸무 적중률'
-// (= 핸승만 안 나오면 적중). 6대리그 결과 있는 경기 전부로 쟀다.
-//
-// ⚠ 이 숫자는 확률 지표가 모르는 새 정보가 아니다. 배당차는 정배배당과 거의 같은
-//    값이라(상관 −0.79~−0.85, 정배배당이 배당차의 71%를 설명한다) 여기 적힌 차이는
-//    사실상 정배배당이 만든 것이다. 실제로 정배배당을 0.05 단위로 고정하고 다시 재면
-//    플핸무 쪽 차이는 사라진다(핸승 z가 −0.48 ~ −3.70으로 부호까지 뒤섞인다).
-//    그래서 이건 "배당표 보고 머릿속으로 빼야 알던 걸 미리 계산해 둔 참조값"이다.
-//    똥배 뱃지도 같은 성격이다(그것도 배당에서 나온 값).
-//
-// 초기·배변을 둘 다 띄우는 이유: 91%는 같은 구간에 들어가지만 9%는 갈린다.
-// 국·해를 둘 다 띄우는 이유: 같은 구간에 들어가는 게 54.2%뿐이다(절반은 갈린다).
-const GAP_CUTS = [0.5, 1.0, 1.5, 2.5, 4.0, 7.0]
-// 구간마다 [플핸무%, 플핸무 적중건, 정무%, 정무 적중건, 전체건]
-// 7구간: ~0.5 / 0.5~1 / 1~1.5 / 1.5~2.5 / 2.5~4 / 4~7 / 7+
-const GAP_HIT = {
-  국초: [[83.4, 4304, 68.1, 3515, 5162], [80.0, 3929, 71.3, 3503, 4913],
-    [76.2, 3205, 74.5, 3135, 4207], [72.6, 4191, 78.7, 4538, 5769],
-    [66.5, 3407, 82.7, 4236, 5121], [57.2, 2633, 89.1, 4097, 4600],
-    [39.7, 1170, 94.0, 2772, 2948]],
-  해초: [[83.1, 3735, 68.1, 3062, 4495], [81.4, 3751, 70.2, 3235, 4608],
-    [77.6, 3462, 74.0, 3301, 4462], [74.2, 4823, 76.6, 4976, 6499],
-    [68.2, 4155, 81.7, 4976, 6090], [60.1, 3210, 86.9, 4639, 5340],
-    [43.8, 1943, 93.1, 4130, 4438]],
-  국배: [[83.4, 4101, 67.8, 3334, 4915], [80.2, 3850, 71.4, 3427, 4799],
-    [76.6, 3256, 74.1, 3148, 4248], [72.7, 4279, 78.5, 4621, 5883],
-    [67.0, 3500, 82.6, 4315, 5227], [57.1, 2698, 88.8, 4200, 4728],
-    [39.6, 1156, 94.2, 2753, 2922]],
-  해배: [[84.9, 3441, 65.4, 2649, 4051], [81.7, 3561, 68.7, 2997, 4361],
-    [78.9, 3282, 73.7, 3066, 4159], [74.7, 4909, 77.0, 5061, 6570],
-    [68.5, 4253, 81.4, 5051, 6205], [61.8, 3411, 86.5, 4770, 5516],
-    [43.8, 2223, 93.2, 4725, 5071]],
-}
-// 배당차가 크면 플핸무%는 볼 이유가 없는 숫자가 된다(7.0+ 구간은 39.7%). 그 구간에서
-// 실제로 걸 만한 건 정무(94.0%)다. 그래서 구간마다 '둘 중 높은 쪽'을 보여준다.
-// 뒤집히는 자리는 배당차 1.5 — 네 출처(국초·해초·국배·해배)가 전부 같은 자리에서 뒤집힌다.
-//
-// 어느 쪽을 보여주는지는 '플'/'정' 글자를 뱃지로 붙여 표시한다. 국배는 1.5 이하라 플,
-// 해배는 1.5 초과라 정 — 이렇게 서로 다른 걸 가리킬 때가 있어서, 글자 없이 %만 두면
-// 무엇의 확률인지 알 수 없다.
-const GAP_FLIP = 3         // 이 구간부터 정무를 보여준다(1.5~2.5부터)
-const GAP_BASE = 69.8      // 배당차를 안 가린 전체 평균(플핸무·정무 둘 다 이 값)
-const GAP_BAND_LABEL = ['~0.5', '0.5~1', '1~1.5', '1.5~2.5', '2.5~4', '4~7', '7+']
-// 라벨 → [승배당 칸, 패배당 칸, 비었을 때 대신 볼 칸]
-const GAP_SRC = [
-  ['국초', 'KW', 'KL', null],
-  ['해초', 'FW', 'FL', null],
-  ['국배', 'EKW', 'EKL', ['KW', 'KL']],
-  ['해배', 'EFW', 'EFL', ['FW', 'FL']],
-]
-
-function gapOf(row, wKey, lKey, fb) {
-  const pick = (a, b) => {
-    const w = numOrNull(row[a])
-    const l = numOrNull(row[b])
-    return w !== null && l !== null && w > 1 && l > 1 ? Math.abs(w - l) : null
-  }
-  const v = pick(wKey, lKey)
-  return v !== null ? v : (fb ? pick(fb[0], fb[1]) : null)
-}
-
-function gapBandIndex(gap) {
-  let i = 0
-  while (i < GAP_CUTS.length && gap >= GAP_CUTS[i]) i += 1
-  return i
-}
-
-// ⚠ 규칙(2026-09-02): 소수점이 나오는 값은 반드시 소수점 둘째 자리까지 채워서
-// 보여준다. 1.2100000001 → "1.21" 은 맞지만, 1.20 → "1.2"(끝자리 0이 잘림)는
-// 틀렸다 — Number()로 되돌리면 끝자리 0이 사라지므로 문자열(toFixed)을 그대로 쓴다.
-function gapText(v) {
-  return v.toFixed(2)
-}
-
-function gapParts(row) {
-  return GAP_SRC.map(([label, w, l, fb]) => {
-    const gap = gapOf(row, w, l, fb)
-    if (gap === null) return null
-    const idx = gapBandIndex(gap)
-    const [phRate, phHit, jmRate, jmHit, tot] = GAP_HIT[label][idx]
-    // 배당차 1.5를 경계로 보여줄 값을 바꾼다 — 그 구간에서 실제로 걸 만한 쪽.
-    const isJm = idx >= GAP_FLIP
-    const pick = isJm ? '정' : '플'
-    const rate = isJm ? jmRate : phRate
-    const hit = isJm ? jmHit : phHit
-    // 색은 '% 그 자체'로 정한다 — 화면에 보이는 숫자와 색이 어긋나지 않게
-    // (80%인데 흰색, 79%인데 초록 같은 일이 없게).
-    // 노랑은 이 앱에서 '적중'을 뜻하는 색이라 쓰지 않는다.
-    const tone = rate >= 80 ? 'best' : rate >= 75 ? 'mid' : 'plain'
-    return { label, gap, rate, hit, tot, idx, tone, pick, isJm }
-  })
-}
-
-// 배당차 — 2026-09-02부터 경기지표 옆 칸에 표로 뺐다(예전엔 칩 하나에 4줄을 욱여넣어
-// 줄이 길어지고 옆 칸엔 빈 공간이 남았다). '시스템 판정' 표와 같은 꼴(초기/배변 ×
-// 국배/해배)로 맞춘다 — GAP_SRC가 이미 [국초,해초,국배,해배] 순서라 그대로 2x2로 접는다.
-function GapTable({ row }) {
-  const [gukcho, haecho, gukbae, haebae] = gapParts(row)
-  if (![gukcho, haecho, gukbae, haebae].some(Boolean)) return <p className="pick-loading">해당 없음</p>
-  const cell = (p) => (p ? (
-    <span
-      title={`${p.label} 배당차 ${gapText(p.gap)} → ${GAP_BAND_LABEL[p.idx]} 구간.`
-        + ` 6대리그 ${p.tot.toLocaleString()}경기 중`
-        + ` ${p.isJm ? '정무' : '플핸무'} 적중 ${p.hit.toLocaleString()}건 (${p.rate}%).`
-        + ` 이 구간에서는 ${p.isJm ? '플핸무보다 정무가' : '정무보다 플핸무가'} 높아`
-        + ` ${p.isJm ? '정무' : '플핸무'}를 보여줍니다(경계는 배당차 1.5).`
-        + ` 배당차를 안 가린 전체 평균은 둘 다 ${GAP_BASE}%.`
-        + ' ※ 배당차는 정배배당과 거의 같은 값이라, 확률 지표가 이미 반영한 정보입니다.'}
-    >
-      <b>{gapText(p.gap)}</b>
-      <span className={`gap-pick gap-pick-${p.isJm ? 'j' : 'p'}`}>{p.pick}</span>
-      <span className={`gap-rate gap-rate-${p.tone}`}>{Math.round(p.rate)}%</span>
-    </span>
-  ) : <span className="dir-none">—</span>)
-  return (
-    <table className="detail-table sys-table gap-table">
-      <thead>
-        <tr>
-          <th className="row-label">배당차</th>
-          <th>국배</th>
-          <th>해배</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td className="row-label">초기</td>
-          <td>{cell(gukcho)}</td>
-          <td>{cell(haecho)}</td>
-        </tr>
-        <tr>
-          <td className="row-label">배변</td>
-          <td>{cell(gukbae)}</td>
-          <td>{cell(haebae)}</td>
-        </tr>
-      </tbody>
-    </table>
-  )
-}
-
 // ── 상대전적 판정 뱃지 (2026-09-02 실측) ──
 // 홈우세 / 홈만우세 / 전적보합 / 원정만우세 / 원정우세 — 판정 규칙과 실측 근거는
 // utils/h2hVerdict.js 주석에 전부 적어 뒀다. 여기선 그 결과를 칩으로 그리기만 한다.
@@ -438,11 +298,37 @@ function drawChips(row, pick) {
   ]
 }
 
-function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick }) {
-  // 배당차는 2026-09-02부터 옆 칸에 표로 따로 뺐다(GapTable) — 여기 줄은
-  // 똥배 → 국/해 엇갈림 → 전적 → 무만 세로로 쌓는다.
+// 동배당 뱃지 — 같은 회차(금~월)에 다른 경기가 똑같은 국내 정배배당으로 떴다는 알림.
+// 짝을 찾는 일은 LeagueTable이 한다(그쪽만 그 회차의 경기 목록을 들고 있다).
+// ⚠ 판단 재료가 아니라 그냥 알림이다. "같은 배당이 두 번 뜨면 하나는 깨진다"는
+// 속설은 6대리그 36,212경기 전수조사에서 사실이 아니었다(2026-09-04). 그래서 색을
+// 입히지 않는다. 호버에는 경기 정보만 보여준다 — 실측 설명은 memory에 남겨 뒀다.
+function sameOddsChips(sameOdds) {
+  if (!sameOdds) return []
+  const { odds, others } = sameOdds
+  const list = others
+    .map((o) => `· ${[formatDt(o.dt), formatTime(o.tm)].filter(Boolean).join(' ')} `
+      + `${o.league}${o.round ? ` ${o.round}` : ''} `
+      + `${o.home}${o.homeFav ? '(정)' : ''} vs ${o.away}${o.homeFav ? '' : '(정)'}`)
+    .join('\n')
+  return [
+    <MatchChip
+      key="same-odds"
+      label="동배당"
+      title={`같은 회차에 국내 정배배당이 ${odds}로 똑같은 경기가 ${others.length}개 더 있습니다.\n${list}`}
+    >
+      {odds}
+    </MatchChip>,
+  ]
+}
+
+function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds }) {
+  // 똥배 → 국/해 엇갈림 → 전적 → 무 → 동배당을 세로로 쌓는다.
+  // (배당차 뱃지는 2026-09-02에 옆 칸 표로 뺐다가 2026-09-05에 아예 삭제했다 —
+  //  정배배당을 다시 적은 값이라 확률 지표와 중복이었다. DirectionScopeTable 주석 참고.)
   const chips = [...ddongChips(row), ...oddsSplitChips(row),
-    ...h2hChips(verdict, h2hLoading, row, pick), ...drawChips(row, pick)]
+    ...h2hChips(verdict, h2hLoading, row, pick), ...drawChips(row, pick),
+    ...sameOddsChips(sameOdds)]
   return (
     <span className="match-chip-row">
       {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}
@@ -1839,7 +1725,315 @@ function SystemVerdictSummary({ row, scope, names, pick, flipped }) {
   )
 }
 
-function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
+// ── 방향성 검토표 (2026-09-05) ───────────────────────────────────────────
+// 승+패·승+무+패 **두 줄만**으로 리그/통합 × 국/해 × 초기/배변 8칸을 만든다.
+// 지금 화면이 쓰는 방향성 4칸(analysisPair — 정배 방향에 따라 고른 9줄 가중평균)과
+// 재료가 다르다. 어느 쪽이 나은지 눈으로 대조하는 표라, 판정에는 아무 영향도
+// 주지 않는다(읽기만 한다).
+//
+// 2026-09-05 배당차 표를 걷어내고 그 자리(가운데 칸)를 물려받았다. 배당차를 뺀 근거:
+//   배당대(정배배당)를 0.1 단위로만 맞춰도 배당차의 예측력은 +0.01%p(z=0.01)로
+//   사라진다 — 같은 조건에서 확률 지표는 +2.31%p(z=2.00)로 살아남는다. 즉 배당차는
+//   정배배당을 다시 적은 값이었다(해)지 플핸무%와 r=-0.959). 확률 지표를 이미 본
+//   뒤에 배당차가 더 주는 정보는 -0.98%p(z=-0.53)로 0이다.
+//
+// 실측 근거(6대리그 35,977경기, 2026-09-05):
+//   통합 해초(TF-WL) 단독 80.53% > 지금 9줄 해초 78.83% (z=6.89, 6/6 리그)
+//   리그 지표는 표본이 안 모인다 — 국내는 표본 4건 이하가 81~94%,
+//   해외도 표본 15건 넘는 경기가 절반뿐. 표본이 얇으면 '정'·'플' 단독이
+//   남발되고(4건 이하에서 51.7%) 적중률이 66.9%로 떨어진다.
+const SCOPE_CODES = {
+  리그: { 국: ['K-WL', 'K-WDL'], 해: ['F-WL', 'F-WDL'] },
+  통합: { 국: ['TK-WL', 'TK-WDL'], 해: ['TF-WL', 'TF-WDL'] },
+}
+
+function scopeCell(row, codes, final) {
+  const lines = codes.map((code) => {
+    const vals = [1, 2, 3, 4].map((i) => {
+      const v = numOrNull(row[`${final ? 'E_' : ''}${code} ${i}`])
+      return v === null ? 0 : Math.trunc(v)
+    })
+    return { vals, total: vals.reduce((a, b) => a + b, 0) }
+  })
+  const v = weightedAnalysis(lines)
+  return { name: v ? directionName(v) : null, total: lines.reduce((a, l) => a + l.total, 0) }
+}
+
+// 표본이 얼마나 되면 믿을 만한가 — 실측 적중률 곡선 그대로.
+// 15건+ 79~81% / 5~14건 71~76% / 1~4건 61~67%
+const SCOPE_TONES = [[15, 'ok', '믿을 만'], [5, 'mid', '참고만'], [1, 'thin', '못 믿음']]
+
+// 방향성 이름 → 정배 쪽(j) / 플핸 쪽(p). 표본이 넉넉한 칸에만 이 색을 입힌다.
+const SCOPE_SIDE = { 정무: 'j', 정역: 'j', 정: 'j', 플핸무: 'p', 플핸승: 'p', 플: 'p' }
+
+// ── 방향성 색 기준 참고표 (표 이름 칸을 누르면 뜬다) ──
+// 화면에서 표본 숫자를 뺀 대신 색 하나가 두 가지를 말하므로, 그 규칙을 어딘가에는
+// 적어 둬야 한다. 확률 칸 색상 참고표(LeagueTable의 RiskLegendModal)와 같은 꼴.
+//
+// 아래 숫자는 전부 실측이다(6대리그 35,977경기, 2026-09-05).
+const TONE_RULE = [
+  ['15건 이상', '색칠 (초록/파랑)', '믿을 만하다', 'ok'],
+  ['5 ~ 14건', '색 없음 (기본색)', '참고만 한다', 'mid'],
+  ['1 ~ 4건', '흐린 회색', '못 믿는다', 'thin'],
+  ['0건', '—', '표본이 없다', 'none'],
+]
+// 표본이 얇을수록 '덜 맞는' 게 아니라 '무리한 답(3개 중 2개를 빼라는 정·플 단독)'이
+// 남발된다 — 15건은 그게 잦아드는 자리다.
+const TONE_WHY = [
+  ['1 ~ 4건', '60~67%', '51.7%'],
+  ['5 ~ 14건', '71~76%', '33.3%'],
+  ['15 ~ 39건', '76~80%', '9.6%'],
+  ['40건 이상', '79~82%', '~1%'],
+]
+// 칸마다 색이 붙는 빈도가 크게 다르다 — 리)국이 늘 비어 보이는 게 고장이 아니라는 설명.
+const TONE_FREQ = [
+  ['리)국', '3.5%', '1.6%', '2건'],
+  ['리)해', '62.4%', '51.9%', '21건'],
+  ['통)국', '47.9%', '42.6%', '14건'],
+  ['통)해', '90.9%', '89.4%', '112건'],
+]
+// 네 칸이 각각 어디서 표본을 세는지 — SCOPE_CODES와 짝이 맞아야 한다.
+const SCOPE_WHAT = [
+  ['리)국', '이 리그 안에서만', '국내배당', 'K-WL · K-WDL'],
+  ['리)해', '이 리그 안에서만', '해외배당', 'F-WL · F-WDL'],
+  ['통)국', '6대리그 전체', '국내배당', 'TK-WL · TK-WDL'],
+  ['통)해', '6대리그 전체', '해외배당', 'TF-WL · TF-WDL'],
+]
+// ── 8칸이 얼마나 같은 곳을 보느냐에 따른 당첨률 (2026-09-05 실측) ──
+// 6대리그 19,795경기 = 8칸이 전부 이름을 낸 경기(전체의 60.8%. 리)국이 표본 부족으로
+// 비는 일이 많아 나머지는 8칸을 다 못 채운다).
+// 만장일치는 그 외보다 +3.74%p이고 6대리그 전부 같은 방향으로 재현됐다(+2.11~+5.25%p).
+const AGREE_RATE = [
+  ['8/8 (만장일치)', '3,054', '15.4%', '82.58%'],
+  ['7/8', '4,055', '20.5%', '80.32%'],
+  ['6/8', '5,075', '25.6%', '78.68%'],
+  ['5/8', '4,921', '24.9%', '78.40%'],
+  ['4/8 (반반)', '2,690', '13.6%', '77.70%'],
+]
+// 같은 만장일치여도 이름에 따라 10%p 넘게 갈린다 — 값어치는 '정무'에 몰려 있다
+// (만장일치+정무 88.14%는 지금 시스템 판정의 같은 경기 85.29%보다 +2.99%p, z=4.76, 6/6 리그).
+const UNANIM_NAME = [
+  ['정무', 'j', '1,054', '88.14%'],
+  ['정역', 'j', '123', '82.11%'],
+  ['플핸무', 'p', '1,165', '80.34%'],
+  ['플핸승', 'p', '712', '78.09%'],
+]
+
+function DirectionScopeLegend({ onClose }) {
+  // ⚠ 상세보기 팝업도 ESC를 듣고 있다(document, 버블 단계). 여기서 캡처 단계로 먼저
+  //   받아 전파를 끊지 않으면 ESC 한 번에 상세보기까지 같이 닫힌다.
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop dscope-legend-back" onClick={onClose}>
+      <div className="modal-card dscope-legend-card" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
+        <h2 className="modal-title">🎨 방향성 — 무엇으로 만들고, 색은 무슨 뜻인가</h2>
+
+        <p className="dscope-legend-title">
+          이 표가 쓰는 재료 — <b>승+패</b> · <b>승+무+패</b> 두 줄만, 칸마다 세는 범위가 다릅니다
+        </p>
+        <table className="detail-table dscope-legend-table">
+          <thead>
+            <tr><th>칸</th><th>어디서 세나</th><th>어느 배당</th><th>지표 코드</th></tr>
+          </thead>
+          <tbody>
+            {SCOPE_WHAT.map(([k, where, mkt, code]) => (
+              <tr key={k}>
+                <td><b>{k}</b></td><td>{where}</td><td>{mkt}</td>
+                <td className="dscope-legend-code">{code}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="dscope-legend-title">8칸이 같은 방향을 보는 개수별 당첨률</p>
+        <table className="detail-table dscope-legend-table">
+          <thead>
+            <tr><th>같은 방향</th><th>경기 수</th><th>비율</th><th>당첨률</th></tr>
+          </thead>
+          <tbody>
+            {AGREE_RATE.map(([k, n, pct, rate]) => (
+              <tr key={k}>
+                <td><b>{k}</b></td><td>{n}</td><td>{pct}</td><td><b>{rate}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <p className="dscope-legend-title">8칸 만장일치일 때, 그 이름별 당첨률</p>
+        <table className="detail-table dscope-legend-table">
+          <thead>
+            <tr><th>이름</th><th>경기 수</th><th>당첨률</th></tr>
+          </thead>
+          <tbody>
+            {UNANIM_NAME.map(([name, side, n, rate]) => (
+              <tr key={name}>
+                <td><b className={`dscope-side-${side}-ink`}>{name}</b></td>
+                <td>{n}</td><td><b>{rate}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <p className="dscope-legend-title">① 색이 붙느냐 — 과거 표본이 15건을 넘는가</p>
+        <table className="detail-table dscope-legend-table">
+          <thead>
+            <tr><th>과거 표본</th><th>화면</th><th>뜻</th></tr>
+          </thead>
+          <tbody>
+            {TONE_RULE.map(([n, view, mean, cls]) => (
+              <tr key={n}>
+                <td>{n}</td>
+                <td className={`dscope-${cls}`}>
+                  {cls === 'ok'
+                    ? (
+                      <>
+                        <b className="dscope-side-p-ink">플핸무</b>
+                        {' / '}
+                        <b className="dscope-side-j-ink">정무</b>
+                      </>
+                    )
+                    : <b>{view}</b>}
+                </td>
+                <td>{mean}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <p className="dscope-legend-title">② 무슨 색이냐 — 그 이름이 어느 편인가</p>
+        <table className="detail-table dscope-legend-table">
+          <thead>
+            <tr><th>색</th><th>방향성 이름</th><th>무슨 주장인가</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b className="dscope-side-p-ink">초록</b></td>
+              <td><b className="dscope-side-p-ink">플핸무 · 플핸승 · 플</b></td>
+              <td><b>핸승은 안 나온다</b></td>
+            </tr>
+            <tr>
+              <td><b className="dscope-side-j-ink">파랑</b></td>
+              <td><b className="dscope-side-j-ink">정무 · 정역 · 정</b></td>
+              <td><b>역은 안 나온다</b></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p className="dscope-legend-title">왜 하필 15건인가 — 표본별 실측</p>
+        <table className="detail-table dscope-legend-table">
+          <thead>
+            <tr><th>과거 표본</th><th>적중률</th><th>&apos;정&apos;·&apos;플&apos; 단독이 나오는 비율</th></tr>
+          </thead>
+          <tbody>
+            {TONE_WHY.map(([n, rate, solo]) => (
+              <tr key={n}><td>{n}</td><td>{rate}</td><td>{solo}</td></tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="dscope-legend-note">
+          표본이 얇으면 <b>덜 맞는 게 아니라 무리한 답이 나옵니다</b> — 3개 중 2개를
+          빼라는 &apos;정&apos;·&apos;플&apos; 단독이 1~4건에서는 절반이 넘습니다. 15건이 그게 잦아드는 자리입니다.
+        </p>
+
+        <p className="dscope-legend-title">칸마다 색이 붙는 빈도가 다릅니다</p>
+        <table className="detail-table dscope-legend-table">
+          <thead>
+            <tr><th>칸</th><th>초기에 색 붙음</th><th>배변에 색 붙음</th><th>표본 중앙값</th></tr>
+          </thead>
+          <tbody>
+            {TONE_FREQ.map(([k, a, b, med]) => (
+              <tr key={k}><td>{k}</td><td>{a}</td><td>{b}</td><td>{med}</td></tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="dscope-legend-note">
+          <b>리)국이 거의 항상 무색인 건 고장이 아닙니다.</b> 국내배당은 같은 조합이
+          반복되지 않아 표본이 안 쌓입니다(표본 중앙값 2건). 반대로 통)해는 열에 아홉이 색입니다.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function DirectionScopeTable({ row }) {
+  const [showLegend, setShowLegend] = useState(false)
+  const cell = (sc, mkt, final, edge) => {
+    const { name, total } = scopeCell(row, SCOPE_CODES[sc][mkt], final)
+    const [, tone, toneLabel] = SCOPE_TONES.find(([cut]) => total >= cut) || [0, 'none', '표본 없음']
+    // 표본 수는 화면에서 빼고(2026-09-05) 색 하나로 두 가지를 말한다 —
+    // 색이 붙어 있으면 '표본이 넉넉하다(15건+)', 색 종류가 방향(플핸/정배)이다.
+    // 그래서 색이 없는 칸은 그 자체로 "믿고 쓰긴 이르다"는 뜻이 된다.
+    const side = tone === 'ok' ? SCOPE_SIDE[name] : null
+    return (
+      <td
+        className={`dscope-${tone}${side ? ` dscope-side-${side}` : ''}${edge ? ' dscope-edge' : ''}`}
+        title={`${sc} · ${mkt === '국' ? '국내' : '해외'}배당 · ${final ? '배변' : '초기'}\n`
+          + `승+패(${SCOPE_CODES[sc][mkt][0]})와 승+무+패(${SCOPE_CODES[sc][mkt][1]}) 두 줄만 가중평균.\n`
+          + `과거 표본 ${total.toLocaleString()}건 — ${toneLabel}`
+          + `${side ? ' (그래서 색을 넣었습니다)' : ' (표본이 얇아 색을 넣지 않았습니다)'}.\n`
+          + '※ 검토용 표입니다. 시스템 판정에는 쓰이지 않습니다.'}
+      >
+        {name ? <b className="sys-name">{name}</b> : <span className="dir-none">—</span>}
+      </td>
+    )
+  }
+  // 표 이름은 왼쪽 위 칸에 넣는다 — 옆의 '시스템 판정' 표와 같은 꼴(2026-09-05,
+  // 배당차 표를 걷어내고 그 자리를 물려받으면서 맞췄다). 리그/통합 묶음 제목을 따로
+  // 두지 않고 칸 이름에 '리)'·'통)'을 붙여 한 줄로 접었다.
+  const table = (
+    <table className="detail-table sys-table dscope-table">
+      <thead>
+        <tr>
+          <th className="row-label">
+            {/* 색 기준을 어딘가에는 적어 둬야 해서 이름 칸 자체를 버튼으로 쓴다 —
+                표가 좁아 물음표 아이콘 하나 더 넣을 자리가 없다. */}
+            <button
+              type="button"
+              className="dscope-help-btn"
+              onClick={() => setShowLegend(true)}
+              title="색 기준 보기 — 색이 붙는 조건(표본 15건+)과 초록/파랑의 뜻"
+            >
+              방향성 <span className="dscope-help-mark">?</span>
+            </button>
+          </th>
+          <th>리)국</th>
+          <th className="dscope-edge">리)해</th>
+          <th>통)국</th>
+          <th>통)해</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="row-label">초기</td>
+          {cell('리그', '국', false)}{cell('리그', '해', false, true)}
+          {cell('통합', '국', false)}{cell('통합', '해', false)}
+        </tr>
+        <tr>
+          <td className="row-label">배변</td>
+          {cell('리그', '국', true)}{cell('리그', '해', true, true)}
+          {cell('통합', '국', true)}{cell('통합', '해', true)}
+        </tr>
+      </tbody>
+    </table>
+  )
+  return (
+    <>
+      {table}
+      {showLegend && <DirectionScopeLegend onClose={() => setShowLegend(false)} />}
+    </>
+  )
+}
+
+function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds }) {
   // '경기지표'의 무 뱃지(같은방향/다른방향)와 '시스템 판정' 둘 다 이 pick이
   // 필요해서 여기서 한 번만 계산해 내려준다.
   const init = analysisPair(row, scope, false)
@@ -1866,17 +2060,23 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
               <DirectionSummary row={row} scope={scope} />
             </h3>
             <RiskCard row={row} />
-            {/* 경기지표·배당차·시스템 판정은 왼쪽('배당') 칸과는 무관하게
+            {/* 경기지표·방향성·시스템 판정은 왼쪽('배당') 칸과는 무관하게
                 이 칸(확률 지표) 표 바로 밑에만 붙인다 — 왼쪽 칸 아래로는 안 내려간다.
                 예전엔 이 셋을 세로로 쌓아서 줄이 길었는데, 이 칸 폭 안에서 가로
                 3단(뱃지·표·표)으로 접어 줄 수를 줄인다. */}
             <div className="pick-band-bottom-cols">
               <div className="pick-band-match">
                 <h3>경기지표</h3>
-                <MatchIndicators row={row} h2hVerdict={verdict} h2hLoading={h2hLoading} pick={pick} />
+                <MatchIndicators
+                  row={row}
+                  h2hVerdict={verdict}
+                  h2hLoading={h2hLoading}
+                  pick={pick}
+                  sameOdds={sameOdds}
+                />
               </div>
-              <div className="pick-band-gap">
-                <GapTable row={row} />
+              <div className="pick-band-dscope">
+                <DirectionScopeTable row={row} />
               </div>
               <div className="pick-band-sys">
                 <SystemVerdictTable names={names} flipped={flipped} />
@@ -1893,7 +2093,7 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading }) {
   )
 }
 
-export default function MatchDetailModal({ code, row, scope, onClose, onSavePick }) {
+export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, onSavePick }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
   const rt = rtLabel(row.RT)
@@ -2057,6 +2257,7 @@ export default function MatchDetailModal({ code, row, scope, onClose, onSavePick
         <PickBand
           row={row}
           scope={scope}
+          sameOdds={sameOdds}
           h2hVerdict={h2hMark}
           h2hLoading={!pickData && !pickError}
         />

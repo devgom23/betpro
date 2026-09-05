@@ -812,7 +812,7 @@
   .pick-band-bottom-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* 경기지표 제목 — 배당차·시스템 판정은 표 안(왼쪽 위 칸)에 이름을 넣는
+/* 경기지표 제목 — 방향성·시스템 판정은 표 안(왼쪽 위 칸)에 이름을 넣는
    걸로 바뀌어서 더 이상 h3가 없다. */
 .pick-band-match h3 {
   margin: 0 0 8px;
@@ -873,71 +873,6 @@
 .draw-rel-ok { color: var(--chip-green-fg); }
 .draw-rel-bad { color: var(--chip-red-fg); }
 .draw-rel-none { color: var(--text-muted); }
-
-/* '플' / '정' — 이 %가 무엇의 확률인지 알려주는 글자. 국배는 플, 해배는 정처럼
-   네 값이 서로 다른 걸 가리킬 때가 있어서, 글자 없이 %만 두면 무엇의 확률인지
-   알 수 없다. 그래서 작은 칩으로 눈에 띄게 만든다.
-   색은 앱 전체 축 그대로 — 정배 쪽=파랑 / 플핸(무+역) 쪽=빨강(핸디기준점·RT와 같은 축). */
-/* 배당차 표 — 시스템 판정 표와 같은 2x2 꼴(초기/배변 × 국배/해배). 칸 하나에
-   배당차 값·픽·적중률 셋을 담아야 해서 inline-flex로 붙인다. */
-.gap-table td span:not(.dir-none) {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 3px;
-  cursor: help;
-}
-
-.gap-table td b {
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.gap-pick {
-  display: inline-block;
-  min-width: 13px;
-  padding: 0 3px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  text-align: center;
-}
-
-.gap-pick-j {
-  background: var(--chip-blue-bg);
-  color: var(--chip-blue-fg);
-}
-
-.gap-pick-p {
-  background: var(--chip-red-bg);
-  color: var(--chip-red-fg);
-}
-
-/* 플핸무 적중률 — 색을 '% 그 자체'로 정한다(배당차 구간이 아니라).
-   화면에 보이는 숫자와 색이 어긋나지 않게 하려는 것이다 — 구간으로 자르면
-   80%인데 회색, 79%인데 초록 같은 일이 생긴다(전체 평균은 69.8%).
-     80% 이상   초록
-     75~80%     파랑
-     그 아래     기본색
-   ⚠ 노랑(--chip-yellow-fg)은 이 앱에서 '적중'을 뜻하는 색이라(.dir-top-hit,
-     .dir-name-hit, PICK_VERDICT 배지) 여기 쓰면 안 된다.
-   숫자 폭이 들쭉날쭉하면 네 값의 자리가 안 맞아 읽기 힘들어서 tabular-nums. */
-.gap-rate {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.gap-rate-best {
-  color: var(--chip-green-fg);
-}
-
-.gap-rate-mid {
-  color: var(--chip-blue-fg);
-}
-
-/* 기본 글자색 — 다크에서는 흰색, 라이트에서는 검정. 색을 아예 안 준다. */
-.gap-rate-plain {
-  color: var(--text-primary);
-}
 
 .match-chip-empty {
   font-size: 11px;
@@ -1036,10 +971,9 @@
 }
 
 /* 4칸 표 — 확률 지표 표보다 좁아도 되므로 폭을 내용에 맡긴다(늘어나면 오른쪽이 빈다).
-   국배/해배 칸은 값이 있을 때(예: "0.57플80%")와 없을 때("—")로 내용 길이가 갈려서,
-   table-layout:auto로 두면 경기마다 표 폭이 들쭉날쭉 흔들렸다 — 값이 있을 때의
-   최대 폭으로 고정해 국배 유무와 상관없이 표 폭이 항상 같게 한다(실측 최대
-   85.45px → 86px). 시스템 판정 표는 칸에 픽 이름만 들어가 더 좁다(51px). */
+   칸 내용이 경기마다 갈려서(값이 있을 때와 "—") table-layout:auto로 두면 표 폭이
+   들쭉날쭉 흔들린다 — fixed로 고정해 어느 경기를 열어도 표 폭이 같게 한다.
+   시스템 판정 표는 칸에 픽 이름만 들어가 51px면 된다. */
 .detail-table.sys-table {
   width: auto;
   table-layout: fixed;
@@ -1050,13 +984,135 @@
   width: 51px;
 }
 
-.detail-table.sys-table.gap-table th:not(.row-label),
-.detail-table.sys-table.gap-table td:not(.row-label) {
-  width: 86px;
-}
-
 .sys-table .row-label {
   white-space: nowrap;
+}
+
+/* ── 방향성 검토표 (2026-09-05) ────────────────────────────────────────
+   승+패·승+무+패 두 줄만으로 리그/통합을 나란히 놓고 보는 표. 배당차 표를
+   걷어내고 그 자리(3단 중 가운데)를 물려받았다 — 그래서 시스템 판정 표와 같은
+   꼴(.sys-table, 표 이름은 왼쪽 위 칸)로 맞춰 둔다.
+   판정에 쓰이지 않으므로 색(tone)으로 좋다/나쁘다를 말하지 않고, 표본이
+   얼마나 되는지만 글자 밝기로 구분한다. */
+
+/* 칸에는 방향성 이름(최대 3글자)만 들어간다 — 표본 수를 화면에서 뺀 뒤로는 시스템
+   판정 표와 같은 폭(51px, .sys-table 기본값)이면 충분해서 따로 폭을 주지 않는다.
+   ⚠ nowrap은 남겨 둔다 — 폭이 모자라 이름이 두 줄로 갈라지면 그 행만 키가 커져
+     옆의 시스템 판정 표와 초기/배변 줄이 어긋난다(표본 수가 붙어 있던 시절
+     68px 칸에서 '플핸무13'이 실제로 그랬다). */
+.detail-table.sys-table.dscope-table th:not(.row-label),
+.detail-table.sys-table.dscope-table td:not(.row-label) {
+  white-space: nowrap;
+}
+
+/* 리그 묶음과 통합 묶음 사이 — 확률 지표 표(risk-edge)와 같은 두께로. */
+.detail-table.dscope-table th.dscope-edge,
+.detail-table.dscope-table td.dscope-edge {
+  border-right: 2px solid var(--border-strong);
+}
+
+/* 표본이 얼마나 쌓였나 — 실측 적중률 곡선(15건+ 79~81% / 5~14건 71~76% /
+   1~4건 61~67%)에 맞춰 글자를 흐리게 죽인다. */
+.dscope-ok b { color: var(--text-primary); }
+.dscope-mid b { color: var(--text-secondary); }
+.dscope-thin b { color: var(--text-muted); font-weight: 400; }
+
+/* 표본이 넉넉한 칸(15건+)만 방향 색을 입힌다 — 표본 숫자를 화면에서 뺀 대신
+   색 하나가 두 가지를 말한다: 색이 있으면 '믿을 만한 표본', 색 종류가 방향.
+   ⚠ 위 .dscope-ok b(기본 글자색)와 특이도가 같으므로 반드시 그 뒤에 와야 이긴다.
+   ⚠ 이 앱의 원래 축은 플핸=빨강이다(핸디기준점 양수·RT 역과 같은 축). 여기서만
+     초록을 쓰는 건 사용자 지정(2026-09-05) — 빨강이 '나쁘다/위험'으로도 읽혀서
+     방향 표시로는 오해를 부르기 때문이다. */
+.dscope-side-p b { color: var(--chip-green-fg); }
+.dscope-side-j b { color: var(--chip-blue-fg); }
+
+/* ── 색 기준 참고표 ─────────────────────────────────────────────────────
+   표 이름 칸('방향성')이 곧 버튼이다 — 표가 좁아 물음표 아이콘을 따로 놓을
+   자리가 없어서, 이름 옆에 작은 ? 만 붙이고 칸 전체를 누르게 했다.
+   th의 글자 모양(크기·굵기·색)을 그대로 물려받아야 버튼처럼 튀어 보이지 않는다. */
+.dscope-help-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dscope-help-btn:hover {
+  text-decoration: underline;
+}
+
+.dscope-help-mark {
+  display: inline-block;
+  min-width: 12px;
+  padding: 0 3px;
+  border-radius: 4px;         /* 표 안 작은 칩 — 6-1장 눈금 */
+  background: var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.dscope-help-btn:hover .dscope-help-mark {
+  background: var(--border-strong);
+  color: var(--text-primary);
+}
+
+/* 상세보기 팝업 위에 겹쳐 뜬다.
+   ⚠ .modal-backdrop / .modal-card 는 LeagueTable.css에도 똑같이 정의돼 있고 그 파일이
+     나중에 로드된다. 그래서 클래스 하나짜리 선택자로는 그쪽(z-index 50, max-width
+     1320px)에 밀린다 — 실제로 팝업이 1320px로 벌어지고 z도 50에 머물렀다.
+     .modal-backdrop.dscope-legend-back 처럼 둘을 겹쳐 특이도를 올려야 이긴다. */
+.modal-backdrop.dscope-legend-back {
+  z-index: 60;
+  /* ⚠ align-items: center 로 두면 안 된다 — 이 참고표는 세로로 1300px가 넘어서
+     화면보다 길 때 위쪽이 잘려 나가고(실측 −99px) 스크롤로도 못 올라간다.
+     flex-start(기본값)로 두면 위에서부터 쌓여 전부 스크롤해 볼 수 있다. */
+}
+
+.modal-card.dscope-legend-card {
+  max-width: 560px;
+}
+
+/* ⚠ 표 안에서는 .dscope-ok b 같은 규칙(특이도 0,1,1)이 먼저 잡으므로, 참고표 안의
+   색 견본은 그보다 특이도가 높아야 한다 — 안 그러면 초록/파랑이 흰색으로 나온다. */
+.dscope-legend-card .dscope-side-p-ink { color: var(--chip-green-fg); }
+.dscope-legend-card .dscope-side-j-ink { color: var(--chip-blue-fg); }
+
+/* 지표 코드(K-WL 등)는 값이 아니라 참조용 이름이라 흐리게, 폭 안 흔들리게 고정폭. */
+.dscope-legend-code {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dscope-legend-title {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* 첫 제목만 제목(h2) 바로 밑에 오므로 위 여백을 줄인다. */
+.dscope-legend-card .dscope-legend-title:first-of-type {
+  margin-top: 10px;
+}
+
+.detail-table.dscope-legend-table {
+  width: 100%;
+}
+
+.detail-table.dscope-legend-table td {
+  font-size: 12px;
+}
+
+.dscope-legend-note {
+  margin: 8px 0 0;
+  font-size: 11px;            /* 부가설명 — 6-1장 눈금 */
+  line-height: 1.6;
+  color: var(--text-muted);
 }
 
 .sys-name {
