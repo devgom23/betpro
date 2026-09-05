@@ -7,7 +7,10 @@ import { formatTime, formatDt, scoreClass } from '../../utils/format'
 import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
-import { drawTendency, drawRelation, systemGrade, resolveSystemPick, sysPickVerdict, VERDICT_TONE } from '../../utils/systemVerdict'
+import {
+  drawTendency, drawRelation, systemGrade, resolveSystemPick, sysPickVerdict, VERDICT_TONE,
+  GRADE, GRADE_FLIP, GRADE_F2, AGREE_LABEL, DRAW_HEAVY_K, DRAW_HEAVY_F, DRAW_LIGHT_K,
+} from '../../utils/systemVerdict'
 import './MatchDetailModal.css'
 
 
@@ -170,7 +173,7 @@ function oddsSplitChips(row) {
       tone="yellow"
       title={`국내배당은 ${dom ? '홈' : '원정'}팀을, 해외배당은 ${forr ? '홈' : '원정'}팀을`
         + ' 정배로 본다 — 두 시장이 이 경기를 다르게 본다는 뜻(6대리그 실측 4.25%,'
-        + ' 16,748경기 중 711건). 화면의 (정)/(역) 표시와 시스템 판정의 전적 관계는'
+        + ' 16,748경기 중 711건). 화면의 (정)/(역) 표시와 판정의 전적 관계는'
         + ' 국내배당을 우선으로 쓴다(homeIsFav) — 해외배당 기준 지표(해초·해배)를'
         + ' 볼 때는 정배가 반대일 수 있다는 걸 감안해야 한다.'}
     >
@@ -238,7 +241,7 @@ function h2hChips(verdict, loading, row, pick) {
       key="h2h"
       label="전적"
       tone={verdict.tone}
-      title={verdict.title + (rel ? `\n지금 시스템 판정(${pick})과는 '${rel}'(사실 표시 — 값이 검증되지 않았다).` : '')}
+      title={verdict.title + (rel ? `\n지금 판정(${pick})과는 '${rel}'(사실 표시 — 값이 검증되지 않았다).` : '')}
     >
       {verdict.label}
       {rel && (
@@ -284,7 +287,7 @@ function drawChips(row, pick) {
           : '국내 무배당이 높다 — 이 구간 실제 무 17.2%(시장예상 18.7%).'
             + ' 무가 죽는 정무·정역이 유리하고(정무 89.3%), 무를 먹는 플핸무는 52.0%로 불리하다.')
         + '\n※ 핸무는 무배당과 무관해서(24% 고정) 플핸승은 이 뱃지의 영향을 받지 않는다.'
-        + (relLabel ? `\n지금 시스템 판정(${pick})과는 '${relLabel}'.` : '')}
+        + (relLabel ? `\n지금 판정(${pick})과는 '${relLabel}'.` : '')}
     >
       {heavy ? '고려' : '제외'}
       {relLabel && (
@@ -1641,13 +1644,161 @@ function findSignal(data, key) {
 // 결과 판정 줄(픽·별점·%·적중배지)은 길이가 들쭉날쭉해서 SystemVerdictSummary로
 // 따로 뺐다 — 한 그리드 칸 안에 같이 두면 그 칸이 늘어나 옆 칸까지의 간격이
 // 넓어져 보였다.
-function SystemVerdictTable({ names, flipped }) {
-  const cell = (v) => (v ? <b className="sys-name">{v}</b> : <span className="dir-none">—</span>)
+// ── 판정 참고표 (표 이름 칸을 누르면 뜬다) ──
+// 방향성 참고표(DirectionScopeLegend)와 같은 구성: 재료 → 어느 칸을 쓰나 → 일치했을
+// 때의 확률 → 별점. 적중률 표는 systemVerdict.js의 GRADE/GRADE_FLIP/GRADE_F2를
+// 그대로 읽어 그린다(복사해 두면 실측을 갱신했을 때 계산과 도움말이 갈린다).
+const VERDICT_MATERIAL = [
+  ['국) 승+패 · 국) 승+무+패', '항상'],
+  ['해) 승+패 · 해) 승+무+패', '항상'],
+  ['국) 플핸', '항상'],
+  ['국) 승 또는 국) 패', '정배가 홈이면 승, 원정이면 패'],
+  ['국) 승=홈팀 또는 국) 패=원정팀', '위와 같은 기준'],
+  ['해) 승 또는 해) 패', '정배 방향 따라'],
+  ['해) 승=홈팀 또는 해) 패=원정팀', '정배 방향 따라'],
+]
+const REL_MEANING = [
+  ['같은편', `무배당이 픽을 밀어준다 (국배 ${DRAW_HEAVY_K.toFixed(2)} 미만 + 해배 ${DRAW_HEAVY_F.toFixed(2)} 미만이면 무가 많고, 국배 ${DRAW_LIGHT_K.toFixed(2)} 이상이면 무가 적다)`],
+  ['중립', '무배당이 어느 쪽도 아니다'],
+  ['무관', '픽이 플핸승 — 핸무는 무배당과 상관없이 24%로 고정이라 영향이 없다'],
+  ['상충', '무배당이 픽과 반대로 민다'],
+]
+const STAR_RULE = [['★★★', '83% 이상'], ['★★', '78% 이상'], ['★', '78% 미만']]
+
+function SystemVerdictLegend({ onClose }) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+
+  const rels = ['같은편', '중립', '무관', '상충']
   return (
+    <div className="modal-backdrop help-legend-back" onClick={onClose}>
+      <div className="modal-card help-legend-card" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
+        <h2 className="modal-title">⚖ 판정 — 무엇으로 정하고, 확률은 어떻게 되나</h2>
+
+        <p className="help-legend-title">이 표가 쓰는 재료 — 9줄을 표본 크기로 가중평균합니다</p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>쓰는 줄</th><th>언제 쓰나</th></tr></thead>
+          <tbody>
+            {VERDICT_MATERIAL.map(([line, when]) => (
+              <tr key={line}><td><b>{line}</b></td><td>{when}</td></tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          이 9줄로 <b>국내·해외 × 초기·배변 4칸</b>을 만듭니다. 통합지표(국통·해통)는
+          일부러 뺍니다 — 리그 밖 표본까지 섞으면 이 리그의 배당 성격이 묻힙니다.
+        </p>
+
+        <p className="help-legend-title">4칸 중 어느 칸을 결론으로 쓰나</p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>상황</th><th>결론으로 쓰는 칸</th><th>근거</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>보통</td><td><b>해외 · 초기</b></td>
+              <td>해배가 국배보다 +1.8%p · 초기가 배변보다 +1.2~1.4%p</td>
+            </tr>
+            <tr>
+              <td>그 칸만 혼자 다를 때</td><td><b>해외 · 배변으로 뒤집음</b></td>
+              <td>고립 시 해초 74.6% vs 다수결 78.0% (z=3.00, 5/6 리그)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p className="help-legend-title">4칸이 일치할수록 당첨률이 오릅니다 (× 무배당 보정)</p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>일치도</th>{rels.map((r) => <th key={r}>{r}</th>)}</tr>
+          </thead>
+          <tbody>
+            {[4, 3, 2, 1].map((a) => (
+              <tr key={a}>
+                <td><b>{AGREE_LABEL[a]}</b></td>
+                {rels.map((r) => (
+                  <td key={r}>{GRADE[a][r] ? `${GRADE[a][r][0].toFixed(1)}%` : '-'}</td>
+                ))}
+              </tr>
+            ))}
+            <tr>
+              <td><b>다수결로 뒤집힘</b></td>
+              {rels.map((r) => (
+                <td key={r}>{GRADE_FLIP[r] ? `${GRADE_FLIP[r][0].toFixed(1)}%` : '-'}</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          최고 <b>86.4%</b>(만장일치+같은편) ↔ 최저 <b>71.8%</b>(1칸+상충)로 폭이 14.6%p입니다.
+          두 신호가 따로 더해집니다 — 같은편이면 어느 일치도에서든 +4.4~6.2%p, 상충이면 −3.0~−6.5%p.
+        </p>
+
+        <p className="help-legend-title">무배당 보정이 무슨 뜻인가</p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>관계</th><th>뜻</th></tr></thead>
+          <tbody>
+            {REL_MEANING.map(([k, v]) => (
+              <tr key={k}><td><b>{k}</b></td><td>{v}</td></tr>
+            ))}
+          </tbody>
+        </table>
+
+        <p className="help-legend-title">별점 기준</p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>별</th><th>당첨률</th></tr></thead>
+          <tbody>
+            {STAR_RULE.map(([s, r]) => (
+              <tr key={s}><td><b>{s}</b></td><td>{r}</td></tr>
+            ))}
+          </tbody>
+        </table>
+
+        <p className="help-legend-title">국내배당이 없어 해외 2칸만 있을 때</p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>상황</th><th>중립</th><th>무관</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>두 칸이 일치</b></td>
+              <td>{GRADE_F2['일치']['중립'][0].toFixed(1)}%</td><td>{GRADE_F2['일치']['무관'][0].toFixed(1)}%</td>
+            </tr>
+            <tr>
+              <td><b>갈려서 해배를 따름</b></td>
+              <td>{GRADE_F2['뒤집힘']['중립'][0].toFixed(1)}%</td><td>{GRADE_F2['뒤집힘']['무관'][0].toFixed(1)}%</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          K1·K2(내 데이터)는 6대리그로만 잰 값이라 <b>%와 별을 띄우지 않습니다</b> —
+          방향과 일치도만 보여줍니다.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function SystemVerdictTable({ names, flipped }) {
+  const [showLegend, setShowLegend] = useState(false)
+  const cell = (v) => (v ? <b className="sys-name">{v}</b> : <span className="dir-none">—</span>)
+  const table = (
     <table className="detail-table sys-table">
       <thead>
         <tr>
-          <th className="row-label">시스템 판정</th>
+          <th className="row-label">
+            <button
+              type="button"
+              className="help-btn"
+              onClick={() => setShowLegend(true)}
+              title="판정 기준 보기 — 무엇으로 정하고, 일치했을 때 확률은 얼마인지"
+            >
+              판정 <span className="help-mark">?</span>
+            </button>
+          </th>
           <th>국배</th>
           <th>해배</th>
         </tr>
@@ -1665,6 +1816,12 @@ function SystemVerdictTable({ names, flipped }) {
         </tr>
       </tbody>
     </table>
+  )
+  return (
+    <>
+      {table}
+      {showLegend && <SystemVerdictLegend onClose={() => setShowLegend(false)} />}
+    </>
   )
 }
 
@@ -1810,8 +1967,15 @@ const AGREE_RATE = [
   ['5/8', '4,921', '24.9%', '78.40%'],
   ['4/8 (반반)', '2,690', '13.6%', '77.70%'],
 ]
-// 같은 만장일치여도 이름에 따라 10%p 넘게 갈린다 — 값어치는 '정무'에 몰려 있다
-// (만장일치+정무 88.14%는 지금 시스템 판정의 같은 경기 85.29%보다 +2.99%p, z=4.76, 6/6 리그).
+// 같은 만장일치여도 이름에 따라 10%p 넘게 갈린다 — 값어치는 '정무'에 몰려 있다.
+//
+// ⚠ 정정(2026-09-05 재측정) — 한때 "만장일치+정무는 판정보다 +2.99%p(z=4.76)"라고
+//   적었는데 틀렸다. 그때는 두 값을 서로 다른 표본에서 따로 재서 붙여 비교했다.
+//   같은 경기 위에서 짝비교하면 +0.28%p(z=0.43)에 그치고, 걸리는 경기의 83%는 판정도
+//   이미 정무를 고르고 있어 결론이 안 바뀐다. 전체 시스템에 규칙으로 넣으면
+//   79.859% → 79.872%(+0.014%p, 바뀌는 경기 0.29%)로 사실상 0이다.
+//   그래서 이 표는 픽을 바꾸는 근거가 아니라 '읽을거리'로만 둔다.
+//   쓸 만한 건 신뢰도 쪽뿐이다 — 판정 등급을 고정해도 만장일치는 +1.78%p(z=2.74, 6/6).
 const UNANIM_NAME = [
   ['정무', 'j', '1,054', '88.14%'],
   ['정역', 'j', '123', '82.11%'],
@@ -1833,15 +1997,15 @@ function DirectionScopeLegend({ onClose }) {
   }, [onClose])
 
   return (
-    <div className="modal-backdrop dscope-legend-back" onClick={onClose}>
-      <div className="modal-card dscope-legend-card" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop help-legend-back" onClick={onClose}>
+      <div className="modal-card help-legend-card" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
         <h2 className="modal-title">🎨 방향성 — 무엇으로 만들고, 색은 무슨 뜻인가</h2>
 
-        <p className="dscope-legend-title">
+        <p className="help-legend-title">
           이 표가 쓰는 재료 — <b>승+패</b> · <b>승+무+패</b> 두 줄만, 칸마다 세는 범위가 다릅니다
         </p>
-        <table className="detail-table dscope-legend-table">
+        <table className="detail-table help-legend-table">
           <thead>
             <tr><th>칸</th><th>어디서 세나</th><th>어느 배당</th><th>지표 코드</th></tr>
           </thead>
@@ -1849,13 +2013,13 @@ function DirectionScopeLegend({ onClose }) {
             {SCOPE_WHAT.map(([k, where, mkt, code]) => (
               <tr key={k}>
                 <td><b>{k}</b></td><td>{where}</td><td>{mkt}</td>
-                <td className="dscope-legend-code">{code}</td>
+                <td className="help-legend-code">{code}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <p className="dscope-legend-title">8칸이 같은 방향을 보는 개수별 당첨률</p>
-        <table className="detail-table dscope-legend-table">
+        <p className="help-legend-title">8칸이 같은 방향을 보는 개수별 당첨률</p>
+        <table className="detail-table help-legend-table">
           <thead>
             <tr><th>같은 방향</th><th>경기 수</th><th>비율</th><th>당첨률</th></tr>
           </thead>
@@ -1868,8 +2032,8 @@ function DirectionScopeLegend({ onClose }) {
           </tbody>
         </table>
 
-        <p className="dscope-legend-title">8칸 만장일치일 때, 그 이름별 당첨률</p>
-        <table className="detail-table dscope-legend-table">
+        <p className="help-legend-title">8칸 만장일치일 때, 그 이름별 당첨률</p>
+        <table className="detail-table help-legend-table">
           <thead>
             <tr><th>이름</th><th>경기 수</th><th>당첨률</th></tr>
           </thead>
@@ -1883,8 +2047,8 @@ function DirectionScopeLegend({ onClose }) {
           </tbody>
         </table>
 
-        <p className="dscope-legend-title">① 색이 붙느냐 — 과거 표본이 15건을 넘는가</p>
-        <table className="detail-table dscope-legend-table">
+        <p className="help-legend-title">① 색이 붙느냐 — 과거 표본이 15건을 넘는가</p>
+        <table className="detail-table help-legend-table">
           <thead>
             <tr><th>과거 표본</th><th>화면</th><th>뜻</th></tr>
           </thead>
@@ -1909,8 +2073,8 @@ function DirectionScopeLegend({ onClose }) {
           </tbody>
         </table>
 
-        <p className="dscope-legend-title">② 무슨 색이냐 — 그 이름이 어느 편인가</p>
-        <table className="detail-table dscope-legend-table">
+        <p className="help-legend-title">② 무슨 색이냐 — 그 이름이 어느 편인가</p>
+        <table className="detail-table help-legend-table">
           <thead>
             <tr><th>색</th><th>방향성 이름</th><th>무슨 주장인가</th></tr>
           </thead>
@@ -1928,8 +2092,8 @@ function DirectionScopeLegend({ onClose }) {
           </tbody>
         </table>
 
-        <p className="dscope-legend-title">왜 하필 15건인가 — 표본별 실측</p>
-        <table className="detail-table dscope-legend-table">
+        <p className="help-legend-title">왜 하필 15건인가 — 표본별 실측</p>
+        <table className="detail-table help-legend-table">
           <thead>
             <tr><th>과거 표본</th><th>적중률</th><th>&apos;정&apos;·&apos;플&apos; 단독이 나오는 비율</th></tr>
           </thead>
@@ -1939,13 +2103,13 @@ function DirectionScopeLegend({ onClose }) {
             ))}
           </tbody>
         </table>
-        <p className="dscope-legend-note">
+        <p className="help-legend-note">
           표본이 얇으면 <b>덜 맞는 게 아니라 무리한 답이 나옵니다</b> — 3개 중 2개를
           빼라는 &apos;정&apos;·&apos;플&apos; 단독이 1~4건에서는 절반이 넘습니다. 15건이 그게 잦아드는 자리입니다.
         </p>
 
-        <p className="dscope-legend-title">칸마다 색이 붙는 빈도가 다릅니다</p>
-        <table className="detail-table dscope-legend-table">
+        <p className="help-legend-title">칸마다 색이 붙는 빈도가 다릅니다</p>
+        <table className="detail-table help-legend-table">
           <thead>
             <tr><th>칸</th><th>초기에 색 붙음</th><th>배변에 색 붙음</th><th>표본 중앙값</th></tr>
           </thead>
@@ -1955,7 +2119,7 @@ function DirectionScopeLegend({ onClose }) {
             ))}
           </tbody>
         </table>
-        <p className="dscope-legend-note">
+        <p className="help-legend-note">
           <b>리)국이 거의 항상 무색인 건 고장이 아닙니다.</b> 국내배당은 같은 조합이
           반복되지 않아 표본이 안 쌓입니다(표본 중앙값 2건). 반대로 통)해는 열에 아홉이 색입니다.
         </p>
@@ -1980,7 +2144,7 @@ function DirectionScopeTable({ row }) {
           + `승+패(${SCOPE_CODES[sc][mkt][0]})와 승+무+패(${SCOPE_CODES[sc][mkt][1]}) 두 줄만 가중평균.\n`
           + `과거 표본 ${total.toLocaleString()}건 — ${toneLabel}`
           + `${side ? ' (그래서 색을 넣었습니다)' : ' (표본이 얇아 색을 넣지 않았습니다)'}.\n`
-          + '※ 검토용 표입니다. 시스템 판정에는 쓰이지 않습니다.'}
+          + '※ 검토용 표입니다. 판정에는 쓰이지 않습니다.'}
       >
         {name ? <b className="sys-name">{name}</b> : <span className="dir-none">—</span>}
       </td>
@@ -1998,11 +2162,11 @@ function DirectionScopeTable({ row }) {
                 표가 좁아 물음표 아이콘 하나 더 넣을 자리가 없다. */}
             <button
               type="button"
-              className="dscope-help-btn"
+              className="help-btn"
               onClick={() => setShowLegend(true)}
               title="색 기준 보기 — 색이 붙는 조건(표본 15건+)과 초록/파랑의 뜻"
             >
-              방향성 <span className="dscope-help-mark">?</span>
+              방향성 <span className="help-mark">?</span>
             </button>
           </th>
           <th>리)국</th>

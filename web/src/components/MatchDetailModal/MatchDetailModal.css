@@ -1030,7 +1030,7 @@
    표 이름 칸('방향성')이 곧 버튼이다 — 표가 좁아 물음표 아이콘을 따로 놓을
    자리가 없어서, 이름 옆에 작은 ? 만 붙이고 칸 전체를 누르게 했다.
    th의 글자 모양(크기·굵기·색)을 그대로 물려받아야 버튼처럼 튀어 보이지 않는다. */
-.dscope-help-btn {
+.help-btn {
   padding: 0;
   border: 0;
   background: none;
@@ -1040,11 +1040,11 @@
   white-space: nowrap;
 }
 
-.dscope-help-btn:hover {
+.help-btn:hover {
   text-decoration: underline;
 }
 
-.dscope-help-mark {
+.help-mark {
   display: inline-block;
   min-width: 12px;
   padding: 0 3px;
@@ -1056,7 +1056,7 @@
   text-align: center;
 }
 
-.dscope-help-btn:hover .dscope-help-mark {
+.help-btn:hover .help-mark {
   background: var(--border-strong);
   color: var(--text-primary);
 }
@@ -1065,30 +1065,30 @@
    ⚠ .modal-backdrop / .modal-card 는 LeagueTable.css에도 똑같이 정의돼 있고 그 파일이
      나중에 로드된다. 그래서 클래스 하나짜리 선택자로는 그쪽(z-index 50, max-width
      1320px)에 밀린다 — 실제로 팝업이 1320px로 벌어지고 z도 50에 머물렀다.
-     .modal-backdrop.dscope-legend-back 처럼 둘을 겹쳐 특이도를 올려야 이긴다. */
-.modal-backdrop.dscope-legend-back {
+     .modal-backdrop.help-legend-back 처럼 둘을 겹쳐 특이도를 올려야 이긴다. */
+.modal-backdrop.help-legend-back {
   z-index: 60;
   /* ⚠ align-items: center 로 두면 안 된다 — 이 참고표는 세로로 1300px가 넘어서
      화면보다 길 때 위쪽이 잘려 나가고(실측 −99px) 스크롤로도 못 올라간다.
      flex-start(기본값)로 두면 위에서부터 쌓여 전부 스크롤해 볼 수 있다. */
 }
 
-.modal-card.dscope-legend-card {
+.modal-card.help-legend-card {
   max-width: 560px;
 }
 
 /* ⚠ 표 안에서는 .dscope-ok b 같은 규칙(특이도 0,1,1)이 먼저 잡으므로, 참고표 안의
    색 견본은 그보다 특이도가 높아야 한다 — 안 그러면 초록/파랑이 흰색으로 나온다. */
-.dscope-legend-card .dscope-side-p-ink { color: var(--chip-green-fg); }
-.dscope-legend-card .dscope-side-j-ink { color: var(--chip-blue-fg); }
+.help-legend-card .dscope-side-p-ink { color: var(--chip-green-fg); }
+.help-legend-card .dscope-side-j-ink { color: var(--chip-blue-fg); }
 
 /* 지표 코드(K-WL 등)는 값이 아니라 참조용 이름이라 흐리게, 폭 안 흔들리게 고정폭. */
-.dscope-legend-code {
+.help-legend-code {
   font-size: 11px;
   color: var(--text-muted);
 }
 
-.dscope-legend-title {
+.help-legend-title {
   margin: 18px 0 8px;
   font-size: 13px;
   font-weight: 600;
@@ -1096,19 +1096,19 @@
 }
 
 /* 첫 제목만 제목(h2) 바로 밑에 오므로 위 여백을 줄인다. */
-.dscope-legend-card .dscope-legend-title:first-of-type {
+.help-legend-card .help-legend-title:first-of-type {
   margin-top: 10px;
 }
 
-.detail-table.dscope-legend-table {
+.detail-table.help-legend-table {
   width: 100%;
 }
 
-.detail-table.dscope-legend-table td {
+.detail-table.help-legend-table td {
   font-size: 12px;
 }
 
-.dscope-legend-note {
+.help-legend-note {
   margin: 8px 0 0;
   font-size: 11px;            /* 부가설명 — 6-1장 눈금 */
   line-height: 1.6;
