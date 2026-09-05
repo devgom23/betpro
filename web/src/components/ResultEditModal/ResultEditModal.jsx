@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
+import { rtFromScore } from '../../utils/rtFromScore'
 import './ResultEditModal.css'
 
 const ALL = 'ALL'
@@ -28,25 +29,6 @@ function handicapInit(v) {
 
 function numOrNull(s) {
   return s === '' || s === null || s === undefined ? null : parseFloat(s)
-}
-
-// 스코어 + 핸디 부호(-1/+1)로 RT(핸승/핸무/무/역)를 판정한다. 이 앱의 핸디는 항상
-// ±1(한 골)이라 규칙이 단순하다 — 실제 스코어가 같으면 무조건 '무'(핸디와 무관하게
-// 실제 무승부), 다르면 정배 쪽이 이겼는지부터 보고 이겼으면 골차가 1이면 '핸무'(정확히
-// 핸디만큼만 이김=푸시), 2 이상이면 '핸승', 정배가 아닌 쪽이 이겼으면(언더독이 실제로
-// 이긴 경우) '역'. handicapSign은 '-1'(홈 정배)/'+1'(원정 정배) 문자열 — 없으면 못 정한다.
-function rtFromScore(hs, as_, handicapSign) {
-  if (hs === '' || as_ === '' || hs === null || as_ === null || !handicapSign) return null
-  const h = Number(hs)
-  const a = Number(as_)
-  if (Number.isNaN(h) || Number.isNaN(a)) return null
-  if (h === a) return '무'
-  const favoredIsHome = handicapSign === '-1'
-  const winnerIsHome = h > a
-  if (winnerIsHome === favoredIsHome) {
-    return Math.abs(h - a) > 1 ? '핸승' : '핸무'
-  }
-  return '역'
 }
 
 // DT는 'YY-MM-DD (요일)' 문자열로 저장돼 있다 — <input type="date">는 'YYYY-MM-DD'가 필요해서

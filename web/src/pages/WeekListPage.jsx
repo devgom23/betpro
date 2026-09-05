@@ -8,6 +8,7 @@ import {
   getWeekListFinalOddsTime, setWeekListFinalOddsTime, setManyRoundFinalOddsTime, formatFinalOddsTime,
 } from '../utils/finalOddsTime'
 import { isWeekSnapshotDone, markWeekSnapshotDone } from '../utils/weekSnapshotFlag'
+import { rtFromScore, handicapSign } from '../utils/rtFromScore'
 import './WeekListPage.css'
 
 // 회차 마지막날 판정용 — 서버(datetime.date.today())와 마찬가지로 이 PC의 현지 날짜를 쓴다
@@ -55,6 +56,8 @@ export default function WeekListPage() {
   const [showRiskLegend, setShowRiskLegend] = useState(false)
   const [busyRefreshOdds, setBusyRefreshOdds] = useState(false)
   const [refreshOddsNotice, setRefreshOddsNotice] = useState('')
+  const [busyFetchResults, setBusyFetchResults] = useState(false)
+  const [fetchResultsNotice, setFetchResultsNotice] = useState('')
   // 이번주 리스트 버튼 자체를 마지막으로 눌렀던 시각 — 개별 라운드 버튼과는 별개 값이다
   // (utils/finalOddsTime.js 참고. 이 버튼을 누르면 그 안의 각 라운드 값도 같이 갱신되지만,
   //  반대로 라운드 버튼을 눌렀다고 이 값이 갱신되진 않는다).
@@ -130,6 +133,75 @@ export default function WeekListPage() {
     }
     if (ek || ef) load()
     setBusyRefreshOdds(false)
+  }
+
+  // "결과불러오기" — 와이즈토토에서 끝난 경기의 스코어를 가져와, 지금 저장돼 있는
+  // 핸디 부호(KH, 없으면 FH)로 RT까지 그 자리에서 판정해 곧바로 저장한다.
+  // (결과·핸디 입력 팝업의 '결과 불러오기'와 계산 로직은 같지만, 여기선 사람이 표를
+  // 다시 확인할 필요 없이 바로 저장까지 끝낸다 — 스코어는 사실만 있고 고칠 게 없어서다.)
+  // 이미 RT나 스코어가 입력된 경기는 절대 덮어쓰지 않는다. edit_rows는 보낸 경기의
+  // 상태를 통째로 확정 짓는 방식이라, 손대지 않는 배당 칸도 지금 값 그대로 같이 보낸다.
+  async function runFetchResults() {
+    if (!rows.length) return
+    const combos = new Map()
+    for (const r of rows) {
+      const key = `${r.scope}|${r.L}|${r.S}|${r.R}`
+      if (!combos.has(key)) combos.set(key, { scope: r.scope, code: r.L, season: r.S, round: r.R })
+    }
+    setBusyFetchResults(true)
+    setFetchResultsNotice('')
+    let filled = 0
+    let already = 0
+    let rtSkipped = 0
+    const fails = []
+    for (const combo of combos.values()) {
+      const { scope, code, season, round } = combo
+      try {
+        const res = await api.post('/api/crawl/kr/fetch_results', { scope, code, season, round })
+        const localByKey = new Map()
+        for (const r of rows) {
+          if (r.scope !== scope || r.L !== code || String(r.S) !== String(season) || String(r.R) !== String(round)) continue
+          localByKey.set(`${r.No}|${r.HT}|${r.AT}`, r)
+        }
+        const payload = []
+        for (const hit of res.rows || []) {
+          const local = localByKey.get(`${hit.No}|${hit.HT}|${hit.AT}`)
+          if (!local) continue
+          if (hasResult(local.RT) || hasResult(local.HS) || hasResult(local.AS)) {
+            already += 1
+            continue
+          }
+          const sign = handicapSign(local.KH ?? local.FH)
+          const rt = rtFromScore(hit.HS, hit.AS, sign)
+          if (!rt) {
+            rtSkipped += 1
+            continue
+          }
+          payload.push({
+            S: local.S, R: local.R, No: local.No, HT: local.HT, AT: local.AT,
+            RT: rt, DT: local.DT ?? null, TM: local.TM ?? null,
+            HS: hit.HS, AS: hit.AS,
+            KW: local.KW ?? null, KD: local.KD ?? null, KL: local.KL ?? null, KH: local.KH ?? null,
+            KHW: local.KHW ?? null, KHD: local.KHD ?? null, KHL: local.KHL ?? null,
+            FW: local.FW ?? null, FD: local.FD ?? null, FL: local.FL ?? null, FH: local.FH ?? null,
+            FHW: local.FHW ?? null, FHD: local.FHD ?? null, FHL: local.FHL ?? null,
+          })
+        }
+        if (payload.length) {
+          const saveRes = await api.post(`/api/leagues/${code}/edit_rows`, { scope, rows: payload })
+          filled += saveRes.updated || payload.length
+        }
+      } catch (err) {
+        fails.push(`${code} ${round}: ${err.message}`)
+      }
+    }
+    const parts = [`${filled}경기 결과를 채웠습니다`]
+    if (already) parts.push(`이미 입력됨 ${already}건`)
+    if (rtSkipped) parts.push(`핸디 정보 없어 건너뜀 ${rtSkipped}건(결과·핸디 입력에서 직접 골라주세요)`)
+    if (fails.length) parts.push(...fails)
+    setFetchResultsNotice(parts.join(' · '))
+    if (filled) load()
+    setBusyFetchResults(false)
   }
 
   // data.rows가 없을 때 매번 새 배열([])을 만들면 아래 useMemo가 렌더마다 다시 돌아
@@ -254,6 +326,14 @@ export default function WeekListPage() {
           </button>
           <button
             className="batch-fold-btn"
+            onClick={runFetchResults}
+            disabled={busyFetchResults}
+            title="지금 보이는 이번주 리스트 전체(리그·라운드 조합별)에서, 와이즈토토에 끝난 것으로 나온 경기의 스코어를 가져와 RT까지 판정해 저장합니다. 이미 결과가 입력된 경기는 건드리지 않습니다."
+          >
+            {busyFetchResults ? '불러오는 중…' : '결과불러오기'}
+          </button>
+          <button
+            className="batch-fold-btn"
             onClick={handleSnapshot}
             disabled={snapping}
             title="지금 이 화면(요일별 목록 전체)을 이미지로 저장합니다. 어디서 다시 볼지는 나중에 정합니다."
@@ -264,6 +344,7 @@ export default function WeekListPage() {
             <span className="final-odds-ts">최신배당({formatFinalOddsTime(weekListTs)})</span>
           )}
           {refreshOddsNotice && <p className="recompute-notice">{refreshOddsNotice}</p>}
+          {fetchResultsNotice && <p className="recompute-notice">{fetchResultsNotice}</p>}
           {snapshotNotice && <p className="recompute-notice">{snapshotNotice}</p>}
         </div>
       )}
