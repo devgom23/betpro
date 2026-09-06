@@ -72,7 +72,8 @@ export default function LeaguePage({ code, scope }) {
   // 보여주려고 표(LeagueTable) 대신 여기서 상태를 들고 있다가 props로 내려준다.
   // 일반정보(시즌/라운드 등 조회 조건에 이미 나와 있는 정보)는 기본으로 접어둔다.
   // '지표'는 칸이 하나뿐이라 접어도 값(강/약)이 그대로 보인다 — 기본 접힘으로 둔다.
-  const [collapsed, setCollapsed] = useState(() => new Set(['일반정보', '경기정보', '지표']))
+  // '똥배'도 접어도 똥1/똥2 순번은 계속 보이므로(LeagueTable.jsx isDdong 참고) 기본 접힘.
+  const [collapsed, setCollapsed] = useState(() => new Set(['일반정보', '경기정보', '지표', '똥배']))
   const [showRiskLegend, setShowRiskLegend] = useState(false)
   const groups = useMemo(() => buildColumnGroups(data?.columns || []), [data?.columns])
   const { batch1Groups, batch2Groups } = splitIndicatorBatches(groups)

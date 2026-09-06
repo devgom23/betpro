@@ -1,6 +1,6 @@
 import { cloneElement, Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, formStyle, bettingDayStyle,
+  buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
   collapsedWidth, splitsOnFinal, oddsMoveDir, riskMoveDir, toFinalRow, rtToText,
   VERDICT_KEY, verdictCellStyle,
@@ -206,7 +206,7 @@ export default function LeagueTable({
   // ref는 즉시(동기) 최신값을 읽고 쓸 수 있어 이 경쟁 상태를 막아준다.
   const pickOverridesRef = useRef({})
   const [pickOverrides, setPickOverrides] = useState({})
-  const [collapsedState, setCollapsedState] = useState(() => new Set(['일반정보', '경기정보', '지표']))
+  const [collapsedState, setCollapsedState] = useState(() => new Set(['일반정보', '경기정보', '지표', '똥배']))
   const collapsed = collapsedProp ?? collapsedState
   const setCollapsed = onCollapsedChange ?? setCollapsedState
   const [showRiskLegendState, setShowRiskLegendState] = useState(false)
@@ -739,6 +739,23 @@ export default function LeagueTable({
                                   <span className="mypick-blank">－</span>
                                 )}
                               </button>
+                            </td>
+                          )
+                        }
+                        if (c.key === 'MY_BET') {
+                          // 저장되는 개인 픽이 아니라 베팅내역 등록 여부만 보여주는
+                          // 참고용 배지라 PICK_VERDICT처럼 클릭 불가(row.MY_BET을
+                          // 그대로 읽는다 — pickOverrides에 없음, 편집은 베팅내역
+                          // 화면에서만 한다).
+                          return (
+                            <td key={`${gi}-${ci}`} className={className}>
+                              {row.MY_BET ? (
+                                <span className="cell-badge" style={myBetStyle(row.MY_BET)}>
+                                  {row.MY_BET}
+                                </span>
+                              ) : (
+                                <span className="mypick-blank">－</span>
+                              )}
                             </td>
                           )
                         }

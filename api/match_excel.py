@@ -404,6 +404,8 @@ def build_match_excel(row: dict, h2h: dict, scope: str = "master",
         pick_bits.append(f"P {row['MY_P']}")
     if row.get("MY_HIT"):
         pick_bits.append(f"의견 {row['MY_HIT']}")
+    if row.get("MY_BET"):
+        pick_bits.append(f"벳 {row['MY_BET']}")
     if pick_bits:
         ws.cell(row=r, column=1, value=" · ".join(pick_bits))
         r += 1
@@ -845,7 +847,8 @@ _GROUP_DEFS = [
     ("TK-WL", "25. 국/통) 승+패 분석"), ("TK-WDL", "26. 국/통) 승+무+패 분석"),
 ]
 _MYPICK_COLS = [
-    ("IMPORTANT", "중요"), ("MY_PICK", "내픽"), ("MY_P", "P"), ("MY_HIT", "적중"), ("MEMO", "메모"),
+    ("IMPORTANT", "중요"), ("MY_PICK", "내픽"), ("MY_P", "P"), ("MY_HIT", "적중"),
+    ("MY_BET", "벳"), ("MEMO", "메모"),
 ]
 # "P" 태그 배지 색 — 경기정보 그룹의 RT 배지와 같은 색 규칙(핸승=파랑/핸무=연파랑/무=회색/역=빨강).
 _P_TAG_COLORS = {
@@ -999,6 +1002,10 @@ def _cell_style(group, col, value, row=None):
     if group["kind"] == "mypick" and sub == "P":
         s = "" if _blank(value) else str(value).strip()
         return _P_TAG_COLORS.get(s)
+
+    if group["kind"] == "mypick" and sub == "벳":
+        s = "" if _blank(value) else str(value).strip()
+        return {"bg": "2E7D32", "fg": "FFFFFF", "bold": True} if s == "P" else None
 
     if (g1 == "해외배당" and sub == "FH") or (g1 == "국내배당" and sub == "KH"):
         n = _num(value)

@@ -574,7 +574,7 @@ def league_rows(code: str,
     _attach_my_picks(records, user["username"], code, scope)
     return {
         "columns": list(df.columns) + COMBODIR.COLS
-                   + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT"],
+                   + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT", "MY_BET"],
         "rows": records,
         "total": total,
         "season": season,
@@ -730,13 +730,28 @@ def _my_pick_key(s, r, no, ht, at) -> tuple:
     return tuple(MYPICKS.normalize(v) for v in (s, r, no, ht, at))
 
 
+def _bet_leg_keys(username: str) -> set:
+    """이 계정이 지금까지 베팅내역(bet_slips)에 실제로 담은 모든 경기의 키 집합.
+    별표(IMPORTANT)·내픽(MY_PICK)과는 별개다 — 별표만 찍고 실제로는 벳을 안 넣은
+    경기도 있어서, '벳' 칸(MY_BET)은 오직 베팅내역 등록 여부만 본다. scope(공식/내
+    데이터) 구분 없이 이 계정의 전체 배팅 이력을 본다(team_bet_record와 같은 범위)."""
+    slips = BETSLIPS.list_slips_all(username)
+    keys = set()
+    for slip in slips:
+        for leg in slip["legs"]:
+            keys.add(_my_pick_key(leg.get("S"), leg.get("R"), leg.get("No"), leg.get("HT"), leg.get("AT")))
+    return keys
+
+
 def _attach_my_picks(records: list, username: str, code: str, scope: str) -> None:
     """조회된 행마다 이 계정이 표시한 중요 별표(IMPORTANT — 0=없음/1=반개·보류/2=온별·
-    중요)/내픽(MY_PICK)/P태그(MY_P)/적중여부(MY_HIT)/메모(MEMO)를 붙인다."""
+    중요)/내픽(MY_PICK)/P태그(MY_P)/적중여부(MY_HIT)/메모(MEMO)/실제벳여부(MY_BET)를 붙인다."""
     picks = MYPICKS.list_my_picks(username, code, scope)
     by_key = {_my_pick_key(p["S"], p["R"], p["No"], p["HT"], p["AT"]): p for p in picks}
+    bet_keys = _bet_leg_keys(username)
     for row in records:
-        p = by_key.get(_my_pick_key(row.get("S"), row.get("R"), row.get("No"), row.get("HT"), row.get("AT")))
+        key = _my_pick_key(row.get("S"), row.get("R"), row.get("No"), row.get("HT"), row.get("AT"))
+        p = by_key.get(key)
         row["IMPORTANT"] = int(p["starred"]) if p else 0
         row["MY_PICK"] = p["pick"] if p else None
         row["MY_P"] = p["p"] if p else None
@@ -744,6 +759,7 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
         row["MEMO"] = p["memo"] if p else None
         row["MEMO_PRE"] = p["memo_pre"] if p else None
         row["REASON_TAG"] = p["reason_tag"] if p else None
+        row["MY_BET"] = "P" if key in bet_keys else None
 
 
 # 내픽(MY_PICK)+RT 대조 규칙 — web/src/components/LeagueTable/columnGroups.js의
@@ -962,6 +978,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
     리그 표와 같은 컬럼 구성을 그대로 쓰되 어느 리그 경기인지 알 수 있도록
     L(리그 코드)을 채워서 내려준다."""
     username = user["username"]
+    bet_keys = _bet_leg_keys(username)
     rows: list[dict] = []
     for scope in (PATHS.SCOPE_MASTER, PATHS.SCOPE_USER):
         try:
@@ -1004,6 +1021,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
                 rec["MY_PICK"] = p["pick"]
                 rec["MY_P"] = p["p"]
                 rec["MY_HIT"] = p["hit"]
+                rec["MY_BET"] = "P" if key in bet_keys else None
                 rec["MEMO"] = p["memo"]
                 rec["MEMO_PRE"] = p["memo_pre"]
                 rows.append(rec)
@@ -1771,7 +1789,7 @@ def table_excel_download(code: str,
 
     shown = USERLG.label_of(db, code) if _is_user_scope(scope) else code
     buf = XLS.build_table_excel(
-        list(df.columns) + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT", "MEMO"], records, title=shown)
+        list(df.columns) + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT", "MY_BET", "MEMO"], records, title=shown)
     parts = [shown]
     if season:
         parts.append(str(season))

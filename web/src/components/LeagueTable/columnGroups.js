@@ -34,12 +34,16 @@ const F_ODDS_COLS = ['FW', 'FD', 'FL', 'FH']
 // (computeAutoVerdict 참고). MY_HIT은 '의견'으로 이름을 바꿔 배팅 비중 태그로 쓴다.
 // MY_P('P')는 내픽과 별개로 "실제로 딱 찍었는지"만 남기는 참고용 태그(핸승/핸무/무/역)
 // — 결과 판정(적중/보험/미적)에는 전혀 반영되지 않는다.
+// MY_BET('벳')은 저장되는 개인 픽이 아니라 베팅내역(bet_slips)에 실제로 등록됐는지만
+// 보는 참고용 배지다 — 별표(IMPORTANT)를 찍고도 실제로는 벳을 안 넣은 경기가 있어서
+// 따로 뒀다(api/main.py _bet_leg_keys 참고). 값은 항상 'P' 아니면 빈칸.
 const MYPICK_COLS = [
   ['IMPORTANT', '중요'],
   ['PICK_VERDICT', '적중'],
   ['MY_PICK', '내픽'],
   ['MY_P', 'P'],
   ['MY_HIT', '의견'],
+  ['MY_BET', '벳'],
 ]
 
 // 똥배 — 국내배당 KW/KL이 1.49 이하로 나온 "똥[안전]배당" 경기를 그 라운드 안에서
@@ -623,6 +627,12 @@ export function summarizeVerdicts(rows) {
   }
   const 총 = counts.적중 + counts.보험 + counts.미적
   return 총 > 0 ? { ...counts, 총 } : null
+}
+
+// 내 예측의 "벳" 배지(MY_BET) 색상 — 값은 항상 'P' 아니면 없음이라 단색이면 충분하다.
+export function myBetStyle(value) {
+  if (value === 'P') return { background: 'var(--chip-green-bg)', color: 'var(--chip-green-fg)', fontWeight: 700 }
+  return null
 }
 
 // 내 예측의 자동 "적중" 배지 색상 — 예전 핸승위험도 그룹의 적중(VERDICT) 배색을 그대로 쓴다.
