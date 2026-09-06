@@ -1942,13 +1942,13 @@ function DirectionScopeLegend({ onClose }) {
           <tbody>
             <tr>
               <td><b className="dscope-side-p-ink">초록</b></td>
-              <td><b className="dscope-side-p-ink">플핸무 · 플핸승 · 플</b></td>
-              <td><b>핸승은 안 나온다</b></td>
+              <td><b className="dscope-side-p-ink">플핸무</b></td>
+              <td><b>핸승은 안 나온다</b> (적중 무·역 / 보험 핸무)</td>
             </tr>
             <tr>
               <td><b className="dscope-side-j-ink">파랑</b></td>
-              <td><b className="dscope-side-j-ink">정무 · 정역 · 정</b></td>
-              <td><b>역은 안 나온다</b></td>
+              <td><b className="dscope-side-j-ink">정무</b></td>
+              <td><b>역은 안 나온다</b> (적중 핸승·핸무 / 보험 무)</td>
             </tr>
           </tbody>
         </table>
@@ -2087,35 +2087,34 @@ const ODDS_WHAT = [
   ['통)국', '6대리그 전체', '국내배당', '국통)승 또는 패 + 국통)플핸'],
   ['통)해', '6대리그 전체', '해외배당', '해통)승 또는 패만'],
 ]
-// 4칸(리국·리해·통국·통해, 초기 기준)이 같은 방향(정/플)을 보는 개수별 당첨률.
-// 만장일치가 반반보다 +5.34%p. 아래 숫자는 28번(TK-PL)을 통)국에 넣은 뒤 다시 잰 값이다.
+// 아래 네 표는 2026-09-06 다시 잰 값이다 — 재료에서 홈/원정 줄을 빼고, 이름 규칙을
+// '핸승 vs 역'으로 바꾼 뒤 기준이 달라졌기 때문(verdictCalc.js pickName 주석).
+// 4칸(리국·리해·통국·통해, 초기 기준)이 같은 편(정/플)을 보는 개수별 당첨률.
 const ODDS_AGREE_RATE = [
-  ['4/4 (만장일치)', '15,568', '50.5%', '84.31%'],
-  ['3/4', '10,867', '35.2%', '81.14%'],
-  ['2/4 (반반)', '4,403', '14.3%', '78.97%'],
+  ['4/4 (만장일치)', '21,836', '67.3%', '84.68%'],
+  ['3/4', '6,563', '20.2%', '79.75%'],
+  ['2/4 (반반)', '3,331', '10.3%', '76.76%'],
 ]
-// 만장일치일 때 이름별 당첨률 — 정무가 가장 높다(방향성 때와 같은 패턴).
+// 만장일치일 때 이름별 당첨률 — 정무가 더 높다(방향성 때와 같은 패턴).
+// 이름 규칙을 바꾼 뒤로 이 표에는 정무·플핸무 둘만 나온다.
 const ODDS_UNANIM_NAME = [
-  ['정무', 'j', '8,048', '87.09%'],
-  ['정역', 'j', '291', '73.20%'],
-  ['플핸무', 'p', '5,820', '81.91%'],
-  ['플핸승', 'p', '1,409', '80.70%'],
+  ['정무', 'j', '13,617', '86.60%'],
+  ['플핸무', 'p', '8,219', '81.51%'],
 ]
-// 표본별 적중률 — 승 하나만 맞으면 되는 지표라 방향성(승+패 두 줄)보다 훨씬 넓게
-// 과거 경기를 찾는다. 그래도 15건을 넘으면 82%대로 안정되는 건 방향성과 같다.
+// 표본별 당첨률 — 15건을 넘으면 82%대로 안정되는 건 방향성과 같다.
 const ODDS_TONE_WHY = [
-  ['1 ~ 4건', '91.8%*', '66.5%'],
-  ['5 ~ 14건', '84.1%', '25.8%'],
-  ['15 ~ 39건', '82.0%', '14.5%'],
-  ['40건 이상', '82~82.6%', '1.3~9.0%'],
+  ['1 ~ 4건', '1,102', '79.67%'],
+  ['5 ~ 14건', '9,798', '80.16%'],
+  ['15 ~ 39건', '47,814', '81.70%'],
+  ['40건 이상', '214,661', '82.41%'],
 ]
-// 칸마다 색 붙는 빈도 — 방향성의 리)국(3.5%)과 달리 여기 리)국도 83%가 색이다.
-// 승 하나만 맞아도 과거 경기가 잡혀서 표본이 훨씬 잘 쌓인다(중앙값 30건대).
+// 칸마다 색 붙는 빈도 — 방향성의 리)국(3.5%)과 달리 여기 리)국도 89%가 색이다.
+// 승 하나만 맞아도 과거 경기가 잡혀서 표본이 훨씬 잘 쌓인다(중앙값 31건).
 const ODDS_TONE_FREQ = [
-  ['리)국', '83.3%', '82.2%', '33건'],
-  ['리)해', '96.7%', '95.0%', '93건'],
-  ['통)국', '90.8%', '90.6%', '174건'],
-  ['통)해', '99.0%', '98.5%', '511건'],
+  ['리)국', '89.1%', '87.5%', '31건'],
+  ['리)해', '96.6%', '95.1%', '82건'],
+  ['통)국', '99.8%', '99.9%', '177건'],
+  ['통)해', '99.8%', '99.7%', '494건'],
 ]
 
 function OddsScopeLegend({ onClose }) {
@@ -2215,13 +2214,13 @@ function OddsScopeLegend({ onClose }) {
           <tbody>
             <tr>
               <td><b className="dscope-side-p-ink">초록</b></td>
-              <td><b className="dscope-side-p-ink">플핸무 · 플핸승 · 플</b></td>
-              <td><b>핸승은 안 나온다</b></td>
+              <td><b className="dscope-side-p-ink">플핸무</b></td>
+              <td><b>핸승은 안 나온다</b> (적중 무·역 / 보험 핸무)</td>
             </tr>
             <tr>
               <td><b className="dscope-side-j-ink">파랑</b></td>
-              <td><b className="dscope-side-j-ink">정무 · 정역 · 정</b></td>
-              <td><b>역은 안 나온다</b></td>
+              <td><b className="dscope-side-j-ink">정무</b></td>
+              <td><b>역은 안 나온다</b> (적중 핸승·핸무 / 보험 무)</td>
             </tr>
           </tbody>
         </table>
@@ -2229,19 +2228,18 @@ function OddsScopeLegend({ onClose }) {
         <p className="help-legend-title">왜 하필 15건인가 — 표본별 실측</p>
         <table className="detail-table help-legend-table">
           <thead>
-            <tr><th>과거 표본</th><th>적중률</th><th>&apos;정&apos;·&apos;플&apos; 단독이 나오는 비율</th></tr>
+            <tr><th>과거 표본</th><th>칸 수</th><th>그 칸 이름의 당첨률</th></tr>
           </thead>
           <tbody>
-            {ODDS_TONE_WHY.map(([n, rate, solo]) => (
-              <tr key={n}><td>{n}</td><td>{rate}</td><td>{solo}</td></tr>
+            {ODDS_TONE_WHY.map(([n, cnt, rate]) => (
+              <tr key={n}><td>{n}</td><td>{cnt}</td><td><b>{rate}</b></td></tr>
             ))}
           </tbody>
         </table>
         <p className="help-legend-note">
-          *1~4건 구간은 표본이 365건뿐이라 우연히 높게 나왔을 수 있습니다 — 대신
-          단독이름 비율(65.2%→1.5%)이 꾸준히 줄어드는 게 더 믿을 만한 근거입니다.
-          이 지표는 승 하나만 맞아도 과거 경기가 잡혀서, 15건을 넘으면 방향성보다
-          더 빨리(더 안정적으로) 82%대에 자리 잡습니다.
+          표본이 늘수록 당첨률이 79.7% → 82.4%로 꾸준히 오릅니다. 15건 언저리에서
+          81%대에 올라서고, 40건을 넘으면 82%대로 자리 잡습니다 — 그래서 15건을
+          색을 넣는 경계로 씁니다.
         </p>
 
         <p className="help-legend-title">칸마다 색이 붙는 빈도가 다릅니다</p>
@@ -2256,7 +2254,7 @@ function OddsScopeLegend({ onClose }) {
           </tbody>
         </table>
         <p className="help-legend-note">
-          방향성의 리)국(3.5%)과 달리 여기 리)국은 83%가 색입니다 — 승 하나만
+          방향성의 리)국(3.5%)과 달리 여기 리)국은 89%가 색입니다 — 승 하나만
           맞아도 과거 경기가 잡히는 지표라 표본이 훨씬 잘 쌓이기 때문입니다.
         </p>
       </div>
@@ -2264,14 +2262,19 @@ function OddsScopeLegend({ onClose }) {
   )
 }
 
+// ⚠ 이 표만 name(표시용 이름)이 아니라 pick(픽용 이름)을 그린다 — 여기가 곧 판정의
+// 재료라서, 표에 뜬 이름과 최종 픽이 다르면 사장님이 화면으로 검산을 못 한다.
+// (2026-09-06: 픽 규칙을 '핸승 vs 역'으로 바꾸면서 표도 같이 맞췄다. 그래서 이 표에는
+//  정무·플핸무 둘만 나온다. 네 이름을 다 보고 싶으면 옆의 '방향성' 표를 쓴다 —
+//  그쪽은 신뢰도(별점)의 재료라 계산 방식이 다르고, 그래서 이름 규칙도 그대로 뒀다.)
 function OddsScopeTable({ row }) {
   const [showLegend, setShowLegend] = useState(false)
   const codes = oddsScopeCodes(row)
   const cell = (key, final, edge) => {
     const list = codes[key]
-    const { name, total } = scopeCell(row, list, final)
+    const { pick, total } = scopeCell(row, list, final)
     const [, tone, toneLabel] = SCOPE_TONES.find(([cut]) => total >= cut) || [0, 'none', '표본 없음']
-    const side = tone === 'ok' ? SCOPE_SIDE[name] : null
+    const side = tone === 'ok' ? SCOPE_SIDE[pick] : null
     return (
       <td
         className={`dscope-${tone}${side ? ` dscope-side-${side}` : ''}${edge ? ' dscope-edge' : ''}`}
@@ -2279,9 +2282,9 @@ function OddsScopeTable({ row }) {
           + `쓰는 지표: ${list.length ? list.join(' · ') : '(배당 없음)'}\n`
           + `과거 표본 ${total.toLocaleString()}건 — ${toneLabel}`
           + `${side ? ' (그래서 색을 넣었습니다)' : ' (표본이 얇아 색을 넣지 않았습니다)'}.\n`
-          + '※ 검토용 표입니다. 판정에는 쓰이지 않습니다.'}
+          + '※ 핸승과 역 중 작은 쪽을 배제한 이름입니다(판정과 같은 기준).'}
       >
-        {name ? <b className="sys-name">{name}</b> : <span className="dir-none">—</span>}
+        {pick ? <b className="sys-name">{pick}</b> : <span className="dir-none">—</span>}
       </td>
     )
   }
@@ -2411,14 +2414,37 @@ function NewSystemVerdictLegend({ onClose }) {
             </tr>
           </tbody>
         </table>
+        <p className="help-legend-title">
+          픽 이름은 <b>핸승과 역만 비교</b>해서 정합니다 — 정무 아니면 플핸무
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>비교</th><th>배제하는 것</th><th>픽</th></tr></thead>
+          <tbody>
+            <tr><td>핸승 &gt; 역</td><td>역</td><td><b>정무</b> (적중 핸승·핸무 / 보험 무)</td></tr>
+            <tr><td>역 ≥ 핸승</td><td>핸승</td><td><b>플핸무</b> (적중 무·역 / 보험 핸무)</td></tr>
+          </tbody>
+        </table>
         <p className="help-legend-note">
-          <b>표에 &apos;정&apos;·&apos;플&apos;로 뜨는 칸도 픽은 구체적으로 냅니다.</b> 배당·방향성
-          표의 &apos;정&apos;·&apos;플&apos;은 &quot;한쪽 쌍이 80% 넘게 압도적&quot;이라는 표시일 뿐이라,
-          픽을 정할 때는 그 안에서 다시 가장 안 나온 하나를 빼고 구체적인 이름(정무·정역·
-          플핸무·플핸승)을 씁니다. 예전에는 이 일반값이 픽까지 그대로 흘러가서, 적중/보험
-          배지가 아예 안 뜨는 경기가 <b>초기 1,710건 · 배변 2,012건</b>(전체의 5~6%)이나
-          있었고 뒤집기도 리)해가 일반값이면 발동하지 않았습니다(2026-09-06 수정 —
-          당첨률 초기 82.27%→82.82% · 배변 81.54%→82.29%, 6개 리그 전부 같은 방향).
+          <b>왜 네 칸을 다 보지 않는가</b> — 네 칸의 &apos;예측이 되는 정도&apos;가 전혀 다릅니다.
+          통)해가 낸 예측%를 5구간으로 나눠 각 구간의 실제 발생률을 재면, 최고구간과
+          최저구간의 격차가 <b>핸승 +33.9~35.6%p · 역 +21.3~24.8%p · 무 +10.6~13.1%p</b>인데{' '}
+          <b>핸무만 +0.6~6.2%p</b>입니다. 핸무는 어떤 배당에서도 그냥 23~24%로 나오는,
+          예측이 안 되는 값입니다.
+        </p>
+        <p className="help-legend-note">
+          그런데 예전 방식(네 칸 중 가장 작은 하나 배제)은 그 핸무가 최소로 뽑히면 근거 없이
+          <b> 플핸승</b>을 골랐고(전체의 12~14%), 그 구간 당첨률이 시점마다 75~79%로
+          흔들렸습니다. 초기와 배변 판정이 서로 반대로 갈리던 것도 전부 이 구간에서 나왔습니다
+          — 신호가 아니라 동전 던지기가 섞여 있던 겁니다(정무·플핸무를 고른 83% 구간은
+          두 방식이 애초에 같은 답을 냅니다). 핸무·무를 배제 후보에서 빼면 그 구간이
+          사라집니다: 최종 판정 <b>초기 82.80%→82.67%(z=−0.82, 우연 범위) ·
+          배변 82.45%→83.24%(z=+5.19)</b>, 적중률은 배변이 60.45%→61.20%로 올랐습니다.
+        </p>
+        <p className="help-legend-note">
+          <b>배당·방향성 표에는 네 이름이 그대로 나옵니다.</b> 그 표들은 &quot;칸마다 무엇이
+          안 나올 것 같은가&quot;를 뜯어보는 검토용이라 정보를 줄이지 않았습니다 — 표의
+          &apos;정&apos;·&apos;플&apos;은 한쪽 쌍이 80% 넘게 압도적이라는 표시입니다. 그래서
+          표의 이름과 최종 픽이 다를 수 있습니다.
         </p>
         <p className="help-legend-note">
           <b>&apos;승=홈팀 · 패=원정팀&apos;은 재료에서 뺐습니다(2026-09-06).</b> 조건이 가장
@@ -2427,8 +2453,8 @@ function NewSystemVerdictLegend({ onClose }) {
           평균 <b>40.5%</b>를 먹었고, 3경기 중 1경기(34.4%)는 표본이 제일 적은 줄이
           비중이 제일 큰 줄이었습니다. 그래서 몇 건짜리 표본의 0 하나가 이름을 뒤집는
           일이 있었습니다. 빼고 재보니 리)해 당첨률이 초기 80.18%→81.33%(z=5.87),
-          배변 80.16%→81.84%(z=9.03)로 올랐고, 최종 판정도 배변 82.29%→82.45%
-          (z=2.19)로 나아졌습니다(초기는 −0.02%p로 그대로).
+          배변 80.16%→81.84%(z=9.03)로 올랐고, 최종 판정도 배변 쪽이 나아졌습니다
+          (초기는 −0.02%p로 그대로).
         </p>
         <p className="help-legend-note">
           초기·배변을 완전히 따로 계산합니다(그 시점 배당만 씁니다) — 시점을 섞은
@@ -2502,8 +2528,8 @@ function NewSystemVerdictLegend({ onClose }) {
         <table className="detail-table help-legend-table">
           <thead><tr><th></th><th>당첨률</th></tr></thead>
           <tbody>
-            <tr><td><b>초기 판정</b></td><td><b>82.80%</b></td></tr>
-            <tr><td><b>배변 판정</b></td><td><b>82.45%</b></td></tr>
+            <tr><td><b>초기 판정</b></td><td><b>82.67%</b></td></tr>
+            <tr><td><b>배변 판정</b></td><td><b>83.24%</b></td></tr>
           </tbody>
         </table>
         <p className="help-legend-note">
