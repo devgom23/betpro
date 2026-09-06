@@ -253,6 +253,15 @@ td.sticky-col {
   background: rgba(148, 163, 184, 0.06);
 }
 
+/* '판정' 칸의 강추 표시 — 국≠해 + 배변 플핸무 + 별3개(verdictCalc.js isStrongPick).
+   배경·글자색은 verdictCellStyle(★3 파랑/초록)이 이미 정하므로 여기서는 밑줄만
+   더한다. 이중선이라 옅은 배경 위에서도 단순 밑줄보다 눈에 띈다. */
+.verdict-strong {
+  text-decoration: underline;
+  text-decoration-style: double;
+  text-underline-offset: 3px;
+}
+
 /* ── 큰글씨 모드 (표 데이터 행에만 적용, 헤더는 그대로 유지) ── */
 .league-table.font-large tbody td {
   font-size: 13px;

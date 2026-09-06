@@ -12,7 +12,7 @@ import {
 } from '../../utils/systemVerdict'
 import {
   DIR_SIDE, SCOPE_CODES, scopeCell, oddsScopeCodes, directionName, weightedAnalysis,
-  ODDS_PHASE_WEIGHTED_GRADE, phaseVerdict,
+  ODDS_PHASE_WEIGHTED_GRADE, phaseVerdict, isStrongPick,
 } from '../../utils/verdictCalc'
 import './MatchDetailModal.css'
 
@@ -2660,7 +2660,10 @@ function NewSystemVerdict({ row, init, fin }) {
   const rtText = rtLabel(row.RT)
   const actual = ['핸승', '핸무', '무', '역'].includes(rtText) ? rtText : null
 
-  const part = (v) => {
+  // '강추' — 배변 판정에만 붙는다(isStrongPick 주석 참고). init(초기)에는 안 켠다.
+  const strong = isStrongPick(row, fin)
+
+  const part = (v, isStrong) => {
     if (!v.pick) {
       return (
         <span className="newv-part">
@@ -2692,6 +2695,15 @@ function NewSystemVerdict({ row, init, fin }) {
           <>
             <span className="sys-stars">{'★'.repeat(v.stars)}{'☆'.repeat(3 - v.stars)}</span>
             <span className="sys-rate">{v.rate.toFixed(2)}%</span>
+            {isStrong && (
+              <span
+                className="newv-strong"
+                title={'국내·해외 정배가 갈린 경기(국≠해)에서 배변 판정 플핸무·별3개가 겹쳤습니다 — '
+                  + '6대리그 실측 당첨률 85.39%(같은 조건인데 국내·해외 정배가 같은 경기는 81.08%, z=3.02).'}
+              >
+                강추
+              </span>
+            )}
           </>
         )}
       </span>
@@ -2709,9 +2721,9 @@ function NewSystemVerdict({ row, init, fin }) {
       >
         시스템 판정 <span className="help-mark">?</span>
       </button>
-      {part(init)}
+      {part(init, false)}
       <span className="newv-arrow">→</span>
-      {part(fin)}
+      {part(fin, strong)}
       {fin.verdict && (
         <span
           className="match-chip match-chip-tone sys-verdict"

@@ -1400,13 +1400,26 @@ def _wdl_breakdown(m: pd.DataFrame, reference: str, home_only: bool = False) -> 
 
 
 def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
-                       cross: bool = True, limit: int = 15) -> dict:
+                       cross: bool = True, limit: int = 15,
+                       before: tuple | None = None) -> dict:
     """
     두 팀의 과거 맞대결 기록(betpro_ui._head_to_head 이식).
     결과(RT)는 '각 경기의 홈팀 기준' — 지금 보고 있는 경기의 홈팀 관점으로
     재해석하지 않는다(원본과 동일한 주의사항).
     cross=True(기본)면 홈/원정이 뒤바뀐 경기도 포함(양방향).
     cross=False면 home=홈팀·away=원정팀으로 지정한 방향만 정확히 일치하는 경기만.
+
+    before : (season, round_, no)를 주면 그 경기 '직전까지'만 쓴다 — standings.
+      recent10_before·_season_matches와 같은 규칙(chrono_key). 안 주면(None) 시점
+      제한 없이 전체 이력을 쓴다 — /api/head_to_head(리그탭 '상대전적 조회')처럼
+      특정 경기를 기준 삼지 않고 두 팀의 통산 상대전적 자체를 보여줄 때 쓴다.
+      ⚠ 특정 경기의 '지금 상황'을 설명하는 용도(종합픽·상세보기·엑셀)로 쓸 때는
+      반드시 before를 줘야 한다 — 안 주면 그 경기 자신과 나중에 열린 맞대결까지
+      섞여 '전적' 배지·같은방향/다른방향이 미래를 미리 아는 값이 된다(2026-09-06,
+      실측으로 발견 — 시점 제한 없이 재면 국≠해+판정플핸무+★3+같은방향이 오히려
+      다른방향보다 낮게 나왔는데, 직전까지만 자르면 그 역전이 사라지고 원래 알려진
+      대로 유의한 차이가 없어진다. 직전까지만 자른 라벨과 전체 이력 라벨이 다른
+      경기가 72.8%나 됐다).
     """
     ht, at = str(home).strip(), str(away).strip()
     empty = {"summary": None, "wdl_summary": None, "wdl_summary_home": None, "matches": [], "total": 0}
@@ -1420,6 +1433,10 @@ def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
     else:
         mask = (h == ht) & (a == at)
     m = total_df[mask].copy()
+    if before is not None and "R" in m.columns and "No" in m.columns:
+        cutoff = standings.chrono_key(*before)
+        keys = [standings.chrono_key(s, r, n) for s, r, n in zip(m["S"], m["R"], m["No"])]
+        m = m[[k < cutoff for k in keys]]
     if m.empty:
         return empty
 
@@ -1542,10 +1559,12 @@ def pick_ai(body: PickAiBody, user: dict = Depends(get_current_user)):
         src_df = _h2h_source_df(db, body.scope, body.code)
         # limit을 크게 잡는다 — pick_ai가 "오늘과 같은 정배/역배 구도였던 맞대결만" 골라
         # 다시 세아려야 해서(아래 compute() 참고) summary 집계만으론 안 되고 개별 경기
-        # 목록(matches)이 전부 있어야 한다.
-        h2h = _head_to_head_calc(src_df, ht, at, cross=True, limit=500)
+        # 목록(matches)이 전부 있어야 한다. before를 줘서 이 경기 직전까지만 쓴다
+        # (안 그러면 나중에 열린 맞대결까지 섞인다 — _head_to_head_calc 주석 참고).
         season = body.row.get("S")
         round_, no = body.row.get("R"), body.row.get("No")
+        h2h = _head_to_head_calc(src_df, ht, at, cross=True, limit=500,
+                                 before=(season, round_, no))
         season_matches = {
             "home": _season_matches(src_df, ht, season, round_, no),
             "away": _season_matches(src_df, at, season, round_, no),
@@ -1645,7 +1664,8 @@ def match_excel_download(code: str,
     at = str(row.get("AT") or "").strip()
 
     h2h_df = _h2h_source_df(db, scope, code)
-    h2h = _head_to_head_calc(h2h_df, ht, at, cross=True, limit=hlimit)
+    h2h = _head_to_head_calc(h2h_df, ht, at, cross=True, limit=hlimit,
+                             before=(row.get("S"), row.get("R"), row.get("No")))
 
     # 시즌전적 — /api/pick_ai가 계산하는 것과 완전히 같은 함수(PICKAI.compute)를
     # 같은 입력으로 불러서 쓴다. h2h는 season 신호 계산에 안 쓰이지만 인터페이스가

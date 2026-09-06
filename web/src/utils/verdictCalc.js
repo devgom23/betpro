@@ -135,6 +135,24 @@ export function oddsScopeCodes(row) {
   }
 }
 
+// 국내·해외 정배가 다른 경기인지 — MatchDetailModal.jsx의 '국≠해' 뱃지와 같은 기준
+// (KW/KL·FW/FL, 시점과 무관한 값). '강추' 표시(리그표 이중밑줄·시스템 판정 뱃지)가
+// 이 값과 '배변 판정 플핸무 + 별3개'가 겹칠 때만 뜬다 — 2026-09-06 실측: 국≠해
+// 하나만으로도 플핸 확률이 64.24%(전체 46.03%)로 뛰고, 여기에 배변 판정 플핸무+★3까지
+// 겹치면 66.51%까지 오른다(같은 조건인데 국=해인 경기의 플핸무+★3는 59.05%뿐이라
+// 두 신호가 겹치는 게 아니라 서로 다른 정보를 더해준다 — z=3.55).
+function marketFavHome(w, l) {
+  const a = numOrNull(w)
+  const b = numOrNull(l)
+  return a !== null && b !== null && a !== b ? a < b : null
+}
+
+export function oddsFavSplit(row) {
+  const dom = marketFavHome(row.KW, row.KL)
+  const forr = marketFavHome(row.FW, row.FL)
+  return dom !== null && forr !== null && dom !== forr
+}
+
 const DIR_CAP_N = 40
 
 // 뒤집을 때 대안을 찾는 순서 — 해외 우선, 그다음 통합 우선(앱 전체의 기존 원칙).
@@ -238,4 +256,15 @@ export function phaseVerdict(row, final, label) {
   const stars = rate !== null ? starsOfNew(rate) : null
   const verdict = sysPickVerdict(pick, row.RT)
   return { label, pick, flipped, ratio, rate, n, stars, verdict }
+}
+
+// '강추' — 국≠해(oddsFavSplit) + 그 판정이 플핸무 + 별3개일 때만 켠다. 배변 판정에만
+// 쓴다(호출하는 쪽에서 배변 phaseVerdict만 넘긴다) — 2026-09-06 실측: 국≠해만으로도
+// 플핸 확률이 46.03%→64.24%로 뛰는데, 배변 판정 플핸무+★3까지 겹치면 적중률 66.51%
+// (당첨률 85.39%, n=842)까지 오른다. 같은 조건에서 국=해인 경기의 플핸무+★3는
+// 당첨률 81.08%(n=5,746)뿐이라(z=3.02) 두 신호가 겹치는 게 아니라 서로 다른 정보를
+// 더해주는 관계다. 리그표 '판정' 칸의 이중밑줄, 상세보기 '시스템 판정' 줄의 강추
+// 뱃지가 이 함수 하나를 같이 쓴다.
+export function isStrongPick(row, verdict) {
+  return !!verdict.pick && verdict.pick === '플핸무' && verdict.stars === 3 && oddsFavSplit(row)
 }
