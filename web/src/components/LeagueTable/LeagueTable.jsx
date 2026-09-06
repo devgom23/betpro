@@ -692,7 +692,16 @@ export default function LeagueTable({
                         cellKeys = [VERDICT_KEY]
                       } else {
                         cells = [
-                          <td key={`${gi}-c`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
+                          // 헤더(collapsedWidth(null)=36px)와 같은 폭을 명시해 둔다 — 똥배는
+                          // 접혀도 실제 값(똥1·똥2…)이 행마다 다르게 찍히는 칸이라, 폭을 안
+                          // 정해 두면 지금 화면에 보이는 행이 전부 값 없는(·) 행일 때만 컬럼이
+                          // 순간 좁아졌다가 값 있는 행이 나오면 넓어지는 식으로 흔들린다
+                          // (COL_WIDTH RT·PICK_VERDICT·MY_BET 주석과 같은 문제).
+                          <td
+                            key={`${gi}-c`}
+                            className={`collapsed-cell${dividerClass(g, isLastGroup)}`}
+                            style={isDdong ? { width: collapsedWidth(null) } : undefined}
+                          >
                             {isDdong ? row.DDONG || '·' : '·'}
                           </td>,
                         ]
