@@ -34,13 +34,32 @@ export function weightedAnalysis(lines) {
 // 먼저 집는다(실측으로 고른 기준선).
 const DIR_PAIR_CUT = 80
 
+// 픽용 이름 — 언제나 구체적인 넷(정무·정역·플핸무·플핸승) 중 하나를 낸다.
+// '가장 작은 하나 배제'만 쓰므로 '정'·'플' 같은 일반값이 나오지 않는다.
+//
+// ⚠ 이게 directionName과 갈라져 있는 이유 (2026-09-06 실측) — 일반값은 표에 "한쪽 쌍이
+// 압도적"임을 보여주려고 만든 표시용 개념인데, 그게 픽 계산까지 흘러들어가 사고를 냈다.
+//   ① 통)해가 일반값이면 픽도 일반값이 되는데, 적중/보험 판정표(VERDICT_RULE)에는
+//      구체적 이름만 있어 배지가 아예 안 떴다 — 초기 1,710건·배변 2,012건(전체의 5~6%).
+//   ② 고립 뒤집기가 '리)해가 구체적일 때만' 발동하게 되어, 리)해가 일반값이면 통)해가
+//      나머지 3칸과 완전히 반대인데도 그대로 픽이 됐다(사용자가 브레스트 경기에서 발견).
+// 픽에서만 80% 규칙을 끄면 둘 다 사라진다. 실측(6대리그 36,010경기 × 초기·배변):
+//   판정불가 3,722건 → 0건, 당첨률 초기 82.27%→82.82% · 배변 81.54%→82.29%,
+//   적중률 초기 59.20%→60.32% · 배변 58.85%→60.30% (6개 리그 전부 같은 방향).
+export function pickName(v) {
+  if (!v) return null
+  const [hs, hm, mu, yk] = v
+  const cand = [['플핸무', hs], ['플핸승', hm], ['정역', mu], ['정무', yk]]
+  return cand.reduce((best, c) => (c[1] < best[1] ? c : best))[0]
+}
+
+// 표시용 이름 — 방향성·배당 표에 그리는 값. 한쪽 쌍이 80%+면 '정'·'플'로 뭉뚱그린다.
 export function directionName(v) {
   if (!v) return null
   const [hs, hm, mu, yk] = v
   if (hs + hm >= DIR_PAIR_CUT) return '정'
   if (mu + yk >= DIR_PAIR_CUT) return '플'
-  const cand = [['플핸무', hs], ['플핸승', hm], ['정역', mu], ['정무', yk]]
-  return cand.reduce((best, c) => (c[1] < best[1] ? c : best))[0]
+  return pickName(v)
 }
 
 // 정무·정역·정 = 정 방향(핸승+핸무 쪽 유력), 플핸무·플핸승·플 = 플 방향(무+역 쪽).
@@ -52,6 +71,7 @@ export const SCOPE_CODES = {
   통합: { 국: ['TK-WL', 'TK-WDL'], 해: ['TF-WL', 'TF-WDL'] },
 }
 
+// name = 표에 그리는 이름(일반값 가능) / pick = 픽 계산에 쓰는 구체적 이름.
 export function scopeCell(row, codes, final) {
   const lines = codes.map((code) => {
     const vals = [1, 2, 3, 4].map((i) => {
@@ -61,7 +81,11 @@ export function scopeCell(row, codes, final) {
     return { vals, total: vals.reduce((a, b) => a + b, 0) }
   })
   const v = weightedAnalysis(lines)
-  return { name: v ? directionName(v) : null, total: lines.reduce((a, l) => a + l.total, 0) }
+  return {
+    name: v ? directionName(v) : null,
+    pick: v ? pickName(v) : null,
+    total: lines.reduce((a, l) => a + l.total, 0),
+  }
 }
 
 // 배당 표 4칸(리)국·리)해·통)국·통)해)의 재료 — 정배 방향(FW/FL, KW/KL)에 따라
@@ -82,20 +106,35 @@ export function oddsScopeCodes(row) {
   }
 }
 
-const SINGLE_DIR_NAMES = new Set(['정무', '정역', '플핸무', '플핸승'])
 const DIR_CAP_N = 40
 
-// 픽 — 배당 표 4칸 중 통)해를 기본으로, 나머지 3칸과 전부 다르면(고립) 리)해로 뒤집는다.
+// 뒤집을 때 대안을 찾는 순서 — 해외 우선, 그다음 통합 우선(앱 전체의 기존 원칙).
+const FLIP_ORDER = ['리해', '통국', '리국']
+
+// 픽 — 배당 표 4칸 중 통)해가 기본. 나머지 3칸이 **전부** 반대편이면(고립) 그쪽으로 뒤집는다.
+//
+// 뒤집는 범위를 '완전 고립'까지로 묶은 근거 (6대리그 36,010경기 × 초기·배변 실측):
+//   · 한 칸이라도 통)해 편이면(2칸만 반대) 그때도 뒤집으면 오히려 손해다
+//     — 초기 z=-3.70, 배변 z=-3.46으로 둘 다 뚜렷하게 나빠진다.
+//   · 완전 고립일 때 뒤집는 것 자체의 이득은 사실상 0이다(초기 z=-1.65, 배변 z=+1.64로
+//     방향이 시점마다 갈린다). 그래도 남겨 둔 이유는 실측이 동률이기 때문 —
+//     4칸 중 3칸이 반대인데 소수를 따라가는 화면은 볼 때마다 의심하게 된다.
+//
+// 예전에는 이 뒤집기가 '리)해가 구체적 이름일 때만' 발동해서, 리)해가 일반값이면
+// 고립인데도 통)해가 그대로 픽이 됐다(pickName 주석의 ② 참고). 이제 4칸 모두 pick으로
+// 계산하므로 일반값이 없고, 그 빈틈도 없다.
 export function resolveOddsPhasePick(row, final) {
   const codes = oddsScopeCodes(row)
-  const nameOf = (key) => scopeCell(row, codes[key], final).name
-  const names = { 리국: nameOf('리국'), 리해: nameOf('리해'), 통국: nameOf('통국'), 통해: nameOf('통해') }
-  const base = names.통해
-  if (!base || !DIR_SIDE[base]) return { pick: null, flipped: false }
-  const others = [names.리국, names.리해, names.통국]
-  const agree = others.filter((n) => n && DIR_SIDE[n] === DIR_SIDE[base]).length
-  if (agree === 0 && names.리해 && SINGLE_DIR_NAMES.has(names.리해)) {
-    return { pick: names.리해, flipped: true }   // 고립 → 리)해로 뒤집음(해외 우선 원칙 유지)
+  const pickOf = (key) => scopeCell(row, codes[key], final).pick
+  const picks = { 리국: pickOf('리국'), 리해: pickOf('리해'), 통국: pickOf('통국'), 통해: pickOf('통해') }
+  const base = picks.통해
+  if (!base) return { pick: null, flipped: false }
+  const others = FLIP_ORDER.map((k) => picks[k]).filter(Boolean)
+  const agree = others.filter((n) => DIR_SIDE[n] === DIR_SIDE[base]).length
+  if (others.length > 0 && agree === 0) {
+    const want = DIR_SIDE[base] === '정' ? '플' : '정'
+    const alt = FLIP_ORDER.map((k) => picks[k]).find((n) => n && DIR_SIDE[n] === want)
+    if (alt) return { pick: alt, flipped: true }
   }
   return { pick: base, flipped: false }
 }
@@ -122,21 +161,23 @@ export function oddsPhaseWeightedRatio(row, pick) {
   return den > 0 ? num / den : null
 }
 
-// [하한, 적중률%, 표본] — 표본 가중 일치 비율 구간별(6대리그 실측, 커버리지 99.9%).
+// [하한, 당첨률%, 표본] — 표본 가중 일치 비율 구간별(6대리그 실측, 커버리지 99.9%).
+// 2026-09-06 픽을 구체적 이름으로 바꾸면서 다시 쟀다(픽이 바뀌면 '픽과 같은 편' 비율도
+// 바뀌므로 옛 표를 그대로 쓰면 안 된다). 전체 평균 당첨률 초기 82.82% · 배변 82.29%.
 export const ODDS_PHASE_WEIGHTED_GRADE = {
   초기: [
-    { min: 0.90, rate: 84.55, n: 10854 },
-    { min: 0.80, rate: 82.93, n: 4769 },
-    { min: 0.65, rate: 82.11, n: 6338 },
-    { min: 0.40, rate: 80.40, n: 7205 },
-    { min: 0, rate: 79.49, n: 4778 },
+    { min: 0.90, rate: 85.45, n: 12187 },
+    { min: 0.80, rate: 83.47, n: 4992 },
+    { min: 0.65, rate: 82.29, n: 6430 },
+    { min: 0.40, rate: 80.50, n: 7267 },
+    { min: 0, rate: 79.65, n: 4801 },
   ],
   배변: [
-    { min: 0.90, rate: 84.32, n: 10622 },
-    { min: 0.80, rate: 83.06, n: 4686 },
-    { min: 0.65, rate: 81.26, n: 6250 },
-    { min: 0.40, rate: 79.40, n: 7120 },
-    { min: 0, rate: 77.52, n: 4863 },
+    { min: 0.90, rate: 85.67, n: 12174 },
+    { min: 0.80, rate: 83.75, n: 4930 },
+    { min: 0.65, rate: 81.49, n: 6379 },
+    { min: 0.40, rate: 79.58, n: 7220 },
+    { min: 0, rate: 77.40, n: 4872 },
   ],
 }
 
