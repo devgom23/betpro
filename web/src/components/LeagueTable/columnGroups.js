@@ -569,20 +569,13 @@ function khHitSide(row) {
 // DB는 옮겼지만 혹시 남아 있는 값이 색 없이 뜨는 일을 막는 안전장치다.
 export function myHitStyle(value) {
   if (value === 'Pass' || value === '패스') return { background: '#757575', color: '#fff', fontWeight: 700 }
-  if (value === 'P-고민' || value === '패스고민') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-분산') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-엇갈') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-상대') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-똥배') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-똥원') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-똥무') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-원정') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-핸↑') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-표X') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-무↑') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-역↑') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-관전') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
-  if (value === 'P-어렵') return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  // 'P-'로 시작하면 새로 추가되는 태그든 옛 이름(패스고민)이든 전부 이 색 하나다 —
+  // 예전엔 태그 하나하나를 나열해서, HIT_OPTIONS(pickOptions.js)에 태그를 새로 추가할
+  // 때마다 여기 색을 깜빡 안 넣으면 색 없이 뜨는 일이 반복됐다(P-빅겜·P-상X에서 실제로
+  // 발생). 'P-'로 시작하는지만 보고 예외 없이 이 색을 준다.
+  if (value === '패스고민' || (typeof value === 'string' && value.startsWith('P-'))) {
+    return { background: '#546E7A', color: '#fff', fontWeight: 700 }
+  }
   if (value === 'B-고민' || value === '벳고민') return { background: '#F57C00', color: '#fff', fontWeight: 700 }
   if (value === '축-플') return { background: '#00897B', color: '#fff', fontWeight: 700 }
   if (value === '축-정') return { background: '#00897B', color: '#fff', fontWeight: 700 }
