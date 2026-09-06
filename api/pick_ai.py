@@ -386,76 +386,77 @@ def _domestic_indicator(row, scope, code):
     return used, est, levels
 
 
-def _home_is_fav(row):
-    """정배(시장이 강하다고 본 쪽)가 홈인지. 국내배당 우선, 없으면 해외배당."""
-    for w, l in (("KW", "KL"), ("FW", "FL")):
-        a, b = _num(row.get(w)), _num(row.get(l))
-        if a is not None and b is not None and a != b:
-            return a < b
-    return None
-
-
 def _round_num(v):
     m = re.search(r"\d+", str(v or ""))
     return int(m.group()) if m else 0
 
 
-_RT_LABEL = {1: "핸승", 2: "핸무", 3: "무", 4: "역"}
+# 승점 — 축구 표준 방식(승3·무1·패0). '합' 칸의 괄호 안 숫자로 쓴다.
+_SEASON_POINTS = {"승": 3, "무": 1, "패": 0}
 
 
-def _team_is_fav(m, team):
-    """그 경기(m)에서 team이 정배였는지. team이 그 경기의 홈이면 그대로,
-    원정이면 홈 기준을 뒤집는다. RT는 항상 '정배가 커버했는지' 기준의 값이라
-    (팀이 홈/원정 어느 쪽이었든) 뒤집어 읽을 필요 없이 그대로 쓸 수 있다."""
-    home_fav = _home_is_fav(m)
-    if home_fav is None:
-        return None
-    is_home = str(m.get("HT") or "").strip() == team
-    return home_fav if is_home else (not home_fav)
-
-
-def _season_record(today_row: dict, matches: list | None, team: str):
-    """team의 이번 시즌 경기 중 '오늘과 같은 정배/역배 구도'였던 경기만 추려
-    핸디캡 결과(핸승/핸무/무/역)를 센다 — 상대전적과 같은 방식으로, 오늘 이
-    팀이 처한 상황과 실제로 비교 가능한 경기만 골라 본다."""
+# 2026-09-06: '오늘과 같은 정배/역배 구도' 필터를 없앴다 — 표본이 조건별로 갈려
+# 헷갈리기만 하고(사용자 지적) 어차피 확률 계산에도 안 쓰던 값이다. 지금은 스코어만
+# 보는 단순 시즌 전적(승/무/패)이고, 핸디캡·배당은 전혀 안 본다.
+def _season_record(matches: list | None, team: str, is_home_today: bool):
+    """team의 이번 시즌 전 경기(홈+원정 전부)를 스코어만 보고 승/무/패로 센다.
+    venue_counts는 그중 '오늘과 같은 장소'(오늘 홈이면 홈경기, 원정이면 원정경기)에서만
+    다시 센 값 — 화면·엑셀이 '5(2)'처럼 총계(장소별) 형태로 보여주는 재료다.
+    points는 승점(승3·무1·패0) 합계 — 홈+원정 전체 기준(장소를 안 가린다), '합' 칸의
+    괄호 안 숫자로 쓴다."""
     if not team:
         return None
-    today_fav = _team_is_fav(today_row, team)
-    if today_fav is None:
-        return None
-    counts = {"핸승": 0, "핸무": 0, "무": 0, "역": 0}
+    counts = {"승": 0, "무": 0, "패": 0}
+    venue_counts = {"승": 0, "무": 0, "패": 0}
     total = 0
+    venue_total = 0
+    points = 0
     for m in matches or []:
-        if _team_is_fav(m, team) != today_fav:
+        hs, a_s = _num(m.get("HS")), _num(m.get("AS"))
+        if hs is None or a_s is None:
             continue
-        rt = _num(m.get("RT"))
-        if rt is None or int(rt) not in _RT_LABEL:
-            continue
-        counts[_RT_LABEL[int(rt)]] += 1
+        is_home = str(m.get("HT") or "").strip() == team
+        mine, theirs = (hs, a_s) if is_home else (a_s, hs)
+        outcome = "승" if mine > theirs else ("패" if mine < theirs else "무")
+        counts[outcome] += 1
         total += 1
-    return {"fav": today_fav, "counts": counts, "total": total}
+        points += _SEASON_POINTS[outcome]
+        if is_home == is_home_today:
+            venue_counts[outcome] += 1
+            venue_total += 1
+    return {
+        "counts": counts, "total": total, "points": points,
+        "venue_counts": venue_counts, "venue_total": venue_total,
+    }
 
 
-def _season_side_text(side_label, rec):
-    if not rec:
-        return f"{side_label} 정배 판정 불가"
-    role = "정" if rec["fav"] else "역"
-    if rec["total"] == 0:
-        return f"{side_label}({role}) 이번 시즌 표본 없음"
-    c = rec["counts"]
-    return f"{side_label}({role}) 핸승({c['핸승']}) 핸무({c['핸무']}) 무({c['무']}) 역({c['역']})"
+def _season_side_text(side_label, rec, is_home_today):
+    if not rec or rec["total"] == 0:
+        return f"{side_label} 이번 시즌 표본 없음"
+    c, v = rec["counts"], rec["venue_counts"]
+    venue_word = "홈" if is_home_today else "원정"
+    return (f"{side_label} 승{c['승']}({v['승']}) 무{c['무']}({v['무']}) 패{c['패']}({v['패']}) "
+            f"— 괄호는 {venue_word}경기 기준. 합 {rec['total']}경기(승점 {rec['points']})")
 
 
-def _season_row(side_label, rec):
+def _season_row(side_label, rec, is_home_today):
     """화면이 표로 그릴 수 있게 구조화한 한 줄 — value_text(문장)와 같은 내용을
-    행/열이 맞는 표로도 보여주기 위한 것(가독성: 숫자를 나열식 문장 대신 표로)."""
+    행/열이 맞는 표로도 보여주기 위한 것(가독성: 숫자를 나열식 문장 대신 표로).
+    counts['승']/['무']/['패'] = [총계, 오늘과 같은 장소(홈/원정)에서 나온 것] — 화면은
+    '5(2)'로 그린다. counts['합']만 예외로 [총 경기 수, 승점 합계](장소 구분 없음)다."""
+    venue_label = "홈" if is_home_today else "원정"
     if not rec:
-        return {"side": side_label, "role": None, "total": 0, "counts": None}
+        return {"side": side_label, "venue": venue_label, "counts": None}
+    c, v = rec["counts"], rec["venue_counts"]
     return {
         "side": side_label,
-        "role": "정" if rec["fav"] else "역",
-        "total": rec["total"],
-        "counts": rec["counts"],
+        "venue": venue_label,
+        "counts": {
+            "승": [c["승"], v["승"]],
+            "무": [c["무"], v["무"]],
+            "패": [c["패"], v["패"]],
+            "합": [rec["total"], rec["points"]],
+        },
     }
 
 
@@ -608,20 +609,21 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master",
             "dir": 0, "adjust": 0.0,
         })
 
-    # ── ④ 시즌전적: 홈팀·원정팀 각각, 이번 시즌 '오늘과 같은 정배/역배 구도'였던
-    # 경기만 추려 핸디캡 결과를 센다. 상대전적처럼 표본이 갈리는 조건이라 계산에는
-    # 안 넣고 참고용으로만 보여준다(상대전적만큼 검증되지 않았고, 시즌 초반엔 표본이
-    # 금방 말라 신뢰하기 어렵다).
+    # ── ④ 시즌전적: 홈팀·원정팀 각각, 이번 시즌 전 경기(홈+원정 전부)를 스코어만
+    # 보고 승/무/패로 센다. 괄호 값은 그중 '오늘과 같은 장소'(홈이면 홈경기,
+    # 원정이면 원정경기)에서만 나온 것 — 참고용이라 확률 계산에는 안 넣는다.
     ht_name = str(row.get("HT") or "").strip()
     at_name = str(row.get("AT") or "").strip()
-    home_rec = _season_record(row, (season_matches or {}).get("home"), ht_name)
-    away_rec = _season_record(row, (season_matches or {}).get("away"), at_name)
-    season_text = f"{_season_side_text('홈', home_rec)}\n{_season_side_text('원정', away_rec)}"
+    home_rec = _season_record((season_matches or {}).get("home"), ht_name, True)
+    away_rec = _season_record((season_matches or {}).get("away"), at_name, False)
+    season_text = (f"{_season_side_text('홈', home_rec, True)}\n"
+                   f"{_season_side_text('원정', away_rec, False)}")
     signals.append({
         "key": "season", "label": "시즌전적", "state": "info",
         "value_text": season_text,
-        "rows": [_season_row("홈", home_rec), _season_row("원", away_rec)],
-        "note": "오늘과 같은 정배/역배 구도였던 이번 시즌 경기만 모은 값 — 확률 계산에는 반영하지 않습니다",
+        "rows": [_season_row("홈", home_rec, True), _season_row("원", away_rec, False)],
+        "note": "이번 시즌 전체 경기의 승/무/패 — 괄호는 그중 오늘과 같은 장소(홈/원정)에서 "
+                "나온 값(합 칸만 예외로 괄호가 승점). 확률 계산에는 반영하지 않습니다",
         "dir": 0, "adjust": 0.0,
     })
 

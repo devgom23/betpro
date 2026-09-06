@@ -1456,10 +1456,12 @@ def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
     }
 
 
-def _season_matches(total_df: pd.DataFrame, team: str, season) -> list:
+def _season_matches(total_df: pd.DataFrame, team: str, season, round_, no) -> list:
     """종합픽의 '시즌전적' 신호용 — team이 이번 시즌(season)에 홈/원정 상관없이 치른
-    경기 원본 목록. 정배/역배 판정과 핸디캡 결과 집계는 pick_ai.py가 한다(여기선 그
-    판단에 필요한 원본 칼럼만 추려서 넘긴다)."""
+    경기 중 '이 경기 직전까지'만 원본 목록으로 준다. standings.recent10_before와 같은
+    규칙이다 — 안 그러면 지금 보는 경기 자신이나 그 이후 라운드 결과까지 시즌전적에
+    섞여 들어간다(2026-09-06, 사용자가 지적). 승/무/패 집계(스코어만 봄)는
+    pick_ai.py가 한다(여기선 그 판단에 필요한 원본 칼럼만 추려서 넘긴다)."""
     t = str(team).strip()
     if not t or total_df.empty or "HT" not in total_df.columns or "AT" not in total_df.columns:
         return []
@@ -1471,7 +1473,14 @@ def _season_matches(total_df: pd.DataFrame, team: str, season) -> list:
     m = total_df[mask]
     if m.empty:
         return []
-    cols = [c for c in ["S", "R", "HT", "AT", "RT", "KW", "KL", "FW", "FL"] if c in m.columns]
+    if "R" in m.columns and "No" in m.columns:
+        cutoff = standings.chrono_key(season, round_, no)
+        before = [standings.chrono_key(s, r, n) < cutoff
+                  for s, r, n in zip(m["S"], m["R"], m["No"])]
+        m = m[before]
+        if m.empty:
+            return []
+    cols = [c for c in ["S", "R", "HT", "AT", "HS", "AS"] if c in m.columns]
     return DATA.df_to_records(m[cols])
 
 
@@ -1536,9 +1545,10 @@ def pick_ai(body: PickAiBody, user: dict = Depends(get_current_user)):
         # 목록(matches)이 전부 있어야 한다.
         h2h = _head_to_head_calc(src_df, ht, at, cross=True, limit=500)
         season = body.row.get("S")
+        round_, no = body.row.get("R"), body.row.get("No")
         season_matches = {
-            "home": _season_matches(src_df, ht, season),
-            "away": _season_matches(src_df, at, season),
+            "home": _season_matches(src_df, ht, season, round_, no),
+            "away": _season_matches(src_df, at, season, round_, no),
         }
     result = PICKAI.compute(body.row, h2h, scope=body.scope, season_matches=season_matches, code=body.code)
     # 상세보기의 "상대전적" 카드가 여기서 이미 구한 h2h를 그대로 재사용하도록 함께
@@ -1640,8 +1650,8 @@ def match_excel_download(code: str,
     # 시즌전적 — /api/pick_ai가 계산하는 것과 완전히 같은 함수(PICKAI.compute)를
     # 같은 입력으로 불러서 쓴다. h2h는 season 신호 계산에 안 쓰이지만 인터페이스가
     # 같아 그대로 넘긴다.
-    season_matches = {"home": _season_matches(h2h_df, ht, row.get("S")),
-                      "away": _season_matches(h2h_df, at, row.get("S"))}
+    season_matches = {"home": _season_matches(h2h_df, ht, row.get("S"), row.get("R"), row.get("No")),
+                      "away": _season_matches(h2h_df, at, row.get("S"), row.get("R"), row.get("No"))}
     pick_result = PICKAI.compute(row, h2h, scope=scope, season_matches=season_matches, code=code)
     season_signal = next((s for s in pick_result.get("signals", []) if s.get("key") == "season"), None)
     season_rows = season_signal.get("rows") if season_signal else None

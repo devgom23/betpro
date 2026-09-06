@@ -744,11 +744,30 @@ function StreakLine({ data, align }) {
 // 서버가 준 목록(recent10)은 화면 칸과 같은 순서라 자리만 맞춰 꺼내 쓴다. 다만 칸은
 // 항상 10개인데 경기가 그보다 적을 수 있어(시즌 초반), 원정팀 쪽은 뒤에서부터 채우는
 // recentCells의 offset을 똑같이 적용해 자리를 맞춘다.
+// 팀명 옆에 적을 배당 — 해외배당(FW/FL)만 쓴다. HeadToHeadResult.jsx의 teamOdds와
+// 같은 이유다: 국내·해외가 갈릴 때 해외 쪽이 더 자주 맞아(6대리그 실측 +1.8%p)
+// 상대전적 표가 이미 해외로 통일했다 — 여기도 같은 기준을 따라야 두 화면이
+// 같은 경기에 다른 배당을 보여주는 일이 없다.
+function recentTeamOdds(game, isHome) {
+  const n = Number(isHome ? game.FW : game.FL)
+  return Number.isFinite(n) && n > 0 ? n.toFixed(2) : null
+}
+
+// 그 경기의 정배(배당이 낮은 쪽)가 홈이었나 원정이었나 — HeadToHeadResult.jsx의
+// favSide와 같은 규칙. 동배(FW===FL)거나 배당이 없으면 null(색 없이 표시).
+function recentFavSide(game) {
+  const a = Number(game.FW)
+  const b = Number(game.FL)
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0 || a === b) return null
+  return a < b ? 'home' : 'away'
+}
+
 // 칸에 마우스를 올렸을 때 뜨는 말풍선.
-//   26-08-24 (일) 00:30 / D
-//   뉴캐슬 2 - 2 리버풀 (무)
+//   26-08-24 (일) 00:30 / D (무)
+//   뉴캐슬(1.85) 2 - 2 리버풀(4.20)
 // 브라우저 기본 툴팁(title)으로는 밑줄·색을 못 넣어서 직접 그린다. team(그 칸의 주인)
 // 이름에 밑줄을 긋고, 이긴 쪽 점수는 앱의 기존 규칙과 같은 빨강(.winner-score)으로.
+// (역)/(무) 같은 RT 표시는 첫 줄 WDL 글자 옆에 붙인다 — 스코어 줄은 팀명(배당)만 본다.
 function RecentTip({ game, team, rect }) {
   if (!game || !rect) return null
   const g = (v) => (v === null || v === undefined ? '-' : Math.trunc(v))
@@ -756,7 +775,17 @@ function RecentTip({ game, team, rect }) {
   const as_ = g(game.AS)
   const win = hs === '-' || as_ === '-' ? null : hs > as_ ? 'home' : as_ > hs ? 'away' : null
   const rt = rtLabel(game.RT)
-  const name = (t) => (t === team ? <u>{t}</u> : t)
+  const fav = recentFavSide(game)
+  const name = (t, isHome) => {
+    const odds = recentTeamOdds(game, isHome)
+    const favCls = fav ? (fav === (isHome ? 'home' : 'away') ? ' recent-tip-odds-fav' : ' recent-tip-odds-dog') : ''
+    return (
+      <>
+        {t === team ? <u>{t}</u> : t}
+        {odds && <span className={`recent-tip-odds${favCls}`}>({odds})</span>}
+      </>
+    )
+  }
   return (
     <div
       className="recent-tip"
@@ -766,14 +795,14 @@ function RecentTip({ game, team, rect }) {
         {[formatDt(game.DT), formatTime(game.TM)].filter(Boolean).join(' ')}
         <span className="recent-tip-sep">/</span>
         <b className={`recent-tip-wdl recent-${game.letter}`}>{game.letter}</b>
+        {rt && <span className="recent-tip-rt"> ({rt})</span>}
       </div>
       <div className="recent-tip-score">
-        {name(game.HT)}{' '}
+        {name(game.HT, true)}{' '}
         <b className={win === 'home' ? 'winner-score' : undefined}>{hs}</b>
         {' - '}
         <b className={win === 'away' ? 'winner-score' : undefined}>{as_}</b>
-        {' '}{name(game.AT)}
-        {rt && <span className="recent-tip-rt"> ({rt})</span>}
+        {' '}{name(game.AT, false)}
       </div>
     </div>
   )
@@ -1588,34 +1617,133 @@ function MyPickBar({ row, onSavePick }) {
   )
 }
 
-// 시즌전적처럼 '홈/원정 × 핸승/핸무/무/역' 숫자가 나열식 문장으로 나오면 자릿수가
+// 승/무/패 칸 색 — 상대전적(HeadToHeadResult.jsx)의 col-w/col-d/col-l과 같은 축
+// (승=파랑/무=회색/패=빨강)을 이 표에도 그대로 맞춘다. '합'은 그 결과들의 합계일
+// 뿐이라 색을 넣지 않는다.
+const SEASON_COL_CLASS = { 승: 'col-w', 무: 'col-d', 패: 'col-l', 합: '' }
+
+// 시즌전적처럼 '홈/원정 × 승/무/패/합' 숫자가 나열식 문장으로 나오면 자릿수가
 // 안 맞아 읽기 힘들다 — 표로 그려서 라벨(홈/원정) 폭을 맞추고 숫자 칸에 구분선을 준다.
+// 승/무/패 칸 값은 "5(2)" 꼴 — 5는 그 팀이 이번 시즌 홈+원정 합쳐 거둔 횟수, (2)는 그중
+// 오늘과 같은 장소(이 줄이 홈이면 홈경기, 원정이면 원정경기)에서 나온 횟수(pick_ai.py
+// _season_row 참고). '합' 칸만 괄호 뜻이 다르다 — "2(4)"는 2경기를 치렀고 그 경기들의
+// 승점 합이 4점(장소 구분 없음)이라는 뜻. 자세한 정의는 SeasonRecordLegend 팝업으로.
 function SeasonRowsTable({ rows }) {
   return (
     <table className="detail-table pick-season-table">
       <thead>
         <tr>
           <th className="row-label" />
-          <th>핸승</th>
-          <th>핸무</th>
-          <th>무</th>
-          <th>역</th>
+          <th className="col-w">승</th>
+          <th className="col-d">무</th>
+          <th className="col-l">패</th>
+          <th>합</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((r) => (
           <tr key={r.side}>
-            <td className="row-label">
-              {r.side}
-              {r.role ? `(${r.role})` : ''}
-            </td>
-            {['핸승', '핸무', '무', '역'].map((k) => (
-              <td key={k}>{r.counts ? r.counts[k] : '-'}</td>
-            ))}
+            <td className="row-label">{r.venue}</td>
+            {['승', '무', '패', '합'].map((k) => {
+              const pair = r.counts ? r.counts[k] : null
+              return (
+                <td key={k} className={SEASON_COL_CLASS[k]}>
+                  {pair ? (
+                    <>
+                      {pair[0]}
+                      <span className="pick-season-venue">({pair[1]})</span>
+                    </>
+                  ) : '-'}
+                </td>
+              )
+            })}
           </tr>
         ))}
       </tbody>
     </table>
+  )
+}
+
+// 시즌전적 정의 팝업 — 다른 참고표(DirectionScopeLegend 등)와 같은 help-legend 꼴.
+// 2026-09-06 개편: '오늘과 같은 정배/역배 구도' 필터를 없애고, 스코어만 보는 단순
+// 승/무/패(+합계)로 바꿨다 — 예전 버전(핸디캡 결과를 정배/역배 조건으로 거르던 것)이
+// '홈'/'원정' 줄 이름과 실제로 세는 범위가 어긋나 보여 헷갈린다는 지적이 있었다.
+// api/pick_ai.py _season_record의 실제 동작을 그대로 옮겨 적었다.
+function SeasonRecordLegend({ onClose }) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop help-legend-back" onClick={onClose}>
+      <div className="modal-card help-legend-card" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
+        <h2 className="modal-title">📋 시즌전적 — 정확히 무엇을 세는 표인가</h2>
+
+        <p className="help-legend-title">
+          ① 배당·핸디캡은 안 봅니다 — 스코어만 보고 가르는 &apos;승/무/패&apos;입니다
+        </p>
+        <p className="help-legend-note">
+          핸승·핸무 같은 핸디캡 결과가 아니라, 그 경기 스코어(HS·AS)만 비교해서 이겼는지·
+          비겼는지·졌는지를 봅니다. &apos;합&apos;은 그 줄에 잡힌 경기 수(승+무+패)이고, 괄호
+          안에는 그 경기들의 <b>승점</b>(승 3점 · 무 1점 · 패 0점, 축구 표준 방식)을 적습니다.
+          지금 이 경기 <b>바로 직전까지의 경기 정보만 포함합니다</b> — 이 경기 자신과 이후에
+          벌어진 경기 결과는 섞지 않습니다.
+        </p>
+
+        <p className="help-legend-title">
+          ② &apos;홈&apos;·&apos;원정&apos; 줄은 오늘 경기의 홈팀/원정팀을 가리킬 뿐,
+          과거 경기를 홈경기로 거르지 않습니다
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>표의 줄</th><th>누구</th><th>실제로 모으는 과거 경기</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>홈</b></td><td>오늘 경기의 홈팀</td>
+              <td>그 팀이 이번 시즌 뛴 <b>홈+원정 경기 전부</b></td>
+            </tr>
+            <tr>
+              <td><b>원정</b></td><td>오늘 경기의 원정팀</td>
+              <td>그 팀이 이번 시즌 뛴 <b>홈+원정 경기 전부</b></td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          &apos;홈&apos; 줄이라고 그 팀이 <b>홈에서 뛴 경기만</b> 모으는 게 아닙니다 — 원정 경기까지
+          전부 봅니다. 표의 &apos;홈&apos;·&apos;원정&apos;은 오늘 이 경기에서 누가 홈이고 누가 원정인지
+          가리키는 이름표일 뿐, 과거 경기의 장소와는 무관합니다.
+        </p>
+
+        <p className="help-legend-title">③ 칸에 적힌 &quot;5(2)&quot;는 무슨 뜻인가</p>
+        <p className="help-legend-note">
+          <b>5</b> = 그 팀이 이번 시즌 홈+원정 합쳐서 그 결과(승/무/패)를 거둔 총 횟수.{' '}
+          <b>(2)</b> = 그 5번 중 <b>오늘과 같은 장소</b>에서 나온 횟수 — &apos;홈&apos; 줄이면 그
+          팀이 홈경기에서 거둔 것만, &apos;원정&apos; 줄이면 원정경기에서 거둔 것만 다시 셉니다.
+          예 — 오늘 뉴캐슬(홈)의 승 칸이 <b>5(2)</b>라면: 뉴캐슬은 이번 시즌 홈+원정 합쳐 5승을
+          했고, 그중 2승이 홈경기에서 나온 승리라는 뜻입니다.
+        </p>
+        <p className="help-legend-note">
+          &apos;합&apos; 칸만 괄호의 뜻이 다릅니다 — 괄호 안이 &apos;같은 장소 횟수&apos;가 아니라{' '}
+          <b>승점</b>(승3·무1·패0, 장소 구분 없이 이번 시즌 전체)입니다. 예를 들어 &apos;합&apos;
+          칸이 <b>2(4)</b>라면: 이번 시즌 홈+원정 합쳐 2경기를 치렀고, 그 2경기에서 딴 승점이
+          4점(1승1무)이라는 뜻입니다.
+        </p>
+
+        <p className="help-legend-title">④ 확률 계산에는 반영되지 않습니다</p>
+        <p className="help-legend-note">
+          참고용 표입니다 — &apos;종합픽&apos; 확률 계산에는 넣지 않고 화면에만 보여줍니다.
+          시즌 초반엔 표본이 금방 말라(경기 수 자체가 적어) 믿고 보기 어렵습니다.
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -2537,6 +2665,7 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
   const matchKey = [row.S, row.R, row.No, row.HT, row.AT].join('|')
   // 지표별 표본은 기본이 '접힘' — 판단에 쓰는 9줄만 보여주고, 펼치면 27줄 전체가 나온다.
   const [sampleExpanded, setSampleExpanded] = useState(false)
+  const [showSeasonLegend, setShowSeasonLegend] = useState(false)
   const [pickData, setPickData] = useState(null)
   const [pickError, setPickError] = useState('')
   // 종합분석 카드를 화면에서 뺀 뒤로 이 응답에서 실제로 쓰는 건 이 둘과 streaks뿐이다.
@@ -2624,6 +2753,7 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
   }
 
   return (
+    <>
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="detail-header-actions">
@@ -2704,10 +2834,17 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
                 {/* note 원문은 한 문장이 길어(‘오늘과 같은 정배/역배 구도였던 …’) 제목 줄이
                     두 줄로 흘러 옆 폼 지표를 밀어낸다 — 짧게 줄이고 원문은 title로 남긴다. */}
                 <h3>
-                  시즌전적
+                  <button
+                    type="button"
+                    className="help-btn"
+                    onClick={() => setShowSeasonLegend(true)}
+                    title="시즌전적이 정확히 무엇을 세는 표인지 보기"
+                  >
+                    시즌전적 <span className="help-mark">?</span>
+                  </button>
                   {seasonSig && seasonSig.note && (
                     <span className="detail-section-note" title={seasonSig.note}>
-                      같은 정배 구도였던 이번 시즌 경기
+                      숫자(괄호=같은 장소)
                     </span>
                   )}
                 </h3>
@@ -2810,5 +2947,7 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
         </div>
       </div>
     </div>
+    {showSeasonLegend && <SeasonRecordLegend onClose={() => setShowSeasonLegend(false)} />}
+    </>
   )
 }

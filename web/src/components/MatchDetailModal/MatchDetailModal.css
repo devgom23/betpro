@@ -1278,6 +1278,29 @@
   white-space: nowrap;
 }
 
+/* "5(2)"의 괄호 부분 — 총계(5)보다 흐리게, 오늘과 같은 장소에서 나온 값이라는 표시 */
+.pick-season-venue {
+  margin-left: 1px;
+  color: var(--text-muted);
+}
+
+/* 승/무/패 칸 색 — 상대전적(HeadToHeadResult.jsx)의 col-w/col-d/col-l과 같은 톤
+   (옅은 배경 틴트 + 진한 글씨, --chip-* 토큰). 이 표 안에서만 적용되게 이름을 좁힌다. */
+.pick-season-table .col-w {
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+}
+
+.pick-season-table .col-d {
+  background: var(--chip-gray-bg);
+  color: var(--chip-gray-fg);
+}
+
+.pick-season-table .col-l {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+}
+
 /* 해외지표·국내지표 계단식 보정 근거 표 — 시즌전적 표와 같은 톤(작은 글씨·좁은 여백)으로
    승/승+패/승+무+패/통합승 각 단계의 핸승/핸무/무/역을 보여준다. 두 카드가 같은 클래스를
    쓰지만 표본 행 수·글자 길이가 서로 달라서 table-layout:auto면 칸 너비가 카드마다
@@ -1539,6 +1562,26 @@
 .recent-tip-rt {
   color: var(--text-muted);
   font-weight: 400;
+}
+
+/* 팀명 옆 해외배당 — 스코어(굵게·진한 글씨)와 구분되게 작고 흐리게.
+   정배/역배가 갈리면(동배 제외) 앱 전체 축(정배=파랑/역배=빨강, HeadToHeadResult.jsx의
+   h2h-fav-j/y와 같은 토큰)대로 색을 준다. */
+.recent-tip-odds {
+  margin-left: 2px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.recent-tip-odds-fav {
+  color: var(--chip-blue-fg);
+  font-weight: 700;
+}
+
+.recent-tip-odds-dog {
+  color: var(--chip-red-fg);
+  font-weight: 700;
 }
 
 .recent-home-swatch {

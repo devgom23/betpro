@@ -570,17 +570,16 @@ def build_match_excel(row: dict, h2h: dict, scope: str = "master",
         ws.cell(row=rr, column=_RIGHT_COL, value="시즌전적").font = _BOLD
         rr += 1
         ws.cell(row=rr, column=_RIGHT_COL,
-               value="오늘과 같은 정배/역배 구도였던 이번 시즌 경기만 모은 값입니다.")
+               value="이번 시즌 전체 경기의 승/무/패입니다. 괄호는 그중 오늘과 같은 장소"
+                     "(홈/원정)에서 나온 값입니다(합 칸만 예외로 괄호가 승점).")
         rr += 1
-        rr = write_row(["", "핸승", "핸무", "무", "역"], rr, start_col=_RIGHT_COL,
+        rr = write_row(["", "승", "무", "패", "합"], rr, start_col=_RIGHT_COL,
                        font=_HEADER_FONT, fill=_HEADER_FILL, align=_CENTER)
         for sr in season_rows:
-            side_label = sr.get("side") or ""
-            role = sr.get("role")
-            label = f"{side_label}({role})" if role else side_label
+            label = sr.get("side") or ""
             counts = sr.get("counts") or {}
-            rr = write_row([label, counts.get("핸승", "-"), counts.get("핸무", "-"),
-                           counts.get("무", "-"), counts.get("역", "-")], rr, start_col=_RIGHT_COL)
+            cells = [f"{v[0]}({v[1]})" if (v := counts.get(k)) else "-" for k in ("승", "무", "패", "합")]
+            rr = write_row([label, *cells], rr, start_col=_RIGHT_COL)
         rr += 1
 
     ws.cell(row=rr, column=_RIGHT_COL, value="폼 지표").font = _BOLD

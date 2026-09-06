@@ -280,7 +280,7 @@ def _attach_one_season(sdf, out):
 # 집계 범위는 '그 경기 직전까지' — 이 파일의 다른 지표들과 같은 원칙이라, 과거 경기를
 # 다시 열어봐도 그 당시 기준 숫자가 나온다(그 경기 이후 기록은 안 섞인다).
 
-def _chrono_key(s, r, no):
+def chrono_key(s, r, no):
     """시간순 정렬 키. DT는 70%가 비어 있어 못 쓰므로 시즌→라운드→경기번호로 세운다.
     시즌 문자열은 '09-10'~'26-27'(유럽)이든 '2013'~'2026'(K리그)이든 그냥 문자열로
     비교해도 연도순이 맞다."""
@@ -300,7 +300,9 @@ def recent10_before(df, team, season, round_, no, newest_first=False):
         · 그 경기 '직전까지'만 (자기 자신과 그 이후는 제외)
         · 결과가 없는 경기(예정·취소·연기)는 건너뛴다
         · 홈팀은 과거→최신, 원정팀은 최신→과거(newest_first=True)
-    반환: [{DT, TM, HT, HS, AS, AT, RT, is_home, letter}, ...] 최대 10개.
+    반환: [{DT, TM, HT, HS, AS, AT, RT, FW, FL, is_home, letter}, ...] 최대 10개.
+    FW/FL(해외배당)을 같이 주는 이유는 HeadToHeadResult.jsx와 같다 — 국내·해외가 갈릴 때
+    해외 쪽이 더 자주 맞아(6대리그 실측 +1.8%p) 팀명 옆 배당 표시를 해외로 통일했다.
     """
     t = str(team or "").strip()
     if not t or df is None or df.empty:
@@ -315,11 +317,11 @@ def recent10_before(df, team, season, round_, no, newest_first=False):
     if mine.empty:
         return []
 
-    cutoff = _chrono_key(season, round_, no)
+    cutoff = chrono_key(season, round_, no)
     get = lambda r, c: (r[c] if c in mine.columns else None)  # noqa: E731
     rows = []
     for _, r in mine.iterrows():
-        key = _chrono_key(r["S"], r["R"], r["No"])
+        key = chrono_key(r["S"], r["R"], r["No"])
         if key >= cutoff:
             continue
         a, b = _score(r["HS"]), _score(r["AS"])
@@ -331,6 +333,7 @@ def recent10_before(df, team, season, round_, no, newest_first=False):
             "DT": _plain(get(r, "DT")), "TM": _plain(get(r, "TM")),
             "HT": str(r["HT"]).strip(), "AT": str(r["AT"]).strip(),
             "HS": a, "AS": b, "RT": _plain(get(r, "RT")),
+            "FW": _plain(get(r, "FW")), "FL": _plain(get(r, "FL")),
             "is_home": is_home,
             "letter": "W" if mine_ > theirs else "L" if mine_ < theirs else "D",
         }))
@@ -369,12 +372,12 @@ def max_streaks_before(df, team, season, round_, no):
     if mine.empty:
         return empty
 
-    cutoff = _chrono_key(season, round_, no)
+    cutoff = chrono_key(season, round_, no)
     rows = []
     for s, r, n, h, hs, as_ in zip(mine["S"], mine["R"], mine["No"],
                                    mine["HT"].astype(str).str.strip(),
                                    mine["HS"], mine["AS"]):
-        key = _chrono_key(s, r, n)
+        key = chrono_key(s, r, n)
         if key >= cutoff:          # 그 경기 자신과 그 이후는 제외
             continue
         a, b = _score(hs), _score(as_)
