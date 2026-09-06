@@ -67,16 +67,11 @@ function formStyle(v) {
 }
 
 // ⚠ 순서가 계산에 영향을 준다 — weightedAnalysis는 '이 배열에서 살아남은 순서'로
-// 가중치를 매긴다(뒤에 있을수록 더 큼). 국통)·해통) 승+패/승+무+패(TK-WL 등)는
-// 판단 9줄(favSampleCodes)에 아예 없어 그 계산에서 항상 걸러지므로, 이 넷의 자리를
-// 옮겨도(2026-09-05, 지표별 표본 기본 화면에 보여주려고) 나머지 9줄의 상대 순서·
-// 가중치는 그대로다 — filter는 걸러지는 원소와 무관하게 남는 원소의 순서를 지킨다.
-//
-// ⚠ 반대로 승=홈팀·패=원정팀(K-W-HT 등)은 판단 9줄에 포함되는 줄이라, 2026-09-06
-// 읽기 순서를 위해 승/패 바로 아래로 옮기면서 '국)분석·해)분석' 가중평균의 상대
-// 가중치도 같이 바뀌었다(승=홈팀·패=원정팀은 더 앞으로 와서 가중치가 줄고, 그
-// 뒤에 있던 플핸·승+패·승+무+패는 한 칸씩 밀려 가중치가 늘었다) — 위 TK-WL류와
-// 달리 이건 계산 결과가 실제로 달라지는 변경이다.
+// 가중치를 매긴다(뒤에 있을수록 더 큼). 단, 판단 7줄(favSampleCodes)에 없는 지표는
+// 그 계산에서 항상 걸러지므로 자리를 옮겨도 남는 줄의 상대 순서·가중치는 그대로다
+// — filter는 걸러지는 원소와 무관하게 남는 원소의 순서를 지킨다. 지금 걸러지는 건
+// 국통)·해통) 승+패/승+무+패(TK-WL 등, 2026-09-05 기본 화면에 보여주려고 끼워 둔 넷)와
+// 승=홈팀·패=원정팀(2026-09-06 판단에서 뺐다 — favSampleCodes 주석 참고)이다.
 const SAMPLE_INDICATORS = [
   ['K-W', '국) 승'], ['K-L', '국) 패'],
   ['K-W-HT', '국) 승=홈팀'], ['K-L-AT', '국) 패=원정팀'],
@@ -93,12 +88,12 @@ const SAMPLE_INDICATORS = [
   ['F-WDL', '해) 승+무+패'], ['TF-WDL', '해통) 승+무+패'],
   ['TF-W', '해통) 승'], ['TF-L', '해통) 패'],
 ]
-// 지표별 표본 기본 화면(접힘)에서 판단 9줄과 함께 항상 보여주는 4줄 — 판정 계산에는
-// 안 쓴다(판단 9줄에 못 들어감). '국)분석/해)분석' 줄은 이 4줄과 무관하게 계산해야
+// 지표별 표본 기본 화면(접힘)에서 판단 7줄과 함께 항상 보여주는 4줄 — 판정 계산에는
+// 안 쓴다(판단 7줄에 못 들어감). '국)분석/해)분석' 줄은 이 4줄과 무관하게 계산해야
 // 화면 숫자가 실제 방향성·판정과 어긋나지 않는다(SampleTable의 calcLines 참고).
 const SAMPLE_DEFAULT_EXTRA = new Set(['TK-WL', 'TK-WDL', 'TF-WL', 'TF-WDL'])
 // 이 8줄이 '방향성 (검토용)' 표(DirectionScopeTable의 SCOPE_CODES)가 그대로 쓰는
-// 재료다 — 판정(9줄)이 쓰는 지표와는 다른 계산이라, 이름을 보라색으로 구분해
+// 재료다 — 판정(7줄)이 쓰는 지표와는 다른 계산이라, 이름을 보라색으로 구분해
 // 어느 지표가 어느 표에 쓰이는지 한눈에 갈리게 한다(2026-09-05).
 const SAMPLE_SCOPE_CODES = new Set(['K-WL', 'K-WDL', 'TK-WL', 'TK-WDL', 'F-WL', 'F-WDL', 'TF-WL', 'TF-WDL'])
 
@@ -904,20 +899,17 @@ function maxOnlyClass(vals, i) {
 // TK-*/TF-* ("국/통", "해/통")는 그 리그를 통합DB(6대리그 등 여러 리그 합산)와
 // 섞은 지표다. 내 데이터는 리그 하나만 있어 통합 대상이 없으므로 항상 국내/해외
 // 지표와 값이 완전히 같아진다 — 의미 없는 중복이라 내 데이터에서는 아예 뺀다.
-// 지표별 표본에서 '판단에 쓰는 9줄'을 테두리로 짚어준다.
 // 통합(TF-*/TK-*)은 6대리그를 합쳐 표본은 크지만 그만큼 리그 특성이 뭉개져서 뺐고,
-// 리그 안에서만 센 지표만 남긴다. 한 경기에서 실제로 강조되는 건 아래 9줄이다.
+// 리그 안에서만 센 지표만 남긴다. 지표별 표본 기본 화면에 나오는 게 아래 7줄이다.
 //
-//   방향에 따라 갈리는 4줄   해)승·패   해)정배팀   국)승·패   국)정배팀
+//   방향에 따라 갈리는 2줄   해)승·패   국)승·패
 //   방향과 무관한 4줄        해)승+패   해)승+무+패   국)승+패   국)승+무+패
 //   역할 기준 1줄            국)플핸
 //
 // [방향에 따라 갈리는 줄] 배당이 낮은 쪽이 정배다. 국내는 KW/KL, 해외는 FW/FL로 각각
 // 따로 판정한다 — 둘이 서로 다른 팀을 정배로 보는 경기가 실측 4.25%(16,748경기 중
 // 711건) 있는데, 그 엇갈림 자체가 "국내와 해외 시장이 갈렸다"는 볼 만한 신호라
-// 하나로 합치지 않는다. 승=홈팀은 "홈팀이 정배일 때 승"만 모은 지표라 홈팀이 정배가
-// 아니면 이 경기와 무관하고, 패=원정팀도 마찬가지다 — 그래서 기준팀(홈/원정) 자체가
-// 정배인지로 따로 판정한다.
+// 하나로 합치지 않는다.
 //
 // [방향과 무관한 줄] 승+패·승+무+패는 승·패 배당을 동시에 맞추는 조건이라 정배가
 // 어느 쪽이든 표본이 그대로다. 그래서 조건 없이 항상 넣는다.
@@ -925,18 +917,24 @@ function maxOnlyClass(vals, i) {
 // [국)플핸] 나머지가 "홈 칸이냐 원정 칸이냐"(자리 기준)인 것과 달리 이것만 "정배냐
 // 언더독이냐"(역할 기준)로 찾는다 — 언더독 쪽 핸디배당이 같고 언더독이 같은 편인 경기.
 // 자리 기준이 아니라서 정배 방향과 무관하게 항상 대상이다.
+//
+// ⚠ 2026-09-06 '승=홈팀·패=원정팀'을 여기서 뺐다(9줄 → 7줄). 조건이 가장 빡세 표본이
+// 늘 제일 적은 줄이라, 배당 4칸에서는 그 줄 하나가 결과를 뒤집을 만큼 비중이 과했다
+// (utils/verdictCalc.js의 oddsScopeCodes 주석에 실측 전부). 여기 '국)분석·해)분석'
+// 줄에서는 재료가 4~5줄이라 원래도 영향이 작아, 빼도 정확도가 그대로였다 —
+// 국)분석 초기 79.68%→79.67%(z=-0.11)·배변 78.67%→78.73%(z=0.50),
+// 해)분석 초기 80.38%→80.44%(z=0.53)·배변 78.93%→79.09%(z=1.20).
+// 손해가 없어서, 배당 4칸과 재료를 같게 맞추는 쪽(같은 지표를 같은 이유로 뺀다)을 골랐다.
 function favSampleCodes(row) {
   const out = new Set(['F-WL', 'F-WDL', 'K-WL', 'K-WDL', 'K-PL'])
-  const pick = (winKey, loseKey, winCode, loseCode, homeWinCode, awayLoseCode) => {
+  const pick = (winKey, loseKey, winCode, loseCode) => {
     const w = numOrNull(row[winKey])
     const l = numOrNull(row[loseKey])
     if (w === null || l === null || w === l) return   // 배당이 없거나 같으면 정배가 없다
     out.add(w < l ? winCode : loseCode)
-    if (w < l) out.add(homeWinCode)
-    else out.add(awayLoseCode)
   }
-  pick('KW', 'KL', 'K-W', 'K-L', 'K-W-HT', 'K-L-AT')
-  pick('FW', 'FL', 'F-W', 'F-L', 'F-W-HT', 'F-L-AT')
+  pick('KW', 'KL', 'K-W', 'K-L')
+  pick('FW', 'FL', 'F-W', 'F-L')
   return out
 }
 
@@ -1216,7 +1214,7 @@ function topOutcome(v) {
 }
 
 // row에서 '국) 분석 / 해) 분석'과 같은 4칸을 만든다. SampleTable이 화면에 그리는 값과
-// 어긋나지 않도록, 거기서 쓰는 것과 완전히 같은 재료(판단 9줄 · 같은 순서 · 같은 가중치)를 쓴다.
+// 어긋나지 않도록, 거기서 쓰는 것과 완전히 같은 재료(판단 7줄 · 같은 순서 · 같은 가중치)를 쓴다.
 //   final=false → 초기배당 기준(vals),  final=true → 배변(최종배당) 기준(E_ 컬럼)
 function analysisPair(row, scope, final) {
   const favCodes = favSampleCodes(row)
@@ -1229,7 +1227,7 @@ function analysisPair(row, scope, final) {
   }
   const lines = []
   for (const [code, label] of indicators) {
-    if (!favCodes.has(code)) continue        // 화면 기본값과 같은 '판단에 쓰는 9줄'만
+    if (!favCodes.has(code)) continue        // 화면 기본값과 같은 '판단에 쓰는 7줄'만
     let vals
     if (final) {
       const raw = [1, 2, 3, 4].map((i) => row[`E_${code} ${i}`])
@@ -1349,8 +1347,8 @@ function DirectionSummary({ row, scope }) {
   )
 }
 
-// expanded=false(기본)면 판단에 쓰는 9줄만 보여준다.
-// (2026-09-06: 펼쳤을 때 그 9줄에 테두리를 두르던 강조는 없앴다 — sample-fav-row.)
+// expanded=false(기본)면 판단에 쓰는 7줄만 보여준다.
+// (2026-09-06: 펼쳤을 때 그 줄들에 테두리를 두르던 강조는 없앴다 — sample-fav-row.)
 function SampleTable({ row, scope, expanded }) {
   const favCodes = favSampleCodes(row)
   const indicators = scope === 'user'
@@ -1374,9 +1372,9 @@ function SampleTable({ row, scope, expanded }) {
       eTotal: eVals ? eVals.reduce((a, b) => a + b, 0) : 0,
     }
   })
-  // 화면에 그릴 줄 — 접었을 때는 판단 9줄 + 국통)·해통) 승+패/승+무+패 4줄(2026-09-05
+  // 화면에 그릴 줄 — 접었을 때는 판단 7줄 + 국통)·해통) 승+패/승+무+패 4줄(2026-09-05
   // 추가, SAMPLE_DEFAULT_EXTRA)까지 보여준다. '국)분석/해)분석' 줄은 이 4줄과 무관하게
-  // calcLines(판단 9줄만)로 따로 계산한다 — 안 그러면 이 표의 %가 analysisPair()가
+  // calcLines(판단 7줄만)로 따로 계산한다 — 안 그러면 이 표의 %가 analysisPair()가
   // 만드는 실제 방향성 4칸·판정과 어긋나 보인다(같은 경기인데 표는 A%, 판정은 B%).
   const lines = expanded
     ? allLines
@@ -1398,7 +1396,7 @@ function SampleTable({ row, scope, expanded }) {
   // 접었을 때만 국내/해외 블록 끝에 '분석' 줄을 붙인다. 펼치면 통합지표까지 섞여
   // 들어와 '리그 지표만 본다'는 전제가 깨지므로 그때는 계산하지 않는다(그때는 null).
   // 접혔는데 표본 자체가 없어 null이 나온 경우는 AnalysisRow가 빈칸으로 그려준다.
-  // ⚠ 반드시 calcLines(판단 9줄)로만 계산한다 — lines(화면 표시용)를 쓰면 안 된다.
+  // ⚠ 반드시 calcLines(판단 7줄)로만 계산한다 — lines(화면 표시용)를 쓰면 안 된다.
   const isForeignCode = (c) => /^(F|TF)-/.test(c)
   const domAnalysis = expanded ? null : weightedAnalysis(calcLines.filter((l) => !isForeignCode(l.code)))
   const forAnalysis = expanded ? null : weightedAnalysis(calcLines.filter((l) => isForeignCode(l.code)))
@@ -1762,7 +1760,7 @@ function findSignal(data, key) {
 // /api/pick_ai), 시즌전적과 상대전적 문장만 아래 표 쪽으로 옮겨 붙였다.
 // ── 방향성 검토표 (2026-09-05) ───────────────────────────────────────────
 // 승+패·승+무+패 **두 줄만**으로 리그/통합 × 국/해 × 초기/배변 8칸을 만든다.
-// 지금 화면이 쓰는 방향성 4칸(analysisPair — 정배 방향에 따라 고른 9줄 가중평균)과
+// 지금 화면이 쓰는 방향성 4칸(analysisPair — 정배 방향에 따라 고른 7줄 가중평균)과
 // 재료가 다르다. 어느 쪽이 나은지 눈으로 대조하는 표라, 판정에는 아무 영향도
 // 주지 않는다(읽기만 한다).
 //
@@ -2061,22 +2059,21 @@ function DirectionScopeTable({ row }) {
 }
 
 // ── 배당(판정 자매표, 2026-09-06) ────────────────────────────────────────
-// 판정이 쓰는 9줄 중 방향성(DirectionScopeTable)이 이미 쓰는 승+패·승+무+패
-// (K-WL/K-WDL/F-WL/F-WDL) 4줄을 빼면 남는 나머지 5줄을 같은 꼴(리)국·리)해·
+// 판정이 쓰는 7줄 중 방향성(DirectionScopeTable)이 이미 쓰는 승+패·승+무+패
+// (K-WL/K-WDL/F-WL/F-WDL) 4줄을 빼면 남는 나머지 3줄을 같은 꼴(리)국·리)해·
 // 통)국·통)해 × 초기·배변)로 보여준다. 판정 자체(최종 픽·별점)는 그대로 두고,
 // 이 표는 그 재료 중 방향성에 없는 몫만 따로 뜯어보는 참고표다(판정에는 안 쓴다).
 //
-//   리)국 = 국)승 또는 국)패(정배 방향대로 하나) + 국)플핸(K-PL, 항상) +
-//           승=홈팀 또는 패=원정팀(국내, 정배 방향대로 하나)
-//   리)해 = 해)승 또는 해)패(정배 방향대로 하나) +
-//           승=홈팀 또는 패=원정팀(해외, 정배 방향대로 하나)
+//   리)국 = 국)승 또는 국)패(정배 방향대로 하나) + 국)플핸(K-PL, 항상)
+//   리)해 = 해)승 또는 해)패(정배 방향대로 하나)만
 //   통)국 = 국통)승 또는 국통)패 + 국통)플핸(TK-PL)
 //   통)해 = 해통)승 또는 해통)패만
 //
-// ⚠ 통)해가 1줄뿐인 건 DB에 그 컬럼이 없어서다 — 통합으로 만든 건 승·패·승+패·
-//   승+무+패 4종류뿐이고 승=홈팀/패=원정팀은 리그별로만 있다(engine.py의
-//   logics_new_individual). 통)국의 플핸은 2026-09-06에 28번 지표(TK-PL)로 새로
-//   만들어 6대리그 과거 19,393경기를 백필했다(K-PL과 계산식이 같고 표본 풀만 통합).
+// ⚠ 2026-09-06 '승=홈팀·패=원정팀'을 재료에서 뺐다(실측 근거는 verdictCalc.js의
+//   oddsScopeCodes 주석). 그래서 리)국·통)국은 '승·패 + 플핸', 리)해·통)해는
+//   '승·패'만으로 모양이 같아졌다 — 리그 안에서만 세느냐 6대리그를 합쳐 세느냐의
+//   차이만 남는다. 통)국의 플핸은 2026-09-06에 28번 지표(TK-PL)로 새로 만들어
+//   6대리그 과거 19,393경기를 백필했다(K-PL과 계산식이 같고 표본 풀만 통합).
 //
 // oddsScopeCodes 함수 자체는 utils/verdictCalc.js로 옮겼다(파일 맨 위 import) —
 // 리그표 '판정' 칸의 픽 계산도 같은 4칸 재료를 써야 해서다.
@@ -2085,10 +2082,10 @@ function DirectionScopeTable({ row }) {
 // 방향성 참고표(DirectionScopeLegend)와 같은 구성 — 재료 → 4칸 일치도별 당첨률 →
 // 만장일치 이름별 당첨률 → 색 기준(15건) → 왜 15건인가 → 칸별 색 빈도.
 const ODDS_WHAT = [
-  ['리)국', '이 리그 안에서만', '국내배당', '국)승 또는 패 + 국)플핸 + 승=홈/패=원정'],
-  ['리)해', '이 리그 안에서만', '해외배당', '해)승 또는 패 + 승=홈/패=원정'],
+  ['리)국', '이 리그 안에서만', '국내배당', '국)승 또는 패 + 국)플핸'],
+  ['리)해', '이 리그 안에서만', '해외배당', '해)승 또는 패만'],
   ['통)국', '6대리그 전체', '국내배당', '국통)승 또는 패 + 국통)플핸'],
-  ['통)해', '6대리그 전체', '해외배당', '해통)승 또는 패만 (홈원정 버전 없음)'],
+  ['통)해', '6대리그 전체', '해외배당', '해통)승 또는 패만'],
 ]
 // 4칸(리국·리해·통국·통해, 초기 기준)이 같은 방향(정/플)을 보는 개수별 당첨률.
 // 만장일치가 반반보다 +5.34%p. 아래 숫자는 28번(TK-PL)을 통)국에 넣은 뒤 다시 잰 값이다.
@@ -2139,7 +2136,7 @@ function OddsScopeLegend({ onClose }) {
         <h2 className="modal-title">💰 배당 — 무엇으로 만들고, 색은 무슨 뜻인가</h2>
 
         <p className="help-legend-title">
-          이 표가 쓰는 재료 — 판정(9줄) 중 방향성이 이미 쓰는 승+패·승+무+패 4줄을
+          이 표가 쓰는 재료 — 판정(7줄) 중 방향성이 이미 쓰는 승+패·승+무+패 4줄을
           빼면 남는 나머지, 칸마다 세는 범위가 다릅니다
         </p>
         <table className="detail-table help-legend-table">
@@ -2424,6 +2421,16 @@ function NewSystemVerdictLegend({ onClose }) {
           당첨률 초기 82.27%→82.82% · 배변 81.54%→82.29%, 6개 리그 전부 같은 방향).
         </p>
         <p className="help-legend-note">
+          <b>&apos;승=홈팀 · 패=원정팀&apos;은 재료에서 뺐습니다(2026-09-06).</b> 조건이 가장
+          빡세 표본이 늘 제일 적은 줄인데(리)해 중앙값 6건 · 리)국 1건), 배열 맨 뒤라
+          위치 가중치를 제일 크게 받아 비중이 과했습니다 — 리)해에서는 표본 6건짜리가
+          평균 <b>40.5%</b>를 먹었고, 3경기 중 1경기(34.4%)는 표본이 제일 적은 줄이
+          비중이 제일 큰 줄이었습니다. 그래서 몇 건짜리 표본의 0 하나가 이름을 뒤집는
+          일이 있었습니다. 빼고 재보니 리)해 당첨률이 초기 80.18%→81.33%(z=5.87),
+          배변 80.16%→81.84%(z=9.03)로 올랐고, 최종 판정도 배변 82.29%→82.45%
+          (z=2.19)로 나아졌습니다(초기는 −0.02%p로 그대로).
+        </p>
+        <p className="help-legend-note">
           초기·배변을 완전히 따로 계산합니다(그 시점 배당만 씁니다) — 시점을 섞은
           것과 대조해 보니 배변은 오히려 −0.59%p였습니다. 시점을 안 섞는 쪽이
           "그 시점에 등록된 배당 전부로 다시 만든다"는 원칙에도 맞습니다.
@@ -2495,8 +2502,8 @@ function NewSystemVerdictLegend({ onClose }) {
         <table className="detail-table help-legend-table">
           <thead><tr><th></th><th>당첨률</th></tr></thead>
           <tbody>
-            <tr><td><b>초기 판정</b></td><td><b>82.82%</b></td></tr>
-            <tr><td><b>배변 판정</b></td><td><b>82.29%</b></td></tr>
+            <tr><td><b>초기 판정</b></td><td><b>82.80%</b></td></tr>
+            <tr><td><b>배변 판정</b></td><td><b>82.45%</b></td></tr>
           </tbody>
         </table>
         <p className="help-legend-note">
@@ -2633,7 +2640,7 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds }) {
                   </div>
                   <div className="pick-band-sys">
                     {/* 2026-09-06 — 여기 있던 '판정' 표(국배/해배 이름 2칸)를 '배당' 표로
-                        바꿨다. 판정이 쓰는 9줄 중 방향성이 이미 보여주는 승+패·승+무+패를
+                        바꿨다. 판정이 쓰는 7줄 중 방향성이 이미 보여주는 승+패·승+무+패를
                         뺀 나머지를 방향성과 같은 꼴로 본다. 예전 결과 판정 줄(9줄, 리그만
                         계산)은 구분선 아래 '시스템 판정' 줄로 완전히 교체하고 지웠다
                         (실측: 82.46% vs 79.79%, NewSystemVerdictLegend 참고). */}
@@ -2680,7 +2687,7 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
   const rowRef = useRef(row)
   rowRef.current = row
   const matchKey = [row.S, row.R, row.No, row.HT, row.AT].join('|')
-  // 지표별 표본은 기본이 '접힘' — 판단에 쓰는 9줄만 보여주고, 펼치면 27줄 전체가 나온다.
+  // 지표별 표본은 기본이 '접힘' — 판단에 쓰는 7줄만 보여주고, 펼치면 전체 지표가 나온다.
   const [sampleExpanded, setSampleExpanded] = useState(false)
   const [showSeasonLegend, setShowSeasonLegend] = useState(false)
   const [pickData, setPickData] = useState(null)
