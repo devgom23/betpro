@@ -1063,6 +1063,10 @@
 .help-legend-card .dscope-side-p-ink { color: var(--chip-green-fg); }
 .help-legend-card .dscope-side-j-ink { color: var(--chip-blue-fg); }
 
+/* 참고표에서 '여기는 약속을 못 지킨다'처럼 스스로 약점을 밝히는 칸 — 앱 전체의
+   경고 축과 같은 빨강(핸디기준점 양수·RT 역과 같은 --chip-red-fg). */
+.help-legend-card .help-legend-warn { color: var(--chip-red-fg); }
+
 /* 지표 코드(K-WL 등)는 값이 아니라 참조용 이름이라 흐리게, 폭 안 흔들리게 고정폭. */
 .help-legend-code {
   font-size: 11px;
