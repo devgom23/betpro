@@ -847,7 +847,7 @@ _GROUP_DEFS = [
     ("TK-WL", "25. 국/통) 승+패 분석"), ("TK-WDL", "26. 국/통) 승+무+패 분석"),
 ]
 _MYPICK_COLS = [
-    ("IMPORTANT", "중요"), ("MY_PICK", "내픽"), ("MY_P", "P"), ("MY_HIT", "적중"),
+    ("IMPORTANT", "중요"), ("MY_PICK", "내픽"), ("MY_P", "상세픽"), ("MY_HIT", "적중"),
     ("MY_BET", "벳"), ("MEMO", "메모"),
 ]
 # "P" 태그 배지 색 — 경기정보 그룹의 RT 배지와 같은 색 규칙(핸승=파랑/핸무=연파랑/무=회색/역=빨강).
@@ -999,7 +999,7 @@ def _cell_style(group, col, value, row=None):
             "패스": {"bg": "757575", "fg": "FFFFFF", "bold": True},
         }.get(s)
 
-    if group["kind"] == "mypick" and sub == "P":
+    if group["kind"] == "mypick" and sub == "상세픽":
         s = "" if _blank(value) else str(value).strip()
         return _P_TAG_COLORS.get(s)
 

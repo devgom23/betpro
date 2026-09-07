@@ -87,7 +87,7 @@ export default function MyPickModal({ code, scope, row, onClose, onSaved }) {
         </label>
 
         <label className="mypick-select-row">
-          P
+          상세픽
           <select value={p} onChange={(e) => setP(e.target.value)}>
             <option value="">선택 안함</option>
             {P_OPTIONS.map((o) => (

@@ -13,7 +13,7 @@ import {
 } from '../../utils/systemVerdict'
 import {
   DIR_SIDE, SCOPE_CODES, scopeCell, oddsScopeCodes, directionName, weightedAnalysis,
-  ODDS_PHASE_WEIGHTED_GRADE, phaseVerdict, isStrongPick,
+  ODDS_PHASE_WEIGHTED_GRADE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE,
 } from '../../utils/verdictCalc'
 import './MatchDetailModal.css'
 
@@ -706,12 +706,12 @@ function FormTable({ row }) {
           <th colSpan={3}>원정</th>
         </tr>
         <tr>
-          <th>전체폼</th>
-          <th>최근5폼</th>
-          <th>홈경기</th>
-          <th>원정경기</th>
-          <th>최근5폼</th>
-          <th>전체폼</th>
+          <th>전체</th>
+          <th>최근5</th>
+          <th>홈</th>
+          <th>원정</th>
+          <th>최근5</th>
+          <th>전체</th>
         </tr>
       </thead>
       <tbody>
@@ -1592,7 +1592,7 @@ function MyPickBar({ row, onSavePick }) {
       </label>
       <label className="mypick-bar-field">
         <select value={p} onChange={handlePChange}>
-          <option value="">P</option>
+          <option value="">상세픽</option>
           {P_OPTIONS.map((o) => (
             <option key={o} value={o}>
               {o}
@@ -2690,8 +2690,9 @@ function NewSystemVerdict({ row, init, fin }) {
   const rtText = rtLabel(row.RT)
   const actual = ['핸승', '핸무', '무', '역'].includes(rtText) ? rtText : null
 
-  // '강추' — 배변 판정에만 붙는다(isStrongPick 주석 참고). init(초기)에는 안 켠다.
-  const strong = isStrongPick(row, fin)
+  // 초강추(국≠해)·강추(접전) — 배변 판정에만 붙는다(strongPickTier 주석 참고).
+  // init(초기)에는 안 켠다. 배지 색(보라)은 두 단계가 똑같다(사용자 지정).
+  const strong = strongPickTier(row, fin)
 
   const part = (v, isStrong) => {
     if (!v.pick) {
@@ -2726,12 +2727,8 @@ function NewSystemVerdict({ row, init, fin }) {
             <span className="sys-stars">{'★'.repeat(v.stars)}{'☆'.repeat(3 - v.stars)}</span>
             <span className="sys-rate">{v.rate.toFixed(2)}%</span>
             {isStrong && (
-              <span
-                className="newv-strong"
-                title={'국내·해외 정배가 갈린 경기(국≠해)에서 배변 판정 플핸무·별3개가 겹쳤습니다 — '
-                  + '6대리그 실측 당첨률 85.39%(같은 조건인데 국내·해외 정배가 같은 경기는 81.08%, z=3.02).'}
-              >
-                강추
+              <span className="newv-strong" title={STRONG_TIER_TITLE[isStrong]}>
+                {isStrong}
               </span>
             )}
           </>

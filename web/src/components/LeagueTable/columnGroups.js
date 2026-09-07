@@ -32,7 +32,7 @@ const F_ODDS_COLS = ['FW', 'FD', 'FL', 'FH']
 // formatCell/cellStyle이 아니라 LeagueTable.jsx가 직접 렌더링한다.
 // PICK_VERDICT(적중)는 저장되는 값이 아니라 내픽+RT로 그때그때 자동 계산한다
 // (computeAutoVerdict 참고). MY_HIT은 '의견'으로 이름을 바꿔 배팅 비중 태그로 쓴다.
-// MY_P('P')는 내픽과 별개로 "실제로 딱 찍었는지"만 남기는 참고용 태그(핸승/핸무/무/역)
+// MY_P('상세픽')는 내픽과 별개로 "실제로 딱 찍었는지"만 남기는 참고용 태그(핸승/핸무/무/역)
 // — 결과 판정(적중/보험/미적)에는 전혀 반영되지 않는다.
 // MY_BET('벳')은 저장되는 개인 픽이 아니라 베팅내역(bet_slips)에 실제로 등록됐는지만
 // 보는 참고용 배지다 — 별표(IMPORTANT)를 찍고도 실제로는 벳을 안 넣은 경기가 있어서
@@ -41,7 +41,7 @@ const MYPICK_COLS = [
   ['IMPORTANT', '중요'],
   ['PICK_VERDICT', '적중'],
   ['MY_PICK', '내픽'],
-  ['MY_P', 'P'],
+  ['MY_P', '상세픽'],
   ['MY_HIT', '의견'],
   ['MY_BET', '벳'],
 ]

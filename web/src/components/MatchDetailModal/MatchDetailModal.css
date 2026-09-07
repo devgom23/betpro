@@ -951,8 +951,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* '강추' — 배변 판정에만 뜬다(verdictCalc.js isStrongPick). 적중(노랑)·보험(청록)과
-   같은 줄에 나란히 붙을 수 있어 그 둘과 안 겹치는 보라를 쓴다(이 축은 이 뱃지 하나뿐). */
+/* '초강추'(국≠해)·'강추'(접전) 뱃지 — 배변 판정에만 뜬다(verdictCalc.js strongPickTier).
+   적중(노랑)·보험(청록)과 같은 줄에 나란히 붙을 수 있어 그 둘과 안 겹치는 보라를 쓴다
+   (이 축은 이 뱃지 하나뿐). 두 단계가 같은 보라를 쓴다 — 글자로 이미 구분된다(사용자 지정). */
 .newv-strong {
   margin-left: 4px;
   padding: 2px 6px;

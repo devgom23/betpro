@@ -5,7 +5,7 @@ import {
   collapsedWidth, splitsOnFinal, oddsMoveDir, riskMoveDir, toFinalRow, rtToText,
   VERDICT_KEY, verdictCellStyle,
 } from './columnGroups'
-import { phaseVerdict, isStrongPick } from '../../utils/verdictCalc'
+import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
@@ -676,15 +676,16 @@ export default function LeagueTable({
                         // 값(픽)과 색까지 그대로 살린다. 위/아래 두 줄로 갈리므로
                         // (VERDICT_KEY 주석 참고) 항상 원본 row(baseRow)로 계산한다.
                         const v = phaseVerdict(baseRow, isFinal, isFinal ? '배변' : '초기')
-                        // '강추'(국≠해+배변 플핸무+★3)는 배변 줄에만 붙는다 — isStrongPick
-                        // 주석 참고. 초기 줄은 isFinal이 false라 항상 false로 걸러진다.
-                        const strong = isFinal && isStrongPick(baseRow, v)
+                        // 초강추(국≠해)·강추(접전)는 배변 줄에만 붙는다 — strongPickTier
+                        // 주석 참고. 초기 줄은 isFinal이 false라 항상 걸러진다.
+                        // 이중밑줄(verdict-strong)은 두 단계가 똑같이 쓴다(사용자 지정).
+                        const strong = isFinal ? strongPickTier(baseRow, v) : null
                         cells = [
                           <td
                             key={`${gi}-c`}
                             className={`collapsed-cell${dividerClass(g, isLastGroup)}${strong ? ' verdict-strong' : ''}`}
                             style={verdictCellStyle(v.pick, v.stars) || undefined}
-                            title={strong ? '강추 — 국내·해외 정배가 갈린 경기의 배변 플핸무 별3개(실측 당첨률 85.39%)' : undefined}
+                            title={strong ? STRONG_TIER_TITLE[strong] : undefined}
                           >
                             {v.pick || ''}
                           </td>,
@@ -801,8 +802,9 @@ export default function LeagueTable({
                       // 쓰면 방향 계산이 달라질 수 있다).
                       cellKeys = [VERDICT_KEY]
                       const v = phaseVerdict(baseRow, isFinal, isFinal ? '배변' : '초기')
-                      // '강추'(국≠해+배변 플핸무+★3) — isStrongPick 주석 참고.
-                      const strong = isFinal && isStrongPick(baseRow, v)
+                      // 초강추(국≠해)·강추(접전) — strongPickTier 주석 참고.
+                      // 이중밑줄은 두 단계가 똑같이 쓴다(사용자 지정).
+                      const strong = isFinal ? strongPickTier(baseRow, v) : null
                       cells = [
                         <td
                           key={`${gi}-c`}
@@ -811,7 +813,7 @@ export default function LeagueTable({
                             strong ? 'verdict-strong' : '',
                           ].filter(Boolean).join(' ') || undefined}
                           style={verdictCellStyle(v.pick, v.stars) || undefined}
-                          title={strong ? '강추 — 국내·해외 정배가 갈린 경기의 배변 플핸무 별3개(실측 당첨률 85.39%)' : undefined}
+                          title={strong ? STRONG_TIER_TITLE[strong] : undefined}
                         >
                           {v.pick || ''}
                         </td>,
