@@ -4,6 +4,7 @@ import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { formatTime, formatDt, scoreClass } from '../../utils/format'
+import { computeAutoVerdict, pickVerdictStyle } from '../LeagueTable/columnGroups'
 import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
@@ -213,6 +214,35 @@ function DdongsaBadge({ row }) {
       title="똥배(국내배당 1.49 이하의 강한 정배)였는데 결과가 무/역으로 뒤집혔다"
     >
       똥사
+    </span>
+  )
+}
+
+// 팝업 맨 위 RT 배지 옆 '벳' — 내가 베팅내역(bet_slips)에 실제로 등록한 경기라는 표시.
+// 별표(IMPORTANT)·내픽(MY_PICK)과 별개다(리그 표의 MY_BET 칸과 같은 값·같은 색).
+function MyBetBadge({ row }) {
+  if (!row.MY_BET) return null
+  return (
+    <span
+      className="rt-badge"
+      style={{ background: 'var(--chip-green-bg)', color: 'var(--chip-green-fg)' }}
+      title="베팅내역에 실제로 등록된 경기입니다"
+    >
+      P
+    </span>
+  )
+}
+
+// 팝업 맨 위 결과 배지 옆 — 내픽(MY_PICK)이 이 경기에서 적중/보험/미적 중 뭐였나.
+// LeagueTable의 판정(PICK_VERDICT) 칸과 같은 규칙(columnGroups.computeAutoVerdict)을
+// 그대로 쓴다. 벳(MY_BET) 배지가 있으면 그 옆에, 없으면(픽만 하고 벳은 안 넣은 경기)
+// RT 배지 옆에 바로 붙는다 — 어디에 붙이는지는 호출하는 쪽(위 modal-meta)이 정한다.
+function PickVerdictBadge({ row }) {
+  const verdict = computeAutoVerdict(row.MY_PICK, row.RT)
+  if (!verdict) return null
+  return (
+    <span className="rt-badge" style={pickVerdictStyle(verdict)}>
+      {verdict}
     </span>
   )
 }
@@ -2965,7 +2995,10 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
           {formatTime(row.TM) ? ` ${formatTime(row.TM)}` : ''}
           &nbsp;&nbsp;
           {rt ? <RtBadge label={rt} /> : <span className="modal-scheduled">예정 경기</span>}
+          {!row.MY_BET && <PickVerdictBadge row={row} />}
           <DdongsaBadge row={row} />
+          <MyBetBadge row={row} />
+          {row.MY_BET && <PickVerdictBadge row={row} />}
         </p>
         <MyPickBar row={row} onSavePick={onSavePick} />
 

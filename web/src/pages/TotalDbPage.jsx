@@ -179,6 +179,12 @@ export default function TotalDbPage({ scope }) {
                   정정한 직후 딱 한 번 눌러 전체를 최신 기준으로 맞추세요. 경기 수가 많으면 수 분
                   이상 걸릴 수 있습니다.
                 </p>
+                <p className="recompute-caption" style={{ color: 'var(--text-warn, #b45309)' }}>
+                  ⚠ 이미 결과가 나온 과거 경기도 지금 시점까지 쌓인 데이터 전체로 다시 계산됩니다.
+                  그 경기 당시에는 없었던(그 이후에 열린) 경기 결과까지 예측에 섞여 들어갈 수
+                  있습니다 — "그 시점 예측의 적중률"이 의미 있으려면 평소엔 누르지 말고, 초기
+                  세팅·대대적 정정 때만 쓰세요.
+                </p>
                 <label className="confirm-check">
                   <input
                     type="checkbox"
