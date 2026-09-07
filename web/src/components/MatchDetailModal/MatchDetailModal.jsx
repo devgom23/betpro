@@ -13,7 +13,7 @@ import {
 } from '../../utils/systemVerdict'
 import {
   DIR_SIDE, SCOPE_CODES, scopeCell, oddsScopeCodes, directionName, weightedAnalysis,
-  ODDS_PHASE_WEIGHTED_GRADE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE,
+  ODDS_PHASE_WEIGHTED_GRADE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE, CLOSE_ODDS_CUT,
 } from '../../utils/verdictCalc'
 import './MatchDetailModal.css'
 
@@ -2403,6 +2403,42 @@ const CONF_BY_COLOR = [
   ['6개', '6,227 / 6,227', '81.66%', '82.11%'],
   ['8개 (전부 색)', '305 / 305', '77.70%', '80.33%'],
 ]
+// ── 강추 2단계 실측 (2026-09-07, 6대리그 36,029경기) ──
+// 계산은 utils/verdictCalc.js의 strongPickTier가 한다. 여기 표는 그 함수 주석에 적힌
+// 실측값을 화면에 그대로 보여주는 것뿐이라, 실측을 다시 하면 양쪽을 같이 고쳐야 한다.
+// [단계, 조건, 경기수, 적중(플핸), 당첨(플핸무)]
+const STRONG_TIER_STATS = [
+  ['초강추', '뼈대 + 국≠해(국내·해외 정배가 갈림)', '842', '66.51%', '85.39%'],
+  ['강추', '뼈대 + 접전(배변 국내 정배배당 2.25 이상)', '1,383', '62.91%', '84.16%'],
+  ['(뼈대만)', '배변 판정 플핸무 + ★3', '7,344', '60.19%', '81.67%'],
+  ['(전체 평균)', '조건 없음 — 모든 경기', '36,029', '46.18%', '69.80%'],
+]
+// 접전 기준을 초기가 아니라 '배변' 배당으로 정한 근거 — 경계를 넘나든 경기만 따로
+// 재보니 배당이 움직인 방향 자체가 신호였다(모집단: 뼈대 + 국=해 6,502건).
+// [초기, 배변, 경기수, 적중, 당첨, 강추 뜨나, 나쁜 칸인가]
+const STRONG_ODDS_MOVE = [
+  ['2.25 이상', '2.25 이상', '1,201', '62.70%', '84.26%', '뜸', false],
+  ['2.25 미만', '2.25 이상', '182', '64.29%', '83.52%', '뜸', false],
+  ['2.25 이상', '2.25 미만', '110', '60.00%', '76.36%', '안 뜸', true],
+  ['2.25 미만', '2.25 미만', '4,278', '58.32%', '80.25%', '안 뜸', false],
+]
+// 어느 시점 배당을 볼지 네 가지를 전부 재본 결과 — 배변 기준이 경기 수와 당첨률
+// 양쪽에서 가장 나아 그것으로 정했다.
+const STRONG_CUT_BASIS = [
+  ['초기 배당만', '1,311', '83.60%', false],
+  ['배변 배당 (채택)', '1,383', '84.16%', true],
+  ['초기·배변 둘 다 2.25+', '1,201', '84.26%', false],
+  ['둘 중 하나라도 2.25+', '1,493', '83.59%', false],
+]
+// 정배배당이 커질수록(접전에 가까울수록) 당첨률이 계단처럼 오른다 — 2.2 근처가 계단.
+const STRONG_ODDS_BAND = [
+  ['2.0 ~ 2.1', '2,611', '79.55%'],
+  ['2.1 ~ 2.2', '2,523', '81.17%'],
+  ['2.2 ~ 2.3', '2,385', '83.35%'],
+  ['2.3 ~ 2.4', '1,559', '83.58%'],
+  ['2.4 이상', '376', '86.97%'],
+]
+
 // 별 3개(가중 일치율 90% 이상) 안에서 총 표본량별 — 표본이 아주 많은 0.9%만
 // 약속을 못 지킨다(-7%p). 전체 영향이 0.06%p라 아직 손대지 않았다.
 const CONF_BY_DEN = [
@@ -2675,6 +2711,115 @@ function NewSystemVerdictLegend({ onClose }) {
         </table>
         <p className="help-legend-note">
           위 신뢰도 표(일치도별 당첨률)를 전부 합쳐 평균 낸 값입니다.
+        </p>
+
+        <p className="help-legend-title">
+          ⭐ 초강추 · 강추 — 판정 중에서도 특히 좋은 경기를 골라내는 표시
+        </p>
+        <p className="help-legend-note">
+          위 판정이 나온 경기 전부가 같은 값을 갖는 건 아닙니다. 그중에서도 실측 당첨률이
+          확실히 높은 두 갈래를 따로 표시합니다. <b>두 갈래 모두 뼈대는 같습니다 —
+          배변 판정이 &apos;플핸무&apos;이고 별이 3개일 것.</b> 거기에 어떤 조건이 겹치느냐로
+          이름이 갈립니다.
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>표시</th><th>조건</th><th>경기수</th><th>적중(플핸)</th><th>당첨(플핸무)</th></tr>
+          </thead>
+          <tbody>
+            {STRONG_TIER_STATS.map(([tier, cond, n, hit, win]) => (
+              <tr key={tier}>
+                <td><b>{tier}</b></td><td>{cond}</td><td>{n}</td><td>{hit}</td><td><b>{win}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          <b>당첨</b>은 플핸무(핸무+무+역) — &quot;핸승만 안 나오면 되는&quot; 확률이고,
+          <b> 적중</b>은 무·역만 나오는 확률입니다. 전체 평균 69.80%와 비교하면 두 갈래 모두
+          15%p 가까이 높습니다. 리그 재현성은 초강추 5/6 · 강추 4/6입니다(뼈대 평균 대비).
+        </p>
+        <p className="help-legend-note">
+          <b>왜 &apos;접전&apos;이 신호인가</b> — 정배배당(KW·KL 중 낮은 쪽)이 커질수록,
+          즉 시장이 두 팀을 비슷하게 볼수록 핸승이 안 나옵니다. 2.2 근처가 계단입니다.
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>국내 정배배당</th><th>경기수</th><th>당첨(플핸무)</th></tr></thead>
+          <tbody>
+            {STRONG_ODDS_BAND.map(([band, n, win]) => (
+              <tr key={band}>
+                <td><b>{band}</b></td><td>{n}</td><td><b>{win}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          기준선을 <b>{CLOSE_ODDS_CUT}</b>로 잡았습니다. 2.2·2.25·2.3 어디를 잘라도
+          통계적으로는 구분되지 않아서(z −1.1~−1.5), 경기 수를 가장 많이 남기면서
+          당첨률이 거의 안 떨어지는 지점을 골랐습니다. 참고로 초강추 조건인 &apos;국≠해&apos;
+          경기의 <b>96.4%가 이미 이 접전 구간</b>에 들어 있습니다 — 두 갈래가 사실은 같은
+          현상(배당이 접전이라 정배가 애매하다)을 다른 각도에서 보고 있는 셈입니다.
+        </p>
+
+        <p className="help-legend-title">
+          접전은 <b>배변(최신) 배당</b>으로 봅니다 — 배당이 움직인 방향 자체가 신호입니다
+        </p>
+        <p className="help-legend-note">
+          같은 2.25 기준이라도 초기 배당으로 보느냐 배변 배당으로 보느냐에 따라 결과가
+          갈리는 경기가 있습니다. 그 경기들만 따로 재봤더니 방향이 아주 뚜렷했습니다.
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>초기 배당</th><th>배변 배당</th><th>경기수</th><th>적중</th>
+              <th>당첨</th><th>강추</th></tr>
+          </thead>
+          <tbody>
+            {STRONG_ODDS_MOVE.map(([ini, fin2, n, hit, win, shown, bad]) => (
+              <tr key={`${ini}-${fin2}`}>
+                <td>{ini}</td><td><b>{fin2}</b></td><td>{n}</td><td>{hit}</td>
+                <td className={bad ? 'help-legend-warn' : undefined}><b>{win}</b></td>
+                <td>{shown}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          핵심은 셋째 줄입니다 — <b>접전이었다가 배변에서 빠져나간 경기(예: 2.26 → 2.21)의
+          당첨률이 76.36%</b>로, 애초에 접전이 아니었던 경기(80.25%)보다도 낮습니다
+          (둘 다 통과한 84.26% 대비 z=−2.14). 반대로 배변에서 접전으로 들어온 경기는
+          83.52%로 올라옵니다. 그래서 <b>초기가 아니라 배변 배당을 기준</b>으로 삼습니다.
+          배변 배당이 아직 없는 경기는 초기 배당으로 대신 봅니다.
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>어느 시점 배당으로 볼까</th><th>경기수</th><th>당첨</th></tr></thead>
+          <tbody>
+            {STRONG_CUT_BASIS.map(([basis, n, win, picked]) => (
+              <tr key={basis}>
+                <td>{picked ? <b>{basis}</b> : basis}</td><td>{n}</td>
+                <td>{picked ? <b>{win}</b> : win}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <p className="help-legend-title">화면에서 어떻게 보이나</p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>어디</th><th>표시</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>이 줄(시스템 판정)</td>
+              <td>배변 판정 옆에 <b>초강추</b> / <b>강추</b> 보라색 배지 —
+                둘 다 같은 색이고 글자로만 구분합니다</td>
+            </tr>
+            <tr>
+              <td>리그표 &apos;판정&apos; 칸</td>
+              <td>배변 줄에 <b>이중 밑줄</b> — 두 단계 모두 똑같이 그어집니다</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          초기 판정에는 붙지 않습니다 — 두 갈래 모두 배변 판정을 기준으로 잰 값이라서입니다.
+          둘 다 해당되면 <b>초강추</b>가 우선합니다.
         </p>
       </div>
     </div>
