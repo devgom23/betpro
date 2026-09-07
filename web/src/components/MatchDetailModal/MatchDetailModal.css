@@ -1311,10 +1311,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 괄호 안 뒤쪽 값(오늘 장소 기준) — 홈팀은 홈경기만·원정팀은 원정경기만으로 낸,
-   이 경기에 더 맞는 값이라 밝게 굵게 둔다(앞의 전체 기준은 흐린 채로).
+/* 괄호 안 앞쪽 값(전체 기준) — 실측에서 판정에 실제로 쓸 값은 이쪽이라 밝게 굵게 둔다
+   (장소 기준은 표본이 절반이라 신호가 더 약했다: 중간 배당대 z=4.76 vs 3.08).
    CLAUDE.md 6-2의 '값은 밝게(--text-primary), 나머지는 흐리게' 규칙과 같다. */
-.pick-season-xg-venue {
+.pick-season-xg-main {
   color: var(--text-primary);
   font-weight: 700;
 }

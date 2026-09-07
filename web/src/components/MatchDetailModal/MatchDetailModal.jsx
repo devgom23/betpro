@@ -236,6 +236,62 @@ function favFlipChips(row) {
   ]
 }
 
+// ── 기대점수 뱃지 (2026-09-07 실측, 6대리그 29,938경기) ──
+// '기대점수 차이' = 정배팀 기대점수 − 언더독팀 기대점수(정배는 해외배당 FW/FL 기준).
+// 배당대 × 기대점수 차이 격자로 RT 4종을 재보니, **정배가 셀 때만** 신호가 나온다.
+// 접전 배당(2.30+)에서는 어느 조합도 유의하지 않아 뱃지를 띄우지 않는다.
+// 아래는 그 격자에서 z≥2로 살아남은 칸만 옮긴 것 — [배당 하한, 배당 상한, 차이 하한,
+//  차이 상한, 라벨, 색, 툴팁에 넣을 실측 문구]. 시즌전적 정의 팝업의 표와 같은 값이다.
+const XG_RULES = [
+  [0, 1.35, 2.2, 99, '기대 정배압도', 'blue',
+    '초강정배 배당(~1.35)에 기대점수 차이 2.2 이상 — 핸승 61.22%(이 배당대 평균 55.98%, +9.1%p),'
+    + ' 역 5.72%(−2.8%p). 정무 94.28%로 이 배당대에서 가장 높다(n=1,573).'],
+  [0, 1.35, 1.4, 2.2, '기대 접전', 'red',
+    '초강정배 배당(~1.35)인데 기대점수 차이가 1.4~2.2뿐 — 핸승 51.83%로 이 배당대 평균(55.98%)보다'
+    + ' 4.5%p 낮고, 플핸무가 48.17%(+6.7%p)로 올라간다(n=1,393).'],
+  [1.35, 1.60, 2.2, 99, '기대 정배압도', 'blue',
+    '강정배 배당(1.35~1.60)에 기대점수 차이 2.2 이상 — 핸승 44.34%(평균 39.46%, +5.3%p),'
+    + ' 정무 89.62%(n=424).'],
+  [1.35, 1.60, 0.3, 0.8, '기대 접전', 'red',
+    '강정배 배당(1.35~1.60)인데 기대점수 차이가 0.3~0.8뿐 — 역이 15.44%로 평균(13.19%)보다'
+    + ' 2.7%p 높다. 정무가 84.56%로 내려간다(n=777).'],
+  [1.60, 1.90, 1.4, 2.2, '기대 정배우위', 'blue',
+    '중정배 배당(1.60~1.90)에 기대점수 차이 1.4~2.2 — 핸승 35.14%로 평균(30.71%)보다 5.1%p 높다.'
+    + ' 플핸무는 64.86%로 내려간다(n=777).'],
+  [1.90, 2.30, 0.8, 1.4, '기대 정배우위', 'blue',
+    '약정배 배당(1.90~2.30)에 기대점수 차이 0.8~1.4 — 핸승 25.31%로 평균(23.05%)보다 2.7%p 높다.'
+    + ' 폭이 작아 참고용이다(n=1,529).'],
+]
+
+// 기대점수는 백엔드(api/pick_ai.py)가 시즌전적과 같이 계산해 내려준다 — 전체 기준 값
+// (괄호 앞쪽)을 쓴다. 장소 기준은 표본이 절반이라 실측에서 신호가 더 약했다.
+function xgChips(row, xg) {
+  if (!xg || xg.home === null || xg.home === undefined
+      || xg.away === null || xg.away === undefined) return []
+  const fw = numOrNull(row.FW)
+  const fl = numOrNull(row.FL)
+  if (fw === null || fl === null || fw === fl) return []
+  const favOdds = Math.min(fw, fl)
+  const homeIsFav = fw < fl
+  const margin = (homeIsFav ? xg.home : xg.away) - (homeIsFav ? xg.away : xg.home)
+  const hit = XG_RULES.find(([o1, o2, m1, m2]) => favOdds >= o1 && favOdds < o2
+    && margin >= m1 && margin < m2)
+  if (!hit) return []
+  const [, , , , label, tone, note] = hit
+  return [
+    <MatchChip
+      key="xg"
+      label={`차 ${margin >= 0 ? '+' : ''}${margin.toFixed(2)}`}
+      tone={tone}
+      title={`기대점수 차이 = 정배(${(homeIsFav ? xg.home : xg.away).toFixed(2)}) −`
+        + ` 언더독(${(homeIsFav ? xg.away : xg.home).toFixed(2)}) = ${margin.toFixed(2)}\n`
+        + `${note}\n※ 접전 배당(2.30 이상)에서는 기대점수가 결과를 예고하지 못해 뱃지를 띄우지 않는다.`}
+    >
+      {label}
+    </MatchChip>,
+  ]
+}
+
 // 팝업 맨 위 RT 배지 옆 '똥사' — 똥배(강한 정배)였는데 결과가 무/역으로 뒤집힌 경기.
 // RT와 같은 '결과' 정보라 RT 배지 바로 옆에 둔다. 모양은 RtBadge와 같은 것을 쓴다.
 function DdongsaBadge({ row }) {
@@ -429,11 +485,12 @@ function sameOddsChips(sameOdds) {
   ]
 }
 
-function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds }) {
+function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds, xg }) {
   // 똥배 → 국/해 엇갈림 → 전적 → 무 → 동배당을 세로로 쌓는다.
   // (배당차 뱃지는 2026-09-02에 옆 칸 표로 뺐다가 2026-09-05에 아예 삭제했다 —
   //  정배배당을 다시 적은 값이라 확률 지표와 중복이었다. DirectionScopeTable 주석 참고.)
   const chips = [...ddongChips(row), ...oddsSplitChips(row), ...favFlipChips(row),
+    ...xgChips(row, xg),
     ...h2hChips(verdict, h2hLoading, row, pick), ...drawChips(row, pick),
     ...sameOddsChips(sameOdds)]
   return (
@@ -1740,11 +1797,10 @@ function SeasonRowsTable({ rows }) {
               {r.side}
               {r.xg && (r.xg[0] !== null && r.xg[0] !== undefined) && (
                 <span className="pick-season-xg">
-                  ({r.xg[0].toFixed(2)}/
-                  {/* 뒤쪽(오늘 장소 기준)이 이 경기에 더 맞는 값이라 밝게·굵게 강조한다 */}
-                  <b className="pick-season-xg-venue">
-                    {r.xg[1] !== null && r.xg[1] !== undefined ? r.xg[1].toFixed(2) : '-'}
-                  </b>)
+                  {/* 앞쪽(전체 기준)을 밝게·굵게 — 실측에서 판정에 쓸 값은 이쪽이다
+                      (장소 기준은 표본이 절반이라 오히려 신호가 약했다). */}
+                  (<b className="pick-season-xg-main">{r.xg[0].toFixed(2)}</b>/
+                  {r.xg[1] !== null && r.xg[1] !== undefined ? r.xg[1].toFixed(2) : '-'})
                 </span>
               )}
             </td>
@@ -1767,6 +1823,26 @@ function SeasonRowsTable({ rows }) {
     </table>
   )
 }
+
+// ── 기대점수 차이 × 배당대 격자 실측 (2026-09-07, 6대리그 29,938경기) ──
+// 시즌전적 정의 팝업이 그대로 그린다. 뱃지 규칙(XG_RULES)과 같은 측정에서 나온 값이라,
+// 실측을 다시 하면 둘을 같이 고쳐야 한다. 핸승 비율 + (그 배당대 평균 대비 %p), ★는 z≥2.
+// [배당대, 그 배당대 평균, 차이~0.3, 0.3~0.8, 0.8~1.4, 1.4~2.2, 2.2+]
+const XG_GRID_HIT = [
+  ['초강정배 ~1.35', '55.98%', '', '54.84%', '52.15%', '51.83% −4.5★', '61.22% +9.1★'],
+  ['강정배 1.35~1.60', '39.46%', '35.27% −4.5', '37.45%', '38.73%', '40.78%', '44.34% +5.3★'],
+  ['중정배 1.60~1.90', '30.71%', '29.38%', '29.12%', '31.01%', '35.14% +5.1★', '34.19%'],
+  ['약정배 1.90~2.30', '23.05%', '23.28%', '22.18%', '25.31% +2.7★', '21.21%', ''],
+  ['접전 2.30+', '17.31%', '17.70%', '16.56%', '16.19%', '', ''],
+]
+// 같은 배당대인데 기대점수가 갈리면 결과가 얼마나 달라지는지 — 위 격자의 요약.
+// [경우, 경기수, 핸승, 핸무, 무, 역, 정무, 플핸무]
+const XG_CONFLICT = [
+  ['강정배 배당(<1.6) + 기대점수 대등(<0.8)', '1,241', '39.24%', '26.03%', '19.90%', '14.83%', '85.17%', '60.76%'],
+  ['강정배 배당(<1.6) + 기대점수 압도(2.2+)', '1,997', '57.64%', '22.33%', '13.32%', '6.71%', '93.29%', '42.36%'],
+  ['접전 배당(2.3+) + 기대점수 압도(1.4+)', '125', '17.60%', '24.80%', '26.40%', '31.20%', '68.80%', '82.40%'],
+  ['접전 배당(2.3+) + 기대점수 대등(<0.8)', '5,779', '17.39%', '21.42%', '30.23%', '30.96%', '69.04%', '82.61%'],
+]
 
 // 시즌전적 정의 팝업 — 다른 참고표(DirectionScopeLegend 등)와 같은 help-legend 꼴.
 // 2026-09-06 개편: '오늘과 같은 정배/역배 구도' 필터를 없애고, 스코어만 보는 단순
@@ -1841,7 +1917,122 @@ function SeasonRecordLegend({ onClose }) {
           4점(1승1무)이라는 뜻입니다.
         </p>
 
-        <p className="help-legend-title">④ 확률 계산에는 반영되지 않습니다</p>
+        <p className="help-legend-title">④ 줄 이름 옆 괄호 — 기대점수</p>
+        <p className="help-legend-note">
+          <b>홈(1.40/1.52)</b>처럼 줄 이름에 붙는 괄호가 <b>기대점수</b>입니다 —
+          &quot;이 경기에서 이 팀이 몇 골 넣을 것 같은가&quot;입니다. 축구 통계의
+          기대골(xG)은 원래 슈팅 하나하나의 위치로 구하는데 우리 DB엔 슈팅 데이터가 없어서,
+          역시 표준으로 쓰이는 <b>공격력 × 수비력</b> 방식(포아송)으로 냅니다.
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th></th><th>계산</th></tr></thead>
+          <tbody>
+            <tr><td>홈팀 공격력</td><td>홈팀 평균 득점 ÷ 리그 기준선</td></tr>
+            <tr><td>원정팀 수비력</td><td>원정팀 평균 <b>실점</b> ÷ 리그 기준선 (수비가 나쁠수록 커짐)</td></tr>
+            <tr><td><b>홈팀 기대점수</b></td><td><b>공격력 × 수비력 × 리그 평균 홈득점</b></td></tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          양 팀이 딱 평균이면 공격력·수비력이 둘 다 1.0이라 기대점수가 리그 평균 그대로
+          나옵니다(EPL이면 홈 1.56 / 원정 1.24 — 실측 리그 평균과 일치). 괄호 규칙은
+          승/무/패와 같습니다: <b>앞이 전체 기준</b>(홈·원정 안 가린 전 경기),
+          <b> 뒤가 오늘 장소 기준</b>(홈팀은 홈경기만·원정팀은 원정경기만).
+          <b> 판정에 쓰는 값은 앞쪽</b>입니다 — 장소 기준은 표본이 절반이라 실측에서
+          신호가 더 약했습니다. 3경기 미만이면 계산하지 않고 &apos;-&apos;로 둡니다.
+        </p>
+
+        <p className="help-legend-title">
+          ⑤ 기대점수 차이 — 어떤 배당대에서 무엇을 말해주나 (실측)
+        </p>
+        <p className="help-legend-note">
+          <b>기대점수 차이 = 정배팀 기대점수 − 언더독팀 기대점수</b>(정배는 해외배당 FW·FL
+          중 낮은 쪽). 이 값이 클수록 정배가 강하다는 뜻인데, <b>그건 배당이 이미 아는
+          정보</b>라 그대로 쓰면 안 됩니다. 그래서 <b>배당대를 고정한 뒤</b> 기대점수 차이로
+          갈라 재봤습니다(6대리그 29,938경기). 아래는 핸승 비율이고, 괄호는 그 배당대
+          평균 대비 차이입니다(★는 z≥2 — 우연으로 보기 어렵다는 뜻).
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>배당대(해외 정배배당)</th><th>평균</th>
+              <th>차이 ~0.3</th><th>0.3~0.8</th><th>0.8~1.4</th><th>1.4~2.2</th><th>2.2+</th></tr>
+          </thead>
+          <tbody>
+            {XG_GRID_HIT.map(([band, avg, ...cells]) => (
+              <tr key={band}>
+                <td>{band}</td><td>{avg}</td>
+                {cells.map((c, i) => (
+                  <td key={i} className={c && c.endsWith('★') ? 'help-legend-warn' : undefined}>
+                    {c || '—'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          <b>정배가 셀 때만 작동합니다.</b> 초강정배 배당(~1.35)에서는 기대점수 차이에 따라
+          핸승이 <b>51.83% ↔ 61.22%</b>로 10%p 가까이 갈립니다. 반대로 <b>접전 배당(2.30 이상)에서는
+          어느 조합도 유의하지 않습니다</b> — 그래서 경기지표 뱃지도 접전 경기에는 안 뜹니다.
+        </p>
+        <p className="help-legend-note">
+          같은 &apos;강정배 배당&apos;이라도 기대점수가 갈리면 결과가 완전히 달라집니다:
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>경우</th><th>경기수</th><th>핸승</th><th>핸무</th><th>무</th><th>역</th>
+              <th>정무</th><th>플핸무</th></tr>
+          </thead>
+          <tbody>
+            {XG_CONFLICT.map(([lab, n, ...v]) => (
+              <tr key={lab}>
+                <td>{lab}</td><td>{n}</td>
+                {v.map((x, i) => <td key={i}>{i >= 4 ? <b>{x}</b> : x}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-title">
+          ⑥ 경기지표에 뱃지가 뜨는 6가지 조합
+        </p>
+        <p className="help-legend-note">
+          위 격자에서 <b>z≥2로 살아남은 칸만</b> 뱃지로 만들었습니다. 지금 보는 경기가 아래
+          조합 중 하나에 들어가면 경기지표 줄에 뜨고, 마우스를 올리면 그 칸의 실측값이
+          그대로 나옵니다. <b>접전 배당(2.30 이상)은 어느 조합도 유의하지 않아 뱃지가
+          아예 없습니다.</b>
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>해외 정배배당</th><th>기대점수 차이</th><th>뱃지</th><th>실측</th></tr>
+          </thead>
+          <tbody>
+            {XG_RULES.map(([o1, o2, m1, m2, label, tone, note]) => (
+              <tr key={`${o1}-${m1}`}>
+                <td>{o1 === 0 ? `~${o2.toFixed(2)}` : `${o1.toFixed(2)}~${o2.toFixed(2)}`}</td>
+                <td>{m2 >= 99 ? `${m1} 이상` : `${m1}~${m2}`}</td>
+                <td>
+                  <span
+                    className="match-chip match-chip-tone"
+                    style={{
+                      background: `var(--chip-${tone}-bg)`,
+                      color: `var(--chip-${tone}-fg)`,
+                    }}
+                  >
+                    <strong>{label}</strong>
+                  </span>
+                </td>
+                {/* 툴팁에 쓰는 문구에서 앞부분(조건 설명)을 빼고 실측 수치만 보여준다 */}
+                <td>{note.split('— ')[1] || note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          색은 방향을 뜻합니다 — <b>파랑</b>은 정배 쪽(핸승·정무)이 유리해진다는 뜻,
+          <b> 빨강</b>은 배당이 강정배로 매겨졌는데 기대점수는 그만큼이 아니라서
+          <b> 플핸무·역</b> 쪽이 살아난다는 뜻입니다.
+        </p>
+
+        <p className="help-legend-title">⑦ 확률 계산에는 반영되지 않습니다</p>
         <p className="help-legend-note">
           참고용 표입니다 — &apos;종합픽&apos; 확률 계산에는 넣지 않고 화면에만 보여줍니다.
           시즌 초반엔 표본이 금방 말라(경기 수 자체가 적어) 믿고 보기 어렵습니다.
@@ -3121,7 +3312,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds }) {
+function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg }) {
   // '경기지표'의 무·전적 뱃지와 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -3157,6 +3348,7 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds }) {
                   h2hLoading={h2hLoading}
                   pick={pick}
                   sameOdds={sameOdds}
+                  xg={xg}
                 />
               </div>
               {/* 방향성·배당 두 표를 한 덩어리로 묶고, 그 아래에 구분선 + 시스템
@@ -3223,6 +3415,11 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
   const [pickError, setPickError] = useState('')
   // 종합분석 카드를 화면에서 뺀 뒤로 이 응답에서 실제로 쓰는 건 이 둘과 streaks뿐이다.
   const seasonSig = findSignal(pickData, 'season')
+  // 기대점수(전체 기준) — 시즌전적 표가 쓰는 값 그대로를 경기지표 뱃지(xgChips)에도 넘긴다.
+  // rows[0]=홈 · rows[1]=원정, xg[0]=전체 기준 · xg[1]=오늘 장소 기준(뱃지는 [0]만 쓴다).
+  const seasonXg = seasonSig && seasonSig.rows
+    ? { home: seasonSig.rows[0]?.xg?.[0], away: seasonSig.rows[1]?.xg?.[0] }
+    : null
   const h2hSig = findSignal(pickData, 'h2h')
   // 경기지표의 '전적' 뱃지(홈우세/홈만우세/전적보합/원정만우세/원정우세).
   // 상대전적 카드가 쓰는 것과 같은 h2h를 그대로 재사용한다 — API를 더 부르지 않는다.
@@ -3358,6 +3555,7 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
           sameOdds={sameOdds}
           h2hVerdict={h2hMark}
           h2hLoading={!pickData && !pickError}
+          xg={seasonXg}
         />
 
         <div className="modal-columns" ref={columnsRef}>
