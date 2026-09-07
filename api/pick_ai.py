@@ -61,6 +61,24 @@ _LEAGUE_AVG_GOALS = {
     "BUNDES": 3.02, "EREDIVISIE": 3.10, "LIGUE1": 2.62,
 }
 _AVG_GOALS_DEFAULT = 2.80   # 6대리그 전체 평균 — 내 데이터 등 리그를 모를 때
+
+# 기대점수(아래 _expected_goals)용 리그 기준선 — 홈팀/원정팀 평균 득점을 따로 둔다.
+# 위 _LEAGUE_AVG_GOALS(양팀 합계)와 달리 홈 어드밴티지를 반영해야 하기 때문이다.
+# 6대리그 36,029경기 실측(2026-09-07): 홈 1.576 · 원정 1.226 — 홈이 0.35골 많다.
+_LEAGUE_HOME_GOALS = {
+    "EPL": 1.563, "LALIGA": 1.545, "SERIEA": 1.487,
+    "BUNDES": 1.681, "EREDIVISIE": 1.760, "LIGUE1": 1.473,
+}
+_LEAGUE_AWAY_GOALS = {
+    "EPL": 1.235, "LALIGA": 1.129, "SERIEA": 1.204,
+    "BUNDES": 1.337, "EREDIVISIE": 1.348, "LIGUE1": 1.145,
+}
+_HOME_GOALS_DEFAULT = 1.576   # 리그를 모를 때(내 데이터 등) 6대리그 평균
+_AWAY_GOALS_DEFAULT = 1.226
+
+# 기대점수를 내려면 양쪽 표본이 최소 이만큼은 있어야 한다 — 1~2경기짜리 평균은
+# 3골 넣은 경기 하나로 공격력이 2배가 되어 숫자가 요동친다(시즌 초반).
+XG_MIN_MATCHES = 3
 # 리그 평균에서 이만큼 벗어나면 저득점/다득점으로 본다. 맞대결 2,530쌍 기준 이 폭이면
 # 저득점 26.9% / 보통 51.9% / 다득점 21.2%로 갈려서 세 칸이 고르게 찬다.
 H2H_GOAL_BAND = 0.4
@@ -411,6 +429,7 @@ def _season_record(matches: list | None, team: str, is_home_today: bool):
     total = 0
     venue_total = 0
     points = 0
+    gf = ga = venue_gf = venue_ga = 0      # 득점/실점 — 기대점수(_expected_goals) 재료
     for m in matches or []:
         hs, a_s = _num(m.get("HS")), _num(m.get("AS"))
         if hs is None or a_s is None:
@@ -421,12 +440,69 @@ def _season_record(matches: list | None, team: str, is_home_today: bool):
         counts[outcome] += 1
         total += 1
         points += _SEASON_POINTS[outcome]
+        gf += mine
+        ga += theirs
         if is_home == is_home_today:
             venue_counts[outcome] += 1
             venue_total += 1
+            venue_gf += mine
+            venue_ga += theirs
     return {
         "counts": counts, "total": total, "points": points,
         "venue_counts": venue_counts, "venue_total": venue_total,
+        "gf": gf, "ga": ga, "venue_gf": venue_gf, "venue_ga": venue_ga,
+    }
+
+
+def _expected_goals(home_rec, away_rec, code):
+    """이 경기에서 양 팀이 몇 골 넣을 것으로 기대되는가 — '기대점수'.
+
+    [무엇인가]
+      축구 통계에서 쓰는 기대골(xG)은 원래 슈팅 하나하나의 위치·각도로 구하는데,
+      우리 DB에는 슈팅 데이터가 없다. 그래서 널리 쓰이는 다른 표준 방식인
+      '공격력 × 수비력' 모델(포아송 기반)로 낸다 — 스코어만으로 계산할 수 있다.
+
+    [공식]
+      리그 평균 홈득점 LH · 원정득점 LA를 기준선으로 두고(위 _LEAGUE_HOME_GOALS),
+        홈팀 공격력  = 홈팀 평균 득점 ÷ 기준선
+        원정팀 수비력 = 원정팀 평균 실점 ÷ 기준선     (수비가 나쁠수록 커진다)
+        홈팀 기대점수 = 홈팀 공격력 × 원정팀 수비력 × LH
+      원정팀 기대점수도 같은 방식(LA 기준). 양쪽이 평균이면 공격력·수비력이 둘 다
+      1.0이라 기대점수가 그대로 리그 평균(LH·LA)이 된다.
+
+    [두 가지를 낸다 — 화면의 괄호 규칙과 같다]
+      전체 : 홈/원정 안 가린 전 경기 평균으로. 표본이 크지만 홈 어드밴티지가 섞인다.
+      장소 : 홈팀은 홈경기만·원정팀은 원정경기만으로. 더 정확하지만 표본이 절반이다.
+             (원정팀이 원정에서 내주는 실점의 리그 평균은 홈득점 LH가 맞다 —
+              원정팀 실점 = 그 경기 홈팀의 득점이기 때문.)
+
+    표본이 XG_MIN_MATCHES 미만인 쪽은 계산하지 않고 None으로 둔다.
+    반환: {"home": [전체, 장소], "away": [전체, 장소]} — 값이 없으면 그 자리가 None.
+    """
+    lh = _LEAGUE_HOME_GOALS.get(code, _HOME_GOALS_DEFAULT)
+    la = _LEAGUE_AWAY_GOALS.get(code, _AWAY_GOALS_DEFAULT)
+    lt = (lh + la) / 2.0        # 장소를 안 가린 팀당 평균
+
+    def calc(att_gf, att_n, def_ga, def_n, ref, base):
+        if not att_n or not def_n or att_n < XG_MIN_MATCHES or def_n < XG_MIN_MATCHES:
+            return None
+        attack = (att_gf / att_n) / ref
+        defence = (def_ga / def_n) / ref
+        return round(attack * defence * base, 2)
+
+    if not home_rec or not away_rec:
+        return {"home": [None, None], "away": [None, None]}
+    return {
+        "home": [
+            calc(home_rec["gf"], home_rec["total"], away_rec["ga"], away_rec["total"], lt, lh),
+            calc(home_rec["venue_gf"], home_rec["venue_total"],
+                 away_rec["venue_ga"], away_rec["venue_total"], lh, lh),
+        ],
+        "away": [
+            calc(away_rec["gf"], away_rec["total"], home_rec["ga"], home_rec["total"], lt, la),
+            calc(away_rec["venue_gf"], away_rec["venue_total"],
+                 home_rec["venue_ga"], home_rec["venue_total"], la, la),
+        ],
     }
 
 
@@ -439,14 +515,16 @@ def _season_side_text(side_label, rec, is_home_today):
             f"— 괄호는 {venue_word}경기 기준. 합 {rec['total']}경기(승점 {rec['points']})")
 
 
-def _season_row(side_label, rec, is_home_today):
+def _season_row(side_label, rec, is_home_today, xg=None):
     """화면이 표로 그릴 수 있게 구조화한 한 줄 — value_text(문장)와 같은 내용을
     행/열이 맞는 표로도 보여주기 위한 것(가독성: 숫자를 나열식 문장 대신 표로).
     counts['승']/['무']/['패'] = [총계, 오늘과 같은 장소(홈/원정)에서 나온 것] — 화면은
-    '5(2)'로 그린다. counts['합']만 예외로 [총 경기 수, 승점 합계](장소 구분 없음)다."""
+    '5(2)'로 그린다. counts['합']만 예외로 [총 경기 수, 승점 합계](장소 구분 없음)다.
+    xg = [전체 기준 기대점수, 오늘 장소 기준 기대점수] — 괄호 규칙은 승/무/패와 같다
+    (_expected_goals 참고). 표본이 모자라면 그 자리가 None."""
     venue_label = "홈" if is_home_today else "원정"
     if not rec:
-        return {"side": side_label, "venue": venue_label, "counts": None}
+        return {"side": side_label, "venue": venue_label, "counts": None, "xg": xg}
     c, v = rec["counts"], rec["venue_counts"]
     return {
         "side": side_label,
@@ -457,6 +535,7 @@ def _season_row(side_label, rec, is_home_today):
             "패": [c["패"], v["패"]],
             "합": [rec["total"], rec["points"]],
         },
+        "xg": xg,
     }
 
 
@@ -618,12 +697,17 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master",
     away_rec = _season_record((season_matches or {}).get("away"), at_name, False)
     season_text = (f"{_season_side_text('홈', home_rec, True)}\n"
                    f"{_season_side_text('원정', away_rec, False)}")
+    # 기대점수 — 양 팀의 이번 시즌 득실로 '이 경기에서 몇 골 넣을 것 같은가'를 낸다
+    # (_expected_goals 참고). 승/무/패와 마찬가지로 확률 계산에는 넣지 않는다.
+    xg = _expected_goals(home_rec, away_rec, code)
     signals.append({
         "key": "season", "label": "시즌전적", "state": "info",
         "value_text": season_text,
-        "rows": [_season_row("홈", home_rec, True), _season_row("원", away_rec, False)],
-        "note": "이번 시즌 전체 경기의 승/무/패 — 괄호는 그중 오늘과 같은 장소(홈/원정)에서 "
-                "나온 값(합 칸만 예외로 괄호가 승점). 확률 계산에는 반영하지 않습니다",
+        "rows": [_season_row("홈", home_rec, True, xg["home"]),
+                 _season_row("원", away_rec, False, xg["away"])],
+        "note": "이번 시즌 전체 경기의 승/무/패와 기대점수 — 괄호는 그중 오늘과 같은 "
+                "장소(홈/원정)에서 나온 값(합 칸만 예외로 괄호가 승점). "
+                "확률 계산에는 반영하지 않습니다",
         "dir": 0, "adjust": 0.0,
     })
 

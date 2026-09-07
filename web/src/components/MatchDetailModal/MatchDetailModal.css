@@ -1276,6 +1276,7 @@
 .pick-season-table .row-label {
   width: 1%;
   white-space: nowrap;
+  text-align: left;          /* 두 줄('홈(…)'·'원(…)')의 시작 위치를 맞춘다 */
 }
 
 /* "5(2)"의 괄호 부분 — 총계(5)보다 흐리게, 오늘과 같은 장소에서 나온 값이라는 표시 */
@@ -1299,6 +1300,23 @@
 .pick-season-table .col-l {
   background: var(--chip-red-bg);
   color: var(--chip-red-fg);
+}
+
+/* 줄 이름 옆 기대점수 — '홈(1.40/1.52)'처럼 라벨에 붙는다(칸을 따로 두지 않는다).
+   승/무/패 숫자와 성격이 다른 값이라 흐리게 두되, 소수 둘째자리가 흔들리지 않게
+   자릿수 폭은 고정한다. */
+.pick-season-xg {
+  margin-left: 2px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 괄호 안 뒤쪽 값(오늘 장소 기준) — 홈팀은 홈경기만·원정팀은 원정경기만으로 낸,
+   이 경기에 더 맞는 값이라 밝게 굵게 둔다(앞의 전체 기준은 흐린 채로).
+   CLAUDE.md 6-2의 '값은 밝게(--text-primary), 나머지는 흐리게' 규칙과 같다. */
+.pick-season-xg-venue {
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 /* 해외지표·국내지표 계단식 보정 근거 표 — 시즌전적 표와 같은 톤(작은 글씨·좁은 여백)으로
