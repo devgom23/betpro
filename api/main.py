@@ -2127,6 +2127,47 @@ def crawl_save_aliases(body: CrawlAliasBody, user: dict = Depends(get_current_us
             "aliases": CRAWL.list_aliases(udb, body.scope, body.code)}
 
 
+def _reconcile_crawl_no(raw: pd.DataFrame, db: str, code: str) -> pd.DataFrame:
+    """
+    해외배당(스코어맨) 크롤은 그 순간 화면에 뜬 경기를 킥오프 시각순으로 다시 정렬해
+    1번부터 No를 새로 매긴다(crawler.py::crawl_current, main.py::crawl_next_round).
+    평소엔 문제없지만, 그 라운드의 어느 한 경기가 연기 등으로 화면에서 빠지거나
+    순서가 바뀌면 이미 저장된 경기들과 No가 어긋난다 — 그러면 저장 시 dedup key
+    (L,S,R,No,HT,AT)가 안 맞아 "같은 경기"로 못 알아보고 새 행으로 중복 추가된다
+    (2026-09-08 실측 — 에레디 26-27 3R에서 네이메헌/엑셀시오르가 연기되며 뒤 4경기의
+    No가 전부 한 칸씩 밀려, 다시 가져와 저장할 때마다 그 4경기가 중복 생성됨).
+
+    그래서 저장 직전에 (S,R,HT,AT)로 이미 있는 경기를 찾아 그 경기의 실제 No를
+    그대로 돌려주고(국배 가져오기·결과 불러오기가 이미 쓰던 것과 같은 방식 —
+    crawl_kr_fetch/crawl_kr_fetch_results 참고), 정말 새로 생긴 경기만 그 라운드의
+    최대 No 다음 번호를 매긴다.
+    """
+    if raw.empty or not {"S", "R", "HT", "AT"}.issubset(raw.columns):
+        return raw
+    old = DATA.load_league_df(db, code)
+    if old.empty or not {"S", "R", "HT", "AT", "No"}.issubset(old.columns):
+        return raw
+    raw = raw.copy()
+    old_no = pd.to_numeric(old["No"], errors="coerce")
+    old_s = old["S"].astype(str)
+    old_r = old["R"].astype(str)
+    old_ht = old["HT"].astype(str).str.strip()
+    old_at = old["AT"].astype(str).str.strip()
+    for (s_val, r_val), idx in raw.groupby(["S", "R"], sort=False).groups.items():
+        mask = (old_s == str(s_val)) & (old_r == str(r_val))
+        row_map = {(ht, at): no for ht, at, no in zip(old_ht[mask], old_at[mask], old_no[mask])
+                  if pd.notna(no)}
+        next_no = (max(row_map.values()) if row_map else 0) + 1
+        for i in idx:
+            key = (str(raw.at[i, "HT"]).strip(), str(raw.at[i, "AT"]).strip())
+            if key in row_map:
+                raw.at[i, "No"] = row_map[key]
+            else:
+                raw.at[i, "No"] = float(next_no)
+                next_no += 1
+    return raw
+
+
 @app.post("/api/crawl/save")
 def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
     """가져온 경기들을 리그에 등록한다. 엑셀 업로드와 완전히 같은 병합 규칙을 쓴다."""
@@ -2139,6 +2180,8 @@ def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
 
     # 업로드 양식과 같은 컬럼만 남긴다(_핸디기준 같은 참고용 필드는 저장하지 않는다)
     raw = pd.DataFrame(body.rows)
+    # No를 화면 순번이 아니라 기존 경기 기준으로 다시 맞춘다(_reconcile_crawl_no 주석 참고).
+    raw = _reconcile_crawl_no(raw, db, body.code)
 
     # 국내 핸디 방향(KH/EKH) 자동 채움 — 국배를 불러와 저장할 때 핸디 방향까지
     # 그 자리에서 정해 같이 저장한다. 예전엔 "결과·핸디 입력" 팝업을 열어 따로

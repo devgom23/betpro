@@ -29,6 +29,14 @@ import './LeagueTable.css'
 const SAME_ODDS_W = 'KW'
 const SAME_ODDS_L = 'KL'
 
+// 판정 칸이 빈칸일 때(픽을 못 낸 경우) 표본이 없는 게 아니라, 통)해(기본 재료)의
+// 정배 방향을 못 정한 경우가 대부분이다 — 해외 정배배당이 완전히 동률이거나(FW=FL)
+// 아직 배당 자체가 등록되지 않은 경우. '표시가 없다=값이 없다'로 보이지 않게
+// 빈칸 대신 흐린 대시를 그리고, 마우스를 올리면 이유를 알려준다(사용자 지정, 2026-09-08).
+const VERDICT_NONE_TITLE = '판정 없음 — 통)해(해외 정배배당) 기준으로 정배 방향을 정할 수'
+  + ' 없습니다(배당이 아직 등록되지 않았거나, 정·역 배당이 완전히 같음). 표본 부족이'
+  + ' 아니라 방향 자체가 안 정해진 경우입니다.'
+
 // 여러 리그를 한 표에 모은 화면(이번주 리스트 등)에서는 row.L이 리그 코드라 그대로
 // 쓰면 'LIGUE1'처럼 나온다 — 표의 '리그' 칸과 같은 말로 바꿔서 보여준다.
 const LEAGUE_LABELS = {
@@ -685,9 +693,9 @@ export default function LeagueTable({
                             key={`${gi}-c`}
                             className={`collapsed-cell${dividerClass(g, isLastGroup)}${strong ? ' verdict-strong' : ''}`}
                             style={verdictCellStyle(v.pick, v.stars) || undefined}
-                            title={strong ? STRONG_TIER_TITLE[strong] : undefined}
+                            title={strong ? STRONG_TIER_TITLE[strong] : (!v.pick ? VERDICT_NONE_TITLE : undefined)}
                           >
-                            {v.pick || ''}
+                            {v.pick || <span className="mypick-blank">－</span>}
                           </td>,
                         ]
                         cellKeys = [VERDICT_KEY]
@@ -813,9 +821,9 @@ export default function LeagueTable({
                             strong ? 'verdict-strong' : '',
                           ].filter(Boolean).join(' ') || undefined}
                           style={verdictCellStyle(v.pick, v.stars) || undefined}
-                          title={strong ? STRONG_TIER_TITLE[strong] : undefined}
+                          title={strong ? STRONG_TIER_TITLE[strong] : (!v.pick ? VERDICT_NONE_TITLE : undefined)}
                         >
-                          {v.pick || ''}
+                          {v.pick || <span className="mypick-blank">－</span>}
                         </td>,
                       ]
                     } else {

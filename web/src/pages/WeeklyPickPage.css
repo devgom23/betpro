@@ -37,6 +37,21 @@
   cursor: default;
 }
 
+.wp-guide-btn {
+  border: 1px solid var(--chip-yellow-fg);
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wp-guide-btn:hover {
+  filter: brightness(1.08);
+}
+
 .wp-title-bet {
   margin-top: 36px;
   margin-bottom: 16px;

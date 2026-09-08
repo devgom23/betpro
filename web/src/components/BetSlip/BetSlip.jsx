@@ -58,6 +58,63 @@ export function oddsForPick(row, pick) {
 
 const matchKey = (r) => `${r.L}|${r.S}|${r.R}|${r.No}|${r.HT}|${r.AT}`
 const legKey = (l) => `${matchKey(l.row)}|${l.pick}`
+
+// ── 보험 없는 단독 픽 경고 ────────────────────────────────────────────────
+// 플핸은 핸무가, 정은 무가 짝이다(CLAUDE.md 5-1 — 3way에서 하나를 배제하는 방식).
+// 한 경기에 적중 쪽만 넣고 보험 쪽을 안 넣으면, 그 하나가 빗나가는 순간 그 경기가
+// 들어간 조합이 전부 죽는다.
+//
+// 2026-09-08 사용자 배팅내역 실측(5회차 · 조합 54개 · 경기 49개) — 조합을 풀어
+// 단폴로 환산한 회수율(1.00이 본전):
+//     플핸  다리 54개 · 적중 51.85% · 평균배당 1.59 → 회수율 0.77 (-86,856원)
+//     정    다리 50개 · 적중 62.00% · 평균배당 1.49 → 회수율 0.87 (-39,583원)
+//     핸무  다리 27개 · 적중 51.85% · 평균배당 3.61 → 회수율 1.76 (+61,183원)
+//     무    다리 17개 · 적중 58.82% · 평균배당 3.21 → 회수율 1.87 (+35,825원)
+// 즉 보험 쪽(핸무·무)이 돈을 벌고, 적중 쪽 단독(플핸·정)이 돈을 깎았다.
+// 조합 54개 중 27개(50%)가 딱 한 다리 때문에 죽었고 그 돈이 436,000원이었다.
+const SOLO_PAIR = { 플핸: '핸무', 정: '무' }
+const SOLO_STAT = { 플핸: '0.77 (−23.4%)', 정: '0.87 (−12.9%)' }
+
+// 이 슬립 안에서 '적중 쪽만 있고 짝(보험)이 없는 경기'를 찾는다.
+function soloPickWarnings(sides) {
+  const byMatch = new Map()
+  for (const legs of sides) {
+    for (const l of legs) {
+      const k = matchKey(l.row)
+      if (!byMatch.has(k)) byMatch.set(k, { row: l.row, picks: new Set() })
+      byMatch.get(k).picks.add(l.pick)
+    }
+  }
+  const out = []
+  for (const { row, picks } of byMatch.values()) {
+    for (const [solo, mate] of Object.entries(SOLO_PAIR)) {
+      if (picks.has(solo) && !picks.has(mate)) {
+        out.push({ match: `${row.HT} vs ${row.AT}`, solo, mate })
+      }
+    }
+  }
+  return out
+}
+
+// 경고 문구 — 확인을 누르면 그대로 진행한다(막지 않고 한 번 멈춰 세우기만 한다).
+function soloPickMessage(warnings) {
+  const lines = warnings.map((w) => `  · ${w.match} — ${w.solo} 단독 (${w.mate} 없음)`)
+  const kinds = [...new Set(warnings.map((w) => w.solo))]
+  const stats = kinds.map((k) => `${k} 단독 회수율 ${SOLO_STAT[k]}`).join(' · ')
+  return [
+    '⚠ 보험 없이 단독으로 건 경기가 있습니다',
+    '',
+    ...lines,
+    '',
+    `내 배팅내역 실측(5회차 · 조합 54개) — ${stats}`,
+    '보험 쪽(핸무 1.76 · 무 1.87)이 오히려 돈을 벌었고,',
+    '조합 54개 중 27개(50%)가 딱 한 다리 때문에 죽었습니다(436,000원).',
+    '',
+    '같은 경기에 짝(핸무·무)을 같이 넣으면 보험이 됩니다.',
+    '',
+    '정말 이대로 진행할까요?',
+  ].join('\n')
+}
 // combos의 odds는 이미 소수 1자리로 전체올림해서 확정된 값이라(아래 combos 참고),
 // 여기서는 그 값을 그대로 소수 1자리 문자열로만 바꾼다.
 // 선택 1/2 목록에 나오는 다리 하나짜리 배당은 원본 그대로 소수 2자리로 보여준다.
@@ -257,6 +314,14 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
     setError('')
   }
 
+  // 보험 없는 단독 픽(플핸만 · 정만)이 있으면 한 번 멈춰 세운다(soloPickWarnings 주석).
+  // 막지는 않는다 — 사용자가 확인을 누르면 그대로 진행한다.
+  function confirmSoloPicks() {
+    const warnings = soloPickWarnings(sides)
+    if (warnings.length === 0) return true
+    return window.confirm(soloPickMessage(warnings))
+  }
+
   async function handleRegister() {
     setError('')
     const usable = combos.filter((c) => toNum(stakes[c.key]) && c.odds)
@@ -264,6 +329,7 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
       setError('뱃금액을 입력한 조합이 없습니다.')
       return
     }
+    if (!confirmSoloPicks()) return
     setBusy(true)
     try {
       await api.post('/api/bet_slips', {
@@ -294,7 +360,12 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
         <button className="slip-btn" onClick={handleRegister} disabled={busy || combos.length === 0}>
           📋 벳등록
         </button>
-        <button className="slip-btn slip-btn-primary" onClick={onSave}>💾 저장</button>
+        <button
+          className="slip-btn slip-btn-primary"
+          onClick={() => { if (confirmSoloPicks()) onSave() }}
+        >
+          💾 저장
+        </button>
         <button
           className="slip-btn"
           onClick={() => {
