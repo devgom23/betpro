@@ -587,15 +587,27 @@ function OddsTable({ row }) {
   // 오히려 풀럼이 정배)에서 '해외 배당'·'해외 핸디' 줄까지 국내 기준으로 강조돼
   // 실제로는 정배인 쪽이 역배 칸에 색칠되는 사고가 있었다. 그 줄이 국내 소속이면
   // KW/KL로, 해외 소속이면 FW/FL로 — 항상 그 줄 자신이 속한 시장의 배당을 본다.
-  const marketFav = (label) => {
-    const [wk, lk] = label.startsWith('국내') ? ['KW', 'KL'] : ['FW', 'FL']
+  // final=true면 그 시장의 배변(최종) 배당(EKW/EKL·EFW/EFL)으로 정배를 다시 정한다.
+  // ⚠ 2026-09-09 실측 버그 수정 — 예전엔 이 함수가 항상 초기(KW/KL·FW/FL)만 봐서,
+  // 정역반전(초기엔 A팀 정배 → 배변엔 B팀 정배로 뒤집힘) 경기의 '배변' 줄에서도
+  // 여전히 초기 기준으로 언더독 칸을 칠했다. 그래서 K1 포항 vs 김천(26-09-09, 초기
+  // KW 2.28<KL 2.85로 포항 정배 → 배변 EKW 2.65>EKL 2.46으로 김천 정배 뒤집힘)처럼
+  // 정역반전이 난 경기는 배변 줄에서 EKHL(5.40, 이제는 정배 쪽 커버 배당)이 언더독
+  // (플핸) 칸으로 잘못 칠해지고, 실제 언더독 배당인 EKHW(1.46)가 안 칠해졌다.
+  // 값 자체(EKHW=1.46)는 최신배당 불러오기가 정확히 받아 DB에 그대로 있었다 —
+  // 틀린 건 "어느 칸이 언더독 칸인가"를 표시하는 강조색뿐이었다.
+  const marketFav = (label, final = false) => {
+    const domestic = label.startsWith('국내')
+    const [wk, lk] = final
+      ? (domestic ? ['EKW', 'EKL'] : ['EFW', 'EFL'])
+      : (domestic ? ['KW', 'KL'] : ['FW', 'FL'])
     const w = numOrNull(row[wk])
     const l = numOrNull(row[lk])
     if (w === null || l === null || w === l) return null
     return w < l
   }
-  const favColClass = (col, label) => {
-    const fav = marketFav(label)
+  const favColClass = (col, label, final = false) => {
+    const fav = marketFav(label, final)
     if (fav === null) return undefined
     const favCol = fav ? 'w' : 'l'
     return col === favCol ? 'odds-fav-col' : undefined
@@ -608,8 +620,8 @@ function OddsTable({ row }) {
   // 강조되는 경우가 있어 실제로 보고 싶은 언더독 쪽과 어긋났다. 언더독도 그 핸디가
   // 속한 시장(국내 핸디→KW/KL, 해외 핸디→FW/FL) 기준으로 정한다 — 위 favColClass와
   // 같은 이유.
-  const dogColClass = (col, label) => {
-    const fav = marketFav(label)
+  const dogColClass = (col, label, final = false) => {
+    const fav = marketFav(label, final)
     if (fav === null) return undefined
     const dogCol = fav ? 'l' : 'w'
     return col === dogCol ? 'odds-fav-col' : undefined
@@ -662,7 +674,8 @@ function OddsTable({ row }) {
       <tbody>
         {rows.map(([label, w, d, l, final]) => {
           const isHandi = label === '국내 핸디' || label === '해외 핸디'
-          const colClass = (col) => (isHandi ? dogColClass(col, label) : favColClass(col, label))
+          const colClass = (col, isFinal = false) =>
+            (isHandi ? dogColClass(col, label, isFinal) : favColClass(col, label, isFinal))
           return (
             <Fragment key={label}>
               <tr className={label === '해외 배당' ? 'odds-group-start' : undefined}>
@@ -688,7 +701,9 @@ function OddsTable({ row }) {
                   </td>
                   {[w, d, l].map((initKey, ci) => {
                     const dir = oddsDir(row[initKey], row[final[ci]])
-                    const cls = ci === 0 ? colClass('w') : ci === 2 ? colClass('l') : undefined
+                    // 배변 줄은 배변(최종) 배당 기준으로 다시 정배를 판단한다(marketFav 주석 참고) —
+                    // 정역반전 경기에서 초기 기준을 그대로 쓰면 엉뚱한 칸이 언더독(플핸)으로 칠해진다.
+                    const cls = ci === 0 ? colClass('w', true) : ci === 2 ? colClass('l', true) : undefined
                     return (
                       <td key={final[ci]} className={cls}>
                         {numOrDash(row[final[ci]])}

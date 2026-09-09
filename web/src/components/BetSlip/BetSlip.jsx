@@ -34,19 +34,27 @@ function latestOdds(row, ekKey, kKey) {
 
 // 유형별 국내배당을 골라준다. 정/역은 고정 컬럼이 아니라 승·패 배당 중 낮은 쪽이
 // 정배(시장이 강하다고 본 쪽)라는 규칙을 따르고, 핸승/플핸도 같은 기준으로 갈린다.
-// 어느 쪽이 정배인지는 초기배당(KW/KL) 기준으로 고정한다 — 배변으로 숫자가 바뀌어도
-// "정"이 가리키는 팀 자체는 바뀌지 않는다(oddsMove.js의 favIsHome 판정과 같은 규칙).
+//
+// ⚠ 2026-09-09 수정 — 예전엔 어느 쪽이 정배인지를 "초기배당(KW0/KL0) 기준으로 고정"해서,
+// 값(khw/khl)은 latestOdds로 최신을 쓰면서 방향(homeIsFav)만 초기 걸 썼다. 정역반전
+// (초기엔 A팀 정배 → 배변엔 B팀 정배로 뒤집힘) 경기에서 이 둘이 어긋난다 — K1 포항 vs
+// 김천(26-09-09, 초기 KW 2.28<KL 2.85로 포항 정배 → 배변 EKW 2.65>EKL 2.46으로 김천
+// 정배 뒤집힘) 경기에서 이번주 벳에 '플핸'을 고르면 실제 언더독(포항) 배당 1.46 대신
+// 정배 쪽 배당 5.40이 나오는 사고가 실제로 있었다(사용자 제보).
+// oddsMove.js의 favIsHome은 "얼마나 움직였는지"를 재려고 일부러 초기 정배팀을 고정
+// 기준점으로 삼는 것이라(그래야 이동폭이 나온다) 여기와 목적이 다르다 — 여기는 "지금
+// 얼마를 받을 수 있는가"를 알려줘야 하므로, 값과 똑같이 방향도 최신(배변 있으면 배변,
+// 없으면 초기) 기준으로 맞춘다. MatchDetailModal.jsx OddsTable 강조색 버그와 같은
+// 원인·같은 날 수정.
 export function oddsForPick(row, pick) {
-  const kw0 = toNum(row?.KW)
-  const kl0 = toNum(row?.KL)
   const kd = latestOdds(row, 'EKD', 'KD')
   const khd = latestOdds(row, 'EKHD', 'KHD')
   if (pick === '무') return kd
   if (pick === '핸무') return khd
-  if (kw0 == null || kl0 == null) return null
-  const homeIsFav = kw0 <= kl0
   const kw = latestOdds(row, 'EKW', 'KW')
   const kl = latestOdds(row, 'EKL', 'KL')
+  if (kw == null || kl == null) return null
+  const homeIsFav = kw <= kl
   const khw = latestOdds(row, 'EKHW', 'KHW')
   const khl = latestOdds(row, 'EKHL', 'KHL')
   if (pick === '정') return homeIsFav ? kw : kl
