@@ -98,8 +98,20 @@ function FavMark({ side, me, odds }) {
 // 기준 시즌은 목록 맨 위 = 지금 보고 있는 경기의 시즌이다(백엔드가 S 내림차순으로
 // 정렬해 주고, 지금 경기 자신도 맞대결 목록에 들어 있다).
 // '최근 3년'은 기준 시즌을 포함해 3개 시즌 — 26-27 기준이면 24-25까지다.
+//
+// ⚠ 2026-09-09 수정 — 6대리그(S="26-27")는 앞 2글자만 잘라도 26으로 구분이 되지만,
+// K리그(내 데이터, S="2026" 4자리 연도 하나)는 앞 2글자가 전부 "20"으로 똑같아서
+// 2026이든 2010이든 늘 20으로 뭉개졌다 — 그래서 '최근 3년/5년'을 골라도 아무 경기도
+// 안 빠지고 전체년도와 똑같이 나왔다(사용자 제보, K1 상대전적). "NN-NN" 형식이면
+// 그 앞 2자리를, 아니면(4자리 연도) 연도 전체를 기준으로 삼는다 — 어느 쪽이든 같은
+// 데이터셋 안에서만 서로 비교하므로 두 형식이 100 차이 나도(26 vs 2026) 문제없다.
 function seasonStart(s) {
-  const n = Number(String(s ?? '').slice(0, 2))
+  const str = String(s ?? '').trim()
+  const dash = /^(\d{2})-/.exec(str)
+  if (dash) return Number(dash[1])
+  const year = /^(\d{4})/.exec(str)
+  if (year) return Number(year[1])
+  const n = Number(str.slice(0, 2))
   return Number.isFinite(n) ? n : null
 }
 
