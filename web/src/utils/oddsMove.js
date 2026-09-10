@@ -37,9 +37,6 @@ const FAV_MIN = 1.8
 const CUT_STRONG = 14
 const CUT_WEAK = 8
 
-/** 리그 표에서 이 등급을 담는 가상 컬럼 이름(백엔드가 내려주는 값이 아니다). */
-export const ODDS_GRADE_KEY = 'ODDS_GRADE'
-
 function num(v) {
   if (v === null || v === undefined || v === '') return null
   const n = Number(v)

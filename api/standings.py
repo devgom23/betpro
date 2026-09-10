@@ -31,6 +31,7 @@
 ⚠ 이 파일은 26개 지표 엔진(engine.py)과 무관하다. DB에 저장된 분석값은 전혀 건드리지 않고,
    경기 결과(HS/AS)만 읽어서 표시용 컬럼을 새로 만들어 붙일 뿐이다.
 """
+import functools
 import itertools
 import re
 from decimal import Decimal, ROUND_HALF_UP
@@ -64,6 +65,9 @@ RECENT_COLS = (HOME_RECENT5_COL, AWAY_RECENT5_COL,
 _REQUIRED = ("S", "R", "HT", "AT", "HS", "AS")
 
 
+# (승점, 경기수) 조합이 몇 백 가지뿐인데 리그 하나에 4만 번 가까이 불린다(EPL 실측
+# 37,920회) — Decimal 계산을 매번 새로 하지 않고 한 번 낸 값을 그대로 쓴다.
+@functools.lru_cache(maxsize=None)
 def _ppg(pts, played):
     """승점 ÷ 경기수 → '2.24' 같은 소수 둘째 자리 문자열.
     아직 해당 경기를 안 치렀으면(경기수 0) 사용자 지정대로 '0.00'."""
@@ -228,24 +232,35 @@ def _ranks(table, teams):
 
 def _attach_one_season(sdf, out):
     """한 시즌 분량(sdf)을 라운드 순서대로 훑으며 각 경기 '직전'의 순위·폼을 기록한다."""
-    ht = sdf["HT"].astype(str).str.strip()
-    at = sdf["AT"].astype(str).str.strip()
+    ht = sdf["HT"].astype(str).str.strip().tolist()
+    at = sdf["AT"].astype(str).str.strip().tolist()
     teams = sorted(set(ht) | set(at))
     if not teams:
         return
 
-    table = _Table()
-    rounds = sorted(sdf["R"].dropna().unique(), key=_round_num)
+    # 라운드별 경기 위치를 한 번에 모아 둔다 — 예전엔 라운드마다 시즌 전체를 불리언
+    # 마스크로 다시 걸러서(리그당 600번 넘게) 판다스 처리 비용이 대부분이었다.
+    # 라운드 순서·라운드 안 경기 순서는 예전(dropna().unique() → _round_num 안정 정렬,
+    # 마스크는 원래 행 순서 유지)과 똑같다: dict는 처음 나온 순서를 지키고 sorted는 안정 정렬.
+    idx_list = sdf.index.tolist()
+    hs_list = sdf["HS"].tolist()
+    as_list = sdf["AS"].tolist()
+    by_round = {}
+    for pos, rnd in enumerate(sdf["R"].tolist()):
+        if pd.isna(rnd):
+            continue
+        by_round.setdefault(rnd, []).append(pos)
 
-    for rnd in rounds:
-        mask = sdf["R"] == rnd
-        rdf = sdf[mask]
+    table = _Table()
+    for rnd in sorted(by_round, key=_round_num):
+        positions = by_round[rnd]
 
         # ① 이 라운드 경기들에는 '직전까지'의 순위·폼을 붙인다
         #    (아직 반영된 경기가 없으면 = 시즌 첫 라운드이므로 값 없음)
         if table.counted > 0:
             ranks = _ranks(table, teams)
-            for idx, h, a in zip(rdf.index, ht[mask], at[mask]):
+            for pos in positions:
+                idx, h, a = idx_list[pos], ht[pos], at[pos]
                 out[HOME_RANK_COL][idx] = ranks.get(h)
                 out[AWAY_RANK_COL][idx] = ranks.get(a)
                 out[HOME_ALL_FORM_COL][idx] = table.all_form(h)
@@ -266,11 +281,11 @@ def _attach_one_season(sdf, out):
                     "H" if v else "A" for v in table.recent_venues(a, newest_first=True))
 
         # ② 그 다음에 이 라운드 결과를 성적표에 반영한다
-        for h, a, hs, as_ in zip(ht[mask], at[mask], rdf["HS"], rdf["AS"]):
-            hs_i, as_i = _score(hs), _score(as_)
+        for pos in positions:
+            hs_i, as_i = _score(hs_list[pos]), _score(as_list[pos])
             if hs_i is None or as_i is None:
                 continue          # 아직 안 끝난 경기는 순위에 반영하지 않는다
-            table.add(h, a, hs_i, as_i)
+            table.add(ht[pos], at[pos], hs_i, as_i)
 
 
 # ─────────────────── 팀별 최고 연속 기록 (상세보기 팝업 전용) ───────────────────

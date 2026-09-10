@@ -107,11 +107,6 @@ export function oddsMoveDir(row, colKey) {
   return b > a ? 1 : -1
 }
 
-/** 이 칸의 배당이 초기 → 최종으로 실제로 움직였는가. */
-export function isOddsMoved(row, colKey) {
-  return oddsMoveDir(row, colKey) !== 0
-}
-
 // 확률 지표(정승%·플핸무%·플%) 8칸 전부 — 배당에서 바로 나오는 4칸(정·플)과
 // 27개 지표를 최종배당으로 다시 세어 나오는 4칸(국)지·해)지) 모두 최종배당 값이 있다.
 // 배당처럼 "올랐다/내렸다"가 곧 "좋다/나쁘다"를 뜻하지 않아서(정배 확률이 오르면
@@ -130,11 +125,6 @@ export function riskMoveDir(row, colKey) {
   if (blank(row[colKey]) || blank(row[FINAL_FIELD[colKey]])) return 0
   if (Number.isNaN(a) || Number.isNaN(b) || a === b) return 0
   return b > a ? 1 : -1
-}
-
-/** 이 경기에 최종배당이 있는가(= 두 줄로 보여줄 값이 있는가). */
-export function hasFinalOdds(row) {
-  return row != null && row.EKW != null && row.EKW !== ''
 }
 
 /** 아랫줄(최종배당)용 행 — 갈라지는 칸의 값만 최종배당 값으로 바꿔 끼운다.

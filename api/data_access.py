@@ -1,12 +1,15 @@
 """
 DB 읽기 + 엔진 호출 래퍼.
 - 스코프(master/user)에 따라 올바른 DB 파일을 열어 리그/통합 데이터를 로드.
-- 파일 mtime 기준의 아주 단순한 메모리 캐시로 반복 로드를 피한다
-  (Streamlit의 st.cache_data + (path, mtime) 키 아이디어를 그대로 이식).
+- 리그(테이블) 단위로 풀리는 아주 단순한 메모리 캐시로 반복 로드를 피한다
+  (무효화 규칙은 아래 _token / table_write 주석 참고).
 """
 import math
 import os
 import sqlite3
+import threading
+from contextlib import contextmanager
+
 import numpy as np
 import pandas as pd
 
@@ -16,8 +19,84 @@ import standings
 
 LEAGUES = PATHS.LEAGUES
 
-# {(kind, db_path): (mtime, DataFrame)} 형태의 초경량 캐시
+# {(kind, db_path): (유효성 토큰, 값)} 형태의 초경량 캐시
 _CACHE = {}
+
+# ── 캐시 유효성: 리그(테이블) 단위 ──
+# 예전엔 DB '파일'의 수정시각(mtime) 하나로만 판정해서, EPL 결과 하나만 저장해도 같은
+# master.db에 든 6개 리그·통합DB·방향성 색인이 전부 풀렸다(2026-09-10 실측: 저장 직후
+# 이번주 리스트 18초 — 6대리그 재준비만 8.2초). 이제 우리 코드가 테이블에 쓸 때
+# table_write()로 "어느 테이블을 바꿨는지" 알리면 그 테이블에 기대는 캐시만 풀린다.
+#
+# 알리지 않은 변경(다른 서버 프로세스·외부 스크립트·table_write를 안 거친 저장 경로·
+# 백업 복원)은 파일 mtime이 마지막으로 확인한 값과 달라지는 것으로 잡아 예전처럼 전부
+# 푼다(epoch 증가). 그래서 저장 경로 하나를 빠뜨려도 낡은 값이 남지 않는다 — 그 경로만
+# 예전 속도로 돌아갈 뿐이다.
+#
+# ⚠ master.db는 WAL 모드라 커밋 직후 본 파일 mtime이 바로 안 바뀔 수 있다(마지막 연결이
+#   닫히며 체크포인트될 때 바뀐다). 알린 쓰기는 mtime과 무관하게 테이블 번호를 올리므로
+#   이 경우에도 확실히 풀린다.
+_STATE = {}   # db_path -> {"mt": 마지막 확인 mtime, "epoch": 전체무효화 횟수, "all": 알린 쓰기 수, "tables": {테이블: 쓰기 수}}
+_STATE_LOCK = threading.Lock()
+
+
+def _token(db_path: str, tables):
+    """캐시 유효성 토큰. tables=None이면 그 DB의 어떤 테이블이 바뀌어도 달라진다."""
+    mt = PATHS.db_mtime(db_path)
+    with _STATE_LOCK:
+        st = _STATE.get(db_path)
+        if st is None:
+            st = _STATE[db_path] = {"mt": mt, "epoch": 0, "all": 0, "tables": {}}
+        elif st["mt"] != mt:
+            st["epoch"] += 1
+            st["mt"] = mt
+        if tables is None:
+            return (st["epoch"], st["all"])
+        return (st["epoch"],) + tuple(st["tables"].get(t, 0) for t in tables)
+
+
+@contextmanager
+def table_write(db_path: str, *tables: str):
+    """DB에 쓰는 코드를 감싼다 — 끝나면 적은 테이블에 기대는 캐시만 풀린다.
+
+    tables를 안 주면(여러 테이블을 한꺼번에 고치는 재계산·백업 복원 등) 그 DB 캐시를
+    전부 푼다. 블록 안의 모든 쓰기(stamp_updated 같은 메타 기록 포함)가 이 알림 하나로
+    처리되므로, 테이블 저장과 메타 기록은 반드시 같은 블록 안에 둔다 — 블록 밖에서 쓰면
+    '알리지 않은 변경'이 되어 캐시가 통째로 풀린다(틀리진 않고 느려질 뿐).
+    쓰는 도중 예외가 나도 일부가 이미 저장됐을 수 있어 알림은 항상 보낸다.
+    """
+    before = PATHS.db_mtime(db_path)
+    try:
+        yield
+    finally:
+        after = PATHS.db_mtime(db_path)
+        with _STATE_LOCK:
+            st = _STATE.get(db_path)
+            if st is not None:
+                # 블록 시작 전에 이미 모르는 변경이 있었으면(st["mt"] != before) 그것까지
+                # 여기서 덮어 버리면 안 되므로 전부 푼다.
+                if tables and st["mt"] == before:
+                    for t in tables:
+                        st["tables"][t] = st["tables"].get(t, 0) + 1
+                    st["all"] += 1
+                else:
+                    st["epoch"] += 1
+                st["mt"] = after
+
+
+def _cached(db_path: str, key_name: str, tables, build):
+    """(key_name, db_path) 캐시 조회 — 없거나 풀렸으면 build()로 만든다.
+    토큰은 반드시 build() '전에' 잡는다 — 만드는 도중에 저장이 끼면 다음 조회에서 다시
+    만들게 하려는 것(뒤에 잡으면 옛 데이터로 만든 값이 새 토큰으로 남는다)."""
+    key = (key_name, db_path)
+    tok = _token(db_path, tables)
+    hit = _CACHE.get(key)
+    if hit and hit[0] == tok:
+        return hit[1]
+    val = build()
+    _CACHE[key] = (tok, val)
+    return val
+
 
 # 똥사 위험도 — 똥배가 무/역으로 뒤집힐 확률(%). 6대리그 똥배 7,724건 실측 로지스틱 회귀.
 #
@@ -62,19 +141,17 @@ def _ddong_columns(df: pd.DataFrame, w_col: str = "KW", l_col: str = "KL"):
     if w_col in df.columns and l_col in df.columns and "S" in df.columns and "R" in df.columns:
         kw = pd.to_numeric(df[w_col], errors="coerce")
         kl = pd.to_numeric(df[l_col], errors="coerce")
-        groups: dict[tuple, list[tuple]] = {}
-        for idx, s, r, w, l in zip(df.index, df["S"], df["R"], kw, kl):
-            w_ok = pd.notna(w) and w <= 1.49
-            l_ok = pd.notna(l) and l <= 1.49
-            if not (w_ok or l_ok):
-                continue
-            cand = min(v for v, ok in ((w, w_ok), (l, l_ok)) if ok)
-            groups.setdefault((s, r), []).append((idx, cand))
-            risk.loc[idx] = _ddong_risk(cand)
-        for items in groups.values():
-            items.sort(key=lambda t: t[1])
-            for rank, (idx, _) in enumerate(items, start=1):
-                ddong.loc[idx] = f"똥{rank}"
+        # 후보 배당값 — KW·KL 중 1.49 이하인 쪽의 최솟값(둘 다 해당하면 더 낮은 쪽 하나만,
+        # 원본 로직 그대로). 어느 쪽도 1.49 이하가 아니면 NaN(=똥배 아님).
+        cand = pd.concat([kw.where(kw <= 1.49), kl.where(kl <= 1.49)], axis=1).min(axis=1)
+        is_ddong = cand.notna()
+        if is_ddong.any():
+            risk[is_ddong] = cand[is_ddong].map(_ddong_risk)
+            # 같은 라운드(시즌+라운드) 안에서 배당 오름차순 순위 — 동률이면 원래 행 순서를
+            # 그대로 유지한다(rank(method="first")가 stable-sort와 같은 규칙).
+            grp = df["S"].astype(str) + "\x00" + df["R"].astype(str)
+            rank = cand[is_ddong].groupby(grp[is_ddong], sort=False).rank(method="first").astype(int)
+            ddong[is_ddong] = "똥" + rank.astype(str)
 
     if "RT" in df.columns:
         rt_num = pd.to_numeric(df["RT"], errors="coerce")
@@ -98,15 +175,8 @@ def _read_table(db_path: str, table: str) -> pd.DataFrame:
 
 
 def load_league_df(db_path: str, league: str) -> pd.DataFrame:
-    """단일 리그 로드(mtime 캐시)."""
-    key = ("league:" + league, db_path)
-    mt = PATHS.db_mtime(db_path)
-    hit = _CACHE.get(key)
-    if hit and hit[0] == mt:
-        return hit[1]
-    df = _read_table(db_path, league)
-    _CACHE[key] = (mt, df)
-    return df
+    """단일 리그 로드(캐시 — 그 리그 테이블이 바뀔 때만 다시 읽는다)."""
+    return _cached(db_path, "league:" + league, (league,), lambda: _read_table(db_path, league))
 
 
 def load_league_df_ranked(db_path: str, league: str) -> pd.DataFrame:
@@ -138,42 +208,38 @@ def load_league_df_ev(db_path: str, league: str) -> pd.DataFrame:
 
     EV 부착은 리그 전체 이력으로 확률표를 만들어 전 행에 붙이는 작업이라 리그당 80~110ms
     (6대리그+내 데이터 합계 실측 686ms)가 든다. 예전엔 화면마다 매 요청 다시 계산해서
-    이번주 리스트/픽이 캐시가 데워진 뒤에도 항상 700ms 넘게 걸렸다 — DB가 바뀔 때만
-    다시 계산하도록 원본과 같은 mtime 캐시에 얹는다.
+    이번주 리스트/픽이 캐시가 데워진 뒤에도 항상 700ms 넘게 걸렸다 — 그 리그 테이블이
+    바뀔 때만 다시 계산하도록 원본과 같은 캐시에 얹는다.
 
     ⚠ 캐시된 df를 그대로 돌려주므로 받는 쪽에서 값을 고쳐 쓰면 안 된다(조회·필터·직렬화만).
       ev_model.attach_for_league 자체는 입력을 복사해 쓰므로 ranked 캐시는 오염되지 않는다.
     """
     import ev_model
     return cached_derive(db_path, "league_ev:" + league,
-                         lambda: ev_model.attach_for_league(load_league_df_ranked(db_path, league)))
+                         lambda: ev_model.attach_for_league(load_league_df_ranked(db_path, league)),
+                         tables=(league,))
 
 
 def load_total_df(db_path: str) -> pd.DataFrame:
-    """스코프 DB의 6개 리그를 합친 통합DB 로드(mtime 캐시).
+    """스코프 DB의 6개 리그를 합친 통합DB 로드(캐시 — 6개 중 하나라도 바뀌면 다시 합친다).
 
     ⚠ 여기서 리그를 읽을 때는 반드시 load_league_df(캐시)를 쓴다 — 예전엔 _read_table을
       직접 불러서, 같은 리그가 이미 캐시에 올라와 있는데도 6개를 전부 디스크에서 다시
       읽었다(실측 2,345ms → 캐시 재사용 69ms, 34배). 상세보기 팝업이 이 함수를 쓰는데
-      DB에 뭔가 저장할 때마다 mtime이 바뀌어 캐시가 풀리므로, 저장 직후 팝업을 처음
-      열면 매번 2.3초를 기다려야 했다.
+      DB에 뭔가 저장할 때마다 캐시가 풀리므로, 저장 직후 팝업을 처음 열면 매번 2.3초를
+      기다려야 했다.
       아래 d.copy()가 있어서 캐시된 원본에 Source_League가 새어 들어갈 걱정은 없다.
     """
-    key = ("total", db_path)
-    mt = PATHS.db_mtime(db_path)
-    hit = _CACHE.get(key)
-    if hit and hit[0] == mt:
-        return hit[1]
-    frames = []
-    for lg in LEAGUES:
-        d = load_league_df(db_path, lg)
-        if len(d):
-            d = d.copy()
-            d["Source_League"] = lg
-            frames.append(d)
-    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    _CACHE[key] = (mt, df)
-    return df
+    def build():
+        frames = []
+        for lg in LEAGUES:
+            d = load_league_df(db_path, lg)
+            if len(d):
+                d = d.copy()
+                d["Source_League"] = lg
+                frames.append(d)
+        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    return _cached(db_path, "total", LEAGUES, build)
 
 
 # 상대전적·시즌전적이 실제로 읽는 컬럼만 추린 목록.
@@ -214,19 +280,13 @@ def _read_table_slim(db_path: str, table: str, cols: list) -> pd.DataFrame:
 
 
 def load_league_h2h_df(db_path: str, league: str) -> pd.DataFrame:
-    """단일 리그 — 상대전적용 슬림 표(mtime 캐시). 내 데이터(user 스코프)가 쓴다."""
-    key = ("league_h2h:" + league, db_path)
-    mt = PATHS.db_mtime(db_path)
-    hit = _CACHE.get(key)
-    if hit and hit[0] == mt:
-        return hit[1]
-    df = _read_table_slim(db_path, league, H2H_COLS)
-    _CACHE[key] = (mt, df)
-    return df
+    """단일 리그 — 상대전적용 슬림 표(캐시). 내 데이터(user 스코프)가 쓴다."""
+    return _cached(db_path, "league_h2h:" + league, (league,),
+                   lambda: _read_table_slim(db_path, league, H2H_COLS))
 
 
 def load_total_h2h_df(db_path: str) -> pd.DataFrame:
-    """6개 리그를 합친 상대전적용 슬림 통합DB(mtime 캐시).
+    """6개 리그를 합친 상대전적용 슬림 통합DB(캐시).
 
     load_total_df(370컬럼)와 행 수·값이 같고 컬럼만 14개로 줄인 것이다. 상세보기 팝업과
     상대전적 탭은 이쪽을 쓴다 — 저장 직후처럼 캐시가 풀린 상태에서 팝업을 처음 열 때
@@ -235,49 +295,29 @@ def load_total_h2h_df(db_path: str) -> pd.DataFrame:
     ⚠ 화면 표(리그 조회·엑셀)는 여전히 load_league_df_ev를 써야 한다. 이 표에는 지표도
       배당(E*)도 순위도 없다.
     """
-    key = ("total_h2h", db_path)
-    mt = PATHS.db_mtime(db_path)
-    hit = _CACHE.get(key)
-    if hit and hit[0] == mt:
-        return hit[1]
-    frames = []
-    for lg in LEAGUES:
-        d = load_league_h2h_df(db_path, lg)
-        if len(d):
-            d = d.copy()
-            d["Source_League"] = lg
-            frames.append(d)
-    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    _CACHE[key] = (mt, df)
-    return df
+    def build():
+        frames = []
+        for lg in LEAGUES:
+            d = load_league_h2h_df(db_path, lg)
+            if len(d):
+                d = d.copy()
+                d["Source_League"] = lg
+                frames.append(d)
+        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    return _cached(db_path, "total_h2h", LEAGUES, build)
 
 
-def load_combo_index(db_path: str) -> dict:
-    """승+패 배당 조합 → 과거 결과 건수 표(mtime 캐시).
+def cached_derive(db_path: str, key_name: str, build, tables=None):
+    """DataFrame이 아닌 '파생 결과'(인덱스·집계 등)도 같은 캐시에 얹는다.
 
-    combo_dir.attach()가 리그 표에 방향성 컬럼을 붙일 때 쓴다. 조합 전수를 세려면
-    통합DB를 한 번 훑어야 해서, 요청마다 다시 만들면 리그 조회가 그만큼 느려진다.
-    """
-    import combo_dir as CD
-    return cached_derive(db_path, "combo_index", lambda: CD.build_index(load_total_df(db_path)))
-
-
-def cached_derive(db_path: str, key_name: str, build):
-    """DataFrame이 아닌 '파생 결과'(인덱스·집계 등)도 같은 mtime 캐시에 얹는다.
-
-    build()는 캐시가 없거나 DB가 바뀌었을 때만 호출된다. 리그 df처럼 DB 내용에서만
-    나오는 값이라면 무엇이든 담을 수 있어, 요청마다 같은 계산을 반복하는 걸 막는다.
-    (베팅내역의 RT 인덱스가 요청마다 리그 전체를 다시 훑느라 실측 155ms를 매번 썼다.)
+    build()는 캐시가 없거나 기대는 테이블이 바뀌었을 때만 호출된다. 리그 df처럼 DB
+    내용에서만 나오는 값이라면 무엇이든 담을 수 있어, 요청마다 같은 계산을 반복하는 걸
+    막는다(베팅내역의 RT 인덱스가 요청마다 리그 전체를 다시 훑느라 실측 155ms를 매번 썼다).
+    tables: 이 값이 기대는 테이블 목록. 안 주면(None) 그 DB의 어떤 테이블이 바뀌어도
+    풀린다 — 모르면 비워 두는 게 안전하다(느려질 수는 있어도 낡은 값은 안 남는다).
     캐시 키에 db_path가 들어가므로 계정별 user.db끼리 섞이지 않는다.
     """
-    key = (key_name, db_path)
-    mt = PATHS.db_mtime(db_path)
-    hit = _CACHE.get(key)
-    if hit and hit[0] == mt:
-        return hit[1]
-    val = build()
-    _CACHE[key] = (mt, val)
-    return val
+    return _cached(db_path, key_name, tables, build)
 
 
 def df_to_records(df: pd.DataFrame):
@@ -287,5 +327,3 @@ def df_to_records(df: pd.DataFrame):
         return []
     return json.loads(df.to_json(orient="records", force_ascii=False,
                                  date_format="iso"))
-
-

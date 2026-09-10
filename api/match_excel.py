@@ -128,15 +128,6 @@ def _num_or_dash(v, digits=2):
         return "-"
 
 
-def _pct_or_dash(v):
-    if v is None or v == "":
-        return "-"
-    try:
-        return f"{float(v):.0f}%"
-    except (TypeError, ValueError):
-        return "-"
-
-
 def _form_or_dash(v):
     """폼(PPG) 값은 백엔드가 '2.13' 같은 문자열로 이미 반올림해 보내준다 — 그대로 쓴다."""
     return "-" if v is None or v == "" else str(v)

@@ -86,7 +86,6 @@ import final_indicators as FINALIND  # noqa: E402
 import my_picks as MYPICKS     # noqa: E402
 import bet_slips as BETSLIPS   # noqa: E402
 import pick_ai as PICKAI       # noqa: E402
-import combo_dir as COMBODIR   # noqa: E402
 import standings               # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
@@ -478,11 +477,9 @@ def _apply_league_filters(df, season, round, odds_query, team=None, team_side=No
         sub = sub[sub["S"].astype(str) == str(season)]
 
     if round is None and "R" in sub.columns and not sub["R"].dropna().empty:
-        try:
-            round = str(sorted(sub["R"].dropna().unique().tolist(),
-                               key=lambda x: float(x))[-1])
-        except (TypeError, ValueError):
-            round = str(sorted(sub["R"].dropna().astype(str).unique().tolist())[-1])
+        # "9R"처럼 숫자+문자가 섞인 라운드 표기는 일반 문자열 정렬로는 "9R" > "38R"가
+        # 되는 버그가 있었다(라운드 안 숫자만 뽑아 비교하는 _round_sort_key로 통일).
+        round = str(sorted(sub["R"].dropna().unique().tolist(), key=_round_sort_key)[-1])
     elif round == "ALL":
         round = None
 
@@ -577,12 +574,10 @@ def league_rows(code: str,
 
     total = len(sub)
     page = sub.iloc[offset: offset + limit]
-    # 승+패 배당 조합 방향성 — 보이는 행에만 붙인다(전체에 붙이면 헛일이 크다).
-    page = COMBODIR.attach(page, DATA.load_combo_index(db), code)
     records = DATA.df_to_records(page)
     _attach_my_picks(records, user["username"], code, scope)
     return {
-        "columns": list(df.columns) + COMBODIR.COLS
+        "columns": list(df.columns)
                    + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT", "MY_BET"],
         "rows": records,
         "total": total,
@@ -1224,7 +1219,7 @@ def _pick_key_index(db: str, code: str) -> dict:
         return {_my_pick_key(s, r, no, ht, at): i
                 for i, s, r, no, ht, at in sub.itertuples(name=None)}
 
-    return DATA.cached_derive(db, "pick_key_index:" + code, build)
+    return DATA.cached_derive(db, "pick_key_index:" + code, build, tables=(code,))
 
 
 def _build_rt_index(df: pd.DataFrame) -> dict:
@@ -1269,7 +1264,7 @@ def _attach_leg_hits(slips: list[dict], user: dict) -> None:
     def rt_index_for(sc: str, code: str) -> dict:
         db = db_for(sc)
         return DATA.cached_derive(db, f"rt_index:{code}",
-                                  lambda: _build_rt_index(df_for(sc, code)))
+                                  lambda: _build_rt_index(df_for(sc, code)), tables=(code,))
 
     def rt_for(leg: dict):
         # 다리에 스코프가 저장돼 있으면 그것만 본다. 옛날에 등록돼 스코프가 없는
@@ -1395,10 +1390,6 @@ def delete_selected_bet_slips(body: SlipIdsBody, user: dict = Depends(get_curren
     return {"ok": True, "deleted": deleted}
 
 
-@app.delete("/api/bet_slips/{slip_id}")
-def delete_bet_slip(slip_id: int, user: dict = Depends(get_current_user)):
-    BETSLIPS.delete_slip(user["username"], slip_id)
-    return {"ok": True}
 
 
 def _wdl_breakdown(m: pd.DataFrame, reference: str, home_only: bool = False) -> dict:
@@ -1682,9 +1673,7 @@ def match_excel_download(code: str,
     if sub.empty:
         raise HTTPException(status_code=404, detail="해당 경기를 찾을 수 없습니다.")
 
-    # 리그 표와 같은 값을 팝업에서도 쓰도록 승+패 조합 방향성을 붙인다.
-    records = DATA.df_to_records(
-        COMBODIR.attach(sub.head(1), DATA.load_combo_index(db), code))
+    records = DATA.df_to_records(sub.head(1))
     _attach_my_picks(records, user["username"], code, scope)   # 내픽/P/의견/메모/별표
     row = records[0]
     ht = str(row.get("HT") or "").strip()
@@ -1939,12 +1928,13 @@ def _merge_and_save(db: str, code: str, scope: str, new: pd.DataFrame, confirm: 
             ["S", "_r", "_day", "_order", "_no"], kind="stable").index]
         final = final.reset_index(drop=True)
 
-    con = sqlite3.connect(db)
-    try:
-        final.to_sql(code, con, if_exists="replace", index=False)
-    finally:
-        con.close()
-    PATHS.stamp_updated(db)
+    with DATA.table_write(db, code):
+        con = sqlite3.connect(db)
+        try:
+            final.to_sql(code, con, if_exists="replace", index=False)
+        finally:
+            con.close()
+        PATHS.stamp_updated(db)
 
     return {
         "saved": True,
@@ -2877,12 +2867,13 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
             leagues = [code] if _is_user_scope(body.scope) else PATHS.LEAGUES
             ind_updated = FINALIND.attach_to_df(df, idxs, db, leagues)
 
-        con = sqlite3.connect(db)
-        try:
-            df.to_sql(code, con, if_exists="replace", index=False)
-        finally:
-            con.close()
-        PATHS.stamp_updated(db)
+        with DATA.table_write(db, code):
+            con = sqlite3.connect(db)
+            try:
+                df.to_sql(code, con, if_exists="replace", index=False)
+            finally:
+                con.close()
+            PATHS.stamp_updated(db)
 
     return {
         "domestic_updated": kr_updated, "domestic_error": kr_error,
@@ -2927,12 +2918,13 @@ def delete_matches(code: str, body: DeleteMatchesBody, user: dict = Depends(get_
     if body.scope == PATHS.SCOPE_MASTER:
         PATHS.backup_master()   # 삭제 전 자동 백업
 
-    con = sqlite3.connect(db)
-    try:
-        remaining.to_sql(code, con, if_exists="replace", index=False)
-    finally:
-        con.close()
-    PATHS.stamp_updated(db)
+    with DATA.table_write(db, code):
+        con = sqlite3.connect(db)
+        try:
+            remaining.to_sql(code, con, if_exists="replace", index=False)
+        finally:
+            con.close()
+        PATHS.stamp_updated(db)
 
     return {"deleted": len(to_delete), "remaining": len(remaining)}
 
@@ -3161,12 +3153,13 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
     if body.scope == PATHS.SCOPE_MASTER:
         PATHS.backup_master()
 
-    con = sqlite3.connect(db)
-    try:
-        df.to_sql(code, con, if_exists="replace", index=False)
-    finally:
-        con.close()
-    PATHS.stamp_updated(db)
+    with DATA.table_write(db, code):
+        con = sqlite3.connect(db)
+        try:
+            df.to_sql(code, con, if_exists="replace", index=False)
+        finally:
+            con.close()
+        PATHS.stamp_updated(db)
 
     return {"ok": True, "updated": updated, "not_found": not_found, "filled_prediction": filled_sides}
 
@@ -3269,7 +3262,8 @@ def recompute_pending(body: RecomputeBody, user: dict = Depends(get_current_user
     db = _resolve_scope_db(body.scope, user)
     if not PATHS.can_write(body.scope, user.get("role")):
         raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
-    summary = engine.recompute_pending_matches(db)
+    with DATA.table_write(db):
+        summary = engine.recompute_pending_matches(db)
     return {"summary": summary}
 
 
@@ -3281,7 +3275,8 @@ def recompute_all(body: RecomputeBody, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
     if not body.confirm:
         raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
-    summary = engine.recompute_all_matches(db)
+    with DATA.table_write(db):
+        summary = engine.recompute_all_matches(db)
     return {"summary": summary}
 
 
@@ -3343,12 +3338,13 @@ def _recompute_one_league(db: str, code: str, include_historical: bool, scope: s
     if not _is_user_scope(scope):
         PATHS.backup_master()     # 공식 데이터는 덮어쓰기 전에 자동 백업
 
-    con = sqlite3.connect(db)
-    try:
-        league_df.to_sql(code, con, if_exists="replace", index=False)
-    finally:
-        con.close()
-    PATHS.stamp_updated(db)
+    with DATA.table_write(db, code):
+        con = sqlite3.connect(db)
+        try:
+            league_df.to_sql(code, con, if_exists="replace", index=False)
+        finally:
+            con.close()
+        PATHS.stamp_updated(db)
     return {code: n_target}
 
 
@@ -3393,7 +3389,10 @@ def teams(scope: str = PATHS.SCOPE_MASTER,
         _check_league_for(code, scope, user)
         df = DATA.load_league_df(db, code)
     else:
-        df = DATA.load_total_df(db)
+        # 팀 이름(S/HT/AT)만 필요하므로 370컬럼짜리 load_total_df 대신, 상대전적이
+        # 쓰는 14컬럼짜리 슬림 통합DB를 재사용한다(같은 6대리그 구성·같은 행 — 값은
+        # 완전히 동일하고 원본을 새로 읽지 않아 캐시 재사용 시 훨씬 빠르다).
+        df = DATA.load_total_h2h_df(db)
     if df.empty or "HT" not in df.columns or "AT" not in df.columns:
         return {"teams": []}
     if season and season != "ALL" and "S" in df.columns:
@@ -3443,7 +3442,8 @@ def admin_master_restore(body: RestoreBody, admin: dict = Depends(get_admin_user
     if not match:
         raise HTTPException(status_code=404, detail="백업 파일을 찾을 수 없습니다.")
     try:
-        PATHS.restore_backup(match)
+        with DATA.table_write(PATHS.get_master_db()):
+            PATHS.restore_backup(match)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"롤백 실패: {e}")
     return {"ok": True}
@@ -3461,13 +3461,14 @@ def admin_master_delete_league(body: DeleteLeagueBody, admin: dict = Depends(get
         raise HTTPException(status_code=400, detail="confirm=true 로 재확인이 필요합니다.")
     mdb = PATHS.get_master_db()
     PATHS.backup_master()   # 삭제 전 자동 백업
-    con = sqlite3.connect(mdb)
-    try:
-        con.execute(f'DROP TABLE IF EXISTS "{body.league}"')
-        con.commit()
-    finally:
-        con.close()
-    PATHS.stamp_updated(mdb)
+    with DATA.table_write(mdb, body.league):
+        con = sqlite3.connect(mdb)
+        try:
+            con.execute(f'DROP TABLE IF EXISTS "{body.league}"')
+            con.commit()
+        finally:
+            con.close()
+        PATHS.stamp_updated(mdb)
     return {"ok": True}
 
 

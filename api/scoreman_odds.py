@@ -80,13 +80,6 @@ def _get_json(url, referer, timeout=20, tries=3):
     raise OddsError(f"스코어맨에 연결하지 못했습니다: {last}")
 
 
-def season_list(league_id) -> list:
-    """그 리그에 있는 시즌 표기 목록(예: ['2026-2027', ...] 또는 ['2026', ...])."""
-    d = _get_json(f"{BASE_LEAGUE}/jsData/leagueSeason/sea{league_id}.json",
-                  f"{BASE_LEAGUE}/league/{league_id}")
-    return list(d.get("SeasonList") or [])
-
-
 def season_schedule(league_id, season) -> list:
     """그 시즌 전 경기 목록.
 

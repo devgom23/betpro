@@ -209,15 +209,6 @@ def settle(slips: list[dict]) -> dict:
     }
 
 
-def delete_slip(username: str, slip_id: int) -> None:
-    con = _connect(username)
-    try:
-        con.execute("DELETE FROM bet_slips WHERE id=?", (slip_id,))
-        con.commit()
-    finally:
-        con.close()
-
-
 def delete_slips(username: str, scope: str, slip_ids: list[int]) -> int:
     """체크박스로 고른 벳들을 지운다 — 이미 회차로 묶인 벳은 걸러지고 그대로 남는다.
     반환값은 실제로 지워진 행 수(이번주 픽 "선택 삭제"와 같은 방식)."""
