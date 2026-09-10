@@ -521,11 +521,81 @@ function sameOddsChips(sameOdds) {
   ]
 }
 
+// ── 플핸85 뱃지 (2026-09-09 실측) ────────────────────────────────────────────
+// 6대리그 36,034경기에서 조건 34개를 1~4개씩 전수 조합(5만 가지 이상)해 **순수
+// 플핸(무+역)** 발생률이 가장 높았던 조합. 네 조건이 동시에 맞을 때만 뜬다.
+//
+//   ① 해외 정배배당(배변 우선) 2.40 이상 — 해외 시장이 접전으로 본다
+//   ② 해외 무배당(배변 우선) 3.20 미만 — 무가 유력하다고 본다
+//   ③ 해외 정역반전 — 초기와 배변에서 정배 팀이 뒤바뀌었다
+//   ④ 전적 같은방향 — 상대전적 우세팀이 언더독 쪽이다
+//
+// 실측: n=60 · 플핸 85.00%(무 28 · 역 23 · 핸무 7 · 핸승 2) · 플핸무 96.67%
+//   기간 분할 검증(학습 ~20-21시즌 / 검증 21-22시즌~): 87.18%(39) → 80.95%(21)
+//   플핸 단독 회수율 1.165(평균 배당 1.43, 배당 있는 27건) — 지금까지 찾은 조합 중
+//   유일하게 본전을 확실히 넘는다. 시장이 이 조합을 과소평가한다는 뜻.
+//   리그 재현성 4/6(EPL 100% · 리그1 88% · 라리가 83% · 세리에 79%,
+//   분데스·에레디는 각 1건이라 사실상 미검증).
+//
+// ⚠ 남은 위험 — 조합을 5만 개 이상 뒤져서 찾은 것이라 다중비교 함정이 있다. 기간
+//   분할을 통과한 게 강력한 방어지만 완벽하진 않다. 검증기간에 6.23%p 떨어졌으니
+//   참값은 80% 언저리로 보는 게 안전하다. 6대리그 통틀어 연 3~4경기뿐이다.
+//
+// ⚠ 실패 9경기를 사전에 걸러낼 방법은 없었다(2026-09-09 대조 분석) — 배당·전적
+//   지표로는 성공 51경기와 구분되지 않았다(해외 정배배당 2.65 vs 2.61, 무배당
+//   3.06 vs 3.03). 유일하게 뚜렷한 차이는 총득점 3.11골 vs 2.00골이었는데 그건
+//   경기가 끝나야 아는 값이다. 즉 "9번 중 1번은 어쩔 수 없이 진다"가 정답이다.
+const PLHAN85_MIN_FAV = 2.40
+const PLHAN85_MAX_DRAW = 3.20
+
+function plhan85Chips(row, verdict) {
+  if (!verdict) return []
+  const side = H2H_HOME_SIDE[verdict.label]
+  if (!side) return []
+  const favHome = marketFavHome(row.FW, row.FL)
+  if (favHome === null) return []
+  // ④ 전적 우세팀이 언더독 쪽인가(해외 초기배당 기준 — h2hRelation과 같은 기준)
+  if ((side === 'home') === favHome) return []
+  const pick2 = (a, b) => numOrNull(row[a]) ?? numOrNull(row[b])
+  const fw = pick2('EFW', 'FW')
+  const fl = pick2('EFL', 'FL')
+  const fd = pick2('EFD', 'FD')
+  if (fw === null || fl === null || fd === null) return []
+  if (Math.min(fw, fl) < PLHAN85_MIN_FAV) return []        // ①
+  if (fd >= PLHAN85_MAX_DRAW) return []                    // ②
+  if (!favFlip(row).forr) return []                        // ③
+  return [
+    <MatchChip
+      key="plhan85"
+      label="플핸"
+      tone="green"
+      title={'★ 6대리그 36,034경기 전수 탐색에서 순수 플핸(무+역) 발생률이 가장 높았던'
+        + ' 조합입니다. 네 조건이 동시에 맞았습니다:'
+        + `\n  ① 해외 정배배당 ${PLHAN85_MIN_FAV} 이상(현재 ${Math.min(fw, fl).toFixed(2)})`
+        + `\n  ② 해외 무배당 ${PLHAN85_MAX_DRAW} 미만(현재 ${fd.toFixed(2)})`
+        + '\n  ③ 해외 정역반전(초기와 배변의 정배 팀이 다름)'
+        + `\n  ④ 전적 같은방향(상대전적 우세팀이 언더독 쪽 — ${verdict.label})`
+        + '\n\n실측 n=60 · 플핸 85.00% · 플핸무 96.67%(무 28 · 역 23 · 핸무 7 · 핸승 2)'
+        + '\n플핸 단독 회수율 1.165 — 지금까지 찾은 조합 중 유일하게 본전을 넘습니다.'
+        + '\n\n⚠ 6대리그 통틀어 연 3~4경기뿐이고, 기간 분할 검증에서 87.18%→80.95%로'
+        + ' 떨어졌습니다. 참값은 80% 언저리로 보세요. 분데스·에레디는 표본이 각 1건이라'
+        + ' 사실상 검증되지 않았습니다.'
+        + '\n⚠ 실패한 9경기는 배당·전적으로 미리 걸러낼 수 없었습니다(총득점이 3.11골로'
+        + ' 높았지만 그건 끝나야 아는 값) — 9번 중 1번은 어쩔 수 없이 집니다.'}
+    >
+      85%
+    </MatchChip>,
+  ]
+}
+
 function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds, xg }) {
   // 똥배 → 국/해 엇갈림 → 전적 → 무 → 동배당을 세로로 쌓는다.
   // (배당차 뱃지는 2026-09-02에 옆 칸 표로 뺐다가 2026-09-05에 아예 삭제했다 —
   //  정배배당을 다시 적은 값이라 확률 지표와 중복이었다. DirectionScopeTable 주석 참고.)
-  const chips = [...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
+  // 플핸85는 맨 앞에 둔다 — 다른 뱃지가 '이 경기가 어떤 경기인가'를 말하는 데 비해
+  // 이것만 "그래서 어떻게 하라"에 가장 가까운 결론이라 눈에 먼저 들어와야 한다.
+  const chips = [...plhan85Chips(row, verdict),
+    ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
     ...favFlipChips(row),
     ...xgChips(row, xg),
     ...h2hChips(verdict, h2hLoading, row, pick), ...drawChips(row, pick),
