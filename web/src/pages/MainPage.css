@@ -327,12 +327,24 @@
 
 /* ── 필터 아래 엑셀 다운로드/업로드 버튼 줄 ── */
 .excel-bar {
+  position: relative;   /* RoundShortcutBar의 측정용 기준점(position:absolute)이 이 줄 안에 붙도록 */
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 12px;
+}
+
+/* 기존 버튼들(해배 가져오기 ~ 엑셀 다운로드)을 한 덩어리로 묶는다 — 라운드
+   바로가기(RoundShortcutBar)가 그 앞에 끼어들 수 있도록 .excel-bar의 직계 자식을
+   "라운드 바로가기 / 기존 버튼 묶음" 두 개로 나눈 것. 묶음 내부 간격·줄바꿈은
+   예전 .excel-bar와 완전히 같다. */
+.excel-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ── 업로드 저장 전 확인 패널 ── */

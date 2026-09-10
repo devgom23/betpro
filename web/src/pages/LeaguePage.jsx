@@ -7,6 +7,7 @@ import RtSummaryBar, { PickSummaryBar } from '../components/RtSummaryBar/RtSumma
 import UploadTemplateModal from '../components/UploadTemplateModal/UploadTemplateModal'
 import DeleteMatchesModal from '../components/DeleteMatchesModal/DeleteMatchesModal'
 import CrawlModal from '../components/CrawlModal/CrawlModal'
+import RoundShortcutBar from '../components/RoundShortcutBar/RoundShortcutBar'
 import KrCrawlModal from '../components/KrCrawlModal/KrCrawlModal'
 import ResultEditModal from '../components/ResultEditModal/ResultEditModal'
 import SeasonStats from '../components/SeasonStats/SeasonStats'
@@ -360,6 +361,14 @@ export default function LeaguePage({ code, scope }) {
     setQuery(nextQuery)
   }
 
+  // 라운드 바로가기 — 필터의 "시즌 및 라운드"에서 라운드를 고르는 것과 완전히 같은
+  // 동작이다(표를 그 라운드로 바로 조회). 시즌은 지금 조회된 시즌(query.season)을
+  // 그대로 따르고, 팀·배당 같은 다른 조회 조건은 지금 값을 유지한다(라운드만 바꿈).
+  function jumpToRound(roundLabel) {
+    if (!query) return
+    handleSearch({ ...query, round: roundLabel })
+  }
+
   if (error) return <p className="error-text">{error}</p>
   if (!filters || !data) return <p className="loading-text">불러오는 중...</p>
 
@@ -383,7 +392,9 @@ export default function LeaguePage({ code, scope }) {
       />
 
       <div className="excel-bar">
-        {data.can_write && (
+        <RoundShortcutBar code={code} query={query} filters={filters} onJump={jumpToRound} />
+        <div className="excel-bar-actions">
+          {data.can_write && (
             <>
               <button
                 className="btn-reset"
@@ -439,6 +450,7 @@ export default function LeaguePage({ code, scope }) {
             {busyExcel === 'table' ? '받는 중...' : '엑셀 다운로드'}
           </button>
         </div>
+      </div>
 
       {showTemplateModal && (
         <UploadTemplateModal

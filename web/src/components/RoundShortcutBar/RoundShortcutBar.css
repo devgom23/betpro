@@ -1,0 +1,73 @@
+/* 측정용 기준점 — 화면에는 전혀 영향을 주지 않는다(위치·크기 0). .excel-bar가
+   position:relative여야 이 기준으로 얌전히 붙어 있는다(MainPage.css 참고). */
+.round-shortcut-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 측정용 그림자 — 실제 버튼과 완전히 같은 마크업(.round-shortcut-btn)을 화면 밖에
+   그려서 '이 내용이 정말 필요로 하는 너비'를 잰다. 보이는 버튼 그룹이 안 그려질
+   때도(fits=false) 이건 항상 떠 있어야 다시 들어갈 공간이 생겼을 때 알아챌 수 있다. */
+.round-shortcut-shadow {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.round-shortcut-shadow .round-shortcut-row {
+  display: flex;
+}
+
+/* 실제로 보이는 라운드 바로가기 — 2줄, 화면(버튼 줄) 왼쪽에 붙는다.
+   .excel-bar가 justify-content:flex-end라, margin-right:auto로 이 요소만 왼쪽에
+   고정하고 나머지 버튼 묶음(.excel-bar-actions)은 계속 오른쪽에 남게 한다. */
+.round-shortcut-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-right: auto;
+}
+
+.round-shortcut-bar .round-shortcut-row {
+  display: flex;
+  gap: 2px;
+}
+
+/* 기존 버튼 줄 높이(.btn-reset/.btn-search의 height:32px)를 절대 넘지 않아야 해서
+   (사용자 지정) 두 줄 합쳐 30px 안쪽으로 맞춘다(14px × 2 + gap 1px + border 여유). */
+.round-shortcut-btn {
+  min-width: 16px;
+  height: 14px;
+  padding: 0 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  text-align: center;
+}
+
+.round-shortcut-bar .round-shortcut-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.round-shortcut-bar .round-shortcut-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
