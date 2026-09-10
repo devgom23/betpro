@@ -384,7 +384,7 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
     db = _resolve_scope_db(scope, user)
     df = DATA.load_league_df_ev(db, code)
     if df.empty or "S" not in df.columns:
-        return {"seasons": [], "rounds_by_season": {}, "latest": None,
+        return {"seasons": [], "rounds_by_season": {}, "rounds_incomplete_by_season": {}, "latest": None,
                 "total_rows": 0, "rt_summary": None, "hit_summary": None}
 
     seasons = sorted([s for s in df["S"].dropna().unique().tolist()], reverse=True)
@@ -404,9 +404,18 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
     rt_num = pd.to_numeric(df["RT"], errors="coerce") if "RT" in df.columns else pd.Series(dtype=float)
     cancelled_count = int((rt_num == 5).sum())
     postponed_count = int((rt_num == 6).sum())
+    # 라운드 바로가기(RoundShortcutBar) 워닝 표시용 — 그 라운드에 RT가 하나도 안 채워진
+    # 경기(예정 경기, RT가 1~6 어디에도 안 속함)가 하나라도 있으면 그 라운드를 "미완료"로
+    # 본다. 취소(5)·연기(6)는 이미 누군가 결과를 정리해 둔 것이라 "안 채워짐"이 아니다.
+    rt_missing = ~rt_num.isin([1, 2, 3, 4, 5, 6])
+    rounds_incomplete_by_season = {}
+    for s in seasons:
+        rs = df.loc[(df["S"] == s) & rt_missing, "R"].dropna().unique().tolist()
+        rounds_incomplete_by_season[str(s)] = [str(x) for x in rs]
     return {
         "seasons": [str(s) for s in seasons],
         "rounds_by_season": rounds_by_season,
+        "rounds_incomplete_by_season": rounds_incomplete_by_season,
         "latest": {"season": latest_season, "round": latest_round},
         "total_rows": len(df),
         "rt_summary": rt_summary,

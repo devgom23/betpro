@@ -61,6 +61,15 @@ export default function RoundShortcutBar({ code, query, filters, onJump }) {
 
   const [topRow, bottomRow] = useMemo(() => splitRows(rounds), [rounds])
 
+  // RT(경기 결과)가 하나도 안 채워진 경기가 남아 있는 라운드 — 그 라운드 버튼은
+  // 기본 색을 워닝(주의) 색으로 채운다(2026-09-10 사용자 지정). 취소(5)·연기(6)는
+  // 이미 결과가 정리된 것이므로 "안 채워짐"이 아니다(백엔드 rounds_incomplete_by_season
+  // 계산 기준, api/main.py의 league_filters 참고).
+  const incompleteRounds = useMemo(() => {
+    const list = filters?.rounds_incomplete_by_season?.[query?.season] ?? []
+    return new Set(list)
+  }, [filters, query?.season])
+
   useEffect(() => {
     if (!rounds.length) {
       setFits(false)
@@ -115,17 +124,21 @@ export default function RoundShortcutBar({ code, query, filters, onJump }) {
         <div className="round-shortcut-bar">
           {[topRow, bottomRow].map((row, i) => (
             <div className="round-shortcut-row" key={i}>
-              {row.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  className={`round-shortcut-btn${query.round === r ? ' is-active' : ''}`}
-                  onClick={() => onJump(r)}
-                  title={`${r}로 이동`}
-                >
-                  {roundNum(r)}
-                </button>
-              ))}
+              {row.map((r) => {
+                const active = query.round === r
+                const warning = !active && incompleteRounds.has(r)
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    className={`round-shortcut-btn${active ? ' is-active' : ''}${warning ? ' is-warning' : ''}`}
+                    onClick={() => onJump(r)}
+                    title={warning ? `${r}로 이동 — 아직 결과(RT) 미입력 경기 있음` : `${r}로 이동`}
+                  >
+                    {roundNum(r)}
+                  </button>
+                )
+              })}
             </div>
           ))}
         </div>

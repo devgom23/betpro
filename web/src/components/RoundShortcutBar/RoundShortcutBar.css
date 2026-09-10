@@ -71,3 +71,18 @@
   color: #fff;
   font-weight: 700;
 }
+
+/* 그 라운드에 RT(결과) 미입력 경기가 남아 있음 — 앱의 "주의=노랑" 관례(DDONG_GRADES)를
+   따르되, 색 자체는 --chip-yellow-* 토큰 대신 진한 호박색을 직접 썼다. 이 버튼이
+   14px짜리로 워낙 작아서(RtBadge 등 다른 칩보다 훨씬 작다) 옅은 톤의 --chip-yellow-bg
+   (다크 모드 #4a3a12, 어두운 올리브색 계열)를 쓰면 이렇게 작은 면적에서는 색이 옅어져
+   보여 역(빨강, #C62828) 계열과 헷갈린다는 지적을 받았다(2026-09-10). RT_COLOR(같은
+   컴포넌트 폴더의 RtBadge.jsx)도 작은 점 용도로는 테마 변수 대신 고정 색을 쓰는
+   선례가 있어 같은 방식을 따랐다. 선택된(is-active) 라운드는 파란색이 우선이라 여기
+   안 걸린다(JSX에서 active면 warning 클래스 자체를 안 붙인다). */
+.round-shortcut-bar .round-shortcut-btn.is-warning {
+  background: #ffc107;
+  border-color: #b8860b;
+  color: #3e2723;
+  font-weight: 700;
+}
