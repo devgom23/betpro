@@ -1,0 +1,31 @@
+/* 순위 칸 안 — 순위 숫자(굵게) · 실측 당첨률 · 베팅일을 세로로. 간격은 6-1장 눈금(2px). */
+.top20-rank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.top20-no {
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.top20-rate {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.top20-day {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* 순위에 든 채로 끝난 경기 — 숫자를 흐리게 해 '이미 끝남'을 구분한다. */
+.top20-played .top20-no,
+.top20-played .top20-rate {
+  color: var(--text-muted);
+}

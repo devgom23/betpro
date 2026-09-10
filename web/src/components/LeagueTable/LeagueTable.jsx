@@ -140,6 +140,9 @@ export default function LeagueTable({
   // 표마다 안쪽 스크롤이 또 생기면 페이지 스크롤과 겹쳐 아주 쓰기 불편해진다.
   // 행이 수백~수천인 리그 표에서는 절대 켜지 말 것(가상 스크롤이 성능의 핵심).
   fitContent = false,
+  // 행마다 맨 앞에 붙일 순위 칸 — (row) => { label, title } | null. 이번주 TOP20 전용.
+  rankOf = null,
+  rankHeader = '순위',
 }) {
   // 이번주 픽처럼 여러 리그·스코프를 한 표에 모아 보여줄 때는 행마다 실제 소속
   // 리그(L)·스코프(scope)가 다를 수 있다 — LeagueTable에 준 code/scope prop은
@@ -256,7 +259,7 @@ export default function LeagueTable({
 
   // 접힌 그룹까지 반영한 실제 열 개수 (위아래 빈 행의 colSpan 용)
   const leafCount =
-    (selectable ? 1 : 0) + 1 +
+    (selectable ? 1 : 0) + (rankOf ? 1 : 0) + 1 +
     groups.reduce((n, g) => n + (collapsed.has(groupKey(g)) ? collapsedSpan(g, hasLeagueLabel) : g.cols.length), 0)
 
   // 그려야 할 구간이 실제로 바뀔 때만 상태를 갱신한다.
@@ -411,6 +414,7 @@ export default function LeagueTable({
           <thead>
             <tr>
               {selectable && <th className="select-col sticky-col" rowSpan={2}></th>}
+              {rankOf && <th className="rank-col sticky-col" rowSpan={2}>{rankHeader}</th>}
               {groups.flatMap((g, gi) => {
                 const key = groupKey(g)
                 const isCollapsed = collapsed.has(key)
@@ -599,6 +603,15 @@ export default function LeagueTable({
                             onChange={() => onToggleRow?.(row)}
                           />
                         </td>, '__merge')]
+                    : []),
+                  ...(rankOf
+                    ? (() => {
+                        const info = rankOf(row)
+                        return [fit(
+                          <td key="rank" className="rank-col sticky-col" title={info?.title}>
+                            {info?.label}
+                          </td>, '__merge')]
+                      })()
                     : []),
                   ...groups.flatMap((g, gi) => {
                     const key = groupKey(g)

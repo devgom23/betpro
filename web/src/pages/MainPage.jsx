@@ -11,6 +11,7 @@ import AdminAccountsPage from './AdminAccountsPage'
 import BetHistoryPage from './BetHistoryPage'
 import WeeklyPickPage from './WeeklyPickPage'
 import WeekListPage from './WeekListPage'
+import WeekTopPage from './WeekTopPage'
 import UserLeagueModal from '../components/UserLeagueModal/UserLeagueModal'
 import './MainPage.css'
 
@@ -100,6 +101,9 @@ export default function MainPage() {
           </button>
           <button className={view === 'week_list' ? 'active' : ''} onClick={() => setView('week_list')}>
             이번주 리스트
+          </button>
+          <button className={view === 'week_top20' ? 'active' : ''} onClick={() => setView('week_top20')}>
+            이번주 TOP20
           </button>
           <button className={view === 'weekly' ? 'active' : ''} onClick={() => setView('weekly')}>
             이번주 픽
@@ -197,6 +201,7 @@ export default function MainPage() {
 
       <main className="content">
         {view === 'week_list' && <WeekListPage />}
+        {view === 'week_top20' && <WeekTopPage />}
         {view === 'weekly' && <WeeklyPickPage onGoBetHistory={() => setView('bet_history')} />}
         {view === 'bet_history' && <BetHistoryPage scope={scope} />}
         {view === 'leagues' && <>

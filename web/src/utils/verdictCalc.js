@@ -271,18 +271,63 @@ export function starsOfNew(rate) {
   return 1
 }
 
-// 초기/배변 판정 하나 — pick(정무·플핸무 등) + stars(1~3) + rate/n(실측 근거) +
+// 화면에 보여 주는 당첨률 — 위 가중 일치율 구간(ODDS_PHASE_WEIGHTED_GRADE)을 다시 픽(정무·
+// 플핸무)과 강추로 쪼갠 실측값. 구간 평균은 정무·플핸무를 섞은 값이라 같은 85.92% 구간 안에서도
+// 정무 89.00% ~ 플핸무·강추없음 78.88%로 벌어졌다(2026-09-10, 6대리그 배변 35,600·초기 35,702경기).
+// 시즌 분할 검증(학습 ~20-21 → 검증 21-22~, 배변): 화면 %와 실제의 평균 차이 2.10→0.82%p,
+// ★3−★2 실제 격차 3.87%p(z=5.30)→6.26%p(z=8.54), 6/6 리그 같은 방향(초기도 같은 모양).
+// 키 = '구간 평균 %|픽|강추'. [실측 당첨률%, 표본]. 고정값 — 경기가 쌓이면 시즌마다 다시 잰다
+// (화면 판정 코드를 6대리그 전 경기에 그대로 돌려 칸별로 세는 방식).
+export const PHASE_CELL_RATE = {
+  배변: {
+    '85.92|정무': [89.00, 7090],
+    '84.38|정무': [86.62, 2624],
+    '84.38|플핸무|강추': [85.92, 824],
+    '85.92|플핸무|강추': [85.33, 2161],
+    '82.76|정무': [84.09, 3281],
+    '80.81|정무': [81.61, 4128],
+    '82.76|플핸무': [81.27, 2990],
+    '79.73|정무': [79.73, 3724],
+    '80.81|플핸무': [79.73, 3058],
+    '79.73|플핸무': [79.69, 1359],
+    '84.38|플핸무': [79.45, 1445],
+    '85.92|플핸무': [78.88, 2916],
+  },
+  초기: {
+    '85.75|정무': [89.07, 7130],
+    '83.78|정무': [86.29, 2648],
+    '82.08|정무': [83.64, 3337],
+    '85.75|플핸무': [81.21, 5238],
+    '83.78|플핸무': [81.00, 2390],
+    '79.38|정무': [80.65, 4015],
+    '82.08|플핸무': [80.40, 3128],
+    '79.20|플핸무': [79.69, 1275],
+    '79.20|정무': [79.02, 3298],
+    '79.38|플핸무': [77.80, 3243],
+  },
+}
+
+// 초기/배변 판정 하나 — pick(정무·플핸무) + 화면용 rate/n/stars(구간×픽×강추 실측) +
 // verdict(적중/보험/미적, 결과가 있을 때만).
+// bandRate/bandStars는 구간 평균 기준이다 — 강추 판정(strongPickTier)은 이것으로 한다.
+// 강추는 '배변 플핸무 + 구간 평균 ★3'을 뼈대로 실측한 등급이라, 새 별로 판정하면
+// 강추 칸만 ★3으로 남아 스스로를 정의하는 순환이 된다(강추 2,985경기는 그대로 유지).
 export function phaseVerdict(row, final, label) {
   const { pick, flipped } = resolveOddsPhasePick(row, final)
   if (!pick) return { label, pick: null }
   const ratio = oddsPhaseWeightedRatio(row, pick)
-  const cell = ratio !== null ? weightedGradeOf(label, ratio) : null
-  const rate = cell ? cell.rate : null
-  const n = cell ? cell.n : null
+  const band = ratio !== null ? weightedGradeOf(label, ratio) : null
+  const bandRate = band ? band.rate : null
+  const bandStars = bandRate !== null ? starsOfNew(bandRate) : null
+  const strong = final && bandRate !== null ? strongPickTier(row, { pick, bandStars }) : null
+  const cell = bandRate !== null
+    ? PHASE_CELL_RATE[label]?.[`${bandRate.toFixed(2)}|${pick}${strong ? '|강추' : ''}`]
+    : null
+  const rate = cell ? cell[0] : bandRate
+  const n = cell ? cell[1] : (band ? band.n : null)
   const stars = rate !== null ? starsOfNew(rate) : null
   const verdict = sysPickVerdict(pick, row.RT)
-  return { label, pick, flipped, ratio, rate, n, stars, verdict }
+  return { label, pick, flipped, ratio, rate, n, stars, bandRate, bandStars, strong, verdict }
 }
 
 // '접전' 기준선 — 정배배당(배변 기준, 낮은 쪽)이 이 값 이상이면 접전으로 본다.
@@ -336,8 +381,9 @@ export const CLOSE_ODDS_CUT_F = 2.5    // 해외 정배배당
 // 화면 표시는 셋을 구분해 보여주되(나중에 어느 길이 잘 맞았는지 따로 집계하려고),
 // 리그표 '판정' 칸 이중밑줄과 배지 색(보라)은 셋 다 똑같이 쓴다(사용자 지정).
 // 배변 판정에만 쓴다 — 호출하는 쪽에서 배변 phaseVerdict만 넘긴다.
+// 별은 구간 평균 별(bandStars)로 본다 — 화면 별(stars)은 칸별 실측이라 여기 쓰면 순환이 된다.
 export function strongPickTier(row, verdict) {
-  if (!verdict.pick || verdict.pick !== '플핸무' || verdict.stars !== 3) return null
+  if (!verdict.pick || verdict.pick !== '플핸무' || verdict.bandStars !== 3) return null
   // 배변(E*) 우선, 없으면 초기로 대신한다.
   const pick2 = (a, b) => [numOrNull(row[a]) ?? numOrNull(row[b])]
   const [kw] = pick2('EKW', 'KW')

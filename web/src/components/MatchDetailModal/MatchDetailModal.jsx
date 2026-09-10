@@ -13,7 +13,7 @@ import {
 } from '../../utils/systemVerdict'
 import {
   DIR_SIDE, SCOPE_CODES, scopeCell, oddsScopeCodes, directionName, weightedAnalysis,
-  ODDS_PHASE_WEIGHTED_GRADE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE,
+  ODDS_PHASE_WEIGHTED_GRADE, PHASE_CELL_RATE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE,
   CLOSE_ODDS_CUT_K, CLOSE_ODDS_CUT_F, favFlip,
 } from '../../utils/verdictCalc'
 import './MatchDetailModal.css'
@@ -3020,6 +3020,33 @@ function NewSystemVerdictLegend({ onClose }) {
           90% 이상 구간과 40% 미만 구간 사이에 5~7%p 차이가 뚜렷합니다.
         </p>
 
+        <p className="help-legend-title">화면에 표시하는 당첨률 — 구간 × 픽 × 강추</p>
+        <p className="help-legend-note">
+          위 구간 평균은 정무와 플핸무를 섞은 값이라, 같은 구간이라도 픽에 따라 실제 당첨률이
+          크게 다릅니다(85.92% 구간: 정무 89.00% · 플핸무 강추없음 78.88%). 그래서 판정 옆에 보여
+          주는 %와 별은 구간을 픽(정무·플핸무)과 강추로 한 번 더 나눠 잰 값입니다(6대리그 실측,
+          2026-09-10). 과거 시즌으로 만든 표를 이후 시즌에 대 보면 화면 %와 실제의 차이가
+          2.10%p → 0.82%p로 줄었습니다. 강추 판정은 그대로 구간 평균 별(★3)을 기준으로 합니다.
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>판정</th><th>구간 평균</th><th>픽</th><th>실측 당첨률(표본)</th></tr></thead>
+          <tbody>
+            {['배변', '초기'].flatMap((ph) => Object.entries(PHASE_CELL_RATE[ph])
+              .sort((a, b) => b[1][0] - a[1][0])
+              .map(([k, [rate, n]]) => {
+                const [band, pick, strong] = k.split('|')
+                return (
+                  <tr key={`${ph}-${k}`}>
+                    <td>{ph}</td>
+                    <td>{band}%</td>
+                    <td>{pick}{strong ? '·강추' : ''}</td>
+                    <td><b>{rate.toFixed(2)}%</b> ({n.toLocaleString()})</td>
+                  </tr>
+                )
+              }))}
+          </tbody>
+        </table>
+
         <p className="help-legend-title">별점 기준</p>
         <table className="detail-table help-legend-table">
           <thead><tr><th>별</th><th>당첨률</th></tr></thead>
@@ -3375,7 +3402,8 @@ function NewSystemVerdict({ row, init, fin }) {
         title={`${v.label} 판정: ${v.pick}`
           + `${v.flipped ? ' (통)해가 나머지 3칸과 전부 반대라 그쪽으로 뒤집음)' : ''}\n`
           + (v.ratio !== null
-            ? `방향성 8칸 표본 가중 일치율 ${Math.round(v.ratio * 100)}% — 과거 ${v.n?.toLocaleString()}경기 중 ${v.rate}%.`
+            ? `방향성 8칸 표본 가중 일치율 ${Math.round(v.ratio * 100)}%(이 구간 평균 ${v.bandRate.toFixed(2)}%)`
+              + ` — 그중 ${v.pick}${v.strong ? '·강추' : ''} 경기만 보면 과거 ${v.n?.toLocaleString()}경기 중 ${v.rate.toFixed(2)}%.`
             : '방향성 8칸에 표본 있는 칸이 하나도 없어 신뢰도를 못 매겼습니다.')}
       >
         <span className="newv-label">{v.label}</span>
