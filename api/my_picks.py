@@ -119,10 +119,14 @@ def get_season_note(username: str, code: str, scope: str, s: str, r: str) -> str
 
 
 def _ensure_top20(con) -> None:
-    """이번주 TOP20 명단 — 회차(시작~종료일)별로 순위에 든 경기 키와 순위.
+    """이번주 TOP20 명단 — 회차(시작~종료일)+갈래(정무/플핸무)별로 순위에 든 경기 키와 순위.
     순위 계산 자체는 화면(web/src/utils/weekTop20.js)이 한다(판정 로직이 JS에만 있다).
     여기엔 '이 경기가 순위에 들어 있었다'는 사실만 남겨, 경기가 끝난 뒤에도 명단에
-    남길 수 있게 한다. match_key는 화면이 만든 문자열을 그대로 저장한다(top20Key)."""
+    남길 수 있게 한다. match_key는 화면이 만든 문자열을 그대로 저장한다(top20Key).
+
+    2026-09-11: 정무만 몰려서(85.92% 칸이 정무 독식) 플핸무가 순위에 아예 안 보이는 문제로
+    정무 TOP10 / 플핸무 TOP10 두 갈래로 나눴다(kind 컬럼 추가). 기존 테이블에는 없던
+    컬럼이라 ALTER로 보강한다 — 이미 있으면(재실행) 조용히 건너뛴다."""
     con.execute(
         """
         CREATE TABLE IF NOT EXISTS week_top20 (
@@ -135,31 +139,36 @@ def _ensure_top20(con) -> None:
         )
         """
     )
+    try:
+        con.execute("ALTER TABLE week_top20 ADD COLUMN kind TEXT")
+    except sqlite3.OperationalError:
+        pass
 
 
-def list_top20(username: str, start: str, end: str) -> list[str]:
+def list_top20(username: str, start: str, end: str, kind: str) -> list[str]:
     con = _connect(username)
     try:
         _ensure_top20(con)
         rows = con.execute(
-            "SELECT match_key FROM week_top20 WHERE week_start=? AND week_end=? ORDER BY rank",
-            (start, end),
+            "SELECT match_key FROM week_top20 WHERE week_start=? AND week_end=? AND kind=? ORDER BY rank",
+            (start, end, kind),
         ).fetchall()
         return [r["match_key"] for r in rows]
     finally:
         con.close()
 
 
-def save_top20(username: str, start: str, end: str, keys: list[str]) -> None:
-    """그 회차 명단을 통째로 바꾼다(순위 밖으로 밀린 경기는 여기서 빠진다)."""
+def save_top20(username: str, start: str, end: str, kind: str, keys: list[str]) -> None:
+    """그 회차·갈래(정무/플핸무)의 명단을 통째로 바꾼다(순위 밖으로 밀린 경기는 여기서 빠진다).
+    다른 갈래의 명단은 건드리지 않는다."""
     con = _connect(username)
     try:
         _ensure_top20(con)
-        con.execute("DELETE FROM week_top20 WHERE week_start=? AND week_end=?", (start, end))
+        con.execute("DELETE FROM week_top20 WHERE week_start=? AND week_end=? AND kind=?", (start, end, kind))
         con.executemany(
-            "INSERT INTO week_top20 (week_start, week_end, match_key, rank, updated_dt) "
-            "VALUES (?, ?, ?, ?, datetime('now'))",
-            [(start, end, k, i + 1) for i, k in enumerate(keys)],
+            "INSERT INTO week_top20 (week_start, week_end, match_key, rank, updated_dt, kind) "
+            "VALUES (?, ?, ?, ?, datetime('now'), ?)",
+            [(start, end, k, i + 1, kind) for i, k in enumerate(keys)],
         )
         con.commit()
     finally:

@@ -1141,22 +1141,33 @@ def hide_weekly_picks(body: HideBody, user: dict = Depends(get_current_user)):
 # ─────────────────────────── 이번주 TOP20 명단 ───────────────────────────
 # 순위는 화면이 시스템 판정(verdictCalc.js)으로 매긴다. 서버는 "이 회차에 순위에 든 경기"
 # 명단만 기억한다 — 경기가 끝나도 명단에 있으면 TOP20에 남기기 위해서다(사용자 지정).
+TOP20_KINDS = ("정무", "플핸무")
+
+
 class Top20Body(BaseModel):
     start: str
     end: str
+    kind: str
     keys: list[str]
 
 
+def _check_top20_kind(kind: str) -> None:
+    if kind not in TOP20_KINDS:
+        raise HTTPException(status_code=400, detail=f"kind는 {'/'.join(TOP20_KINDS)} 중 하나여야 합니다.")
+
+
 @app.get("/api/week_top20/members")
-def week_top20_members(start: str, end: str, user: dict = Depends(get_current_user)):
-    return {"keys": MYPICKS.list_top20(user["username"], start, end)}
+def week_top20_members(start: str, end: str, kind: str, user: dict = Depends(get_current_user)):
+    _check_top20_kind(kind)
+    return {"keys": MYPICKS.list_top20(user["username"], start, end, kind)}
 
 
 @app.post("/api/week_top20/members")
 def save_week_top20_members(body: Top20Body, user: dict = Depends(get_current_user)):
-    if len(body.keys) > 20:
-        raise HTTPException(status_code=400, detail="TOP20 명단은 20개까지만 저장합니다.")
-    MYPICKS.save_top20(user["username"], body.start, body.end, body.keys)
+    _check_top20_kind(body.kind)
+    if len(body.keys) > 10:
+        raise HTTPException(status_code=400, detail=f"{body.kind} TOP10 명단은 10개까지만 저장합니다.")
+    MYPICKS.save_top20(user["username"], body.start, body.end, body.kind, body.keys)
     return {"ok": True}
 
 

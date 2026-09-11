@@ -29,3 +29,49 @@
 .top20-played .top20-rate {
   color: var(--text-muted);
 }
+
+/* 정무/플핸무 갈래 탭 — 정무가 상위 구간을 독식해 한 줄로 합치면 플핸무가 안 보이는
+   문제(2026-09-11)로 갈래를 나눴다. 버튼 톤은 상단 네비(.scope-toggle)와 같은 규칙. */
+.top20-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 16px;
+}
+
+.top20-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.top20-tab:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.top20-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.top20-tab-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.top20-tab:not(.active) .top20-tab-count {
+  background: var(--bg-page);
+  color: var(--text-muted);
+}
