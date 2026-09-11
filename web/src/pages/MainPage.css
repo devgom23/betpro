@@ -522,6 +522,54 @@
   cursor: not-allowed;
 }
 
+/* ── 통합DB 탭: 참고 링크(클로드 코드로 만든 웹페이지 자료) ── */
+.ref-links-box {
+  max-width: 720px;
+}
+
+.ref-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ref-link-item {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.ref-link-item:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.ref-link-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.ref-link-title:hover {
+  text-decoration: underline;
+}
+
+.ref-link-date {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ref-link-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 .expander {
   margin-top: 14px;
 }

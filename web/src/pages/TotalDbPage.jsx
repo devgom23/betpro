@@ -5,6 +5,29 @@ import RtSummaryBar from '../components/RtSummaryBar/RtSummaryBar'
 import FilterForm from '../components/FilterForm/FilterForm'
 import { buildQueryString, ODDS_KEYS } from '../utils/query'
 
+// 클로드 코드와 함께 만든 웹페이지 자료(실측 리포트 등) 바로가기.
+// 새 자료가 생기면 여기 한 줄만 추가하면 된다 — 화면 어디에도 이 목록을 따로 저장하지 않는다.
+const REFERENCE_LINKS = [
+  {
+    title: '초강추 플핸 리포트 — 국≠해·통합 1,624경기 18시즌 실측',
+    url: 'https://claude.ai/code/artifact/3d457bae-50b0-4e5a-a462-46637cba8c27',
+    date: '2026-09-11',
+    desc: '초강추 당첨 85.59%(등급 없는 플핸무★3 대비 +6.53%p) · 시즌·리그·배당대별 기록 · 프로토에서 거는 법(저장 RT는 국내 정배 기준)',
+  },
+  {
+    title: '이번주 TOP20 백테스트 — 정무 TOP10·플핸무 TOP10 18시즌 실측',
+    url: 'https://claude.ai/code/artifact/d85c23b7-2435-49bc-a0a0-a3b41370e22c',
+    date: '2026-09-11',
+    desc: '지금 화면의 TOP20 판정 기준(강추→실측 당첨률→킥오프 순)을 2009-10~2026-27 과거 경기에 그대로 적용해 실제 당첨률을 잰 리포트',
+  },
+  {
+    title: '주말 TOP20 9/11~15 — 해외배당 기준',
+    url: 'https://claude.ai/code/artifact/fc57f0bf-6ffc-437f-ae38-652328a408e9',
+    date: '2026-09-10',
+    desc: '9/10 밤 시점 스냅샷. 그 주 6대리그 경기를 실측 당첨률 순으로 정리(순위는 그 뒤 바뀔 수 있음)',
+  },
+]
+
 export default function TotalDbPage({ scope }) {
   const [dashboard, setDashboard] = useState(null)
   const [leagues, setLeagues] = useState([])
@@ -155,6 +178,27 @@ export default function TotalDbPage({ scope }) {
           ))}
         </tbody>
       </table>
+
+      {REFERENCE_LINKS.length > 0 && (
+        <div className="recompute-box ref-links-box">
+          <h3>🔗 참고 링크</h3>
+          <p className="recompute-caption">
+            클로드 코드와 함께 실측·분석한 내용을 웹페이지로 정리해 둔 자료입니다. 제목을 누르면
+            새 창으로 열립니다.
+          </p>
+          <ul className="ref-link-list">
+            {REFERENCE_LINKS.map((ref) => (
+              <li key={ref.url} className="ref-link-item">
+                <a className="ref-link-title" href={ref.url} target="_blank" rel="noopener noreferrer">
+                  {ref.title}
+                </a>
+                <span className="ref-link-date">{ref.date}</span>
+                <p className="ref-link-desc">{ref.desc}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {dashboard.can_write && (
         <div className="recompute-box">

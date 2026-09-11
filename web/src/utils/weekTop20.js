@@ -71,7 +71,15 @@ export function rankByKind(rows, kind, memberKeys) {
     if (!score || score.pick !== kind) continue
     cands.push({ row, key, played, score, ko: kickoffKey(row) })
   }
-  cands.sort((a, b) => b.score.rate - a.score.rate || cmp(a.ko, b.ko) || cmp(a.key, b.key))
+  // 강추(strongPickTier)부터 우선 — 실측표(PHASE_CELL_RATE)상 강추 칸이 같은 픽의 어떤
+  // 비강추 칸보다도 항상 높아 지금은 rate만 비교해도 결과가 같지만, 표를 다시 잴 때마다
+  // 그 관계가 유지된다는 보장이 없어 강추 여부를 정렬 기준 맨 앞에 명시로 둔다(2026-09-11
+  // 사용자 지정 — "플핸무 탭에서도 강추 우선으로 정렬").
+  cands.sort((a, b) =>
+    (b.score.strong ? 1 : 0) - (a.score.strong ? 1 : 0)
+    || b.score.rate - a.score.rate
+    || cmp(a.ko, b.ko)
+    || cmp(a.key, b.key))
   return {
     top: cands.slice(0, TOP_N).map((c, i) => ({ ...c, rank: i + 1 })),
     candidateCount: cands.length,
