@@ -546,12 +546,17 @@ def league_rows(code: str,
                 team_fav: Optional[str] = None,
                 limit: int = 500,
                 offset: int = 0,
+                fields: Optional[str] = None,
                 user: dict = Depends(get_current_user)):
     """
     대형 분석표 데이터. 저장된 값을 '불러오기만' 한다(재계산 없음 — 원칙 6-3).
     season/round 미지정 시 최근 시즌·최근 라운드를 기본 선택. "ALL"이면 그 축은 필터 없음.
     배당 9종(kw~fl)을 넘기면 ±0.005 오차로 근사 일치하는 경기만 추린다(원본 조회 필터와 동일 규칙).
     team을 넘기면 그 팀이 홈이든 원정이든 나온 경기만 추린다.
+    fields를 넘기면(콤마 구분 컬럼명) 그 컬럼만 골라 내려준다 — 화면 표는 그대로 전체
+    컬럼(기본값)을 받지만, 프론트가 몇 개 필드만 필요한 대량 조회(예: 리그 전체 판정
+    요약)를 할 때 439개 컬럼을 통째로 안 보내려고 쓴다(2026-09-12, 실측 EPL 전체 6,500행
+    ·전체 컬럼 42MB·10초대 → 판정 계산에 쓰는 컬럼만 추리면 훨씬 가벼워진다).
     """
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
@@ -574,10 +579,18 @@ def league_rows(code: str,
 
     total = len(sub)
     page = sub.iloc[offset: offset + limit]
+    if fields:
+        # _attach_my_picks가 S/R/No/HT/AT로 내 예측을 매칭하므로, 요청에 없어도
+        # 조용히 None만 채워질 뿐 에러는 안 난다(그 함수는 row.get()으로 읽는다) —
+        # 하지만 요청한 컬럼 목록 자체는 실제 df에 있는 것만 남긴다(없는 이름이면
+        # to_json이 그냥 빠뜨리는 게 아니라 KeyError가 난다).
+        want = [c for c in fields.split(",") if c in page.columns]
+        if want:
+            page = page[want]
     records = DATA.df_to_records(page)
     _attach_my_picks(records, user["username"], code, scope)
     return {
-        "columns": list(df.columns)
+        "columns": list(page.columns)
                    + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT", "MY_BET"],
         "rows": records,
         "total": total,

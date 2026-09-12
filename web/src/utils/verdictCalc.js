@@ -87,6 +87,24 @@ export const SCOPE_CODES = {
   통합: { 국: ['TK-WL', 'TK-WDL'], 해: ['TF-WL', 'TF-WDL'] },
 }
 
+// phaseVerdict(→ resolveOddsPhasePick·oddsPhaseWeightedRatio·scopeCell)가 실제로 읽는
+// 컬럼 전부 — 경기 하나당 몇백 개 컬럼 중 이 판정 계산에 쓰는 건 일부뿐이다. 한 경기
+// 상세보기처럼 행 하나만 볼 땐 어차피 전체 컬럼을 받아오니 상관없지만, 리그 전체
+// 수천 경기를 판정만 보려고 한 번에 받을 때(LeaguePage.jsx 전체 시즌 판정 요약)
+// 필요 없는 컬럼까지 같이 받으면 낭비가 크다(2026-09-12 실측 — EPL 6,500행 전체
+// 컬럼 42MB·10초대, 서버가 df.to_json→json.loads→FastAPI 재직렬화를 그 크기 그대로
+// 세 번 하는 게 병목이었다). oddsScopeCodes는 행마다 정배 방향에 따라 K-W나 K-L 중
+// 하나만 쓰지만, 어느 쪽이 나올지 행마다 달라 여기선 둘 다 넣어 둔다.
+const VERDICT_ALL_CODES = [
+  'K-WL', 'K-WDL', 'F-WL', 'F-WDL', 'TK-WL', 'TK-WDL', 'TF-WL', 'TF-WDL',
+  'K-W', 'K-L', 'K-PL', 'F-W', 'F-L', 'TK-W', 'TK-L', 'TK-PL', 'TF-W', 'TF-L',
+]
+export const VERDICT_FIELDS = [
+  'RT', 'KW', 'KL', 'FW', 'FL', 'EKW', 'EKL', 'EFW', 'EFL',
+  ...VERDICT_ALL_CODES.flatMap((code) =>
+    [1, 2, 3, 4].flatMap((i) => [`${code} ${i}`, `E_${code} ${i}`])),
+]
+
 // 코드가 국내(K-/TK-)·해외(F-/TF-) 어느 시장 기준인지 보고, 그 시장의 정배 가격이
 // 초기→배변 사이에 실제로 달라졌는지 — '배변 컬럼(E_*)이 존재한다'와 다르다. 국내는
 // 크롤러가 자주 돌아 안 움직여도 EKW=KW로 늘 채워진다(kr_crawler.py "배변이 없었으면

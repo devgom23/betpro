@@ -5,6 +5,7 @@ import {
   buildColumnGroups, groupKey, splitIndicatorBatches, summarizeSystemVerdicts,
   finalSystemPick, computeAutoVerdict,
 } from '../components/LeagueTable/columnGroups'
+import { VERDICT_FIELDS } from '../utils/verdictCalc'
 import FilterForm from '../components/FilterForm/FilterForm'
 import RtSummaryBar, { PickSummaryBar } from '../components/RtSummaryBar/RtSummaryBar'
 import UploadTemplateModal from '../components/UploadTemplateModal/UploadTemplateModal'
@@ -20,6 +21,55 @@ import { getRoundFinalOddsTime, setRoundFinalOddsTime, formatFinalOddsTime } fro
 // 결과요약 배지(핸승/핸무/무/역) 클릭 정렬용 — RT 원본값(1~4)과 배지 이름 대응.
 // columnGroups.js의 RT_DISPLAY와 같은 매핑이다.
 const RT_LABEL_TO_NUM = { 핸승: 1, 핸무: 2, 무: 3, 역: 4 }
+
+// '전체 시즌 판정' 요약(allTimeSystemSummary) 결과 캐시 — 모듈 스코프(컴포넌트 바깥)에
+// 둬서 LeaguePage가 언마운트·재마운트돼도 살아남는다. MainPage.jsx가 리그 탭마다
+// key={scope:activeTab}를 걸어 둬서 탭을 오갈 때마다 이 페이지가 통째로 새로 마운트되는데,
+// 캐시가 없으면 탭을 바꿔 다시 돌아올 때마다 수천 경기를 매번 다시 받아 다시 계산했다
+// (2026-09-12 사용자 제보 — 이 요약을 넣고부터 페이지 열리는 속도가 느려짐. 실측:
+// EPL 6,500경기 전체 컬럼 조회가 10초대 걸렸다 — VERDICT_FIELDS로 필요한 컬럼만
+// 받도록 줄인 것과 별개로, 그마저도 탭 전환마다 반복하지 않게 여기서 한 번 더 막는다).
+// 값이 실제로 바뀔 수 있는 시점(업로드·삭제·재계산·최신배당 불러오기 등)은 전부
+// setReloadKey를 거치므로, "이 마운트에서 reloadKey가 아직 한 번도 안 올랐다"(=0)일
+// 때만 캐시를 믿는다 — 실제 변경 후에는 항상 다시 받는다. 그래도 이 세션이 열려 있는
+// 동안 다른 창·관리자·크롤러가 데이터를 바꿨을 수 있어 5분이 지나면 한 번은 다시 받는다.
+const ALL_TIME_SUMMARY_CACHE = new Map()
+const ALL_TIME_SUMMARY_TTL_MS = 5 * 60 * 1000
+
+// 같은 리그를 요청하는 두 마운트가 동시에 떠 있는 동안(개발 모드 React StrictMode가
+// 마운트→언마운트→재마운트를 곧바로 반복해 effect를 두 번 태우는 경우가 대표적)에는
+// 15MB짜리 요청을 두 번 동시에 쏘지 않고 하나만 보내서 나눠 쓴다 — 캐시(위)는 "이미
+// 끝난 결과"를 재사용하는 것이고, 이건 "지금 진행 중인 요청"을 재사용하는 것이다.
+const ALL_TIME_SUMMARY_INFLIGHT = new Map()
+
+/** 리그 하나의 전체 시즌 판정 요약을 서버에서 받아 계산한다(module 스코프 — 컴포넌트
+ *  마운트와 무관하게 진행 중 요청을 여러 호출자가 나눠 쓸 수 있어야 해서 여기 둔다).
+ *  이미 시작된 계산은 부르던 컴포넌트가 언마운트돼도 끝까지 돈다 — 다른 호출자가
+ *  아직 기다리고 있을 수 있어서, 개별 마운트의 취소 여부와 무관하게 완주한다. */
+async function fetchAllTimeSystemSummary(code, scope) {
+  const res = await api.get(
+    `/api/leagues/${code}?scope=${scope}&season=ALL&round=ALL&limit=100000`
+    // fields=VERDICT_FIELDS — 439개 컬럼 전부가 아니라 이 판정 계산에 실제로 쓰는
+    // 것만 받는다(2026-09-12 실측 — EPL 6,500행 전체 컬럼 42MB·10초대 → 필요한
+    // 컬럼만 추리면 15MB·2~3초대로 줄어든다. api/main.py league_rows fields 참고).
+    + `&fields=${encodeURIComponent(VERDICT_FIELDS.join(','))}`
+  )
+  const rows = res?.rows || []
+  // ⚠ 예전엔 이 계산(row마다 phaseVerdict 최대 2번)을 300건씩 나눠 setTimeout(0)으로
+  // 쉬어 가며 돌렸다("한 번에 하면 30초 넘게 메인 스레드가 막힌다"는 예전 실측 근거였다).
+  // 2026-09-12 다시 재보니 — fields로 컬럼을 줄인 지금 데이터로는 6,500행 동기 계산이
+  // 333ms뿐이라(예전 실측은 439개 컬럼 전체를 다 들고 있던 시절 값으로 보인다), 나눌
+  // 필요가 없어졌다. 오히려 setTimeout(0)은 브라우저가 "포커스 없는 탭"에서 타이머를
+  // 초 단위로 늦춰버려서(탭 백그라운드 스로틀링), 나눠 돌리던 버전이 포커스를 잃은
+  // 탭에서는 300ms짜리 계산이 10초 넘게 걸리는 역효과를 냈다 — 그래서 다시 한 번에 돈다.
+  const counts = { 적중: 0, 보험: 0, 미적: 0 }
+  for (const row of rows) {
+    const v = computeAutoVerdict(finalSystemPick(row), row.RT)
+    if (v === '적중' || v === '보험' || v === '미적') counts[v] += 1
+  }
+  const 총 = counts.적중 + counts.보험 + counts.미적
+  return 총 > 0 ? { ...counts, 총 } : null
+}
 
 export default function LeaguePage({ code, scope }) {
   const [filters, setFilters] = useState(null)
@@ -165,31 +215,31 @@ export default function LeaguePage({ code, scope }) {
 
   useEffect(() => {
     let cancelled = false
+    const cacheKey = `${scope}:${code}`
+    if (reloadKey === 0) {
+      const cached = ALL_TIME_SUMMARY_CACHE.get(cacheKey)
+      if (cached && Date.now() - cached.ts < ALL_TIME_SUMMARY_TTL_MS) {
+        setAllTimeSystemSummary(cached.value)
+        return undefined
+      }
+    }
     setAllTimeSystemSummary(undefined)   // undefined=계산 중 · null=결과 없음(값 있는 상태와 구분)
-    api
-      // limit 기본값(500)에 걸리면 등록된 경기 전부가 아니라 앞쪽 500건만 세게 된다 —
-      // 한 리그가 그보다 훨씬 많을 수 있어(실측 6,500건) 넉넉히 크게 잡는다.
-      .get(`/api/leagues/${code}?scope=${scope}&season=ALL&round=ALL&limit=100000`)
-      .then(async (res) => {
-        const rows = res?.rows || []
-        // summarizeSystemVerdicts를 그대로 한 번에 부르면(row마다 phaseVerdict 최대 2번)
-        // 6,500경기 기준 실측 30초 넘게 메인 스레드를 막아 화면이 통째로 멈췄다
-        // (2026-09-12 확인) — 300건씩 나눠 세고 매번 한 틱(setTimeout 0) 쉬어 화면이
-        // 계속 반응하게 한다. 세는 규칙 자체는 summarizeSystemVerdicts와 완전히 같다.
-        const counts = { 적중: 0, 보험: 0, 미적: 0 }
-        const CHUNK = 300
-        for (let i = 0; i < rows.length; i += CHUNK) {
-          if (cancelled) return
-          for (const row of rows.slice(i, i + CHUNK)) {
-            const v = computeAutoVerdict(finalSystemPick(row), row.RT)
-            if (v === '적중' || v === '보험' || v === '미적') counts[v] += 1
-          }
-          // eslint-disable-next-line no-await-in-loop -- 의도적으로 순서대로, 매 덩어리 사이만 쉰다.
-          await new Promise((r) => setTimeout(r, 0))
+    // 이미 같은 리그를 받는 중인 요청이 있으면(개발 모드 StrictMode의 이중 마운트 등)
+    // 새로 하나 더 쏘지 않고 그 결과를 같이 기다린다 — ALL_TIME_SUMMARY_INFLIGHT 주석 참고.
+    let promise = ALL_TIME_SUMMARY_INFLIGHT.get(cacheKey)
+    if (!promise) {
+      promise = fetchAllTimeSystemSummary(code, scope)
+      ALL_TIME_SUMMARY_INFLIGHT.set(cacheKey, promise)
+      promise.finally(() => {
+        if (ALL_TIME_SUMMARY_INFLIGHT.get(cacheKey) === promise) {
+          ALL_TIME_SUMMARY_INFLIGHT.delete(cacheKey)
         }
-        if (cancelled) return
-        const 총 = counts.적중 + counts.보험 + counts.미적
-        setAllTimeSystemSummary(총 > 0 ? { ...counts, 총 } : null)
+      })
+    }
+    promise
+      .then((value) => {
+        ALL_TIME_SUMMARY_CACHE.set(cacheKey, { value, ts: Date.now() })
+        if (!cancelled) setAllTimeSystemSummary(value)
       })
       .catch(() => {
         if (!cancelled) setAllTimeSystemSummary(null)
