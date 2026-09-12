@@ -194,7 +194,7 @@ def load_league_df_ranked(db_path: str, league: str) -> pd.DataFrame:
     # attach_rank_and_form()은 원본 df를 그대로 돌려줄 때가 있다(빈 데이터 등) —
     # 아래서 컬럼을 더 붙이기 전에 반드시 .copy()로 떼어내야 원본(raw) 캐시가
     # 오염되어 표시용 컬럼이 업로드/삭제 쪽으로 새어 들어가는 사고를 막는다.
-    df = standings.attach_rank_and_form(load_league_df(db_path, league)).copy()
+    df = standings.attach_rank_and_form(load_league_df(db_path, league), league=league).copy()
     df["DDONG"], df["DDONG_RISK"], df["DDONGSA"] = _ddong_columns(df)
     # 최종배당(배변 후) 기준 똥배 — 화면에서 초기/최종 두 줄로 나란히 보여준다.
     # E_ 접두사 = 최종배당에서 나온 값(End). 저장되는 값이 아니라 조회할 때 만든다.

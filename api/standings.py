@@ -12,6 +12,10 @@
   HR10 홈팀 최근10경기 승패  AR10 원정팀 최근10경기 승패 (상세보기 팝업 전용)
   HR10H/AR10H  HR10/AR10과 한 글자씩 대응하는 홈("H")/원정("A") 표시 — 그 팀 기준으로
                그 경기가 홈경기였는지(화면에서 점으로 표시). (상세보기 팝업 전용)
+  HREM/AREM    이 경기 포함 남은 경기 수          ┐ 시즌 막판 뱃지 — league를 넘겨야 붙는다
+  HSTK/ASTK    뱃지 이름(우승경쟁·강등확정 …)      │ (STAKE_LINES 주석 참고, 남은 경기 10 이하만)
+  HSTKT/ASTKT  경계선과의 승점 차 문구             │
+  HSTKS/ASTKS  네 경계선 상태 요약(툴팁용)         ┘
 
 최근5·최근10도 순위/폼과 마찬가지로 '그 시즌 안에서만' 센다 — 시즌이 바뀌면 리셋되고,
 아직 그만큼 안 치렀으면 있는 경기까지만 쓴다.
@@ -55,6 +59,31 @@ AWAY_RECENT10_HOME_COL = "AR10H"  # AR10과 같은 순서
 
 RECENT_N = 5     # '최근5폼' 창 크기
 RECENT10_N = 10  # '최근10경기 전적' 창 크기
+
+# ── 시즌 막판 '무엇이 걸려 있나' 뱃지 (2026-09-12) ──
+# 팀마다 남은 경기가 STAKE_WINDOW 이하가 되면, 그 라운드 직전 순위표로 경계선 4개(우승 · 챔스권 ·
+# 유로파권(컨퍼런스 포함) · 강등 안전선)마다 수학적으로 확정/탈락/아직 걸림을 가린다.
+#   확정 = 이 팀의 지금 승점 이상을 남은 경기로 따라올 수 있는 팀이 (경계 인원−1)팀 이하
+#   탈락 = 이 팀이 남은 경기를 다 이겨도 이미 넘을 수 없는 팀이 경계 인원 이상
+#   (승점이 같아지는 경우는 둘 다 '아직 걸림'으로 둔다 — 골득실·승자승으로 갈릴 수 있다)
+# 실측(6대리그 완료 시즌 32,095경기, 2026-09-11): '걸린 것' 자체는 같은 배당끼리 비교하면
+# 결과 차이가 없다(남은 경기 수까지 고정하면 어느 묶음도 z<1.9) — 배당에 이미 들어 있는
+# 정보라 화면에서는 참고용 표시다. 결과가 달라지는 건 '시즌 마지막 2라운드'뿐이다
+# (역 +3.67%p z=3.91 — web/src/utils/seasonStake.js 주석 참고).
+STAKE_WINDOW = 10
+# 리그별 경계 인원 (챔스권, 유로파권(컨퍼런스 포함), 강등 자리(플레이오프 포함)).
+# 해마다 UEFA 배정이 바뀌면 여기만 고친다. 여기 없는 리그(사용자 리그 등)는 뱃지를 안 붙인다.
+STAKE_LINES = {
+    "EPL": (4, 6, 3), "LALIGA": (4, 6, 3), "SERIEA": (4, 6, 3),
+    "BUNDES": (4, 6, 3), "LIGUE1": (3, 5, 3), "EREDIVISIE": (2, 6, 3),
+}
+HOME_REM_COL, AWAY_REM_COL = "HREM", "AREM"                # 이 경기 포함 남은 경기 수
+HOME_STAKE_COL, AWAY_STAKE_COL = "HSTK", "ASTK"            # 뱃지 이름(우승경쟁·강등확정·걸린 것 없음 …)
+HOME_STAKE_TXT_COL, AWAY_STAKE_TXT_COL = "HSTKT", "ASTKT"  # 경계선과의 승점 차('4위와 +1점')
+HOME_STAKE_ALL_COL, AWAY_STAKE_ALL_COL = "HSTKS", "ASTKS"  # 네 경계선 상태 한 줄 요약(툴팁용)
+HOME_STAKE_TRIPLE = (HOME_STAKE_COL, HOME_STAKE_TXT_COL, HOME_STAKE_ALL_COL)
+AWAY_STAKE_TRIPLE = (AWAY_STAKE_COL, AWAY_STAKE_TXT_COL, AWAY_STAKE_ALL_COL)
+STAKE_COLS = (HOME_REM_COL, AWAY_REM_COL) + HOME_STAKE_TRIPLE + AWAY_STAKE_TRIPLE
 
 RANK_COLS = (HOME_RANK_COL, AWAY_RANK_COL)
 FORM_COLS = (HOME_ALL_FORM_COL, HOME_FORM_COL, AWAY_FORM_COL, AWAY_ALL_FORM_COL)
@@ -230,13 +259,94 @@ def _ranks(table, teams):
     return {t: n for n, t in enumerate(final, start=1)}
 
 
-def _attach_one_season(sdf, out):
+def _regular_teams(ht, at):
+    """시즌을 정상적으로 치르는 팀 목록 — 가장 많이 나온 팀의 절반 이상 나온 팀만.
+    팀 이름이 몇 경기만 다르게 들어간 행이 있으면(세리에 25-26이 21팀으로 잡힌다)
+    그 이름까지 세면 팀 수와 남은 경기 수가 틀어진다."""
+    cnt = {}
+    for t in itertools.chain(ht, at):
+        cnt[t] = cnt.get(t, 0) + 1
+    if not cnt:
+        return []
+    top = max(cnt.values())
+    return sorted(t for t, c in cnt.items() if c * 2 >= top)
+
+
+def _signed(gap):
+    return "동점" if gap == 0 else (f"+{gap}점" if gap > 0 else f"−{-gap}점")
+
+
+_STAKE_FIGHT = ("우승경쟁", "챔스경쟁", "유로파경쟁", "강등경쟁")
+
+
+def _stake_label(team, states, bounds, pos, order, pts):
+    """네 경계선 상태 → (뱃지 이름, 승점 차 문구, 요약). 아직 걸린 선이 여럿이면 위쪽 선 하나만."""
+    summary = " · ".join((f"우승 {states[0]}", f"챔스 {states[1]}", f"유로파 {states[2]}",
+                          {"확정": "잔류 확정", "탈락": "강등 확정", "걸림": "강등권 걸림"}[states[3]]))
+    for i, st in enumerate(states):
+        if st != "걸림":
+            continue
+        b, p = bounds[i], pos[team]
+        if p <= b:   # 지금 선 안쪽 — 선 밖 첫 팀과의 차
+            gap = pts[team] - pts[order[b]]
+            text = f"강등권({b + 1}위)과 {_signed(gap)}" if i == 3 else f"{b + 1}위와 {_signed(gap)}"
+        else:        # 지금 선 밖 — 선 안 마지막 팀과의 차
+            gap = pts[team] - pts[order[b - 1]]
+            text = f"잔류선({b}위)과 {_signed(gap)}" if i == 3 else f"{b}위와 {_signed(gap)}"
+        return _STAKE_FIGHT[i], text, summary
+    if states[0] == "확정":
+        label = "우승확정"
+    elif states[1] == "확정":
+        label = "챔스확정"
+    elif states[2] == "확정":
+        label = "유로파확정"
+    elif states[3] == "탈락":
+        label = "강등확정"
+    else:
+        label = "걸린 것 없음"
+    return label, "", summary
+
+
+def _round_stakes(table, ranks, regular, lines, total):
+    """이 라운드 직전 성적표로 팀별 남은 경기 수와, 남은 경기가 STAKE_WINDOW 이하인 팀의
+    (뱃지 이름, 승점 차 문구, 요약)을 만든다. STAKE_LINES 주석 참고."""
+    if len(regular) < 4:
+        return {}, {}
+    rems = {t: total - table.played.get(t, 0) for t in regular}
+    rems = {t: r for t, r in rems.items() if r > 0}      # 이 경기 포함 남은 경기
+    if not any(r <= STAKE_WINDOW for r in rems.values()):
+        return {}, rems
+    pts = {t: table.pts.get(t, 0) for t in regular}
+    mx = {t: pts[t] + 3 * rems.get(t, 0) for t in regular}
+    order = sorted(regular, key=lambda t: ranks.get(t, 10 ** 6))
+    pos = {t: i + 1 for i, t in enumerate(order)}
+    cl, eu, rel = lines
+    bounds = (1, cl, eu, len(regular) - rel)
+    stakes = {}
+    for t in regular:
+        r = rems.get(t)
+        if r is None or r > STAKE_WINDOW:
+            continue
+        threats = sum(1 for u in regular if u != t and mx[u] >= pts[t])
+        above = sum(1 for u in regular if u != t and pts[u] > mx[t])
+        states = ["확정" if threats <= b - 1 else "탈락" if above >= b else "걸림" for b in bounds]
+        stakes[t] = _stake_label(t, states, bounds, pos, order, pts)
+    return stakes, rems
+
+
+def _attach_one_season(sdf, out, league=None):
     """한 시즌 분량(sdf)을 라운드 순서대로 훑으며 각 경기 '직전'의 순위·폼을 기록한다."""
     ht = sdf["HT"].astype(str).str.strip().tolist()
     at = sdf["AT"].astype(str).str.strip().tolist()
     teams = sorted(set(ht) | set(at))
     if not teams:
         return
+    # 시즌 막판 뱃지 — 경계선 설정이 있는 리그만(STAKE_LINES). 남은 경기는 '팀 수로 정해지는
+    # 전체 경기 수 − 치른 경기'로 센다 — 진행 중 시즌은 앞으로의 일정이 DB에 다 없어서
+    # 행 개수로는 못 센다. 6대리그는 모두 홈·원정 두 번씩 도는 방식이다.
+    lines = STAKE_LINES.get(league)
+    regular = _regular_teams(ht, at) if lines else []
+    total = 2 * (len(regular) - 1)
 
     # 라운드별 경기 위치를 한 번에 모아 둔다 — 예전엔 라운드마다 시즌 전체를 불리언
     # 마스크로 다시 걸러서(리그당 600번 넘게) 판다스 처리 비용이 대부분이었다.
@@ -259,6 +369,7 @@ def _attach_one_season(sdf, out):
         #    (아직 반영된 경기가 없으면 = 시즌 첫 라운드이므로 값 없음)
         if table.counted > 0:
             ranks = _ranks(table, teams)
+            stakes, rems = _round_stakes(table, ranks, regular, lines, total) if lines else ({}, {})
             for pos in positions:
                 idx, h, a = idx_list[pos], ht[pos], at[pos]
                 out[HOME_RANK_COL][idx] = ranks.get(h)
@@ -279,6 +390,12 @@ def _attach_one_season(sdf, out):
                     "H" if v else "A" for v in table.recent_venues(h))
                 out[AWAY_RECENT10_HOME_COL][idx] = "".join(
                     "H" if v else "A" for v in table.recent_venues(a, newest_first=True))
+                for team, rem_col, stk_cols in ((h, HOME_REM_COL, HOME_STAKE_TRIPLE),
+                                                (a, AWAY_REM_COL, AWAY_STAKE_TRIPLE)):
+                    if team in rems:
+                        out[rem_col][idx] = rems[team]
+                    for col, val in zip(stk_cols, stakes.get(team, ())):
+                        out[col][idx] = val
 
         # ② 그 다음에 이 라운드 결과를 성적표에 반영한다
         for pos in positions:
@@ -419,15 +536,17 @@ def max_streaks_before(df, team, season, round_, no):
     return best
 
 
-ADDED_COLS = RANK_COLS + FORM_COLS + RECENT_COLS
+ADDED_COLS = RANK_COLS + FORM_COLS + RECENT_COLS + STAKE_COLS
 
 
-def attach_rank_and_form(df, group_cols=("S",)):
+def attach_rank_and_form(df, group_cols=("S",), league=None):
     """
     경기 데이터에 순위(HP/AP)·폼(HTF/HF/AF/ATF)·최근전적(HRF/ARF/HR10/AR10)
     컬럼을 붙여 새 DataFrame을 돌려준다.
     group_cols 로 따로 집계할 단위를 정한다 — 리그 하나면 ("S",),
     여러 리그가 섞인 통합DB면 ("Source_League", "S").
+    league 를 주면(예: 'EPL') 시즌 막판 뱃지(HREM/AREM·HSTK/ASTK …)도 붙인다 — 테이블의
+    L 컬럼은 약칭이 제각각이라('EP'·'La'…) 리그 이름을 따로 받는다(STAKE_LINES 참고).
     """
     if df is None or df.empty:
         return df
@@ -440,7 +559,7 @@ def attach_rank_and_form(df, group_cols=("S",)):
 
     buckets = {c: {} for c in ADDED_COLS}
     for _, sdf in df.groupby(keys, sort=False, dropna=False):
-        _attach_one_season(sdf, buckets)
+        _attach_one_season(sdf, buckets, league)
 
     out = df.copy()
     for col in ADDED_COLS:

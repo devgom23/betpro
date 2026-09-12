@@ -16,6 +16,7 @@ import {
   ODDS_PHASE_WEIGHTED_GRADE, PHASE_CELL_RATE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE,
   CLOSE_ODDS_CUT_K, CLOSE_ODDS_CUT_F, favFlip,
 } from '../../utils/verdictCalc'
+import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
 import './MatchDetailModal.css'
 
 
@@ -238,6 +239,30 @@ function foreignTieChips(row) {
       {fw.toFixed(2)}
     </MatchChip>,
   ]
+}
+
+// 시즌 막판 뱃지 — 경기마다 '시즌 마지막 2라운드 · 정무 주의', 팀마다 '무엇이 걸려 있나'
+// (남은 경기 10 이하). 규칙·실측 근거는 utils/seasonStake.js, 계산은 api/standings.py.
+// 팀 뱃지는 참고용(배당에 이미 반영된 정보), 막판 주의만 실측으로 결과가 갈린 신호다.
+function seasonStakeChips(row) {
+  const chips = []
+  if (seasonEndWarn(row)) {
+    chips.push(
+      <MatchChip key="season-end" label="시즌막판" tone="yellow" title={SEASON_END_TITLE}>
+        정무 주의
+      </MatchChip>,
+    )
+  }
+  for (const [side, team] of [['H', row.HT], ['A', row.AT]]) {
+    const s = teamStake(row, side)
+    if (!s) continue
+    chips.push(
+      <MatchChip key={`stake-${side}`} label={`${team})`} tone={s.tone} title={s.title}>
+        {s.label}{s.text ? ` · ${s.text}` : ''}
+      </MatchChip>,
+    )
+  }
+  return chips
 }
 
 // 정역반전 뱃지 — 초기엔 A팀이 정배였는데 배변에서 B팀이 정배가 된 경기.
@@ -594,7 +619,8 @@ function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds,
   //  정배배당을 다시 적은 값이라 확률 지표와 중복이었다. DirectionScopeTable 주석 참고.)
   // 플핸85는 맨 앞에 둔다 — 다른 뱃지가 '이 경기가 어떤 경기인가'를 말하는 데 비해
   // 이것만 "그래서 어떻게 하라"에 가장 가까운 결론이라 눈에 먼저 들어와야 한다.
-  const chips = [...plhan85Chips(row, verdict),
+  // 시즌막판(정무 주의)도 '어떻게 하라'에 가까워 플핸85 바로 뒤에 둔다.
+  const chips = [...plhan85Chips(row, verdict), ...seasonStakeChips(row),
     ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
     ...favFlipChips(row),
     ...xgChips(row, xg),
