@@ -5,7 +5,7 @@ import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { formatTime, formatDt, scoreClass } from '../../utils/format'
 import { computeAutoVerdict, pickVerdictStyle } from '../LeagueTable/columnGroups'
-import { PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
+import { PICK_OPTIONS, ODDS_PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
 import {
@@ -1882,8 +1882,9 @@ function MyPickBar({ row, onSavePick }) {
   const [p, setP] = useState(row.MY_P || '')
   const [hit, setHit] = useState(row.MY_HIT || '')
   const [reasonTag, setReasonTag] = useState(row.REASON_TAG || '')
-  // 배당픽 — 내픽(pick)과 선택지는 같지만(PICK_OPTIONS) 완전히 별개로 남기는 참고용
-  // 태그. 상세픽(p)처럼 어떤 집계·판정에도 안 쓰인다(2026-09-12 추가, 사용자 지정).
+  // 배답픽 — 내픽과 선택지가 완전히 다른 별개의 참고용 태그(ODDS_PICK_OPTIONS).
+  // 상세픽(p)처럼 어떤 집계·판정에도 안 쓰인다(2026-09-12 추가, 사용자 지정 —
+  // 처음엔 PICK_OPTIONS를 그대로 재사용했다가, 같은 날 전용 선택지로 교체했다).
   const [oddsPick, setOddsPick] = useState(row.MY_ODDS_PICK || '')
   // memoPre = 경기 전에 적는 메모, memo = 결과가 나온 뒤 적는 회고 메모 — 시점이
   // 다른 별개의 글이라 따로 관리한다(결과반성 칸 앞/뒤에 하나씩 둔다).
@@ -1968,8 +1969,8 @@ function MyPickBar({ row, onSavePick }) {
       </label>
       <label className="mypick-bar-field">
         <select value={oddsPick} onChange={handleOddsPickChange}>
-          <option value="">배당픽</option>
-          {PICK_OPTIONS.map((o) => (
+          <option value="">배답픽</option>
+          {ODDS_PICK_OPTIONS.map((o) => (
             <option key={o} value={o}>
               {o}
             </option>
