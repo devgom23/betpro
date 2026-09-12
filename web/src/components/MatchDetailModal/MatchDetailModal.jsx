@@ -1067,7 +1067,7 @@ function SeasonSampleCard({ m, kind, favCode }) {
           {hasScore ? (
             <>
               <span className={scoreClass(m.hs, m.as_, 'home')}>{m.hs}</span>
-              :
+              {' : '}
               <span className={scoreClass(m.hs, m.as_, 'away')}>{m.as_}</span>
             </>
           ) : 'vs'}
