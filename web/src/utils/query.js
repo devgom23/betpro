@@ -2,7 +2,12 @@
 // (예전엔 LeaguePage 와 TotalDbPage 에 거의 같은 복사본이 각각 있었다 —
 //  차이는 TotalDbPage 만 league 를 함께 넘긴다는 점뿐이라, 앞부분을 base 로 받게 했다.)
 
-export const ODDS_KEYS = ['kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl']
+// 초기배당 9종 + '배변' 체크박스가 보내는 최종배당 9종(e접두, 2026-09-12 추가 —
+// FilterForm.jsx가 이 이름 그대로 만들어 보낸다: ekw/ekd/ekl/ekhw/ekhd/ekhl/efw/efd/efl).
+export const ODDS_KEYS = [
+  'kw', 'kd', 'kl', 'khw', 'khd', 'khl', 'fw', 'fd', 'fl',
+  'ekw', 'ekd', 'ekl', 'ekhw', 'ekhd', 'ekhl', 'efw', 'efd', 'efl',
+]
 
 // base: 항상 붙일 기본 파라미터 (예: { scope } 또는 { scope, league })
 // query: 화면의 조회 조건. 비어 있으면 base 만 담긴다.

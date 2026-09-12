@@ -4,14 +4,25 @@ import './FilterForm.css'
 const SEASON_ALL = 'ALL'
 const ROUND_ALL = 'ALL'
 
+// finalKey — 그룹 옆 '배변' 체크박스 상태를 담는 draft 키. 체크하면 그 그룹 3칸
+// 전부(홈/무/원정)를 초기배당이 아니라 최종배당(EKW 등)에서 찾는다 — 백엔드
+// ODDS_FILTER_COLS도 같이 늘려야 한다(api/main.py 참고). 2026-09-12 추가: 리그표
+// 필터가 최종배당을 아예 못 찾아서, 배변 지표(shadow_pool 기준)와 다른 값이
+// 나오는 걸 배변인 줄 착각하는 혼선이 있었다 — 이제 체크박스로 직접 고를 수 있다.
+// 그룹 이름은 앱 전체가 쓰는 줄임 표기(국)승·국)플핸·해)승 등)와 맞춘다(2026-09-12 사용자 지정).
 const ODDS_FIELDS = [
-  { group: '국내', fields: [['kw', 'KW', '홈 배당'], ['kd', 'KD', '무 배당'], ['kl', 'KL', '원정 배당']] },
-  { group: '국내 플핸', fields: [['khw', 'KHW', '홈 배당'], ['khd', 'KHD', '무 배당'], ['khl', 'KHL', '원정 배당']] },
-  { group: '해외', fields: [['fw', 'FW', '홈 배당'], ['fd', 'FD', '무 배당'], ['fl', 'FL', '원정 배당']] },
+  { group: '국)', finalKey: 'domFinal', fields: [['kw', 'KW', '홈 배당'], ['kd', 'KD', '무 배당'], ['kl', 'KL', '원정 배당']] },
+  { group: '국)플', finalKey: 'domHandiFinal', fields: [['khw', 'KHW', '홈 배당'], ['khd', 'KHD', '무 배당'], ['khl', 'KHL', '원정 배당']] },
+  { group: '해)', finalKey: 'forFinal', fields: [['fw', 'FW', '홈 배당'], ['fd', 'FD', '무 배당'], ['fl', 'FL', '원정 배당']] },
 ]
 
-const BLANK_ODDS = { kw: '', kd: '', kl: '', khw: '', khd: '', khl: '', fw: '', fd: '', fl: '' }
-const ODDS_KEYS = ODDS_FIELDS.flatMap(({ fields }) => fields.map(([key]) => key))
+const BLANK_ODDS = {
+  kw: '', kd: '', kl: '', khw: '', khd: '', khl: '', fw: '', fd: '', fl: '',
+  domFinal: false, domHandiFinal: false, forFinal: false,
+}
+// hasOdds 판정(배당값이 하나라도 있으면 시즌·라운드를 전체로 바꾸는 것) 때
+// 초기 키(kw)뿐 아니라 배변으로 보낼 수 있는 e접두 키(ekw)도 같이 봐야 한다.
+const ODDS_KEYS = ODDS_FIELDS.flatMap(({ fields }) => fields.flatMap(([key]) => [key, `e${key}`]))
 
 const TEAM_SIDE_OPTIONS = [
   ['all', '전체보기'],
@@ -76,16 +87,18 @@ export default function FilterForm({ filters, leagueKey, onSearch, teams = [] })
       if (source.teamFav && source.teamFav !== 'all') q.team_fav = source.teamFav
     }
     const badFields = []
-    for (const { fields } of ODDS_FIELDS) {
+    for (const { fields, finalKey } of ODDS_FIELDS) {
+      const useFinal = !!source[finalKey]
       for (const [key, apiKey] of fields) {
         const raw = String(source[key] ?? '').trim()
         if (!raw) continue
         const num = Number(raw)
         if (Number.isNaN(num)) {
-          badFields.push(apiKey)
+          badFields.push(useFinal ? `배변 ${apiKey}` : apiKey)
           continue
         }
-        q[key] = num
+        // 배변 체크 시 e를 붙인 키로 보낸다(ekw 등) — 백엔드가 EKW 컬럼에서 찾는다.
+        q[useFinal ? `e${key}` : key] = num
       }
     }
     return { q, badFields }
@@ -139,9 +152,17 @@ export default function FilterForm({ filters, leagueKey, onSearch, teams = [] })
         </div>
       </div>
 
-      {ODDS_FIELDS.map(({ group, fields }) => (
+      {ODDS_FIELDS.map(({ group, finalKey, fields }) => (
         <div className="filter-block" key={group}>
           <span className="filter-label">{group}</span>
+          <label className="filter-final-check" title="체크하면 이 3칸을 초기배당이 아니라 최종배당(배변)에서 찾습니다">
+            <input
+              type="checkbox"
+              checked={draft[finalKey]}
+              onChange={(e) => updateField(finalKey, e.target.checked)}
+            />
+            배변
+          </label>
           <div className="filter-row">
             {fields.map(([key, , placeholder]) => (
               <input

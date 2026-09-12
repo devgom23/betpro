@@ -429,7 +429,13 @@ def league_filters(code: str, scope: str = PATHS.SCOPE_MASTER,
     }
 
 
-ODDS_FILTER_COLS = ["KW", "KD", "KL", "KHW", "KHD", "KHL", "FW", "FD", "FL"]
+ODDS_FILTER_COLS = ["KW", "KD", "KL", "KHW", "KHD", "KHL", "FW", "FD", "FL",
+                    # 최종배당(배변) — 화면 필터의 '배변' 체크박스가 이 컬럼들로 찾는다.
+                    # 2026-09-12 추가: 예전엔 배변 체크가 없어 최종배당을 검색할 방법이
+                    # 없었고, 그래서 사용자가 최종배당 숫자를 이 초기배당 컬럼에서 찾아
+                    # 보고는(우연히 값이 겹치는 다른 경기들이 섞여) 지표(E_ 컬럼, shadow_pool
+                    # 기준)가 틀렸다고 오해하는 혼선이 있었다.
+                    "EKW", "EKD", "EKL", "EKHW", "EKHD", "EKHL", "EFW", "EFD", "EFL"]
 ODDS_TOLERANCE = 0.005   # 원본 조회 필터와 동일한 부동소수 오차 허용
 
 
@@ -541,6 +547,17 @@ def league_rows(code: str,
                 fw: Optional[float] = None,
                 fd: Optional[float] = None,
                 fl: Optional[float] = None,
+                # 최종배당(배변) 필터 — 화면의 '배변' 체크박스가 여기로 보낸다. 초기(kw 등)와
+                # 짝만 다를 뿐 규칙은 같다(±0.005 근사). 2026-09-12 추가.
+                ekw: Optional[float] = None,
+                ekd: Optional[float] = None,
+                ekl: Optional[float] = None,
+                ekhw: Optional[float] = None,
+                ekhd: Optional[float] = None,
+                ekhl: Optional[float] = None,
+                efw: Optional[float] = None,
+                efd: Optional[float] = None,
+                efl: Optional[float] = None,
                 team: Optional[str] = None,
                 team_side: Optional[str] = None,
                 team_fav: Optional[str] = None,
@@ -552,6 +569,7 @@ def league_rows(code: str,
     대형 분석표 데이터. 저장된 값을 '불러오기만' 한다(재계산 없음 — 원칙 6-3).
     season/round 미지정 시 최근 시즌·최근 라운드를 기본 선택. "ALL"이면 그 축은 필터 없음.
     배당 9종(kw~fl)을 넘기면 ±0.005 오차로 근사 일치하는 경기만 추린다(원본 조회 필터와 동일 규칙).
+    ekw~efl(최종배당)도 같은 규칙으로 필터할 수 있다 — 화면 '배변' 체크박스용.
     team을 넘기면 그 팀이 홈이든 원정이든 나온 경기만 추린다.
     fields를 넘기면(콤마 구분 컬럼명) 그 컬럼만 골라 내려준다 — 화면 표는 그대로 전체
     컬럼(기본값)을 받지만, 프론트가 몇 개 필드만 필요한 대량 조회(예: 리그 전체 판정
@@ -575,7 +593,10 @@ def league_rows(code: str,
     sub, season, round = _apply_league_filters(
         df, season, round,
         {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
-         "KHL": khl, "FW": fw, "FD": fd, "FL": fl}, team=team, team_side=team_side, team_fav=team_fav)
+         "KHL": khl, "FW": fw, "FD": fd, "FL": fl,
+         "EKW": ekw, "EKD": ekd, "EKL": ekl, "EKHW": ekhw, "EKHD": ekhd,
+         "EKHL": ekhl, "EFW": efw, "EFD": efd, "EFL": efl},
+        team=team, team_side=team_side, team_fav=team_fav)
 
     total = len(sub)
     page = sub.iloc[offset: offset + limit]
@@ -1811,6 +1832,15 @@ def table_excel_download(code: str,
                          fw: Optional[float] = None,
                          fd: Optional[float] = None,
                          fl: Optional[float] = None,
+                         ekw: Optional[float] = None,
+                         ekd: Optional[float] = None,
+                         ekl: Optional[float] = None,
+                         ekhw: Optional[float] = None,
+                         ekhd: Optional[float] = None,
+                         ekhl: Optional[float] = None,
+                         efw: Optional[float] = None,
+                         efd: Optional[float] = None,
+                         efl: Optional[float] = None,
                          team: Optional[str] = None,
                          team_side: Optional[str] = None,
                          team_fav: Optional[str] = None,
@@ -1828,7 +1858,10 @@ def table_excel_download(code: str,
     sub, season, round = _apply_league_filters(
         df, season, round,
         {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
-         "KHL": khl, "FW": fw, "FD": fd, "FL": fl}, team=team, team_side=team_side, team_fav=team_fav)
+         "KHL": khl, "FW": fw, "FD": fd, "FL": fl,
+         "EKW": ekw, "EKD": ekd, "EKL": ekl, "EKHW": ekhw, "EKHD": ekhd,
+         "EKHL": ekhl, "EFW": efw, "EFD": efd, "EFL": efl},
+        team=team, team_side=team_side, team_fav=team_fav)
 
     records = DATA.df_to_records(sub)
     _attach_my_picks(records, user["username"], code, scope)
@@ -3115,6 +3148,36 @@ def _fill_missing_ph_side(df: pd.DataFrame, db: str, scope: str, touched_idx: li
             if c in res.columns:
                 df.loc[res.index, c] = res[c].values
         filled[side] = len(target)
+
+    # K-PL/TK-PL(27·28번, 국)플핸·국통)플핸)은 PH_K_CODES/PH_F_CODES에 없어서 위 루프가
+    # 안 건드린다 — 그래서 이 두 지표만 이 '나중에 채워진 쪽 계산' 혜택을 못 받고 있었다
+    # (2026-09-12 사용자 제보로 발견). 등록 시점엔 핸디 배당(KHW/KHL)이 아직 없다가
+    # 나중에 국배 가져오기로 채워지는 경우가 흔해서, K-W/K-L과 같은 이유로 따로 챙긴다.
+    # ⚠ engine.py의 K-PL 계산은 핸디가 없으면 NaN이 아니라 [0,0,0,0]을 그대로 반환한다
+    # (pl_odds<=0 조기 반환) — 그래서 '아직 안 채워짐'은 PH_K/PH_F처럼 isna()가 아니라
+    # 표본 4칸 합계==0으로 판단해야 한다.
+    need_cols = ("KW", "KL", "KHW", "KHL")
+    if all(c in df.columns for c in need_cols):
+        has_handi = pd.Series(True, index=idx)
+        for c in need_cols:
+            has_handi &= df.loc[idx, c].notna()
+        # K-PL과 TK-PL은 따로 판정한다 — 한쪽만 먼저 채워져 있는 경기가 실제로 있어서
+        # (예: 통합재분석은 돌았는데 그 리그만 따로는 한 번도 안 돈 경우), 둘을 합쳐서
+        # 보면 한쪽이 이미 있다는 이유로 다른 쪽까지 건너뛰는 사고가 난다.
+        for code in ("K-PL", "TK-PL"):
+            side_cols = [f"{code} {i}" for i in (1, 2, 3, 4)]
+            for c in side_cols:
+                if c not in df.columns:
+                    df[c] = np.nan
+            pl_sum = df.loc[idx, side_cols].apply(pd.to_numeric, errors="coerce").fillna(0).sum(axis=1)
+            pl_target = idx[((pl_sum == 0) & has_handi).to_numpy()]
+            if len(pl_target) == 0:
+                continue
+            res_pl = engine._recompute_indicators_for_subset(df.loc[pl_target], df, total_df)
+            for c in side_cols:
+                if c in res_pl.columns:
+                    df.loc[res_pl.index, c] = res_pl[c].values
+            filled[code] = len(pl_target)
     return filled
 
 
@@ -3262,10 +3325,19 @@ def total_view(scope: str = PATHS.SCOPE_MASTER,
               fw: Optional[float] = None,
               fd: Optional[float] = None,
               fl: Optional[float] = None,
+              ekw: Optional[float] = None,
+              ekd: Optional[float] = None,
+              ekl: Optional[float] = None,
+              ekhw: Optional[float] = None,
+              ekhd: Optional[float] = None,
+              ekhl: Optional[float] = None,
+              efw: Optional[float] = None,
+              efd: Optional[float] = None,
+              efl: Optional[float] = None,
               limit: int = 2000,
               user: dict = Depends(get_current_user)):
     """
-    통합DB(6대 리그 합산) 조회. 리그·시즌·라운드·배당 9종 필터 + RT 결과분포 요약.
+    통합DB(6대 리그 합산) 조회. 리그·시즌·라운드·배당 9종(+최종배당 9종) 필터 + RT 결과분포 요약.
     저장된 값을 불러오기만 한다 (재계산은 /api/recompute/* 별도 호출).
     """
     db = _resolve_scope_db(scope, user)
@@ -3282,7 +3354,9 @@ def total_view(scope: str = PATHS.SCOPE_MASTER,
     view, season, round = _apply_league_filters(
         view, season, round,
         {"KW": kw, "KD": kd, "KL": kl, "KHW": khw, "KHD": khd,
-         "KHL": khl, "FW": fw, "FD": fd, "FL": fl})
+         "KHL": khl, "FW": fw, "FD": fd, "FL": fl,
+         "EKW": ekw, "EKD": ekd, "EKL": ekl, "EKHW": ekhw, "EKHD": ekhd,
+         "EKHL": ekhl, "EFW": efw, "EFD": efd, "EFL": efl})
 
     rt_summary = _rt_summary(view)
 

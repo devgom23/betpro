@@ -82,7 +82,11 @@ const SAMPLE_INDICATORS = [
   // 27번 — 플핸측(언더독) 핸디배당이 같고 플핸측이 같은 편(홈/원정)인 과거 경기만.
   // 승·패 바로 아래에 둔다 — 셋 다 '이 경기 배당 하나'로 찾는 단일 조건 지표라
   // 두 배당을 동시에 맞추는 승+패·승+무+패보다 먼저 읽는 게 순서가 맞다.
-  ['K-PL', '국) 플핸'],
+  // 28번(TK-PL, 2026-09-06 추가) — K-PL의 통합판(6대리그 전체에서 찾음, 표본 풀만
+  // 다르고 계산식은 K-PL과 한 글자도 안 다르다). 계산·백필은 이미 끝나 있었는데
+  // 이 화면 목록에는 빠져 있었다(2026-09-12 사용자 지정 — K-WL 옆 TK-WL처럼
+  // 바로 옆에 짝으로 보여준다).
+  ['K-PL', '국) 플핸'], ['TK-PL', '국통) 플핸'],
   ['K-WL', '국) 승+패'], ['TK-WL', '국통) 승+패'],
   ['K-WDL', '국) 승+무+패'], ['TK-WDL', '국통) 승+무+패'],
   ['TK-W', '국통) 승'], ['TK-L', '국통) 패'],
@@ -92,10 +96,12 @@ const SAMPLE_INDICATORS = [
   ['F-WDL', '해) 승+무+패'], ['TF-WDL', '해통) 승+무+패'],
   ['TF-W', '해통) 승'], ['TF-L', '해통) 패'],
 ]
-// 지표별 표본 기본 화면(접힘)에서 판단 7줄과 함께 항상 보여주는 4줄 — 판정 계산에는
-// 안 쓴다(판단 7줄에 못 들어감). '국)분석/해)분석' 줄은 이 4줄과 무관하게 계산해야
+// 지표별 표본 기본 화면(접힘)에서 판단 7줄과 함께 항상 보여주는 5줄 — 판정 계산에는
+// 안 쓴다(판단 7줄에 못 들어감). '국)분석/해)분석' 줄은 이 5줄과 무관하게 계산해야
 // 화면 숫자가 실제 방향성·판정과 어긋나지 않는다(SampleTable의 calcLines 참고).
-const SAMPLE_DEFAULT_EXTRA = new Set(['TK-WL', 'TK-WDL', 'TF-WL', 'TF-WDL'])
+// TK-PL도 TK-WL·TK-WDL과 같은 이유로 여기 둔다 — 6대리그를 합쳐 표본은 크지만
+// 리그 특성이 뭉개지므로 국)분석 판단 재료(favSampleCodes)에는 안 넣는다.
+const SAMPLE_DEFAULT_EXTRA = new Set(['TK-WL', 'TK-WDL', 'TF-WL', 'TF-WDL', 'TK-PL'])
 // 이 8줄이 '방향성 (검토용)' 표(DirectionScopeTable의 SCOPE_CODES)가 그대로 쓰는
 // 재료다 — 판정(7줄)이 쓰는 지표와는 다른 계산이라, 이름을 보라색으로 구분해
 // 어느 지표가 어느 표에 쓰이는지 한눈에 갈리게 한다(2026-09-05).
@@ -1723,14 +1729,22 @@ function SampleTable({ row, scope, expanded }) {
   }
   const allLines = indicators.map(([code, label]) => {
     const vals = [1, 2, 3, 4].map((i) => cnt(row[`${code} ${i}`]))
+    const initTotal = vals.reduce((a, b) => a + b, 0)
     // 최종배당 기준으로 다시 센 표본. 아직 '최신배당 불러오기'가 안 돈 경기는
     // E_ 컬럼 자체가 없어(undefined) eVals를 null로 두고 빈칸으로 그린다.
     const eRaw = [1, 2, 3, 4].map((i) => row[`E_${code} ${i}`])
-    const hasE = eRaw.some((v) => v !== null && v !== undefined && v !== '') && sampleOddsMoved(row, code)
+    // 시장이 안 움직였으면 배변을 숨기는 규칙(sampleOddsMoved)은 "초기와 같은 값을
+    // 또 보여주는 혼란"을 막으려는 것이다 — 초기 줄이 애초에 표본 0건(- - - -)이면
+    // 비교할 대상 자체가 없어 그 혼란이 생기지 않는다. 이때는 시장이 안 움직였어도
+    // 배변의 실제 표본(다른 과거 경기 집합에서 나온 값)을 그대로 보여준다
+    // (2026-09-12, 본머스 vs 브렌트포드 사용자 제보 — 국)플핸이 초기 0건인데
+    // 배변 실제 20건까지 같이 숨어 있었다).
+    const hasE = eRaw.some((v) => v !== null && v !== undefined && v !== '')
+      && (initTotal === 0 || sampleOddsMoved(row, code))
     const eVals = hasE ? eRaw.map(cnt) : null
     return {
       code, label, vals,
-      total: vals.reduce((a, b) => a + b, 0),
+      total: initTotal,
       eVals,
       eTotal: eVals ? eVals.reduce((a, b) => a + b, 0) : 0,
     }
