@@ -2,8 +2,8 @@ import { cloneElement, Fragment, useEffect, useMemo, useRef, useState } from 're
 import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
-  collapsedWidth, splitsOnFinal, oddsMoveDir, oddsUnmoved, riskMoveDir, toFinalRow, rtToText,
-  VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemPick,
+  collapsedWidth, splitsOnFinal, oddsMoveDir, oddsUnmoved, riskUnmoved, riskMoveDir, toFinalRow, rtToText,
+  VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemPick, verdictAnyMarketMoved,
 } from './columnGroups'
 import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
 import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
@@ -37,6 +37,13 @@ const SAME_ODDS_L = 'KL'
 const VERDICT_NONE_TITLE = '판정 없음 — 통)해(해외 정배배당) 기준으로 정배 방향을 정할 수'
   + ' 없습니다(배당이 아직 등록되지 않았거나, 정·역 배당이 완전히 같음). 표본 부족이'
   + ' 아니라 방향 자체가 안 정해진 경우입니다.'
+
+// 배변 줄인데 국내·해외 배당이 초기와 하나도 안 달라진 경기 — '최신배당 불러오기'를
+// 아직 안 돌렸거나 돌렸어도 배당이 그대로인 경우다. 이때는 판정이 초기와 같은 값을
+// 내더라도(내부적으로 초기 표본을 그대로 쓴 것뿐이라) 배변으로 다시 확인된 것처럼
+// 보여주지 않는다(2026-09-12 사용자 지정 — verdictAnyMarketMoved 참고).
+const VERDICT_UNMOVED_TITLE = '배변 없음 — 국내·해외 배당이 초기와 그대로입니다.'
+  + ' 아직 최신배당이 안 들어왔거나, 들어왔어도 배당이 안 움직인 경기입니다.'
 
 // 여러 리그를 한 표에 모은 화면(이번주 리스트 등)에서는 row.L이 리그 코드라 그대로
 // 쓰면 'LIGUE1'처럼 나온다 — 표의 '리그' 칸과 같은 말로 바꿔서 보여준다.
@@ -738,10 +745,16 @@ export default function LeagueTable({
                         // 색까지 그대로 살린다. 위/아래 두 줄로 갈리므로(VERDICT_KEY
                         // 주석 참고) 항상 원본 row(baseRow)로 계산한다.
                         const v = phaseVerdict(baseRow, isFinal, isFinal ? '배변' : '초기')
+                        // 배변 줄인데 이 판정이 근거로 삼는 시장(국내·해외)이 하나도 안
+                        // 움직였으면, phaseVerdict가 내부적으로 초기 표본을 그대로 쓴
+                        // 값을 냈더라도 '배변으로 다시 확인된 판정'인 것처럼 보여주지
+                        // 않는다(2026-09-12, 본머스 vs 브렌트포드 제보 — verdictAnyMarketMoved 참고).
+                        const showBlank = isFinal && !verdictAnyMarketMoved(baseRow)
+                        const pick = showBlank ? null : v.pick
                         // 초강추(국≠해)·강추(접전)는 배변 줄에만 붙는다 — strongPickTier
                         // 주석 참고. 초기 줄은 isFinal이 false라 항상 걸러진다.
                         // 이중밑줄(verdict-strong)은 두 단계가 똑같이 쓴다(사용자 지정).
-                        const strong = isFinal ? strongPickTier(baseRow, v) : null
+                        const strong = isFinal && !showBlank ? strongPickTier(baseRow, v) : null
                         // 적중 — 최종(배변) 판정 기준, 위/아래 두 줄로 안 갈리고 합친 칸
                         // (finalHitVerdict 주석 참고).
                         const hitVerdict = finalHitVerdict(baseRow)
@@ -749,11 +762,15 @@ export default function LeagueTable({
                           <td
                             key={`${gi}-c`}
                             className={`collapsed-cell${strong ? ' verdict-strong' : ''}`}
-                            style={verdictCellStyle(v.pick, v.stars) || undefined}
-                            title={strong ? STRONG_TIER_TITLE[strong] : (!v.pick ? VERDICT_NONE_TITLE : undefined)}
+                            style={verdictCellStyle(pick, v.stars) || undefined}
+                            title={
+                              strong ? STRONG_TIER_TITLE[strong]
+                                : showBlank ? VERDICT_UNMOVED_TITLE
+                                  : !pick ? VERDICT_NONE_TITLE : undefined
+                            }
                           >
-                            {v.pick || <span className="mypick-blank">－</span>}
-                            <SeasonEndMark row={baseRow} pick={v.pick} />
+                            {pick || <span className="mypick-blank">－</span>}
+                            <SeasonEndMark row={baseRow} pick={pick} />
                           </td>,
                           <td key={`${gi}-hit`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
                             {hitVerdict ? (
@@ -878,19 +895,28 @@ export default function LeagueTable({
                       // PICK_VERDICT와 같고(computeAutoVerdict) 대조하는 픽만 다르다.
                       cellKeys = [VERDICT_KEY, VERDICT_HIT_KEY]
                       const v = phaseVerdict(baseRow, isFinal, isFinal ? '배변' : '초기')
+                      // 배변 줄인데 이 판정이 근거로 삼는 시장(국내·해외)이 하나도 안
+                      // 움직였으면 '배변으로 다시 확인된 판정'인 것처럼 보여주지 않는다
+                      // (2026-09-12, 본머스 vs 브렌트포드 제보 — verdictAnyMarketMoved 참고).
+                      const showBlank = isFinal && !verdictAnyMarketMoved(baseRow)
+                      const pick = showBlank ? null : v.pick
                       // 초강추(국≠해)·강추(접전) — strongPickTier 주석 참고.
                       // 이중밑줄은 두 단계가 똑같이 쓴다(사용자 지정).
-                      const strong = isFinal ? strongPickTier(baseRow, v) : null
+                      const strong = isFinal && !showBlank ? strongPickTier(baseRow, v) : null
                       const hitVerdict = finalHitVerdict(baseRow)
                       cells = [
                         <td
                           key={`${gi}-c`}
                           className={strong ? 'verdict-strong' : undefined}
-                          style={verdictCellStyle(v.pick, v.stars) || undefined}
-                          title={strong ? STRONG_TIER_TITLE[strong] : (!v.pick ? VERDICT_NONE_TITLE : undefined)}
+                          style={verdictCellStyle(pick, v.stars) || undefined}
+                          title={
+                            strong ? STRONG_TIER_TITLE[strong]
+                              : showBlank ? VERDICT_UNMOVED_TITLE
+                                : !pick ? VERDICT_NONE_TITLE : undefined
+                          }
                         >
-                          {v.pick || <span className="mypick-blank">－</span>}
-                          <SeasonEndMark row={baseRow} pick={v.pick} />
+                          {pick || <span className="mypick-blank">－</span>}
+                          <SeasonEndMark row={baseRow} pick={pick} />
                         </td>,
                         <td key={`${gi}-hit`} className={dividerClass(g, isLastGroup).trim() || undefined}>
                           {hitVerdict ? (
@@ -911,6 +937,7 @@ export default function LeagueTable({
                       // 별표(중요) 행의 금색 배경은 배당 칸까지 덮으면 배당 적중·배변 화살표
                       // 배경(oddsHitSide 등)이 묻혀 안 보인다 — 국내배당/해외배당 칸만 빼둔다.
                       const isOddsGroup = g.label1 === '국내배당' || g.label1 === '해외배당'
+                      const isRiskGroup = g.kind === 'risk'
                       // 같은 날 다른 경기와 국내 정배배당 숫자가 똑같으면 그 칸에 2중 밑줄.
                       // 아랫줄(배변)은 다른 행 객체라 자연히 안 걸린다 — 초기 배당만 표시.
                       const isDupFav = dupFavCol.get(row) === c.key
@@ -921,13 +948,15 @@ export default function LeagueTable({
                         isOddsGroup ? 'odds-group-cell' : '',
                         isDupFav ? 'odds-dup-fav' : '',
                       ].filter(Boolean).join(' ')
-                      // 배변 줄인데 그 칸의 배당이 실제로 안 움직였으면(초기·최종이 완전히
-                      // 같으면) 같은 숫자를 또 보여주지 않고 '-'로 비운다 — oddsUnmoved는
-                      // 항상 원본(초기+최종이 다 있는) baseRow로 판단해야 한다(srcRow는
-                      // 배변 줄에서 이미 EKW 등으로 값이 바뀐 사본이라 비교가 안 된다).
-                      const text = (isFinal && isOddsGroup && oddsUnmoved(baseRow, c.key))
-                        ? '-'
-                        : formatCell(g, c, value, row)
+                      // 배변 줄인데 그 칸의 배당(또는 확률이 나오는 시장)이 실제로 안
+                      // 움직였으면(초기·최종이 완전히 같으면) 같은 값을 또 보여주지 않고
+                      // '-'로 비운다 — oddsUnmoved/riskUnmoved는 항상 원본(초기+최종이
+                      // 다 있는) baseRow로 판단해야 한다(srcRow는 배변 줄에서 이미 E_
+                      // 값으로 바뀐 사본이라 비교가 안 된다).
+                      const isUnmovedFinal = isFinal
+                        && ((isOddsGroup && oddsUnmoved(baseRow, c.key))
+                          || (isRiskGroup && riskUnmoved(baseRow, c.key)))
+                      const text = isUnmovedFinal ? '-' : formatCell(g, c, value, row)
                       // 폼(PPG) 칸 — 상세보기 팝업의 폼 지표와 같은 스타일로, 뱃지가 아니라
                       // 칸 전체를 배경색으로 칠한다.
                       if (g.label1 === '경기정보' && FORM_COLS.has(c.key)) {
@@ -962,7 +991,10 @@ export default function LeagueTable({
                           </td>
                         )
                       }
-                      const style = cellStyle(g, c, value, row)
+                      // '-'로 비운 칸은 색도 같이 비운다(실제 값이 있는데 흐리게 칠해진
+                      // 것처럼 보이면 안 된다) — cellStyle에 값 대신 null을 넘기면
+                      // 회색(값 없음과 같은 스타일)으로 자연히 떨어진다.
+                      const style = cellStyle(g, c, isUnmovedFinal ? null : value, row)
                       return (
                         <td
                           key={`${gi}-${ci}`}

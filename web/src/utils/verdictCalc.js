@@ -12,6 +12,58 @@ function numOrNull(v) {
   return Number.isNaN(n) ? null : n
 }
 
+// ── 시장 단위 "움직임" 판정 — 확률지표(RiskCard)·방향성·판정 참고표·리그표 확률 칸이
+// 전부 같이 쓴다(2026-09-12, 오늘 본머스 vs 브렌트포드 사용자 제보로 확인) ──
+//
+// marketMoved()가 K-PL 하나의 코드 단위로 "이 지표의 재료가 움직였나"를 봤다면,
+// 여기는 그보다 위 단계 — "이 화면 값이 통째로 어느 시장(국내 승무패·국내 핸디·
+// 해외 승무패)에서 나오는가"를 먼저 정해 두고, 그 시장의 배당 3개(승/무/패) 중
+// 하나라도 다르면 움직인 것으로 본다. api/ev_model.py 주석 근거:
+//   국)정(WIN_RISK)·해)정(WIN_RISK_F) — 승무패 배당에서 곧바로(KW/KD/KL, FW/FD/FL)
+//   국)플(NH_KO·PL_KO)              — 국내 핸디배당에서 곧바로(KHW/KHD/KHL)
+//   국)지(NH_KI·PL_KI)              — engine.py PH_K_CODES(K-W·K-L·K-WL·K-WDL·
+//                                      K-W-HW 등) — 국내 승무패·핸디 둘 다 재료다
+//   해)지(NH_FI·PL_FI)              — PH_F_CODES(F- 계열) — 해외 승무패만(해외
+//                                      핸디 최종배당은 애초에 안 모은다)
+export const DOM_WL_PAIRS = [['KW', 'EKW'], ['KD', 'EKD'], ['KL', 'EKL']]
+export const DOM_HANDI_PAIRS = [['KHW', 'EKHW'], ['KHD', 'EKHD'], ['KHL', 'EKHL']]
+export const DOM_ALL_PAIRS = [...DOM_WL_PAIRS, ...DOM_HANDI_PAIRS]
+export const FOR_WL_PAIRS = [['FW', 'EFW'], ['FD', 'EFD'], ['FL', 'EFL']]
+
+/** pairs(초기컬럼·배변컬럼 쌍들) 중 하나라도 실제로 값이 다르면 true. 어느 한 쌍이라도
+ *  값 자체가 없으면(최신배당 불러오기 전) 판단할 수 없으므로 안전하게 '움직였다'로
+ *  본다(숨기지 않고 값을 그대로 보여준다) — marketMoved()와 같은 원칙. */
+export function marketSetMoved(row, pairs) {
+  for (const [initKey, finKey] of pairs) {
+    const a = numOrNull(row[initKey])
+    const b = numOrNull(row[finKey])
+    if (a === null || b === null) return true
+    if (a !== b) return true
+  }
+  return false
+}
+
+// 확률지표(RiskCard)·리그표 확률 칸(WIN_RISK 등)이 배변 줄에서 기준으로 삼는 시장.
+export const RISK_FIELD_MARKET = {
+  WIN_RISK: DOM_WL_PAIRS, WIN_RISK_F: FOR_WL_PAIRS,
+  NH_KO: DOM_HANDI_PAIRS, PL_KO: DOM_HANDI_PAIRS,
+  NH_KI: DOM_ALL_PAIRS, PL_KI: DOM_ALL_PAIRS,
+  NH_FI: FOR_WL_PAIRS, PL_FI: FOR_WL_PAIRS,
+}
+
+// 방향성(검토용, DirectionScopeTable — K-WL/K-WDL/F-WL/F-WDL만 쓴다. K-PL은 안 씀)이
+// 배변 줄에서 기준으로 삼는 시장.
+export const DIRECTION_SCOPE_MARKET = {
+  리그: { 국: DOM_WL_PAIRS, 해: FOR_WL_PAIRS },
+  통합: { 국: DOM_WL_PAIRS, 해: FOR_WL_PAIRS },
+}
+
+// 배당(판정 참고표, OddsScopeTable — 리)국·통)국은 국)플핸(K-PL)까지 재료로 쓴다)이
+// 배변 줄에서 기준으로 삼는 시장.
+export const ODDS_SCOPE_MARKET = {
+  리국: DOM_ALL_PAIRS, 리해: FOR_WL_PAIRS, 통국: DOM_ALL_PAIRS, 통해: FOR_WL_PAIRS,
+}
+
 // 표본이 이만큼이면 그 줄을 '절반쯤' 믿는다 — 단계 가중치(줄 순서)와 표본 신뢰도
 // (n/(n+SHRINK))를 곱해서, 표본이 적은 줄이 순서만으로 결론을 뒤집지 못하게 한다.
 const SAMPLE_SHRINK = 10
@@ -101,6 +153,7 @@ const VERDICT_ALL_CODES = [
 ]
 export const VERDICT_FIELDS = [
   'RT', 'KW', 'KL', 'FW', 'FL', 'EKW', 'EKL', 'EFW', 'EFL',
+  'KHW', 'KHL', 'EKHW', 'EKHL',   // K-PL/TK-PL(국)플핸)이 움직임을 보는 기준 — marketMoved 참고
   ...VERDICT_ALL_CODES.flatMap((code) =>
     [1, 2, 3, 4].flatMap((i) => [`${code} ${i}`, `E_${code} ${i}`])),
 ]
@@ -114,7 +167,18 @@ export const VERDICT_FIELDS = [
 function marketMoved(row, code) {
   let initKey
   let finKey
-  if (code.startsWith('K-') || code.startsWith('TK-')) {
+  // 국)플핸(K-PL)·국통)플핸(TK-PL)은 "자리 기준"이 아니라 "역할 기준"(언더독 쪽
+  // 핸디배당)이라, 이 지표가 실제로 읽는 값은 KW/KL(승무패)이 아니라 KHW/KHL(핸디)이다
+  // — 움직임도 그 시장으로 봐야 한다. KW/KL로 보면 승무패는 안 움직였는데 핸디만
+  // 움직인 경기(예: 라치오 vs AC밀란 23-24 27R)에서 배변 픽이 조용히 초기 값을 쓰는
+  // 사고가 났다(2026-09-12 발견, MatchDetailModal.jsx sampleOddsMoved와 같은 버그).
+  // 방향(언더독이 홈인지)은 engine.py K-PL 계산과 똑같이 KW>KL로 정한다.
+  if (code === 'K-PL' || code === 'TK-PL') {
+    const kw = numOrNull(row.KW)
+    const kl = numOrNull(row.KL)
+    if (kw === null || kl === null || kw === kl) return true
+    ;[initKey, finKey] = kw > kl ? ['KHW', 'EKHW'] : ['KHL', 'EKHL']
+  } else if (code.startsWith('K-') || code.startsWith('TK-')) {
     const w = numOrNull(row.KW)
     const l = numOrNull(row.KL)
     if (w === null || l === null || w === l) return true

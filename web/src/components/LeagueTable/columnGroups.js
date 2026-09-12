@@ -3,7 +3,10 @@
 // 산출 로직은 건드리지 않고, "표시 순서·라벨·색상"만 그대로 재현한다.
 
 import { formatDt } from '../../utils/format'
-import { DIR_SIDE, phaseVerdict } from '../../utils/verdictCalc'
+import {
+  DIR_SIDE, phaseVerdict, marketSetMoved, RISK_FIELD_MARKET,
+  DOM_ALL_PAIRS, FOR_WL_PAIRS,
+} from '../../utils/verdictCalc'
 
 // '판정' 칸 — 저장된 컬럼이 아니라 그때그때 계산하는 값이라 가짜 컬럼 키로 둔다.
 // 초기·배변을 좌우 두 칸이 아니라 국내배당·해외배당처럼 위/아래 두 줄로 보여준다 —
@@ -130,6 +133,27 @@ export function oddsUnmoved(row, colKey) {
   if (blank(row[colKey]) || blank(row[FINAL_FIELD[colKey]])) return false
   if (Number.isNaN(a) || Number.isNaN(b)) return false
   return a === b
+}
+
+/** 확률 칸(정승%·플핸무%·플%, WIN_RISK 등)이 배변 줄에서 실제로 근거로 삼는 시장이
+ *  움직이지 않았는가 — oddsUnmoved와 같은 원칙이지만, 이 값들은 배당이 아니라 배당에서
+ *  파생된 확률이라 "그 확률이 나오는 시장"(RISK_FIELD_MARKET, api/ev_model.py 근거)이
+ *  움직였는지로 판단해야 한다(2026-09-12, 본머스 vs 브렌트포드 사용자 제보 — 국내
+ *  승무패가 그대로인데 국)정이 실제 값을 보여주고 있었다). */
+export function riskUnmoved(row, colKey) {
+  const pairs = RISK_FIELD_MARKET[colKey]
+  if (!row || !pairs) return false
+  return !marketSetMoved(row, pairs)
+}
+
+/** '판정' 칸이 배변 줄에서 근거로 삼는 모든 시장(국내 승무패+핸디, 해외 승무패) 중
+ *  하나라도 움직였는가 — 하나도 안 움직였으면 phaseVerdict(row, true, ...)가 내부적으로
+ *  초기 표본을 그대로 쓴 값(marketMoved 폴백)을 내더라도, 화면에는 '배변으로 다시
+ *  확인된 판정'인 것처럼 보여주지 않는다(CLAUDE.md 4-1의 "① 해외배당만 들어옴 → 배변
+ *  —" 표와 같은 원칙, 2026-09-12 사용자 제보). */
+export function verdictAnyMarketMoved(row) {
+  if (!row) return true
+  return marketSetMoved(row, DOM_ALL_PAIRS) || marketSetMoved(row, FOR_WL_PAIRS)
 }
 
 // 확률 지표(정승%·플핸무%·플%) 8칸 전부 — 배당에서 바로 나오는 4칸(정·플)과

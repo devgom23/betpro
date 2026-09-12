@@ -15,6 +15,7 @@ import {
   DIR_SIDE, SCOPE_CODES, scopeCell, oddsScopeCodes, directionName, weightedAnalysis,
   ODDS_PHASE_WEIGHTED_GRADE, PHASE_CELL_RATE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE,
   CLOSE_ODDS_CUT_K, CLOSE_ODDS_CUT_F, favFlip,
+  marketSetMoved, RISK_FIELD_MARKET, DIRECTION_SCOPE_MARKET, ODDS_SCOPE_MARKET,
 } from '../../utils/verdictCalc'
 import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
 import './MatchDetailModal.css'
@@ -115,7 +116,19 @@ function numOrNull(v) {
 function sampleOddsMoved(row, code) {
   let initKey
   let finKey
-  if (code.startsWith('K-') || code.startsWith('TK-')) {
+  // 국)플핸(K-PL)·국통)플핸(TK-PL)은 "자리 기준"(K-W/K-L처럼 홈=승/원정=패)이 아니라
+  // "역할 기준"(언더독 쪽 핸디배당)이다 — 이 지표가 실제로 찾는 값은 KW/KL(승무패
+  // 배당)이 아니라 KHW/KHL(핸디 배당)이라, 움직임도 그 시장으로 봐야 한다. KW/KL로
+  // 보면 승무패는 안 움직였는데 핸디만 움직인 경기(예: 라치오 vs AC밀란 23-24 27R
+  // — KW/KL은 그대로인데 KHW 1.58→1.61·KHL 4.20→4.10)에서 실제로 있는 배변 표본을
+  // 통째로 숨기는 사고가 났다(2026-09-12 발견). 방향(언더독이 홈인지)은 engine.py
+  // K-PL 계산과 똑같이 KW>KL(홈이 더 높으면 홈이 언더독)로 정한다.
+  if (code === 'K-PL' || code === 'TK-PL') {
+    const kw = numOrNull(row.KW)
+    const kl = numOrNull(row.KL)
+    if (kw === null || kl === null || kw === kl) return true
+    ;[initKey, finKey] = kw > kl ? ['KHW', 'EKHW'] : ['KHL', 'EKHL']
+  } else if (code.startsWith('K-') || code.startsWith('TK-')) {
     const w = numOrNull(row.KW)
     const l = numOrNull(row.KL)
     if (w === null || l === null || w === l) return true   // 정배를 못 가리면 안전하게 보여준다
@@ -917,18 +930,18 @@ function RiskCard({ row }) {
   // '최신배당 불러오기'가 최종배당으로 다시 센 27개 지표에서 나온다.
   const groups = [
     ['정승 %', 'win', [
-      ['국)정', toN(row.WIN_RISK), toN(row.E_WIN_RISK), true],
-      ['해)정', toN(row.WIN_RISK_F), toN(row.E_WIN_RISK_F), true],
+      ['국)정', 'WIN_RISK', toN(row.WIN_RISK), toN(row.E_WIN_RISK), true],
+      ['해)정', 'WIN_RISK_F', toN(row.WIN_RISK_F), toN(row.E_WIN_RISK_F), true],
     ]],
     ['플핸무 %', 'nh', [
-      ['국)플', toN(row.NH_KO), toN(row.E_NH_KO), true],
-      ['국)지', toN(row.NH_KI), toN(row.E_NH_KI), true],
-      ['해)지', toN(row.NH_FI), toN(row.E_NH_FI), true],
+      ['국)플', 'NH_KO', toN(row.NH_KO), toN(row.E_NH_KO), true],
+      ['국)지', 'NH_KI', toN(row.NH_KI), toN(row.E_NH_KI), true],
+      ['해)지', 'NH_FI', toN(row.NH_FI), toN(row.E_NH_FI), true],
     ]],
     ['플 %', 'pl', [
-      ['국)플', toN(row.PL_KO), toN(row.E_PL_KO), true],
-      ['국)지', toN(row.PL_KI), toN(row.E_PL_KI), true],
-      ['해)지', toN(row.PL_FI), toN(row.E_PL_FI), true],
+      ['국)플', 'PL_KO', toN(row.PL_KO), toN(row.E_PL_KO), true],
+      ['국)지', 'PL_KI', toN(row.PL_KI), toN(row.E_PL_KI), true],
+      ['해)지', 'PL_FI', toN(row.PL_FI), toN(row.E_PL_FI), true],
     ]],
   ]
   return (
@@ -964,7 +977,7 @@ function RiskCard({ row }) {
         <tr>
           <td className="row-label" />
           {groups.flatMap(([title, kind, cols], gi) =>
-            cols.map(([label, n, , hasFinal], ci) => (
+            cols.map(([label, , n, , hasFinal], ci) => (
               <td
                 key={`${title}-${label}`}
                 rowSpan={hasFinal ? 1 : 2}
@@ -981,19 +994,25 @@ function RiskCard({ row }) {
           {groups.flatMap(([title, kind, cols], gi) =>
             cols
               .map((col, ci) => ({ col, ci }))
-              .filter(({ col }) => col[3])
-              .map(({ col: [label, n, en], ci }) => {
+              .filter(({ col }) => col[4])
+              .map(({ col: [label, fieldKey, n, en], ci }) => {
+                // 이 칸이 실제로 나오는 시장(RISK_FIELD_MARKET)이 초기→배변 사이에
+                // 안 움직였으면, E_ 컬럼에 값이 있어도 '-'로 비운다 — OddsTable·
+                // SampleTable과 같은 원칙(2026-09-12, 본머스 vs 브렌트포드 사용자
+                // 제보 — 국내 승무패가 그대로인데 국)정이 실제 값을 보여주고 있었다).
+                const moved = marketSetMoved(row, RISK_FIELD_MARKET[fieldKey])
+                const shown = moved ? en : null
                 // 오르든 내리든(정배 확률이 오른 게 플핸 쪽엔 나쁠 수도 있어) 배당
                 // 화살표처럼 빨강/파랑으로 방향에 뜻을 담지 않는다 — 그냥 값이
                 // 움직였다는 표시로만, 배경색과 잘 보이도록 흰색으로 둔다.
-                const dir = n !== null && en !== null && en !== n ? (en > n ? 'up' : 'down') : null
+                const dir = n !== null && shown !== null && shown !== n ? (shown > n ? 'up' : 'down') : null
                 return (
                   <td
                     key={`${title}-${label}-e`}
                     className={ci === cols.length - 1 && gi < groups.length - 1 ? 'risk-edge' : ''}
-                    style={riskCellStyle(kind, en)}
+                    style={riskCellStyle(kind, shown)}
                   >
-                    {en === null ? '-' : en.toFixed(0)}
+                    {shown === null ? '-' : shown.toFixed(0)}
                     {dir && <span className="risk-arrow">{dir === 'up' ? '▲' : '▼'}</span>}
                   </td>
                 )
@@ -2508,7 +2527,13 @@ function DirectionScopeLegend({ onClose }) {
 function DirectionScopeTable({ row }) {
   const [showLegend, setShowLegend] = useState(false)
   const cell = (sc, mkt, final, edge) => {
-    const { name, total } = scopeCell(row, SCOPE_CODES[sc][mkt], final)
+    const rawScope = scopeCell(row, SCOPE_CODES[sc][mkt], final)
+    // 배변 줄인데 이 칸이 나오는 시장(국내 승무패 또는 해외 승무패)이 초기→배변
+    // 사이에 실제로 안 움직였으면, scopeCell 내부적으로는 초기 표본을 그대로 쓴 값이
+    // 나오더라도(marketMoved 폴백) 화면에는 '움직인 배변'인 것처럼 보여주지 않는다
+    // (2026-09-12, 본머스 vs 브렌트포드 사용자 제보 — OddsTable·SampleTable과 같은 원칙).
+    const moved = !final || marketSetMoved(row, DIRECTION_SCOPE_MARKET[sc][mkt])
+    const { name, total } = moved ? rawScope : { name: null, total: 0 }
     const [, tone, toneLabel] = SCOPE_TONES.find(([cut]) => total >= cut) || [0, 'none', '표본 없음']
     // 표본 수는 화면에서 빼고(2026-09-05) 색 하나로 두 가지를 말한다 —
     // 색이 붙어 있으면 '표본이 넉넉하다(15건+)', 색 종류가 방향(플핸/정배)이다.
@@ -2519,8 +2544,10 @@ function DirectionScopeTable({ row }) {
         className={`dscope-${tone}${side ? ` dscope-side-${side}` : ''}${edge ? ' dscope-edge' : ''}`}
         title={`${sc} · ${mkt === '국' ? '국내' : '해외'}배당 · ${final ? '배변' : '초기'}\n`
           + `승+패(${SCOPE_CODES[sc][mkt][0]})와 승+무+패(${SCOPE_CODES[sc][mkt][1]}) 두 줄만 가중평균.\n`
-          + `과거 표본 ${total.toLocaleString()}건 — ${toneLabel}`
-          + `${side ? ' (그래서 색을 넣었습니다)' : ' (표본이 얇아 색을 넣지 않았습니다)'}.\n`
+          + (moved
+            ? `과거 표본 ${total.toLocaleString()}건 — ${toneLabel}`
+              + `${side ? ' (그래서 색을 넣었습니다)' : ' (표본이 얇아 색을 넣지 않았습니다)'}.\n`
+            : '이 시장(국내/해외 승무패)이 초기와 배변 사이에 안 움직였습니다.\n')
           + '※ 검토용 표입니다. 판정에는 쓰이지 않습니다.'}
       >
         {name ? <b className="sys-name">{name}</b> : <span className="dir-none">—</span>}
@@ -2788,7 +2815,13 @@ function OddsScopeTable({ row }) {
   const codes = oddsScopeCodes(row)
   const cell = (key, final, edge) => {
     const list = codes[key]
-    const { pick, total } = scopeCell(row, list, final)
+    const rawScope = scopeCell(row, list, final)
+    // 배변 줄인데 이 칸이 쓰는 시장(리)국·통)국은 국내 승무패+핸디, 리)해·통)해는
+    // 해외 승무패)이 초기→배변 사이에 실제로 안 움직였으면 '-'로 비운다 — 안 움직인
+    // 시장은 scopeCell 내부에서 초기 표본을 그대로 쓰고 있어(marketMoved 폴백),
+    // 그 값을 배변인 것처럼 보여주면 안 된다(2026-09-12, 본머스 vs 브렌트포드 제보).
+    const moved = !final || marketSetMoved(row, ODDS_SCOPE_MARKET[key])
+    const { pick, total } = moved ? rawScope : { pick: null, total: 0 }
     const [, tone, toneLabel] = SCOPE_TONES.find(([cut]) => total >= cut) || [0, 'none', '표본 없음']
     const side = tone === 'ok' ? SCOPE_SIDE[pick] : null
     return (
@@ -2796,8 +2829,10 @@ function OddsScopeTable({ row }) {
         className={`dscope-${tone}${side ? ` dscope-side-${side}` : ''}${edge ? ' dscope-edge' : ''}`}
         title={`${key} · ${final ? '배변' : '초기'}\n`
           + `쓰는 지표: ${list.length ? list.join(' · ') : '(배당 없음)'}\n`
-          + `과거 표본 ${total.toLocaleString()}건 — ${toneLabel}`
-          + `${side ? ' (그래서 색을 넣었습니다)' : ' (표본이 얇아 색을 넣지 않았습니다)'}.\n`
+          + (moved
+            ? `과거 표본 ${total.toLocaleString()}건 — ${toneLabel}`
+              + `${side ? ' (그래서 색을 넣었습니다)' : ' (표본이 얇아 색을 넣지 않았습니다)'}.\n`
+            : '이 시장이 초기와 배변 사이에 안 움직였습니다.\n')
           + '※ 핸승과 역 중 작은 쪽을 배제한 이름입니다(판정과 같은 기준).'}
       >
         {pick ? <b className="sys-name">{pick}</b> : <span className="dir-none">—</span>}
