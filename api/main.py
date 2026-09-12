@@ -917,6 +917,62 @@ def save_season_note(code: str, body: SeasonNoteBody, user: dict = Depends(get_c
     return {"ok": True}
 
 
+@app.get("/api/leagues/{code}/season_sample")
+def season_sample(code: str, scope: str = PATHS.SCOPE_MASTER,
+                  season: str = "", round: str = "",   # noqa: A002
+                  no: Optional[float] = None,
+                  user: dict = Depends(get_current_user)):
+    """상세보기 '정배·플핸 시즌표'용 — 국)정배(이 경기 정배 방향의 K-W 또는 K-L)와
+    국)플핸(K-PL)을 '이번 시즌 안에서만' 다시 센다(초기 배당 기준, 배변은 없음).
+    저장된 지표(K-W N 등)는 리그 전체 히스토리가 표본 풀이라 시즌 단위로 볼 값이
+    따로 없어서, 이 표를 열 때만 그 자리에서 계산한다.
+    ⚠ 계산 로직(engine._prep_db/get_samples_fast)은 한 글자도 안 건드린다 — 표본
+    풀로 넘기는 df만 이번 시즌 것으로 좁힌다(4번 원칙: engine.py 함수 보호).
+    """
+    _check_league_for(code, scope, user)
+    db = _resolve_scope_db(scope, user)
+    df = DATA.load_league_df_ev(db, code)
+    if df.empty or not {"S", "R", "No", "KW", "KL"}.issubset(df.columns):
+        raise HTTPException(status_code=404, detail="데이터가 없습니다.")
+
+    mask = (df["S"].astype(str) == str(season)) & (df["R"].astype(str) == str(round))
+    if no is not None:
+        mask &= (pd.to_numeric(df["No"], errors="coerce") == no)
+    target = df[mask]
+    if target.empty:
+        raise HTTPException(status_code=404, detail="경기를 찾을 수 없습니다.")
+    row = target.iloc[0]
+
+    def _pos(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f > 0 else None
+
+    kw, kl = _pos(row.get("KW")), _pos(row.get("KL"))
+    if kw is None or kl is None or kw == kl:
+        # 정배 방향을 못 가리면(배당 없음/동률) 국)정배는 낼 수 없다 — 국)플핸만 시도.
+        fav_code = None
+    else:
+        fav_code = "K-W" if kw < kl else "K-L"
+
+    # 시즌 줄은 '이 리그의 이번 시즌'이 아니라 '6대리그 전체의 이번 시즌'이 표본 풀이다
+    # (2026-09-13 사용자 지정 — 통합/리그는 전체 히스토리 기준으로 이미 나뉘어 있으니,
+    # 시즌만 그 아래 한 단계 더(전체 시즌→이번 시즌) 좁힌 것으로 본다). 내 데이터는
+    # 리그가 사용자 정의라 6대리그 개념이 없으므로 이 리그 하나로 그대로 둔다
+    # (_merge_and_save의 total_new 분기와 같은 기준 — _is_user_scope).
+    season_pool = df if _is_user_scope(scope) else DATA.load_total_df(db)
+    if season_pool is None or season_pool.empty or "S" not in season_pool.columns:
+        season_pool = df
+    season_df = season_pool[season_pool["S"].astype(str) == str(season)]
+    cache = engine._prep_db(season_df)
+    row_dict = row.to_dict()
+    counts_fav = engine.get_samples_fast(cache, fav_code, row_dict) if fav_code else None
+    counts_pl = engine.get_samples_fast(cache, "K-PL", row_dict)
+    return {"season": season, "fav_code": fav_code, "정": counts_fav, "플": counts_pl}
+
+
 # ─────────────────────────── 상대전적 (상세 팝업용) ───────────────────────────
 # 5="취소"는 아예 열리지 않은 경기(리그 자체 취소 등), 6="연기"는 날짜만 미뤄져
 # 나중에 치러질 경기 표시용이다. 연기 경기는 실제로 열린 뒤 1~4로 고쳐 넣으면 된다.

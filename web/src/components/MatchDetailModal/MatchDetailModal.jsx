@@ -76,8 +76,14 @@ function formStyle(v) {
 // — filter는 걸러지는 원소와 무관하게 남는 원소의 순서를 지킨다. 지금 걸러지는 건
 // 국통)·해통) 승+패/승+무+패(TK-WL 등, 2026-09-05 기본 화면에 보여주려고 끼워 둔 넷)와
 // 승=홈팀·패=원정팀(2026-09-06 판단에서 뺐다 — favSampleCodes 주석 참고)이다.
+// 펼쳤을 때는 리그(국)·해))와 통합(국통)·해통))을 같은 재료끼리 바로 붙여서 번갈아
+// 보여준다 — 국)승 바로 아래 국통)승, 국)패 바로 아래 국통)패 식(2026-09-12 사용자
+// 지정). 접었을 때(판단 7줄 + extra)는 K-W/TK-W·K-L/TK-L·F-W/TF-W·F-L/TF-L이
+// favSampleCodes·SAMPLE_DEFAULT_EXTRA 어디에도 없어 애초에 안 보이므로, 이 순서
+// 변경은 펼친 화면에만 영향을 준다.
 const SAMPLE_INDICATORS = [
-  ['K-W', '국) 승'], ['K-L', '국) 패'],
+  ['K-W', '국) 승'], ['TK-W', '국통) 승'],
+  ['K-L', '국) 패'], ['TK-L', '국통) 패'],
   ['K-W-HT', '국) 승=홈팀'], ['K-L-AT', '국) 패=원정팀'],
   // 27번 — 플핸측(언더독) 핸디배당이 같고 플핸측이 같은 편(홈/원정)인 과거 경기만.
   // 승·패 바로 아래에 둔다 — 셋 다 '이 경기 배당 하나'로 찾는 단일 조건 지표라
@@ -89,12 +95,11 @@ const SAMPLE_INDICATORS = [
   ['K-PL', '국) 플핸'], ['TK-PL', '국통) 플핸'],
   ['K-WL', '국) 승+패'], ['TK-WL', '국통) 승+패'],
   ['K-WDL', '국) 승+무+패'], ['TK-WDL', '국통) 승+무+패'],
-  ['TK-W', '국통) 승'], ['TK-L', '국통) 패'],
-  ['F-W', '해) 승'], ['F-L', '해) 패'],
+  ['F-W', '해) 승'], ['TF-W', '해통) 승'],
+  ['F-L', '해) 패'], ['TF-L', '해통) 패'],
   ['F-W-HT', '해) 승=홈팀'], ['F-L-AT', '해) 패=원정팀'],
   ['F-WL', '해) 승+패'], ['TF-WL', '해통) 승+패'],
   ['F-WDL', '해) 승+무+패'], ['TF-WDL', '해통) 승+무+패'],
-  ['TF-W', '해통) 승'], ['TF-L', '해통) 패'],
 ]
 // 지표별 표본 기본 화면(접힘)에서 판단 7줄과 함께 항상 보여주는 5줄 — 판정 계산에는
 // 안 쓴다(판단 7줄에 못 들어감). '국)분석/해)분석' 줄은 이 5줄과 무관하게 계산해야
@@ -890,6 +895,109 @@ function OddsTable({ row }) {
             </Fragment>
           )
         })}
+      </tbody>
+    </table>
+  )
+}
+
+// ── 정배·플핸 시즌표(2026-09-12 추가) ──────────────────────────────────
+// '배당' 표 바로 아래(확률 지표 칸 위)에 붙는다. 국)정배(이 경기 정배 방향의
+// K-W 또는 K-L)와 국)플핸(K-PL)을 통합(TK-)·리그(K-)·시즌(이번 시즌만) 세 단위로
+// 나란히 보여준다 — 초기 배당 기준만이고 배변 줄은 없다(사용자 지정).
+// 통합·리그는 이 경기 row에 이미 저장된 지표 컬럼을 그대로 읽고, 시즌만 저장된 값이
+// 없어서(리그 전체 히스토리가 표본 풀이라 시즌 단위로 뗀 값이 없다) 팝업을 열 때
+// /api/leagues/{code}/season_sample로 그 자리에서 계산해 받아온다.
+function seasonFavCode(row) {
+  const kw = numOrNull(row.KW)
+  const kl = numOrNull(row.KL)
+  if (kw === null || kl === null || kw === kl) return null
+  return kw < kl ? 'K-W' : 'K-L'
+}
+
+function seasonCountsOf(row, code) {
+  if (!code) return null
+  return [1, 2, 3, 4].map((i) => {
+    const v = Number(row[`${code} ${i}`])
+    return Number.isNaN(v) ? 0 : Math.trunc(v)
+  })
+}
+
+// vals: [핸승,핸무,무,역] 또는 null(재료 없음) 또는 undefined(아직 불러오는 중).
+function seasonSampleCells(vals) {
+  if (vals === undefined) {
+    return <td colSpan={4} className="season-sample-loading">불러오는 중…</td>
+  }
+  const total = vals ? vals.reduce((a, b) => a + b, 0) : 0
+  return (
+    <>
+      {[0, 1, 2, 3].map((i) => (
+        <td key={i}>{vals && total > 0 ? vals[i] : '-'}</td>
+      ))}
+    </>
+  )
+}
+
+function SeasonSampleTable({ row, code, scope }) {
+  // undefined=불러오는 중 · null=실패(또는 아직 값 없음) · {정,플}=성공.
+  const [seasonCounts, setSeasonCounts] = useState(undefined)
+
+  useEffect(() => {
+    let cancelled = false
+    setSeasonCounts(undefined)
+    const params = new URLSearchParams({ scope, season: String(row.S ?? ''), round: String(row.R ?? '') })
+    if (row.No !== undefined && row.No !== null && row.No !== '') params.set('no', String(row.No))
+    api.get(`/api/leagues/${code}/season_sample?${params.toString()}`)
+      .then((res) => {
+        if (!cancelled) setSeasonCounts(res)
+      })
+      .catch(() => {
+        if (!cancelled) setSeasonCounts(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [code, scope, row.S, row.R, row.No])
+
+  const favCode = seasonFavCode(row)
+  const favTotalCode = favCode === 'K-W' ? 'TK-W' : favCode === 'K-L' ? 'TK-L' : null
+
+  // 그룹 하나(국)정배 또는 국)플핸)의 통합/리그/시즌 세 줄. 통합·리그는 row에서 바로,
+  // 시즌은 seasonCounts가 아직 undefined면 로딩, null이면 값 없음(재료 부족 등)으로 본다.
+  // 국)정배/국)플핸 이름 칸을 구분 칸 앞에 다시 넣는다(2026-09-13 사용자 지정 —
+  // 한 번 뺐다가, 시즌표가 박스로 독립되면서 자리가 생겨 다시 넣었다).
+  function group(label, leagueCode, totalCode, seasonKey) {
+    const rows = [
+      ['통합', seasonCountsOf(row, totalCode)],
+      ['리그', seasonCountsOf(row, leagueCode)],
+      ['시즌', seasonCounts === undefined ? undefined : (seasonCounts?.[seasonKey] ?? null)],
+    ]
+    return rows.map(([sub, vals], i) => (
+      <tr key={`${label}-${sub}`}>
+        {i === 0 && (
+          <td className="row-label season-sample-group" rowSpan={rows.length}>
+            {label}
+          </td>
+        )}
+        <td className="row-label season-sample-sub">{sub}</td>
+        {seasonSampleCells(vals)}
+      </tr>
+    ))
+  }
+
+  return (
+    <table className="detail-table season-sample-table">
+      <thead>
+        <tr>
+          <th className="row-label" colSpan={2}>구분</th>
+          <th className="col-hs">핸승</th>
+          <th className="col-hm">핸무</th>
+          <th className="col-mu">무</th>
+          <th className="col-yk">역</th>
+        </tr>
+      </thead>
+      <tbody>
+        {group('국)정배', favCode, favTotalCode, '정')}
+        {group('국)플핸', 'K-PL', 'TK-PL', '플')}
       </tbody>
     </table>
   )
@@ -3875,6 +3983,16 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
           h2hLoading={!pickData && !pickError}
           xg={seasonXg}
         />
+
+        {/* 정배·플핸 시즌표 — 배당(PickBand) 칸 안에 넣었다가(2026-09-12) 확률 지표·
+            경기지표가 눌리는 문제로 뺐고, 배당과 지표별 표본 사이에 배당과 같은 폭의
+            독립 카드로 둔다(2026-09-13 사용자 지정 — "배당과 지표별 표본 사이로,
+            해당 영역의 박스 너비를 팝업에 꽉차게, 배당 영역과 동일하게"). modal-columns
+            2단 그리드 바깥(PickBand와 같은 레벨)에 둬야 폭이 팝업 전체를 채운다. */}
+        <section className="detail-section">
+          <h3>정배·플핸 시즌표</h3>
+          <SeasonSampleTable row={row} code={code} scope={scope} />
+        </section>
 
         <div className="modal-columns" ref={columnsRef}>
           <div className="modal-col">

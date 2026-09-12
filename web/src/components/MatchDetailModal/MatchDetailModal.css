@@ -957,6 +957,52 @@
   .pick-band-risk-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* 정배·플핸 시즌표 — 배당(PickBand)과 지표별 표본 사이, modal-columns 2단 그리드
+   바깥(PickBand와 같은 레벨)에 독립 카드로 둔다(2026-09-13 — 배당 옆 3단 배치는
+   확률지표·경기지표가 눌려서 되돌렸고, 지표별 표본 아래 왼쪽 칸에 뒀던 것도
+   "배당 영역과 동일하게" 폭을 꽉 채워 달라는 요청으로 다시 옮겼다). 다른 카드는
+   modal-col(그리드 절반 폭) 안에 있지만 이건 그 바깥에 있어 별도 폭 지정이
+   필요 없다 — .detail-section이 이미 부모 폭을 그대로 채우고, 기본 margin-bottom
+   14px가 아래 modal-columns와의 간격도 다른 카드 사이 간격과 그대로 맞는다. */
+/* .season-sample-table 단독 클래스(특이도 0,0,1,0)로는 LeagueTable.css가 같은
+   특이도로 정의한 .detail-table{width:100%}를 못 이긴다 — 두 CSS 파일이 각각
+   .detail-table을 정의하고, 로드 순서가 LeagueTable.css 쪽이 더 뒤라 width:100%가
+   이겨 버린다(2026-09-13 실측: 340px을 줘도 1232px로 렌더링됨). .detail-table과
+   같이 써서 특이도를 (0,0,2,0)으로 올려 파일 로드 순서와 무관하게 이기게 한다.
+   카드 폭은 배당과 맞추되 표 자체는 예전 크기(구분 2칸 46px + 4칸 62px = 340px)
+   그대로 두고, 남는 오른쪽 공간은 나중에 다른 정보를 넣을 자리로 비워 둔다
+   (2026-09-13 사용자 지정 — "표 크기는 이전과 동일하게, 나머지 영역에 새 정보"). */
+.detail-table.season-sample-table {
+  width: 354px;
+  table-layout: fixed;
+}
+
+.season-sample-table .season-sample-sub {
+  width: 46px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.season-sample-table .col-hs,
+.season-sample-table .col-hm,
+.season-sample-table .col-mu,
+.season-sample-table .col-yk {
+  width: 62px;
+}
+
+/* 국)정배·국)플핸 4글자가 46px 칸에서 두 줄로 줄바꿈되던 것을 한 줄로 고정한다
+   (2026-09-13 사용자 지정 — "국)정배 한줄로 처리해줘" + "국)플핸도"). */
+.season-sample-table .season-sample-group {
+  width: 60px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.season-sample-loading {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 /* ── 방향성·배당 표를 담는 칸. */
 .pick-band-sys {
   min-width: 0;
