@@ -970,7 +970,96 @@ def season_sample(code: str, scope: str = PATHS.SCOPE_MASTER,
     row_dict = row.to_dict()
     counts_fav = engine.get_samples_fast(cache, fav_code, row_dict) if fav_code else None
     counts_pl = engine.get_samples_fast(cache, "K-PL", row_dict)
-    return {"season": season, "fav_code": fav_code, "정": counts_fav, "플": counts_pl}
+
+    fav_matches = _season_sample_match_cards(season_df, code, season, round, no, "fav", fav_code, row)
+    pl_matches = _season_sample_match_cards(season_df, code, season, round, no, "pl", None, row)
+
+    return {
+        "season": season, "fav_code": fav_code, "정": counts_fav, "플": counts_pl,
+        "정_경기": fav_matches, "플_경기": pl_matches,
+    }
+
+
+def _season_sample_match_cards(season_df, code, season, round, no, kind, fav_code, row):  # noqa: A002
+    """'정배·플핸 시즌표' 옆 카드 목록용 — season_sample이 표본 '건수'만 셀 때 쓰는
+    engine.get_samples_fast의 매칭 조건을 여기서 그대로 다시 적어(행 단위 불리언
+    마스크), 실제로 어느 경기들이 그 건수에 들어갔는지 최신순 3건만 뽑는다.
+    ⚠ engine.py 함수는 안 부른다(카운트만 반환하고 매칭된 행 자체는 안 돌려줘서) —
+    대신 get_samples_fast의 'K-W'/'K-L'/'K-PL' 분기와 완전히 같은 조건식을 그대로
+    복붙해 옮겼다. engine.py 파일 자체는 한 글자도 안 건드렸다(4번 원칙)."""
+
+    def _pos(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f > 0 else None
+
+    def _round2(colname):
+        if colname not in season_df.columns:
+            return pd.Series(np.nan, index=season_df.index)
+        return pd.to_numeric(season_df[colname], errors="coerce").round(2)
+
+    cKW, cKL, cKHW, cKHL = _round2("KW"), _round2("KL"), _round2("KHW"), _round2("KHL")
+
+    if kind == "fav":
+        if not fav_code:
+            return {"total": 0, "matches": []}
+        kw, kl = _pos(row.get("KW")), _pos(row.get("KL"))
+        cond = (cKW == kw) if fav_code == "K-W" else (cKL == kl)
+    else:  # 'pl' — engine.get_samples_fast의 K-PL 분기와 동일한 조건
+        kw, kl = _pos(row.get("KW")), _pos(row.get("KL"))
+        khw, khl = _pos(row.get("KHW")), _pos(row.get("KHL"))
+        if kw is None or kl is None or kw == kl:
+            return {"total": 0, "matches": []}
+        home_dog = kw > kl
+        pl_odds = khw if home_dog else khl
+        if pl_odds is None:
+            return {"total": 0, "matches": []}
+        valid = cKW.notna() & cKL.notna() & (cKW != cKL)
+        db_home_dog = cKW > cKL
+        db_pl = cKHW.where(db_home_dog, cKHL)
+        cond = valid & (db_home_dog == home_dog) & (db_pl == pl_odds)
+
+    if "Source_League" in season_df.columns:
+        self_mask = (
+            (season_df["Source_League"] == code)
+            & (season_df["S"].astype(str) == str(season))
+            & (season_df["R"].astype(str) == str(round))
+            & (pd.to_numeric(season_df["No"], errors="coerce") == no)
+        )
+    else:
+        self_mask = (
+            (season_df["S"].astype(str) == str(season))
+            & (season_df["R"].astype(str) == str(round))
+            & (pd.to_numeric(season_df["No"], errors="coerce") == no)
+        )
+
+    # 위 시즌표 숫자(핸승/핸무/무/역 합)는 RT가 있는 경기만 센다(engine.get_samples_fast가
+    # cRT[m]==1~4로만 카운트) — 카드 건수도 여기 맞춰 RT 없는(아직 안 치러진) 경기는 뺀다.
+    rt_known = pd.to_numeric(season_df["RT"], errors="coerce").isin([1, 2, 3, 4])
+    sub = season_df[cond.fillna(False) & ~self_mask & rt_known]
+    total = len(sub)
+    if total == 0:
+        return {"total": 0, "matches": []}
+
+    date_key = pd.to_datetime(sub["DT"].astype(str).str.split(" ").str[0], format="%y-%m-%d", errors="coerce")
+    tm_key = pd.to_numeric(sub.get("TM"), errors="coerce").fillna(0)
+    order = pd.DataFrame({"d": date_key, "t": tm_key}, index=sub.index).sort_values(["d", "t"], ascending=False).index
+    # 최신 4건까지만(2026-09-13 사용자 지정 — 처음엔 3건이었다가, 카드 한 줄에 실제로
+    # 4개까지 들어가는 걸 보고 4건으로 늘림).
+    picked = sub.loc[order[:4]]
+
+    matches = []
+    for _, r in picked.iterrows():
+        matches.append({
+            "league": r.get("Source_League", code),
+            "s": r.get("S"), "r": r.get("R"), "dt": r.get("DT"),
+            "ht": r.get("HT"), "hs": r.get("HS"), "at": r.get("AT"), "as_": r.get("AS"), "rt": r.get("RT"),
+            "kw": r.get("KW"), "kd": r.get("KD"), "kl": r.get("KL"),
+            "khw": r.get("KHW"), "khd": r.get("KHD"), "khl": r.get("KHL"),
+        })
+    return {"total": total, "matches": DATA.df_to_records(pd.DataFrame(matches))}
 
 
 # ─────────────────────────── 상대전적 (상세 팝업용) ───────────────────────────

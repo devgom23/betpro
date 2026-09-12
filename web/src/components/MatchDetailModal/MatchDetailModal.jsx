@@ -985,21 +985,115 @@ function SeasonSampleTable({ row, code, scope }) {
   }
 
   return (
-    <table className="detail-table season-sample-table">
-      <thead>
-        <tr>
-          <th className="row-label" colSpan={2}>구분</th>
-          <th className="col-hs">핸승</th>
-          <th className="col-hm">핸무</th>
-          <th className="col-mu">무</th>
-          <th className="col-yk">역</th>
-        </tr>
-      </thead>
-      <tbody>
-        {group('국)정배', favCode, favTotalCode, '정')}
-        {group('국)플핸', 'K-PL', 'TK-PL', '플')}
-      </tbody>
-    </table>
+    <div className="season-sample-wrap">
+      <table className="detail-table season-sample-table">
+        <thead>
+          <tr>
+            <th className="row-label" colSpan={2}>구분</th>
+            <th className="col-hs">핸승</th>
+            <th className="col-hm">핸무</th>
+            <th className="col-mu">무</th>
+            <th className="col-yk">역</th>
+          </tr>
+        </thead>
+        <tbody>
+          {group('국)정배', favCode, favTotalCode, '정')}
+          {group('국)플핸', 'K-PL', 'TK-PL', '플')}
+        </tbody>
+      </table>
+      <div className="season-sample-cardcols">
+        <SeasonSampleCardGroup kind="fav" favCode={favCode} data={seasonCounts === undefined ? undefined : seasonCounts?.정_경기} />
+        <SeasonSampleCardGroup kind="pl" data={seasonCounts === undefined ? undefined : seasonCounts?.플_경기} />
+      </div>
+    </div>
+  )
+}
+
+// data: undefined(불러오는 중) · null/없음(재료 부족) · {total, matches}(성공, matches는
+// 최신순 최대 3건 — 그 이상은 서버가 아예 안 돌려준다, 2026-09-13 사용자 지정).
+function SeasonSampleCardGroup({ kind, favCode, data }) {
+  const total = data?.total ?? 0
+  const matches = data?.matches ?? []
+  return (
+    <div className="season-sample-cardgroup">
+      {data === undefined ? (
+        <div className="season-sample-cards-empty">불러오는 중…</div>
+      ) : total === 0 ? (
+        <div className="season-sample-cards-empty">표본 없음</div>
+      ) : (
+        <div className="season-sample-cards">
+          {matches.map((m, i) => (
+            <SeasonSampleCard key={`${m.league}-${m.s}-${m.r}-${i}`} m={m} kind={kind} favCode={favCode} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SeasonSampleCard({ m, kind, favCode }) {
+  const fmt = (v) => {
+    const n = numOrNull(v)
+    return n === null ? '-' : n.toFixed(2)
+  }
+  const hl = (on) => (on ? 'season-sample-card-hl' : undefined)
+  const hasScore = m.hs !== null && m.hs !== undefined && m.as_ !== null && m.as_ !== undefined
+  const dateShort = String(m.dt || '').split(' ')[0]
+
+  // 이 경기가 표본에 들어간 '이유'가 된 배당 칸만 밝게 강조한다(2026-09-13 사용자
+  // 지정 — "해당되는 배당은 TEXT에 하이라이트"). 국)정 줄은 시즌표 전체가 같은
+  // fav_code 하나로 찾은 것이라 그룹 전체가 같은 칸(KW 또는 KL)을 강조하고, 핸디
+  // 줄은 K-PL 매칭 규칙대로 이 경기 자신의 홈/원정 언더독 쪽이 달라서 경기마다
+  // 강조 칸이 다를 수 있다(엔진 로직 재사용 — api/main.py _season_sample_match_cards
+  // 주석 참고).
+  const rowKw = numOrNull(m.kw)
+  const rowKl = numOrNull(m.kl)
+  const oddsKnown = rowKw !== null && rowKl !== null
+  const homeDog = oddsKnown && rowKw > rowKl
+  const hlKw = kind === 'fav' && favCode === 'K-W'
+  const hlKl = kind === 'fav' && favCode === 'K-L'
+  const hlKhw = kind === 'pl' && homeDog
+  const hlKhl = kind === 'pl' && oddsKnown && !homeDog
+
+  // 핸디 줄 라벨 — 저장된 'KH'(핸디 기준점) 값을 읽지 않고, 이 경기 자신의 홈/원정
+  // 정배·역배만으로 다시 정한다: 홈이 정배면 -1, 홈이 역배(언더독)면 +1 — 홈 기준
+  // 한 값만 보여준다(2026-09-13 사용자 지정 — "이 중에서 한 개만 나와야지", 앞서
+  // 넣은 "-1, +1"처럼 홈·원정 두 값을 같이 보여주는 건 틀렸다는 정정). 정배 판정
+  // 기준은 바로 위 homeDog와 같다(KW>KL이면 홈이 언더독).
+  const handiLabel = !oddsKnown ? '핸디' : homeDog ? '+1' : '-1'
+
+  return (
+    <div className="season-sample-card">
+      <div className="season-sample-card-row season-sample-card-info">
+        <span className="season-sample-card-info-meta">{m.league} · {m.r} · {dateShort}</span>
+        {hasScore && <RtBadge label={rtLabel(m.rt)} />}
+      </div>
+      <div className="season-sample-card-row season-sample-card-teams">
+        <span className="season-sample-card-ht">{m.ht}</span>
+        <span className="season-sample-card-score">
+          {hasScore ? (
+            <>
+              <span className={scoreClass(m.hs, m.as_, 'home')}>{m.hs}</span>
+              :
+              <span className={scoreClass(m.hs, m.as_, 'away')}>{m.as_}</span>
+            </>
+          ) : 'vs'}
+        </span>
+        <span className="season-sample-card-at">{m.at}</span>
+      </div>
+      <div className="season-sample-card-row">
+        <span className="season-sample-card-meta">국)정</span>
+        <span className={hl(hlKw)}>{fmt(m.kw)}</span>
+        <span>{fmt(m.kd)}</span>
+        <span className={hl(hlKl)}>{fmt(m.kl)}</span>
+      </div>
+      <div className="season-sample-card-row">
+        <span className="season-sample-card-meta">{handiLabel}</span>
+        <span className={hl(hlKhw)}>{fmt(m.khw)}</span>
+        <span>{fmt(m.khd)}</span>
+        <span className={hl(hlKhl)}>{fmt(m.khl)}</span>
+      </div>
+    </div>
   )
 }
 

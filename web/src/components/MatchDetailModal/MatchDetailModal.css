@@ -1003,6 +1003,153 @@
   font-size: 11px;
 }
 
+/* 시즌표(340px) 옆에 마진을 두고, 그 표본에 실제로 들어간 경기 카드 목록을 둔다
+   (2026-09-13 사용자 지정 — "옆에 아래 위로 ... 경기 정보"). 표 폭은 그대로 340px,
+   남는 공간을 카드 영역이 flex:1로 채운다. */
+.season-sample-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.season-sample-wrap .season-sample-table {
+  flex: none;
+}
+
+/* 왼쪽 시즌표 '국)플핸' 줄과 오른쪽 카드박스 시작선을 맞추려고 간격을 넓혔다가
+   (2026-09-13, 22px) 사용자 지정으로 16px로 다시 줄였다. */
+.season-sample-cardcols {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 국)정/국)플핸 중 한쪽이 표본 없음(카드 0장)이어도 그 자리가 줄어들면 안 된다 —
+   그러면 아래 칸(국)플핸)이 위로 붙어버린다(2026-09-13 사용자 지정 — "표본 없다고
+   아래 핸디 경기가 위로 올라가면 안 돼"). 카드 한 장 실측 높이(85px)를 그대로
+   최소 높이로 고정해 로딩·표본없음·카드있음 세 상태가 항상 같은 자리를 차지한다. */
+.season-sample-cardgroup {
+  min-height: 85px;
+}
+
+.season-sample-cards-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.season-sample-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 카드 한 장 — 국)정배/국)플핸 시즌 표본에 실제로 들어간 경기 하나. 3줄: 리그·팀·스코어
+   / 라운드+승무패 배당 / 날짜+플핸 배당(구조는 사용자가 준 스샷 그대로, 색은 다크 테마
+   토큰으로 맞췄다 — 스샷은 배치 확인용 흰 바탕 기본 표라 색까지 그대로 따르지 않았다). */
+.season-sample-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 190px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  font-size: 11px;
+}
+
+.season-sample-card-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* :not(.rt-badge) — 결과 배지(RtBadge)는 이 줄의 오른쪽 끝에 텍스트 폭만큼만
+   차지해야 하는데, 이 규칙에 같이 걸리면 flex:1이 배지까지 늘려서(실측 90.9px로
+   벌어짐) "핸무" 두 글자가 억지로 넓은 칸 안에서 줄바꿈됐다(2026-09-13 — "뱃지
+   너비가 너무 넓어" / "2줄로 보여지면 안돼"). */
+.season-sample-card-row:not(.season-sample-card-teams) > span:not(.season-sample-card-meta):not(.rt-badge) {
+  flex: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* 위 규칙이 리그·라운드·날짜 span에도 걸려 가운데 정렬 + flex:1로 밀려 보였다 —
+   이 줄은 오른쪽 배지와만 양끝 정렬(justify-content:space-between)하면 되고
+   글자 자체는 왼쪽 끝에 붙어야 한다(2026-09-13 사용자 지정 — "리그명 이 영역은
+   젤 왼쪽으로 배치"). */
+.season-sample-card-info-meta {
+  flex: none !important;
+  text-align: left !important;
+}
+
+.season-sample-card-meta {
+  flex: none;
+  width: 34px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+/* 이 경기가 표본에 들어간 이유가 된 배당 칸(국)정 줄은 정배 쪽, 핸디 줄은 이 경기의
+   언더독 쪽) — 글자만 강조한다(2026-09-13 사용자 지정 — "해당되는 배당은 TEXT에
+   하이라이트"). 배경을 칠하면 칩처럼 보여 RT·PICK 배지 톤과 겹치니 글자색+굵기로만. */
+.season-sample-card-hl {
+  color: var(--accent) !important;
+  font-weight: 700;
+}
+
+/* 결과 배지는 이 줄 오른쪽 끝(2026-09-13 사용자 지정 — 처음엔 왼쪽으로 뒀다가
+   "아 오른쪽이다"로 정정). justify-content:space-between이 리그·라운드·날짜를
+   왼쪽에, 배지를 오른쪽에 붙인다. */
+.season-sample-card-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.season-sample-card-teams {
+  font-weight: 600;
+}
+
+.season-sample-card-ht,
+.season-sample-card-at {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.season-sample-card-at {
+  text-align: right;
+}
+
+.season-sample-card-score {
+  flex: none;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 이긴 쪽 점수는 앱 전체 관례와 같은 빨강(2026-09-13 사용자 지정). 원본 규칙
+   (.detail-table .winner-score)은 표 안에만 걸려 있어 카드에서는 다시 준다
+   (.detail-title-teams .winner-score와 같은 패턴). */
+.season-sample-card .winner-score {
+  color: var(--chip-red-fg);
+}
+
+.season-sample-card .rt-badge {
+  min-width: 0;
+  padding: 1px 6px;
+  font-size: 10px;
+}
+
 /* ── 방향성·배당 표를 담는 칸. */
 .pick-band-sys {
   min-width: 0;
