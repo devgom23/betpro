@@ -12,6 +12,23 @@
   color: var(--text-primary);
 }
 
+/* 등락 화살표 — 직전에 본 순위 대비. '3(1▼)'처럼 순위 숫자 뒤에 괄호로 붙는다
+   (weekTop20.js delta 주석 참고). 순위 숫자보다 작게, 색만으로 방향을 구분한다. */
+.top20-delta {
+  margin-left: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.top20-delta-up {
+  color: var(--chip-green-fg);
+}
+
+.top20-delta-down {
+  color: var(--chip-red-fg);
+}
+
 .top20-rate {
   font-size: 11px;
   font-weight: 700;

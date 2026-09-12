@@ -1165,8 +1165,8 @@ def week_top20_members(start: str, end: str, kind: str, user: dict = Depends(get
 @app.post("/api/week_top20/members")
 def save_week_top20_members(body: Top20Body, user: dict = Depends(get_current_user)):
     _check_top20_kind(body.kind)
-    if len(body.keys) > 10:
-        raise HTTPException(status_code=400, detail=f"{body.kind} TOP10 명단은 10개까지만 저장합니다.")
+    if len(body.keys) > 15:
+        raise HTTPException(status_code=400, detail=f"{body.kind} TOP15 명단은 15개까지만 저장합니다.")
     MYPICKS.save_top20(user["username"], body.start, body.end, body.kind, body.keys)
     return {"ok": True}
 
