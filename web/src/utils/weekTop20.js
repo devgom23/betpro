@@ -63,6 +63,31 @@ const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 // rows: /api/week_list 행 전부 · kind: '정무' | '플핸무' · prevRanks: 직전에 저장된
 // 이 갈래의 순위(Map, key → 1부터 시작하는 순위) — 등락 화살표 계산용(아래 delta 참고).
 // 반환: { top: [{row, key, rank, played, score, prevRank, delta}], candidateCount }
+// rankByKind가 돌려준 한 후보(c)를 사람이 읽는 문구로 바꾼다 — '이번주 TOP30' 목록
+// (WeekTopPage.rankOf)과 상세보기 배당표(구분 위 칸, LeagueTable의 자동 계산)가
+// 같은 문구를 쓴다. JSX는 안 만든다(이 파일은 .js라 JSX 빌드 설정이 없다) — 호출한
+//쪽(.jsx)에서 이 데이터로 직접 배지를 그린다.
+export function rankInfoOf(c, kind, row) {
+  const { rank, played, score, prevRank, delta } = c
+  const day = bettingDayOf(row)?.label ?? '날짜 미정'
+  // delta>0(숫자가 커짐)=하락▼ · delta<0=상승▲ · 0=변동 없음 · null=새로 순위에 듦.
+  const deltaLine = delta === null
+    ? '새로 순위에 들었습니다'
+    : delta === 0
+      ? '직전과 순위가 같습니다'
+      : delta > 0
+        ? `직전 ${prevRank}위에서 ${delta}계단 내려왔습니다`
+        : `직전 ${prevRank}위에서 ${-delta}계단 올라왔습니다`
+  const title = [
+    `${rank}위(${kind} 갈래) · ${score.phase} 판정 ${score.pick}${score.strong ? ` · ${score.strong}` : ''}`,
+    `실측 당첨률 ${score.rate.toFixed(2)}% (같은 칸·같은 픽 과거 ${score.n.toLocaleString()}경기)`,
+    `가중 일치율 구간 평균 ${score.bandRate.toFixed(2)}%를 픽·강추로 나눈 실측값입니다`,
+    deltaLine,
+    played ? '경기 종료 — 결과와 무관하게 배당(배변) 기준 판정으로 순위를 매깁니다' : `베팅일 ${day}`,
+  ].join('\n')
+  return { title, rank, delta, prevRank, played, score, day }
+}
+
 export function rankByKind(rows, kind, prevRanks) {
   const cands = []
   for (const row of rows) {

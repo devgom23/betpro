@@ -8,6 +8,8 @@ import {
 import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
 import { seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
 import { LEAGUE_LABELS } from '../../utils/format'
+import { rankByKind, rankInfoOf, top20Score } from '../../utils/weekTop20'
+import { buildRankBadge } from '../../utils/weekRankBadge'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
@@ -146,6 +148,47 @@ export function selectKey(row) {
   return `${row.L ?? ''}|${row.scope ?? ''}|${row.S}|${row.R}|${row.No}|${row.HT}|${row.AT}`
 }
 
+// 상세보기를 '이번주 TOP30'(rankOf prop)이 아니라 다른 화면(리그 조회·상대전적 등)
+// 에서 열었을 때도 순위를 자동으로 찾아 보여준다(2026-09-13 사용자 지정 — "공식데이터/
+// 내 데이터 등 상세보기에서 모두다 보여야지"). 내 데이터(scope==='user')는 애초에
+// weekTop20.rankByKind가 걸러내는 대상이 아니라서 항상 null이다. '직전 순위' 저장
+// (POST)은 이번주 TOP30 화면(WeekTopPage)만 한다 — 여기서는 읽기만 해서, 다른 화면을
+// 열 때마다 등락 화살표 기준이 덮어써지지 않게 한다.
+//
+// ⚠ top20Key(row)로는 못 찾는다 — /api/week_list가 주는 row.L은 리그 코드('LALIGA')인데
+// 일반 리그 조회(/api/leagues/{code})가 주는 row.L은 표시용 약어('La')라 같은 경기도
+// 키가 달라진다(실측 확인, 2026-09-13). L·scope 대신 코드(effectiveCode)로 직접
+// 맞춰서 찾는다.
+function useAutoWeekRank(row, effectiveCode, effectiveScope, skip) {
+  const [info, setInfo] = useState(null)
+  useEffect(() => {
+    let alive = true
+    setInfo(null)
+    if (skip || !row || effectiveScope === 'user') return undefined
+    const score = top20Score(row)
+    if (!score) return undefined
+    ;(async () => {
+      try {
+        const list = await api.get('/api/week_list')
+        const q = new URLSearchParams({ start: list.start || '', end: list.end || '', kind: score.pick })
+        const members = await api.get(`/api/week_top20/members?${q}`).catch(() => ({ keys: [] }))
+        const prevRanks = new Map((members.keys || []).map((k, i) => [k, i + 1]))
+        const ranked = rankByKind(list.rows || [], score.pick, prevRanks)
+        const c = ranked.top.find((x) =>
+          (x.row.L === effectiveCode || x.row.Source_League === effectiveCode)
+          && String(x.row.S) === String(row.S) && String(x.row.R) === String(row.R)
+          && Number(x.row.No) === Number(row.No) && x.row.HT === row.HT && x.row.AT === row.AT)
+        if (!alive) return
+        setInfo(c ? buildRankBadge(rankInfoOf(c, score.pick, row)) : null)
+      } catch {
+        if (alive) setInfo(null)
+      }
+    })()
+    return () => { alive = false }
+  }, [row, effectiveCode, effectiveScope, skip])
+  return info
+}
+
 export default function LeagueTable({
   code, columns, rows, scope, highlightCols = [],
   selectable = false, selectedKeys, onToggleRow, hideIndicators = false,
@@ -175,6 +218,12 @@ export default function LeagueTable({
   const rowScope = (row) => row?.scope || scope
   const groups = useMemo(() => buildColumnGroups(columns || [], { hideIndicators }), [columns, hideIndicators])
   const [detailRow, setDetailRow] = useState(null)
+  // rankOf가 이미 있으면(이번주 TOP30 화면 자신) 그 값을 그대로 쓰고, 없으면
+  // 자동으로 찾는다 — 훅은 조건 없이 항상 부른다(Rules of Hooks), skip으로 끈다.
+  const autoWeekRank = useAutoWeekRank(
+    detailRow, detailRow ? rowCode(detailRow) : null, detailRow ? rowScope(detailRow) : null, !!rankOf,
+  )
+  const weekRank = detailRow ? (rankOf ? rankOf(detailRow) : autoWeekRank) : null
   // '회차|국내 정배배당' → 그 배당으로 뜬 경기들. 행 전체를 한 번만 훑는다.
   const sameOddsIndex = useMemo(() => {
     const idx = new Map()
@@ -1030,6 +1079,7 @@ export default function LeagueTable({
             }}
             scope={rowScope(detailRow)}
             sameOdds={sameOdds}
+            weekRank={weekRank}
             onClose={() => setDetailRow(null)}
             onSavePick={(patch) => savePick(detailRow, patch)}
           />

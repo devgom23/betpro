@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
-import { bettingDayOf, summarizeVerdicts, summarizeSystemVerdicts } from '../components/LeagueTable/columnGroups'
+import { summarizeVerdicts, summarizeSystemVerdicts } from '../components/LeagueTable/columnGroups'
 import { PickSummaryBar } from '../components/RtSummaryBar/RtSummaryBar'
-import { rankByKind, top20Key, TOP_N, KINDS } from '../utils/weekTop20'
+import { rankByKind, rankInfoOf, top20Key, TOP_N, KINDS } from '../utils/weekTop20'
+import { buildRankBadge } from '../utils/weekRankBadge'
 import './WeekListPage.css'
 import './WeekTopPage.css'
 
@@ -100,40 +101,7 @@ export default function WeekTopPage() {
   const rankOf = useCallback((row) => {
     const c = infoByKey.get(top20Key(row))
     if (!c) return null
-    const { rank, played, score, prevRank, delta } = c
-    const day = bettingDayOf(row)?.label ?? '날짜 미정'
-    // delta>0(숫자가 커짐)=하락▼ · delta<0=상승▲ · 0=변동 없음 · null=새로 순위에 듦.
-    const deltaLine = delta === null
-      ? '새로 순위에 들었습니다'
-      : delta === 0
-        ? '직전과 순위가 같습니다'
-        : delta > 0
-          ? `직전 ${prevRank}위에서 ${delta}계단 내려왔습니다`
-          : `직전 ${prevRank}위에서 ${-delta}계단 올라왔습니다`
-    const title = [
-      `${rank}위(${tab} 갈래) · ${score.phase} 판정 ${score.pick}${score.strong ? ` · ${score.strong}` : ''}`,
-      `실측 당첨률 ${score.rate.toFixed(2)}% (같은 칸·같은 픽 과거 ${score.n.toLocaleString()}경기)`,
-      `가중 일치율 구간 평균 ${score.bandRate.toFixed(2)}%를 픽·강추로 나눈 실측값입니다`,
-      deltaLine,
-      played ? '경기 종료 — 결과와 무관하게 배당(배변) 기준 판정으로 순위를 매깁니다' : `베팅일 ${day}`,
-    ].join('\n')
-    return {
-      title,
-      label: (
-        <div className={`top20-rank${played ? ' top20-played' : ''}`}>
-          <strong className="top20-no">
-            {rank}
-            {delta !== null && delta !== 0 && (
-              <span className={`top20-delta ${delta > 0 ? 'top20-delta-down' : 'top20-delta-up'}`}>
-                ({prevRank}{delta > 0 ? '▼' : '▲'})
-              </span>
-            )}
-          </strong>
-          <span className="top20-rate">{score.rate.toFixed(2)}%</span>
-          <span className="top20-day">{day}</span>
-        </div>
-      ),
-    }
+    return buildRankBadge(rankInfoOf(c, tab, row))
   }, [infoByKey, tab])
 
   const period = data.start && data.end

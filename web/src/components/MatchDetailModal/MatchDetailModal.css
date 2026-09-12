@@ -657,6 +657,18 @@
   padding: 8px 7px;
 }
 
+/* 순위 숫자(.top20-no)는 이번주 TOP30 목록에서 끝난 경기를 흐리게 보여주는 규칙
+   (.top20-played .top20-no, WeekTopPage.css)을 그대로 물려받아 실측 색이
+   --text-muted(#93a1b5)로 죽어 있었다 — 여기서는 항상 밝게 고정한다(2026-09-13
+   사용자 지정 — "순위 text는 하얀색 볼드로"). 리터럴 흰색 대신 --text-primary를
+   쓴다 — 라이트 테마에서는 --bg-surface가 흰색이라 진짜 흰 글씨를 쓰면 안 보인다.
+   특이도가 같은 규칙(.top20-played .top20-no, 클래스 2개)과의 승패가 CSS 로드
+   순서에 좌우되지 않게 !important로 못박는다. */
+.odds-weekrank-cell .top20-no {
+  color: var(--text-primary) !important;
+  font-weight: 700;
+}
+
 .odds-team-name {
   white-space: normal;
   word-break: keep-all;

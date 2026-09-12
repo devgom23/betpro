@@ -712,7 +712,7 @@ function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds,
 //   서울(1)
 //   (정)
 // 팝업 제목 줄은 한 줄에 "서울(1위)(정)"로 그대로 둔다 — 거기는 가로 폭이 넉넉하다.
-function OddsTable({ row }) {
+function OddsTable({ row, weekRank }) {
   // 5번째 자리(final)는 그 배당의 배변(최종배당) 칸 이름 — 해외 핸디는 스코어맨이
   // 무(D) 값을 안 주고 최종배당 자체를 안 모으므로 배변 행이 없다.
   const rows = [
@@ -826,7 +826,9 @@ function OddsTable({ row }) {
     <table className="detail-table odds-table">
       <thead>
         <tr className="odds-teams-row">
-          <th className="row-label" />
+          <th className="row-label odds-weekrank-cell" title={weekRank?.title}>
+            {weekRank?.rankOnly}
+          </th>
           <th className="odds-team-name">
             {ht}
             {rankNum(row.HP)}
@@ -3824,7 +3826,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg }) {
+function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank }) {
   // '경기지표'의 무·전적 뱃지와 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -3839,7 +3841,7 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg })
         <div className="pick-band-risk-cols">
           <div className="pick-band-risk-col">
             <h3 className="pick-band-risk-col-title">배당</h3>
-            <OddsTable row={row} />
+            <OddsTable row={row} weekRank={weekRank} />
           </div>
           <div className="pick-band-risk-col">
             <h3 className="pick-band-risk-col-title">
@@ -3890,7 +3892,7 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg })
   )
 }
 
-export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, onSavePick }) {
+export default function MatchDetailModal({ code, row, scope, sameOdds, weekRank, onClose, onSavePick }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
   const rt = rtLabel(row.RT)
@@ -4086,6 +4088,7 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
           h2hVerdict={h2hMark}
           h2hLoading={!pickData && !pickError}
           xg={seasonXg}
+          weekRank={weekRank}
         />
 
         {/* 정배·플핸 시즌표 — 배당(PickBand) 칸 안에 넣었다가(2026-09-12) 확률 지표·
