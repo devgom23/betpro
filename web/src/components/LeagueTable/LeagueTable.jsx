@@ -327,6 +327,7 @@ export default function LeagueTable({
       memo: o?.memo !== undefined ? o.memo : row.MEMO || '',
       memoPre: o?.memoPre !== undefined ? o.memoPre : row.MEMO_PRE || '',
       reasonTag: o?.reasonTag !== undefined ? o.reasonTag : row.REASON_TAG || '',
+      oddsPick: o?.oddsPick !== undefined ? o.oddsPick : row.MY_ODDS_PICK || '',
     }
   }
 
@@ -343,6 +344,7 @@ export default function LeagueTable({
       memo: row.MEMO || '',
       memoPre: row.MEMO_PRE || '',
       reasonTag: row.REASON_TAG || '',
+      oddsPick: row.MY_ODDS_PICK || '',
     }
     const next = { ...prevValue, ...patch }
     pickOverridesRef.current = { ...pickOverridesRef.current, [key]: next }
@@ -362,6 +364,7 @@ export default function LeagueTable({
         memo: next.memo || null,
         memo_pre: next.memoPre || null,
         reason_tag: next.reasonTag || null,
+        odds_pick: next.oddsPick || null,
       })
     } catch {
       // 저장 실패 시 원래 상태로 되돌린다
@@ -1014,6 +1017,7 @@ export default function LeagueTable({
               MEMO: effectivePick(detailRow).memo,
               MEMO_PRE: effectivePick(detailRow).memoPre,
               REASON_TAG: effectivePick(detailRow).reasonTag,
+              MY_ODDS_PICK: effectivePick(detailRow).oddsPick,
             }}
             scope={rowScope(detailRow)}
             sameOdds={sameOdds}

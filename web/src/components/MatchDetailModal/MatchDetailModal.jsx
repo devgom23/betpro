@@ -1849,6 +1849,9 @@ function MyPickBar({ row, onSavePick }) {
   const [p, setP] = useState(row.MY_P || '')
   const [hit, setHit] = useState(row.MY_HIT || '')
   const [reasonTag, setReasonTag] = useState(row.REASON_TAG || '')
+  // 배당픽 — 내픽(pick)과 선택지는 같지만(PICK_OPTIONS) 완전히 별개로 남기는 참고용
+  // 태그. 상세픽(p)처럼 어떤 집계·판정에도 안 쓰인다(2026-09-12 추가, 사용자 지정).
+  const [oddsPick, setOddsPick] = useState(row.MY_ODDS_PICK || '')
   // memoPre = 경기 전에 적는 메모, memo = 결과가 나온 뒤 적는 회고 메모 — 시점이
   // 다른 별개의 글이라 따로 관리한다(결과반성 칸 앞/뒤에 하나씩 둔다).
   const [memoPre, setMemoPre] = useState(row.MEMO_PRE || '')
@@ -1878,6 +1881,12 @@ function MyPickBar({ row, onSavePick }) {
     const next = e.target.value
     setReasonTag(next)
     onSavePick({ reasonTag: next || null })
+  }
+
+  function handleOddsPickChange(e) {
+    const next = e.target.value
+    setOddsPick(next)
+    onSavePick({ oddsPick: next || null })
   }
 
   function saveMemoPreIfChanged() {
@@ -1918,6 +1927,16 @@ function MyPickBar({ row, onSavePick }) {
         <select value={hit} onChange={handleHitChange}>
           <option value="">의견</option>
           {HIT_OPTIONS.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mypick-bar-field">
+        <select value={oddsPick} onChange={handleOddsPickChange}>
+          <option value="">배당픽</option>
+          {PICK_OPTIONS.map((o) => (
             <option key={o} value={o}>
               {o}
             </option>

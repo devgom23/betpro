@@ -45,7 +45,7 @@ def list_my_picks(username: str, code: str, scope: str) -> list[dict]:
     con = _connect(username)
     try:
         rows = con.execute(
-            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, reason_tag, wp_hidden "
+            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, reason_tag, odds_pick, wp_hidden "
             "FROM my_picks WHERE code=? AND scope=?",
             (code, scope),
         ).fetchall()
@@ -82,23 +82,23 @@ def upsert_my_pick(username: str, code: str, scope: str,
                     s: str, r: str, no: str, ht: str, at: str,
                     starred: int, pick: str | None, hit: str | None, memo: str | None,
                     p: str | None = None, reason_tag: str | None = None,
-                    memo_pre: str | None = None) -> None:
+                    memo_pre: str | None = None, odds_pick: str | None = None) -> None:
     con = _connect(username)
     try:
         con.execute(
             """
             INSERT INTO my_picks
-                (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, reason_tag, wp_hidden, updated_dt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
+                (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, reason_tag, odds_pick, wp_hidden, updated_dt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
             ON CONFLICT(code, scope, S, R, No, HT, AT)
             DO UPDATE SET starred = excluded.starred, pick = excluded.pick, p = excluded.p,
                           hit = excluded.hit, memo = excluded.memo, memo_pre = excluded.memo_pre,
-                          reason_tag = excluded.reason_tag,
+                          reason_tag = excluded.reason_tag, odds_pick = excluded.odds_pick,
                           wp_hidden = 0, updated_dt = excluded.updated_dt
             """,
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),
              max(0, min(2, int(starred or 0))), pick or None, p or None, hit or None, memo or None,
-             memo_pre or None, reason_tag or None),
+             memo_pre or None, reason_tag or None, odds_pick or None),
         )
         con.commit()
     finally:
