@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, saveBlob } from '../api/client'
 import LeagueTable, { RiskLegendModal } from '../components/LeagueTable/LeagueTable'
-import { buildColumnGroups, groupKey, splitIndicatorBatches } from '../components/LeagueTable/columnGroups'
+import {
+  buildColumnGroups, groupKey, splitIndicatorBatches, summarizeSystemVerdicts,
+  finalSystemPick, computeAutoVerdict,
+} from '../components/LeagueTable/columnGroups'
 import FilterForm from '../components/FilterForm/FilterForm'
 import RtSummaryBar, { PickSummaryBar } from '../components/RtSummaryBar/RtSummaryBar'
 import UploadTemplateModal from '../components/UploadTemplateModal/UploadTemplateModal'
@@ -18,27 +21,13 @@ import { getRoundFinalOddsTime, setRoundFinalOddsTime, formatFinalOddsTime } fro
 // columnGroups.js의 RT_DISPLAY와 같은 매핑이다.
 const RT_LABEL_TO_NUM = { 핸승: 1, 핸무: 2, 무: 3, 역: 4 }
 
-function describeQuery(query) {
-  if (!query) return ''
-  const parts = []
-  if (query.season && query.season !== 'ALL') parts.push(`S=${query.season}`)
-  if (query.round && query.round !== 'ALL') parts.push(`R=${query.round}`)
-  if (query.team) {
-    const sideLabel = query.team_side === 'home' ? '홈' : query.team_side === 'away' ? '원정' : ''
-    const favLabel = query.team_fav === 'fav' ? '정배' : query.team_fav === 'dog' ? '역배' : ''
-    const tags = [sideLabel, favLabel].filter(Boolean).join('·')
-    parts.push(`팀=${query.team}${tags ? `(${tags})` : ''}`)
-  }
-  for (const key of ODDS_KEYS) {
-    if (query[key] !== undefined && query[key] !== null) {
-      parts.push(`${key.toUpperCase()}=${query[key]}`)
-    }
-  }
-  return parts.join(' · ') || '전체'
-}
-
 export default function LeaguePage({ code, scope }) {
   const [filters, setFilters] = useState(null)
+  // 최상단 '등록된 시즌' 줄의 판정 적중 요약 — 조회 조건과 무관하게 이 리그에 등록된
+  // 전체 경기 기준(2026-09-12 사용자 지정). filters API는 집계값만 주고 적중 계산에
+  // 쓰는 원본 행(배당·27개 지표)은 안 줘서, 전체 행을 한 번 따로 받아 센다
+  // (SeasonStats.jsx의 시즌 전체 적중과 같은 방식 — 거긴 시즌 하나, 여긴 전체).
+  const [allTimeSystemSummary, setAllTimeSystemSummary] = useState(undefined)
   const [query, setQuery] = useState(null)
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
@@ -92,6 +81,11 @@ export default function LeaguePage({ code, scope }) {
     }
     return [...matched, ...rest]
   }, [data?.rows, rtSort])
+
+  // 조회 조건 줄 맨 끝 '판정' 요약 뱃지 — 내 예측(hit_summary, 서버 계산)과 나란히,
+  // 이쪽은 시스템 판정 기준(2026-09-12 추가). 판정 로직이 JS에만 있어(columnGroups.js
+  // finalSystemPick 주석 참고) 서버가 못 만들고 여기서 지금 조회된 rows로 직접 센다.
+  const systemVerdictSummary = useMemo(() => summarizeSystemVerdicts(data?.rows || []), [data?.rows])
 
   function toggleBatch(batchGroups) {
     const keys = batchGroups.map(groupKey)
@@ -163,6 +157,42 @@ export default function LeaguePage({ code, scope }) {
       })
       .catch((err) => {
         if (!cancelled) setError(err.message)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [code, scope, reloadKey])
+
+  useEffect(() => {
+    let cancelled = false
+    setAllTimeSystemSummary(undefined)   // undefined=계산 중 · null=결과 없음(값 있는 상태와 구분)
+    api
+      // limit 기본값(500)에 걸리면 등록된 경기 전부가 아니라 앞쪽 500건만 세게 된다 —
+      // 한 리그가 그보다 훨씬 많을 수 있어(실측 6,500건) 넉넉히 크게 잡는다.
+      .get(`/api/leagues/${code}?scope=${scope}&season=ALL&round=ALL&limit=100000`)
+      .then(async (res) => {
+        const rows = res?.rows || []
+        // summarizeSystemVerdicts를 그대로 한 번에 부르면(row마다 phaseVerdict 최대 2번)
+        // 6,500경기 기준 실측 30초 넘게 메인 스레드를 막아 화면이 통째로 멈췄다
+        // (2026-09-12 확인) — 300건씩 나눠 세고 매번 한 틱(setTimeout 0) 쉬어 화면이
+        // 계속 반응하게 한다. 세는 규칙 자체는 summarizeSystemVerdicts와 완전히 같다.
+        const counts = { 적중: 0, 보험: 0, 미적: 0 }
+        const CHUNK = 300
+        for (let i = 0; i < rows.length; i += CHUNK) {
+          if (cancelled) return
+          for (const row of rows.slice(i, i + CHUNK)) {
+            const v = computeAutoVerdict(finalSystemPick(row), row.RT)
+            if (v === '적중' || v === '보험' || v === '미적') counts[v] += 1
+          }
+          // eslint-disable-next-line no-await-in-loop -- 의도적으로 순서대로, 매 덩어리 사이만 쉰다.
+          await new Promise((r) => setTimeout(r, 0))
+        }
+        if (cancelled) return
+        const 총 = counts.적중 + counts.보험 + counts.미적
+        setAllTimeSystemSummary(총 > 0 ? { ...counts, 총 } : null)
+      })
+      .catch(() => {
+        if (!cancelled) setAllTimeSystemSummary(null)
       })
     return () => {
       cancelled = true
@@ -382,6 +412,15 @@ export default function LeaguePage({ code, scope }) {
           <strong>{(filters.fw_count ?? 0).toLocaleString()}</strong>
         </span>
         <RtSummaryBar summary={filters.rt_summary} inline />
+        <span className="league-summary-divider" aria-hidden="true" />
+        <span className="league-summary-pick-group">
+          <span className="league-summary-pick-label">판정</span>
+          {allTimeSystemSummary === undefined ? (
+            <span className="final-odds-ts">계산 중…</span>
+          ) : (
+            <PickSummaryBar summary={allTimeSystemSummary} />
+          )}
+        </span>
       </div>
 
       <FilterForm
@@ -492,7 +531,6 @@ export default function LeaguePage({ code, scope }) {
       <SeasonStats code={code} scope={scope} season={query?.season} round={query?.round} />
 
       <div className="league-summary">
-        <span>조회 조건 {describeQuery(query)}</span>
         <span>
           경기수 <strong>{data.total.toLocaleString()}</strong> · 국배 등록{' '}
           <strong>{(data.odds_summary?.국배 ?? 0).toLocaleString()}</strong> · 해배 등록{' '}
@@ -508,10 +546,15 @@ export default function LeaguePage({ code, scope }) {
           <span className="rt-sort-hint">{rtSort} 결과부터 정렬 중 (다시 클릭하면 해제)</span>
         )}
         <span className="league-summary-divider" aria-hidden="true" />
+        <span className="league-summary-pick-group">
+          <span className="league-summary-pick-label">판정</span>
+          <PickSummaryBar summary={systemVerdictSummary} />
+        </span>
+        <span className="league-summary-divider" aria-hidden="true" />
         <PickSummaryBar summary={data.hit_summary} />
         <div className="league-summary-toolbar">
           {finalOddsTs && (
-            <span className="final-odds-ts">최신배당({formatFinalOddsTime(finalOddsTs)})</span>
+            <span className="final-odds-ts">최신({formatFinalOddsTime(finalOddsTs)})</span>
           )}
           <button
             className="batch-fold-btn"

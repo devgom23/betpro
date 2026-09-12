@@ -259,6 +259,21 @@
   border-left: 2px solid var(--border-strong);
 }
 
+/* 시스템 판정 적중 요약(systemVerdictSummary) 뱃지 앞 라벨 — 바로 옆(내 예측 적중)
+   뱃지와 색·모양이 같아서 구분용으로 붙였다(2026-09-12). 라벨+뱃지를 한 덩어리로
+   묶어(6px, 6-1장 '제목과 부가설명 사이' 눈금) .league-summary의 기본 20px 틈과
+   구분되게 한다. */
+.league-summary-pick-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.league-summary-pick-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 /* 해외지표/국내지표 접기 · 핸승 위험도 참고 — 조회 조건 줄 맨 오른쪽에 붙는다 */
 .league-summary-toolbar {
   display: flex;

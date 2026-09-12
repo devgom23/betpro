@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import { RT_COLOR } from '../RtBadge/RtBadge'
+import { summarizeVerdicts, summarizeSystemVerdicts } from '../LeagueTable/columnGroups'
+import { PickSummaryBar } from '../RtSummaryBar/RtSummaryBar'
 import './SeasonStats.css'
 
 const RT_ROWS = ['핸승', '핸무', '무', '역']
@@ -34,6 +36,34 @@ function gridTemplate(roundCount) {
 
 export default function SeasonStats({ code, scope, season, round }) {
   const [data, setData] = useState(null)
+  // 판정(시스템)·내 예측 적중 요약 — '시즌 지표'라는 이름대로 이번 라운드가 아니라
+  // 시즌 전체 기준이어야 한다(2026-09-12 사용자 지정). 위 season_stats API는 라운드별
+  // 집계표(똥배/결과분포)만 주고 적중 계산에 쓰는 원본 행(MY_PICK·배당·27개 지표)은
+  // 안 주므로, 시즌 전체 행을 따로 한 번 받아 클라이언트에서 센다(round=ALL, 리그
+  // 화면의 /api/leagues/{code}와 같은 엔드포인트 — round만 다르다). 라운드를 옮겨
+  // 다녀도(같은 시즌 안이면) 다시 안 받는다 — 의존성이 season까지만이라서다.
+  const [seasonSummary, setSeasonSummary] = useState({ pick: null, system: null })
+  useEffect(() => {
+    const ready = season && season !== 'ALL'
+    if (!ready) {
+      setSeasonSummary({ pick: null, system: null })
+      return undefined
+    }
+    let cancelled = false
+    api
+      .get(`/api/leagues/${code}?scope=${scope}&season=${encodeURIComponent(season)}&round=ALL`)
+      .then((res) => {
+        if (cancelled) return
+        const rows = res?.rows || []
+        setSeasonSummary({ pick: summarizeVerdicts(rows), system: summarizeSystemVerdicts(rows) })
+      })
+      .catch(() => {
+        if (!cancelled) setSeasonSummary({ pick: null, system: null })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [code, scope, season])
   const [open, setOpen] = useState(false)
   const [ddongOpen, setDdongOpen] = useState(false)
   const [resultOpen, setResultOpen] = useState(true)
@@ -157,6 +187,13 @@ export default function SeasonStats({ code, scope, season, round }) {
             ))}
           </span>
         )}
+        <span className="league-summary-divider" aria-hidden="true" />
+        <span className="league-summary-pick-group">
+          <span className="league-summary-pick-label">판정</span>
+          <PickSummaryBar summary={seasonSummary.system} />
+        </span>
+        <span className="league-summary-divider" aria-hidden="true" />
+        <PickSummaryBar summary={seasonSummary.pick} />
       </div>
 
       {open && (

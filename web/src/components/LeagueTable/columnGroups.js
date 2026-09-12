@@ -3,7 +3,7 @@
 // 산출 로직은 건드리지 않고, "표시 순서·라벨·색상"만 그대로 재현한다.
 
 import { formatDt } from '../../utils/format'
-import { DIR_SIDE } from '../../utils/verdictCalc'
+import { DIR_SIDE, phaseVerdict } from '../../utils/verdictCalc'
 
 // '판정' 칸 — 저장된 컬럼이 아니라 그때그때 계산하는 값이라 가짜 컬럼 키로 둔다.
 // 초기·배변을 좌우 두 칸이 아니라 국내배당·해외배당처럼 위/아래 두 줄로 보여준다 —
@@ -13,6 +13,15 @@ import { DIR_SIDE } from '../../utils/verdictCalc'
 // KW/FW까지 바뀌어(그 컬럼들도 FINAL_FIELD에 있다) 상세보기 '시스템 판정'과
 // 다른 답이 나올 수 있어서다(항상 원본 배당으로 방향을 잡아야 모달과 일치한다).
 export const VERDICT_KEY = 'VERDICT'
+// '판정' 바로 옆 '적중' 칸 — 시스템 판정의 픽이 실제 결과(RT)와 대조해 적중/보험/미적
+// 중 뭐였나. 내 예측의 PICK_VERDICT(내픽+RT)와 계산 함수는 같지만(computeAutoVerdict)
+// 픽이 다르다 — 이쪽은 시스템이 고른 픽을 넣는다. 저장된 컬럼이 아니라 매번 다시
+// 계산한다(2026-09-12 추가).
+// ⚠ 판정과 달리 위/아래(초기/배변)로 안 갈린다 — 항상 '최종(배변) 판정' 픽 기준으로
+// 딱 한 번만 계산해 두 줄을 합친 칸(rowSpan)에 보여준다(2026-09-12 사용자 지정:
+// "적중은 최종 판정에만"). 그래서 FINAL_FIELD에는 안 올린다 — 올리면 splitsOnFinal이
+// true가 되어 위/아래 줄이 따로 그려진다(LeagueTable.jsx의 fit() 참고).
+export const VERDICT_HIT_KEY = 'VERDICT_HIT'
 
 const GEN_COLS = ['L', 'S', 'R', 'No', 'DT', 'TM']
 // 그 경기 '직전까지'의 시즌 성적. 백엔드가 조회 시 계산해 붙여준다.
@@ -82,6 +91,7 @@ export const FINAL_FIELD = {
   // 판정 — '위/아래로 갈린다'는 표시만 필요하고 실제 값은 안 읽는다(LeagueTable.jsx가
   // 원본 row + isFinal로 직접 계산한다). null이라 toFinalRow가 아랫줄에 그대로
   // null을 채워도 무해하다.
+  // (바로 옆 '적중'은 위/아래로 안 갈려서(VERDICT_HIT_KEY 주석 참고) 여기 없다.)
   [VERDICT_KEY]: null,
 }
 
@@ -281,21 +291,24 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
     groups.push({ label1: '똥배', label2: '', kind: 'flat', cols: ddongLeaves })
   }
 
+  addFlatGroup('국내배당', '승(W) / 무(D) / 패(L)', K_ODDS_COLS)
+  addFlatGroup('해외배당', '승(W) / 무(D) / 패(L)', F_ODDS_COLS)
+
   // 판정 — 시스템 판정(새)의 픽. 위(초기)/아래(배변) 두 줄로 갈린다(국내배당·해외배당과
   // 같은 꼴). 저장된 컬럼이 아니라 그때그때 계산한다(utils/verdictCalc.js — 상세보기
   // '시스템 판정' 줄과 완전히 같은 계산이다. 둘이 따로 놀지 않게 한 파일을 같이 쓴다).
   // CLAUDE.md 4-1: 판정은 그 시점 배당 전부로 매번 다시 만든다 — 그래서 저장하지 않고
   // 매 렌더마다 다시 계산한다. 해외 초기배당이 있는 표에서만 낸다(배당 표 4칸의
-  // 리)해·통)해 재료가 필요하다).
+  // 리)해·통)해 재료가 필요하다). 위치는 해외배당 바로 뒤·내 예측 바로 앞(2026-09-12
+  // 사용자 지정 — 판정에 쓴 배당을 보고 바로 판정·적중을 확인한 뒤 내 예측으로 이어지게).
   if (available.has('FW') && available.has('FL')) {
     groups.push({
       label1: '판정', label2: '', kind: 'flat',
-      cols: [{ key: VERDICT_KEY, sub: '판정' }],
+      // 적중 — 시스템 판정의 픽을 그 행의 실제 결과(RT)와 대조한 값(computeAutoVerdict,
+      // 2026-09-12 추가). 판정과 마찬가지로 위(초기)/아래(배변) 두 줄로 갈린다.
+      cols: [{ key: VERDICT_KEY, sub: '판정' }, { key: VERDICT_HIT_KEY, sub: '적중' }],
     })
   }
-
-  addFlatGroup('국내배당', '승(W) / 무(D) / 패(L)', K_ODDS_COLS)
-  addFlatGroup('해외배당', '승(W) / 무(D) / 패(L)', F_ODDS_COLS)
 
   // PICK_VERDICT(적중)는 저장된 컬럼이 아니라 내픽+RT로 그때그때 계산하는 값이라
   // 백엔드가 내려준 컬럼 목록엔 절대 없다 — IMPORTANT/MY_PICK/MY_P/MY_HIT 중
@@ -350,6 +363,9 @@ const COL_WIDTH = {
   // 정무·정역·플핸무·플핸승(2~3글자) — 실측 안 하고 감으로 잡았다(새 칸이라 아직
   // DB 값 분포를 캔버스로 잴 대상이 없다). 필요하면 나중에 실측해서 고칠 것.
   [VERDICT_KEY]: 54,
+  // 적중(VERDICT_HIT) — 아래 PICK_VERDICT와 똑같은 뱃지(.cell-badge)를 그대로 쓰므로
+  // 실측해 둔 그 폭(63)을 그대로 쓴다.
+  [VERDICT_HIT_KEY]: 63,
   WIN_RISK: 50, WIN_RISK_F: 50,
   NH_KO: 50, NH_KI: 50, NH_FI: 50,
   PL_KO: 50, PL_KI: 50, PL_FI: 50,
@@ -610,6 +626,15 @@ export function computeAutoVerdict(pick, rt) {
   return '미적'
 }
 
+// '판정' 칸의 값 — 항상 '최종(배변) 판정' 픽 기준(2026-09-12 사용자 지정: 판정은 위/아래
+// 두 줄로 갈려도, 적중 판단은 최종 하나로만 한다). 배변 판정이 아직 없으면(픽이 없으면)
+// 초기 판정으로 대신한다 — CLAUDE.md 4-1과 같은 원칙. LeagueTable.jsx의 VERDICT_HIT_KEY
+// 칸(적중)도, 아래 summarizeSystemVerdicts도 이 함수 하나를 같이 쓴다.
+export function finalSystemPick(row) {
+  const fin = phaseVerdict(row, true, '배변')
+  return fin.pick ?? phaseVerdict(row, false, '초기').pick
+}
+
 // 여러 행을 한꺼번에 적중/보험/미적 건수로 묶는다 — RtSummaryBar의 PickSummaryBar가
 // 그대로 받는 {적중,보험,미적,총} 모양(api/main.py _hit_summary와 같은 모양).
 // 내픽을 안 찍었거나 결과가 아직 없는 행은 세지 않는다. 유효 판정이 하나도 없으면 null.
@@ -617,6 +642,19 @@ export function summarizeVerdicts(rows) {
   const counts = { 적중: 0, 보험: 0, 미적: 0 }
   for (const row of rows) {
     const v = computeAutoVerdict(row.MY_PICK, row.RT)
+    if (v === '적중' || v === '보험' || v === '미적') counts[v] += 1
+  }
+  const 총 = counts.적중 + counts.보험 + counts.미적
+  return 총 > 0 ? { ...counts, 총 } : null
+}
+
+// 시스템 판정(위 finalSystemPick) 기준 적중/보험/미적 집계 — summarizeVerdicts와 모양은
+// 같고 대조하는 픽만 다르다(내픽 대신 시스템이 고른 픽). 리그 조회 화면의 '판정' 요약
+// 뱃지(2026-09-12 추가)가 쓴다.
+export function summarizeSystemVerdicts(rows) {
+  const counts = { 적중: 0, 보험: 0, 미적: 0 }
+  for (const row of rows) {
+    const v = computeAutoVerdict(finalSystemPick(row), row.RT)
     if (v === '적중' || v === '보험' || v === '미적') counts[v] += 1
   }
   const 총 = counts.적중 + counts.보험 + counts.미적

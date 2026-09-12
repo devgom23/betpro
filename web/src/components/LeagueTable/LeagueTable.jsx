@@ -3,7 +3,7 @@ import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
   collapsedWidth, splitsOnFinal, oddsMoveDir, riskMoveDir, toFinalRow, rtToText,
-  VERDICT_KEY, verdictCellStyle,
+  VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemPick,
 } from './columnGroups'
 import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
 import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
@@ -91,6 +91,14 @@ const FORM_COLS = new Set(['HTF', 'HF', 'AF', 'ATF'])
 
 // 그룹 경계 구분선 클래스 — 국내배당/해외배당 사이는 두 "배당" 블록이 헷갈리기 쉬워
 // 다른 경계보다 더 두껍게 강조한다(divider-strong, LeagueTable.css 참고).
+// '적중' 칸의 값 — 항상 '최종(배변) 판정' 픽 기준(2026-09-12 사용자 지정: 위/아래로
+// 안 갈리고 한 줄로 합친 칸이라, 어느 줄이 그리는 호출이든 같은 값을 내야 한다 —
+// VERDICT_HIT_KEY 주석의 fit() 병합 설명 참고). 픽 자체(배변 없으면 초기로 대신)는
+// columnGroups.js의 finalSystemPick — 리그 조회 화면 위쪽 '판정' 요약 뱃지도 같은 걸 쓴다.
+function finalHitVerdict(baseRow) {
+  return computeAutoVerdict(finalSystemPick(baseRow), baseRow.RT)
+}
+
 function dividerClass(g, isLastGroup) {
   if (isLastGroup) return ''
   return g.label1 === '국내배당' ? ' group-divider divider-strong' : ' group-divider'
@@ -107,6 +115,9 @@ function collapsedSpan(g, hasLeagueLabel) {
   // 경기정보를 접어도 순위·팀명·스코어·결과(HP/HT/HS/RT/AS/AT/AP)는 계속 보여준다 —
   // 접힌 채로도 어느 팀이 몇 위이고 결과가 어땠는지는 바로 알 수 있어야 한다.
   if (g.label1 === '경기정보') return 7
+  // 판정·적중 둘 다 접어도 칸을 유지한다(위 g.label1 === '판정' 분기 참고) — 개수를
+  // 하드코딩하지 않고 실제 칸 수(g.cols.length, 지금은 2)를 그대로 쓴다.
+  if (g.label1 === '판정') return g.cols.length
   return 1
 }
 
@@ -519,18 +530,20 @@ export default function LeagueTable({
                       </th>
                     ))
                   }
-                  // '판정'은 원래 칸이 하나뿐이라 접어도 숨겨지는 게 없다 — '···'
-                  // 대신 컬럼명을 그대로 두어 접힌 채로도 무슨 칸인지 알 수 있게 한다.
+                  // '판정'·'적중'은 접어도 숨겨지는 게 없다 — '···' 대신 컬럼명을
+                  // 그대로 두어 접힌 채로도 무슨 칸인지 알 수 있게 한다.
                   if (g.label1 === '판정') {
-                    return [
+                    return g.cols.map((c, ci) => (
                       <th
-                        key={`${gi}-c`}
-                        className={`sub-header collapsed-cell${dividerClass(g, isLastGroup)}`}
-                        style={{ width: columnWidth(g, g.cols[0]) }}
+                        key={`${gi}-${c.key}`}
+                        className={`sub-header collapsed-cell${
+                          ci === g.cols.length - 1 ? dividerClass(g, isLastGroup) : ''
+                        }`}
+                        style={{ width: columnWidth(g, c) }}
                       >
-                        {g.cols[0].sub}
-                      </th>,
-                    ]
+                        {c.sub}
+                      </th>
+                    ))
                   }
                   return [
                     <th
@@ -718,26 +731,36 @@ export default function LeagueTable({
                           ? ['__merge', '__merge', '__merge']
                           : ['__merge', '__merge']
                       } else if (g.label1 === '판정') {
-                        // 판정은 칸이 하나뿐이라 접어도 펼친 것과 똑같이 그린다 —
-                        // 값(픽)과 색까지 그대로 살린다. 위/아래 두 줄로 갈리므로
-                        // (VERDICT_KEY 주석 참고) 항상 원본 row(baseRow)로 계산한다.
+                        // 판정·적중은 접어도 펼친 것과 똑같이 그린다 — 값(픽·적중)과
+                        // 색까지 그대로 살린다. 위/아래 두 줄로 갈리므로(VERDICT_KEY
+                        // 주석 참고) 항상 원본 row(baseRow)로 계산한다.
                         const v = phaseVerdict(baseRow, isFinal, isFinal ? '배변' : '초기')
                         // 초강추(국≠해)·강추(접전)는 배변 줄에만 붙는다 — strongPickTier
                         // 주석 참고. 초기 줄은 isFinal이 false라 항상 걸러진다.
                         // 이중밑줄(verdict-strong)은 두 단계가 똑같이 쓴다(사용자 지정).
                         const strong = isFinal ? strongPickTier(baseRow, v) : null
+                        // 적중 — 최종(배변) 판정 기준, 위/아래 두 줄로 안 갈리고 합친 칸
+                        // (finalHitVerdict 주석 참고).
+                        const hitVerdict = finalHitVerdict(baseRow)
                         cells = [
                           <td
                             key={`${gi}-c`}
-                            className={`collapsed-cell${dividerClass(g, isLastGroup)}${strong ? ' verdict-strong' : ''}`}
+                            className={`collapsed-cell${strong ? ' verdict-strong' : ''}`}
                             style={verdictCellStyle(v.pick, v.stars) || undefined}
                             title={strong ? STRONG_TIER_TITLE[strong] : (!v.pick ? VERDICT_NONE_TITLE : undefined)}
                           >
                             {v.pick || <span className="mypick-blank">－</span>}
                             <SeasonEndMark row={baseRow} pick={v.pick} />
                           </td>,
+                          <td key={`${gi}-hit`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
+                            {hitVerdict ? (
+                              <span className="cell-badge" style={pickVerdictStyle(hitVerdict)}>{hitVerdict}</span>
+                            ) : (
+                              <span className="mypick-blank">－</span>
+                            )}
+                          </td>,
                         ]
-                        cellKeys = [VERDICT_KEY]
+                        cellKeys = [VERDICT_KEY, VERDICT_HIT_KEY]
                       } else {
                         cells = [
                           // 헤더(collapsedWidth(null)=36px)와 같은 폭을 명시해 둔다 — 똥배는
@@ -847,23 +870,31 @@ export default function LeagueTable({
                       // 갈린다. VERDICT_KEY 주석 참고: 항상 원본 row(baseRow)로 계산해야
                       // 상세보기 '시스템 판정'과 같은 답이 나온다(EKW/EFW로 바뀐 srcRow를
                       // 쓰면 방향 계산이 달라질 수 있다).
-                      cellKeys = [VERDICT_KEY]
+                      // 적중 — 판정 바로 옆 칸(VERDICT_HIT_KEY, 2026-09-12 추가). 시스템
+                      // 판정의 픽을 실제 결과(RT)와 대조한다 — 계산 함수는 '내 예측'의
+                      // PICK_VERDICT와 같고(computeAutoVerdict) 대조하는 픽만 다르다.
+                      cellKeys = [VERDICT_KEY, VERDICT_HIT_KEY]
                       const v = phaseVerdict(baseRow, isFinal, isFinal ? '배변' : '초기')
                       // 초강추(국≠해)·강추(접전) — strongPickTier 주석 참고.
                       // 이중밑줄은 두 단계가 똑같이 쓴다(사용자 지정).
                       const strong = isFinal ? strongPickTier(baseRow, v) : null
+                      const hitVerdict = finalHitVerdict(baseRow)
                       cells = [
                         <td
                           key={`${gi}-c`}
-                          className={[
-                            isLastGroup ? '' : dividerClass(g, isLastGroup).trim(),
-                            strong ? 'verdict-strong' : '',
-                          ].filter(Boolean).join(' ') || undefined}
+                          className={strong ? 'verdict-strong' : undefined}
                           style={verdictCellStyle(v.pick, v.stars) || undefined}
                           title={strong ? STRONG_TIER_TITLE[strong] : (!v.pick ? VERDICT_NONE_TITLE : undefined)}
                         >
                           {v.pick || <span className="mypick-blank">－</span>}
                           <SeasonEndMark row={baseRow} pick={v.pick} />
+                        </td>,
+                        <td key={`${gi}-hit`} className={dividerClass(g, isLastGroup).trim() || undefined}>
+                          {hitVerdict ? (
+                            <span className="cell-badge" style={pickVerdictStyle(hitVerdict)}>{hitVerdict}</span>
+                          ) : (
+                            <span className="mypick-blank">－</span>
+                          )}
                         </td>,
                       ]
                     } else {

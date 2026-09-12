@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
-import { bettingDayOf, summarizeVerdicts } from '../components/LeagueTable/columnGroups'
+import { bettingDayOf, summarizeVerdicts, summarizeSystemVerdicts } from '../components/LeagueTable/columnGroups'
 import { PickSummaryBar } from '../components/RtSummaryBar/RtSummaryBar'
 import { rankByKind, top20Key, TOP_N, KINDS } from '../utils/weekTop20'
 import './WeekListPage.css'
@@ -94,6 +94,8 @@ export default function WeekTopPage() {
   const rows = useMemo(() => ranked.top.map((c) => c.row), [ranked])
   const infoByKey = useMemo(() => new Map(ranked.top.map((c) => [c.key, c])), [ranked])
   const verdictSummary = useMemo(() => summarizeVerdicts(rows), [rows])
+  // 시스템 판정 기준 적중/보험/미적 — 2026-09-12 추가, 리그 화면·이번주 리스트와 같은 계산.
+  const systemVerdictSummary = useMemo(() => summarizeSystemVerdicts(rows), [rows])
 
   const rankOf = useCallback((row) => {
     const c = infoByKey.get(top20Key(row))
@@ -142,7 +144,7 @@ export default function WeekTopPage() {
   return (
     <div className="wl-page">
       <div className="wl-title-row">
-        <h2 className="wl-title">🏆 이번주 TOP20</h2>
+        <h2 className="wl-title">🏆 이번주 TOP30</h2>
         {period && <span className="wl-period">{period}</span>}
       </div>
       <p className="wl-desc">
@@ -184,6 +186,11 @@ export default function WeekTopPage() {
             <span className="wl-summary">
               {tab} 후보 <strong>{ranked.candidateCount}</strong> · 순위 <strong>{rows.length}</strong>
             </span>
+            <span className="league-summary-pick-group">
+              <span className="league-summary-pick-label">판정</span>
+              <PickSummaryBar summary={systemVerdictSummary} />
+            </span>
+            <span className="league-summary-divider" aria-hidden="true" />
             <PickSummaryBar summary={verdictSummary} />
           </div>
           <LeagueTable

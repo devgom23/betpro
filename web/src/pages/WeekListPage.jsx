@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 import { api } from '../api/client'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
-import { bettingDayOf, summarizeVerdicts } from '../components/LeagueTable/columnGroups'
+import { bettingDayOf, summarizeVerdicts, summarizeSystemVerdicts } from '../components/LeagueTable/columnGroups'
 import { PickSummaryBar } from '../components/RtSummaryBar/RtSummaryBar'
 import {
   getWeekListFinalOddsTime, setWeekListFinalOddsTime, setManyRoundFinalOddsTime, formatFinalOddsTime,
@@ -231,12 +231,16 @@ export default function WeekListPage() {
     for (const sec of buckets.values()) {
       sec.rows.sort((a, b) => rank(a) - rank(b) || tmOf(a) - tmOf(b))
       sec.verdict = summarizeVerdicts(sec.rows)
+      // 시스템 판정(위 '판정' 칸) 기준 적중/보험/미적 — 2026-09-12 추가, LeaguePage.jsx와
+      // 같은 계산(columnGroups.js summarizeSystemVerdicts).
+      sec.systemVerdict = summarizeSystemVerdicts(sec.rows)
     }
     return [...buckets.values()].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
   }, [rows, leagueOrder])
 
   // 지금 불러온 회차 전체(요일 구분 없이)의 적중/보험/미적 — 새로고침 버튼 옆 요약.
   const totalVerdict = useMemo(() => summarizeVerdicts(rows), [rows])
+  const totalSystemVerdict = useMemo(() => summarizeSystemVerdicts(rows), [rows])
 
   // 화면 전체(요일 구간·표 포함)를 이미지로 저장한다. 어디서 다시 볼지는 아직 안 정했고,
   // 지금은 저장만 한다 — data/users/{계정}/snapshots/ 밑에 시각을 이름에 담아 쌓인다.
@@ -315,6 +319,11 @@ export default function WeekListPage() {
 
       {rows.length > 0 && (
         <div className="wl-refresh-row">
+          <span className="league-summary-pick-group">
+            <span className="league-summary-pick-label">판정</span>
+            <PickSummaryBar summary={totalSystemVerdict} />
+          </span>
+          <span className="league-summary-divider" aria-hidden="true" />
           <PickSummaryBar summary={totalVerdict} />
           <button
             className="batch-fold-btn"
@@ -354,6 +363,11 @@ export default function WeekListPage() {
           <div className="wl-day-head">
             <span className={`wl-day-chip wl-day-${sec.weekday || 'none'}`}>{sec.label}</span>
             <span className="wl-day-count">{sec.rows.length}경기</span>
+            <span className="league-summary-pick-group">
+              <span className="league-summary-pick-label">판정</span>
+              <PickSummaryBar summary={sec.systemVerdict} />
+            </span>
+            <span className="league-summary-divider" aria-hidden="true" />
             <PickSummaryBar summary={sec.verdict} />
           </div>
           <LeagueTable
