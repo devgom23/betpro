@@ -725,6 +725,12 @@ function OddsTable({ row }) {
   const at = String(row.AT || '').trim()
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
   const homeFav = homeIsFav(row)
+  // 시즌 막판(남은 경기 10 이하) 뱃지 — 예전엔 리그 표(LeagueTable)의 팀명 칸 옆에
+  // 붙었는데, 배당 표 팀명 위로 옮겼다(2026-09-13 사용자 지정, 스샷 그대로 — 유로파/
+  // 챔스✔ 같은 알약 배지가 팀명 칸 머리 위에 온다). 계산 근거는 utils/seasonStake.js,
+  // '경기지표' 줄의 상세 칩(seasonStakeChips)과 같은 데이터를 짧은 라벨로만 보여준다.
+  const hStake = teamStake(row, 'H')
+  const aStake = teamStake(row, 'A')
   // 해외 배당이 크게 움직인 경기인가 — '해외 배당' 표 제목 옆 (강)/(약) 표시.
   // 2026-09-07에 리그 표 '지표 > 배변' 칸은 '판정'으로 바뀌어 이 값을 더 이상
   // 안 보여준다(그쪽엔 시스템 판정이 대신 들어간다) — 이 배지만 남았다.
@@ -738,13 +744,16 @@ function OddsTable({ row }) {
   }
   // (정)/(역)은 팀명·순위 아래 줄로 내린다. 줄바꿈을 이 함수 안에 같이 넣어 둬야
   // 배당이 없어 정/역을 못 가리는 경기(homeFav === null)에서 빈 줄만 남지 않는다.
-  const roleSuffix = (isHome) => {
+  // 시즌 막판 뱃지(유로파/챔스✔ 등)는 그 (정)/(역) 오른쪽에 같은 줄로 붙인다
+  // (2026-09-13 사용자 지정 — "팀이름 아래 (정)/(역) 오른쪽으로 배치").
+  const roleSuffix = (isHome, stake) => {
     if (homeFav === null) return null
     const isFav = isHome ? homeFav : !homeFav
     return (
       <>
         <br />
         <span className={isFav ? 'odds-role-fav' : 'odds-role-dog'}>{isFav ? '(정)' : '(역)'}</span>
+        {stakeBadge(stake)}
       </>
     )
   }
@@ -803,6 +812,16 @@ function OddsTable({ row }) {
     if (a === null || b === null || a === b) return 0
     return b > a ? 1 : -1
   }
+  const stakeBadge = (s) =>
+    s && (
+      <span
+        className="odds-stake-badge"
+        style={{ background: `var(--chip-${s.tone}-bg)`, color: `var(--chip-${s.tone}-fg)` }}
+        title={s.title}
+      >
+        {s.short}
+      </span>
+    )
   return (
     <table className="detail-table odds-table">
       <thead>
@@ -811,7 +830,7 @@ function OddsTable({ row }) {
           <th className="odds-team-name">
             {ht}
             {rankNum(row.HP)}
-            {roleSuffix(true)}
+            {roleSuffix(true, hStake)}
           </th>
           <th className="odds-score-cell">
             {hasScore ? (
@@ -827,7 +846,7 @@ function OddsTable({ row }) {
           <th className="odds-team-name">
             {at}
             {rankNum(row.AP)}
-            {roleSuffix(false)}
+            {roleSuffix(false, aStake)}
           </th>
         </tr>
         <tr>

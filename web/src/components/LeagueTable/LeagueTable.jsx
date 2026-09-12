@@ -6,7 +6,7 @@ import {
   VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemPick, verdictAnyMarketMoved,
 } from './columnGroups'
 import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
-import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
+import { seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
 import { LEAGUE_LABELS } from '../../utils/format'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import RtBadge from '../RtBadge/RtBadge'
@@ -124,22 +124,6 @@ function collapsedSpan(g, hasLeagueLabel) {
 }
 
 // 경기정보 그룹의 col 목록에서 이 7개만, 이 순서대로 뽑는다.
-// 시즌 막판 팀 뱃지 — 팀명(HT/AT) 칸 옆 작은 칩. 남은 경기 10 이하일 때만 뜬다
-// (규칙·실측 근거는 utils/seasonStake.js).
-function StakeChip({ row, colKey }) {
-  if (colKey !== 'HT' && colKey !== 'AT') return null
-  const s = teamStake(row, colKey === 'HT' ? 'H' : 'A')
-  if (!s) return null
-  return (
-    <span
-      className="stake-chip"
-      style={{ background: `var(--chip-${s.tone}-bg)`, color: `var(--chip-${s.tone}-fg)` }}
-      title={s.title}
-    >
-      {s.short}
-    </span>
-  )
-}
 
 // 판정 칸 '⚠' — 시즌 마지막 2라운드의 정무 픽에만(플핸무는 실측상 영향 없음).
 function SeasonEndMark({ row, pick }) {
@@ -707,7 +691,6 @@ export default function LeagueTable({
                           return (
                             <td key={`${gi}-${c.key}`} className={className} style={cellStyle(g, c, value, row) || undefined}>
                               {text}
-                              <StakeChip row={row} colKey={c.key} />
                             </td>
                           )
                         })
@@ -997,7 +980,6 @@ export default function LeagueTable({
                           style={style || undefined}
                         >
                           {text}
-                          {g.label1 === '경기정보' && <StakeChip row={row} colKey={c.key} />}
                         </td>
                       )
                       })

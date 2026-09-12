@@ -632,6 +632,21 @@
   color: var(--text-muted);
 }
 
+/* 시즌 막판(남은 경기 10 이하) 뱃지(유로파/챔스✔ 등) — 새 줄(tr)을 따로 안 만들고
+   팀명 칸(odds-team-name) 안, (정)/(역) 글자 오른쪽에 같은 줄로 붙인다(2026-09-13
+   사용자 지정 — 처음엔 팀명 위 한 줄이었다가 "팀이름 아래 (정)/(역) 오른쪽으로
+   배치"로 정정). roleSuffix()가 (정)/(역) 뒤에 바로 이어 붙인다. 리그 표에 있던
+   자리를 여기로 옮겼다. */
+.odds-stake-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* 배당표 맨 위 — 홈팀명/점수/원정팀명을 승(홈)·무·패(원정) 컬럼과 같은 자리에 맞춘 줄.
    예정 경기라 점수가 없으면 odds-score-cell에 '-'만 뜬다. */
 .odds-teams-row th {

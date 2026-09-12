@@ -271,21 +271,6 @@ td.sticky-col {
   text-underline-offset: 3px;
 }
 
-/* 시즌 막판 팀 뱃지 — 팀명 옆 작은 칩(utils/seasonStake.js). 표 칸이 좁아 두세 글자로
-   줄이고 전체 문구(승점 차·경계선 상태)는 title로 둔다. 색은 --chip-* 토큰. */
-.stake-chip {
-  display: inline-block;
-  margin-left: 4px;
-  padding: 0 4px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 15px;
-  vertical-align: 1px;
-  white-space: nowrap;
-  text-decoration: none;
-}
-
 /* 판정 칸 '⚠' — 시즌 마지막 2라운드의 정무 픽(seasonEndWarn). 이중밑줄(verdict-strong)이
    ⚠까지 이어지지 않게 끊는다. */
 .verdict-end-warn {
