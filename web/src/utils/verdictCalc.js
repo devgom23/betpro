@@ -87,11 +87,43 @@ export const SCOPE_CODES = {
   통합: { 국: ['TK-WL', 'TK-WDL'], 해: ['TF-WL', 'TF-WDL'] },
 }
 
+// 코드가 국내(K-/TK-)·해외(F-/TF-) 어느 시장 기준인지 보고, 그 시장의 정배 가격이
+// 초기→배변 사이에 실제로 달라졌는지 — '배변 컬럼(E_*)이 존재한다'와 다르다. 국내는
+// 크롤러가 자주 돌아 안 움직여도 EKW=KW로 늘 채워진다(kr_crawler.py "배변이 없었으면
+// 초기배당과 같다" 주석 참고) — 그래서 컬럼 존재만 보면 '안 움직인 배변'도 배변으로
+// 잘못 쓰게 된다. 정배를 못 가리면(무승부 배당 등) 안전하게 '움직였다'로 봐서 지금까지
+// 처럼 배변을 그대로 쓴다.
+function marketMoved(row, code) {
+  let initKey
+  let finKey
+  if (code.startsWith('K-') || code.startsWith('TK-')) {
+    const w = numOrNull(row.KW)
+    const l = numOrNull(row.KL)
+    if (w === null || l === null || w === l) return true
+    ;[initKey, finKey] = w < l ? ['KW', 'EKW'] : ['KL', 'EKL']
+  } else if (code.startsWith('F-') || code.startsWith('TF-')) {
+    const w = numOrNull(row.FW)
+    const l = numOrNull(row.FL)
+    if (w === null || l === null || w === l) return true
+    ;[initKey, finKey] = w < l ? ['FW', 'EFW'] : ['FL', 'EFL']
+  } else {
+    return true
+  }
+  const a = numOrNull(row[initKey])
+  const b = numOrNull(row[finKey])
+  if (a === null || b === null) return true
+  return a !== b
+}
+
 // name = 표에 그리는 이름(일반값 가능) / pick = 픽 계산에 쓰는 구체적 이름.
+// final=true(배변 판정)라도 그 코드의 시장이 실제로 안 움직였으면 초기 값을 쓴다
+// (2026-09-12 사용자 지정 — "움직인 쪽은 배변, 안 움직인 쪽은 초기". marketMoved 참고).
+// 이 함수 하나가 resolveOddsPhasePick·oddsPhaseWeightedRatio를 거쳐 판정 전체에 퍼진다.
 export function scopeCell(row, codes, final) {
   const lines = codes.map((code) => {
+    const useFinal = final && marketMoved(row, code)
     const vals = [1, 2, 3, 4].map((i) => {
-      const v = numOrNull(row[`${final ? 'E_' : ''}${code} ${i}`])
+      const v = numOrNull(row[`${useFinal ? 'E_' : ''}${code} ${i}`])
       return v === null ? 0 : Math.trunc(v)
     })
     return { vals, total: vals.reduce((a, b) => a + b, 0) }

@@ -2,7 +2,7 @@ import { cloneElement, Fragment, useEffect, useMemo, useRef, useState } from 're
 import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
-  collapsedWidth, splitsOnFinal, oddsMoveDir, riskMoveDir, toFinalRow, rtToText,
+  collapsedWidth, splitsOnFinal, oddsMoveDir, oddsUnmoved, riskMoveDir, toFinalRow, rtToText,
   VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemPick,
 } from './columnGroups'
 import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
@@ -918,7 +918,13 @@ export default function LeagueTable({
                         isOddsGroup ? 'odds-group-cell' : '',
                         isDupFav ? 'odds-dup-fav' : '',
                       ].filter(Boolean).join(' ')
-                      const text = formatCell(g, c, value, row)
+                      // 배변 줄인데 그 칸의 배당이 실제로 안 움직였으면(초기·최종이 완전히
+                      // 같으면) 같은 숫자를 또 보여주지 않고 '-'로 비운다 — oddsUnmoved는
+                      // 항상 원본(초기+최종이 다 있는) baseRow로 판단해야 한다(srcRow는
+                      // 배변 줄에서 이미 EKW 등으로 값이 바뀐 사본이라 비교가 안 된다).
+                      const text = (isFinal && isOddsGroup && oddsUnmoved(baseRow, c.key))
+                        ? '-'
+                        : formatCell(g, c, value, row)
                       // 폼(PPG) 칸 — 상세보기 팝업의 폼 지표와 같은 스타일로, 뱃지가 아니라
                       // 칸 전체를 배경색으로 칠한다.
                       if (g.label1 === '경기정보' && FORM_COLS.has(c.key)) {

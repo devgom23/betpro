@@ -117,6 +117,21 @@ export function oddsMoveDir(row, colKey) {
   return b > a ? 1 : -1
 }
 
+/** 초기·최종 배당이 둘 다 있고 값이 완전히 같은가 — '배변 컬럼(E_*)이 있다'와
+ *  '실제로 배당이 움직였다'는 다르다(국내는 크롤러가 자주 돌아 안 움직여도
+ *  EKW=KW로 늘 채워진다 — kr_crawler.py 주석 참고). 배변 줄에서 이 값이 true면
+ *  움직이지 않은 똑같은 숫자를 또 보여주는 대신 '-'로 비운다(2026-09-12 사용자 지정,
+ *  상세보기 팝업 OddsTable과 같은 규칙 — MatchDetailModal.jsx sampleOddsMoved 참고). */
+export function oddsUnmoved(row, colKey) {
+  if (!row || !ODDS_MOVE_COLS.includes(colKey)) return false
+  const a = Number(row[colKey])
+  const b = Number(row[FINAL_FIELD[colKey]])
+  const blank = (v) => v == null || v === ''
+  if (blank(row[colKey]) || blank(row[FINAL_FIELD[colKey]])) return false
+  if (Number.isNaN(a) || Number.isNaN(b)) return false
+  return a === b
+}
+
 // 확률 지표(정승%·플핸무%·플%) 8칸 전부 — 배당에서 바로 나오는 4칸(정·플)과
 // 27개 지표를 최종배당으로 다시 세어 나오는 4칸(국)지·해)지) 모두 최종배당 값이 있다.
 // 배당처럼 "올랐다/내렸다"가 곧 "좋다/나쁘다"를 뜻하지 않아서(정배 확률이 오르면

@@ -106,6 +106,34 @@ function numOrNull(v) {
   return Number.isNaN(n) ? null : n
 }
 
+// 지표별 표본의 배변 줄 — '배변(EK*/EF*) 컬럼이 있다'와 '실제로 배당이 움직였다'는
+// 다르다(국내는 크롤러가 자주 돌아 안 움직여도 EKW=KW로 늘 채워진다 — kr_crawler.py
+// "배변이 없었으면 초기배당과 같다" 주석 참고). 코드가 어느 시장(국내 K-/TK- vs
+// 해외 F-/TF-) 기준인지 보고, 그 시장의 정배 가격(홈이 정배면 W, 원정이 정배면 L)이
+// 초기·배변 사이에 실제로 달라졌을 때만 '움직였다'로 본다(2026-09-12 사용자 지정 —
+// 안 움직였으면 배변 줄은 '-'로, 초기 줄과 표본이 달라 보여도 값을 안 보여준다).
+function sampleOddsMoved(row, code) {
+  let initKey
+  let finKey
+  if (code.startsWith('K-') || code.startsWith('TK-')) {
+    const w = numOrNull(row.KW)
+    const l = numOrNull(row.KL)
+    if (w === null || l === null || w === l) return true   // 정배를 못 가리면 안전하게 보여준다
+    ;[initKey, finKey] = w < l ? ['KW', 'EKW'] : ['KL', 'EKL']
+  } else if (code.startsWith('F-') || code.startsWith('TF-')) {
+    const w = numOrNull(row.FW)
+    const l = numOrNull(row.FL)
+    if (w === null || l === null || w === l) return true
+    ;[initKey, finKey] = w < l ? ['FW', 'EFW'] : ['FL', 'EFL']
+  } else {
+    return true
+  }
+  const a = numOrNull(row[initKey])
+  const b = numOrNull(row[finKey])
+  if (a === null || b === null) return true   // 값 자체가 없는 경우는 hasE 쪽에서 이미 걸러진다
+  return a !== b
+}
+
 // 정배(시장이 강하다고 본 쪽)가 홈인지 — 국내배당(KW/KL) 우선, 없으면 해외배당(FW/FL).
 // 핸승 위험도·종합픽 등 다른 계산과 같은 우선순위(api/pick_ai.py의 _home_is_fav 참고).
 function homeIsFav(row) {
@@ -817,13 +845,19 @@ function OddsTable({ row }) {
                     )}
                   </td>
                   {[w, d, l].map((initKey, ci) => {
+                    const initVal = numOrNull(row[initKey])
+                    const finVal = numOrNull(row[final[ci]])
                     const dir = oddsDir(row[initKey], row[final[ci]])
+                    // 초기와 배변이 같은 값이면(실제로 안 움직였으면) 굳이 같은 숫자를 또
+                    // 보여주지 않고 '-'로 비운다(2026-09-12 사용자 지정 — SampleTable의
+                    // sampleOddsMoved와 같은 취지).
+                    const unmoved = initVal !== null && finVal !== null && initVal === finVal
                     // 배변 줄은 배변(최종) 배당 기준으로 다시 정배를 판단한다(marketFav 주석 참고) —
                     // 정역반전 경기에서 초기 기준을 그대로 쓰면 엉뚱한 칸이 언더독(플핸)으로 칠해진다.
                     const cls = ci === 0 ? colClass('w', true) : ci === 2 ? colClass('l', true) : undefined
                     return (
                       <td key={final[ci]} className={cls}>
-                        {numOrDash(row[final[ci]])}
+                        {unmoved ? '-' : numOrDash(row[final[ci]])}
                         {dir !== 0 && (
                           <span className={`odds-arrow ${dir > 0 ? 'up' : 'down'}`}>
                             {dir > 0 ? '↑' : '↓'}
@@ -1673,7 +1707,7 @@ function SampleTable({ row, scope, expanded }) {
     // 최종배당 기준으로 다시 센 표본. 아직 '최신배당 불러오기'가 안 돈 경기는
     // E_ 컬럼 자체가 없어(undefined) eVals를 null로 두고 빈칸으로 그린다.
     const eRaw = [1, 2, 3, 4].map((i) => row[`E_${code} ${i}`])
-    const hasE = eRaw.some((v) => v !== null && v !== undefined && v !== '')
+    const hasE = eRaw.some((v) => v !== null && v !== undefined && v !== '') && sampleOddsMoved(row, code)
     const eVals = hasE ? eRaw.map(cnt) : null
     return {
       code, label, vals,
