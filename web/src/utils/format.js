@@ -31,3 +31,18 @@ export function scoreClass(hs, as_, side) {
   const winner = hs > as_ ? 'home' : as_ > hs ? 'away' : null
   return winner === side ? 'winner-score' : undefined
 }
+
+// 리그 코드(row.L, Source_League 등 'LALIGA' 같은 내부 값) → 상단 탭과 같은
+// 표시용 이름. 여러 리그가 한 표에 섞이는 화면(이번주 리스트 등)에서 'LIGUE1'
+// 같은 원본 코드 대신 이걸로 보여준다.
+export const LEAGUE_LABELS = {
+  EPL: 'EPL', LALIGA: '라리가', SERIEA: '세리에',
+  BUNDES: '분데스', EREDIVISIE: '에레디', LIGUE1: '리그1',
+}
+
+// 위와 같은 리그 코드 → 2글자 초압축 이름. 정배·플핸 시즌표 카드처럼 자리가
+// 아주 좁은 곳에서만 쓴다(2026-09-13 사용자 지정).
+export const LEAGUE_LABELS_SHORT = {
+  EPL: 'EP', LALIGA: 'La', SERIEA: 'Sa',
+  BUNDES: 'Bd', EREDIVISIE: 'Er', LIGUE1: 'L1',
+}

@@ -3,7 +3,7 @@ import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
-import { formatTime, formatDt, scoreClass } from '../../utils/format'
+import { formatTime, formatDt, scoreClass, LEAGUE_LABELS_SHORT } from '../../utils/format'
 import { computeAutoVerdict, pickVerdictStyle } from '../LeagueTable/columnGroups'
 import { PICK_OPTIONS, ODDS_PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
@@ -1055,17 +1055,10 @@ function SeasonSampleCard({ m, kind, favCode }) {
   const hlKhw = kind === 'pl' && homeDog
   const hlKhl = kind === 'pl' && oddsKnown && !homeDog
 
-  // 핸디 줄 라벨 — 저장된 'KH'(핸디 기준점) 값을 읽지 않고, 이 경기 자신의 홈/원정
-  // 정배·역배만으로 다시 정한다: 홈이 정배면 -1, 홈이 역배(언더독)면 +1 — 홈 기준
-  // 한 값만 보여준다(2026-09-13 사용자 지정 — "이 중에서 한 개만 나와야지", 앞서
-  // 넣은 "-1, +1"처럼 홈·원정 두 값을 같이 보여주는 건 틀렸다는 정정). 정배 판정
-  // 기준은 바로 위 homeDog와 같다(KW>KL이면 홈이 언더독).
-  const handiLabel = !oddsKnown ? '핸디' : homeDog ? '+1' : '-1'
-
   return (
     <div className="season-sample-card">
       <div className="season-sample-card-row season-sample-card-info">
-        <span className="season-sample-card-info-meta">{m.league} · {m.r} · {dateShort}</span>
+        <span className="season-sample-card-info-meta">{LEAGUE_LABELS_SHORT[m.league] || m.league} · {m.r} · {dateShort}</span>
         {hasScore && <RtBadge label={rtLabel(m.rt)} />}
       </div>
       <div className="season-sample-card-row season-sample-card-teams">
@@ -1082,13 +1075,11 @@ function SeasonSampleCard({ m, kind, favCode }) {
         <span className="season-sample-card-at">{m.at}</span>
       </div>
       <div className="season-sample-card-row">
-        <span className="season-sample-card-meta">국)정</span>
         <span className={hl(hlKw)}>{fmt(m.kw)}</span>
         <span>{fmt(m.kd)}</span>
         <span className={hl(hlKl)}>{fmt(m.kl)}</span>
       </div>
       <div className="season-sample-card-row">
-        <span className="season-sample-card-meta">{handiLabel}</span>
         <span className={hl(hlKhw)}>{fmt(m.khw)}</span>
         <span>{fmt(m.khd)}</span>
         <span className={hl(hlKhl)}>{fmt(m.khl)}</span>

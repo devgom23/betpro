@@ -7,6 +7,7 @@ import {
 } from './columnGroups'
 import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
 import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
+import { LEAGUE_LABELS } from '../../utils/format'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
@@ -45,12 +46,6 @@ const VERDICT_NONE_TITLE = '판정 없음 — 통)해(해외 정배배당) 기�
 const VERDICT_UNMOVED_TITLE = '배변 없음 — 국내·해외 배당이 초기와 그대로입니다.'
   + ' 아직 최신배당이 안 들어왔거나, 들어왔어도 배당이 안 움직인 경기입니다.'
 
-// 여러 리그를 한 표에 모은 화면(이번주 리스트 등)에서는 row.L이 리그 코드라 그대로
-// 쓰면 'LIGUE1'처럼 나온다 — 표의 '리그' 칸과 같은 말로 바꿔서 보여준다.
-const LEAGUE_LABELS = {
-  EPL: 'EPL', LALIGA: '라리가', SERIEA: '세리에',
-  BUNDES: '분데스', EREDIVISIE: '에레디', LIGUE1: '리그1',
-}
 // 동배당 측정은 6대리그로만 한다(2026-09-05, 사용자 지정) — K1/K2(내 데이터)는
 // 배당 형성 방식이 달라 섞으면 안 되고, 필요하면 K1/K2끼리 따로 재야 한다.
 const MAJOR_LEAGUES = new Set(Object.keys(LEAGUE_LABELS))

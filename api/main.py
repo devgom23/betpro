@@ -1046,9 +1046,9 @@ def _season_sample_match_cards(season_df, code, season, round, no, kind, fav_cod
     date_key = pd.to_datetime(sub["DT"].astype(str).str.split(" ").str[0], format="%y-%m-%d", errors="coerce")
     tm_key = pd.to_numeric(sub.get("TM"), errors="coerce").fillna(0)
     order = pd.DataFrame({"d": date_key, "t": tm_key}, index=sub.index).sort_values(["d", "t"], ascending=False).index
-    # 최신 4건까지만(2026-09-13 사용자 지정 — 처음엔 3건이었다가, 카드 한 줄에 실제로
-    # 4개까지 들어가는 걸 보고 4건으로 늘림).
-    picked = sub.loc[order[:4]]
+    # 최신 5건까지만(2026-09-13 — 3건→4건 이후, 카드 폭을 줄이면서 한 줄에 5개까지
+    # 들어가는 걸 보고 5건으로 늘림).
+    picked = sub.loc[order[:5]]
 
     matches = []
     for _, r in picked.iterrows():
