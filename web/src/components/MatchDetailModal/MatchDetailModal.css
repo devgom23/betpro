@@ -100,6 +100,49 @@
   font-size: 20px;
 }
 
+/* 2026-09-12: 날짜·팀·별표·결과 배지를 한 줄로 합쳤다(예전엔 제목줄+메타줄 2줄, 아래
+   .modal-meta는 그래서 이 파일에선 이제 안 쓴다 — 다른 팝업들의 같은 이름 규칙과는 무관).
+   화면이 좁으면 줄바꿈되도록 flex-wrap만 켠다(칸 자체는 여전히 하나). */
+/* 클래스 2개짜리 선택자(.detail-modal-title.detail-title-line)로 특이도를 올린다 —
+   .modal-title은 LeagueTable.css에도 똑같이 정의돼 있고(margin: 0 0 4px) 그 파일이
+   이 파일보다 나중에 로드돼, 한 클래스짜리 규칙끼리는 그쪽이 이겨 margin-top이 안 먹었다. */
+.detail-modal-title.detail-title-line {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  /* 오른쪽 위 엑셀 다운로드·닫기 버튼(.modal-close 등, position:absolute top:14px)과
+     세로 중앙을 실측(getBoundingClientRect)으로 맞췄다 — 이 줄이 다운로드/팀정보/배지를
+     합쳐 예전 제목줄보다 커져서 버튼 대비 8px쯤 아래로 처져 있었다(2026-09-12 사용자 지적). */
+  margin-top: -8px;
+  /* 아래 여백도 4px(.modal-title 기본값)에서 16px로 — 예전보다 내용이 많아진 줄이라
+     바로 아래 PickBand와 더 떨어져 보이게(2026-09-12 사용자 지정, 8px→16px로 재조정). */
+  margin-bottom: 16px;
+}
+
+.detail-title-date {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.detail-title-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* 결과가 있는 경기는 팀 사이 'vs' 대신 스코어를 넣는다. 이긴 쪽만 앱 전체 관례와
+   같은 빨강(winner-score) — 원본 규칙(.detail-table .winner-score)은 표 안쪽에만
+   걸려 있어 제목줄에서는 여기서 한 번 더 준다(.recent-tip .winner-score와 같은 패턴). */
+.detail-title-score {
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-title-teams .winner-score {
+  color: var(--chip-red-fg);
+}
+
 /* 팀이름 옆 (적중/전체) — 제목 안에서도 보조 정보라 본문보다 작고 흐리게 */
 .team-bet-record {
   font-size: 13px;
@@ -142,19 +185,6 @@
 
 .mypick-bar-memo input {
   width: 100%;
-}
-
-.modal-meta {
-  margin: 0 0 8px;
-  font-size: 13px;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.modal-scheduled {
-  color: var(--text-muted);
 }
 
 .modal-columns {

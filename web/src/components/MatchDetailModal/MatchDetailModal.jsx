@@ -368,6 +368,27 @@ function DdongsaBadge({ row }) {
   )
 }
 
+// 팝업 맨 위 결과 배지 자리 — 아직 결과가 없는(예정) 경기에서 그 자리를 채운다.
+// 예전엔 '예정 경기'라는 글자를 넣었는데(2026-09-12 사용자 지정으로 삭제), 그 경기가
+// 똥배(강한 정배)면 순번(똥1·똥2…)을 대신 보여준다 — 모양·등급 기준은 경기지표 줄의
+// ddongChips와 같다. 똥배가 아니면 빈 자리(아무 것도 안 보여줌)로 둔다.
+function DdongBadge({ row }) {
+  const ddong = String(row.DDONG || '').trim()
+  if (!ddong) return null
+  const risk = numOrNull(row.DDONG_RISK)
+  const [, label, tone] = DDONG_GRADES.find(([cut]) => risk !== null && risk < cut) || []
+  return (
+    <span
+      className="rt-badge"
+      style={tone ? { background: `var(--chip-${tone}-bg)`, color: `var(--chip-${tone}-fg)` } : undefined}
+      title={`국내배당 1.49 이하 — 그 라운드에서 ${ddong.replace('똥', '')}번째로 강한 정배.`
+        + (risk !== null ? ` 무/역으로 뒤집힐 확률 ${Math.round(risk)}%(${label}).` : '')}
+    >
+      {ddong}
+    </span>
+  )
+}
+
 // 팝업 맨 위 RT 배지 옆 '벳' — 내가 베팅내역(bet_slips)에 실제로 등록한 경기라는 표시.
 // 별표(IMPORTANT)·내픽(MY_PICK)과 별개다(리그 표의 MY_BET 칸과 같은 값·같은 색).
 function MyBetBadge({ row }) {
@@ -386,7 +407,7 @@ function MyBetBadge({ row }) {
 // 팝업 맨 위 결과 배지 옆 — 내픽(MY_PICK)이 이 경기에서 적중/보험/미적 중 뭐였나.
 // LeagueTable의 판정(PICK_VERDICT) 칸과 같은 규칙(columnGroups.computeAutoVerdict)을
 // 그대로 쓴다. 벳(MY_BET) 배지가 있으면 그 옆에, 없으면(픽만 하고 벳은 안 넣은 경기)
-// RT 배지 옆에 바로 붙는다 — 어디에 붙이는지는 호출하는 쪽(위 modal-meta)이 정한다.
+// RT 배지 옆에 바로 붙는다 — 어디에 붙이는지는 호출하는 쪽(제목줄의 detail-title-badges)이 정한다.
 function PickVerdictBadge({ row }) {
   const verdict = computeAutoVerdict(row.MY_PICK, row.RT)
   if (!verdict) return null
@@ -3558,6 +3579,7 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
   const rt = rtLabel(row.RT)
+  const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
   const homeFav = homeIsFav(row)
   const titleRoleSuffix = (isHome) => {
     if (homeFav === null) return null
@@ -3697,32 +3719,49 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, onClose, 
         </div>
         {downloadError && <p className="detail-download-error">{downloadError}</p>}
 
-        <h2 className="modal-title detail-modal-title">
-          <span>
-            {ht}
-            {rankSuffix(row.HP)}
-            {titleRoleSuffix(true)}
-            <TeamBetRecord name={ht} /> vs {at}
-            {rankSuffix(row.AP)}
-            {titleRoleSuffix(false)}
-            <TeamBetRecord name={at} />
+        {/* 2026-09-12: 날짜/별표/팀/결과 배지를 한 줄로 합쳤다(예전엔 제목줄+메타줄 2줄).
+            결과가 있는 경기는 팀 사이 'vs' 대신 스코어를 넣고 이긴 쪽만 빨강(winner-score,
+            앱 전체 관례 — .detail-title-teams .winner-score 참고). 예정 경기는 지금처럼 'vs',
+            결과 배지 자리는 '예정 경기' 글자 대신 똥배면 그 순번(DdongBadge)만 보여준다. */}
+        <h2 className="modal-title detail-modal-title detail-title-line">
+          <span className="detail-title-date">
+            {row.S} · {row.R}
+            {row.DT ? ` · ${formatDt(row.DT)}` : ''}
+            {formatTime(row.TM) ? ` ${formatTime(row.TM)}` : ''}
           </span>
           <StarButton
             level={starLevel(row.IMPORTANT)}
             onClick={() => onSavePick({ important: nextStarLevel(starLevel(row.IMPORTANT)) })}
           />
+          <span className="detail-title-teams">
+            {ht}
+            {rankSuffix(row.HP)}
+            {titleRoleSuffix(true)}
+            <TeamBetRecord name={ht} />
+            {hasScore ? (
+              <span className="detail-title-score">
+                {' '}
+                <b className={scoreClass(row.HS, row.AS, 'home')}>{Math.trunc(row.HS)}</b>
+                {' : '}
+                <b className={scoreClass(row.HS, row.AS, 'away')}>{Math.trunc(row.AS)}</b>
+                {' '}
+              </span>
+            ) : (
+              ' vs '
+            )}
+            {at}
+            {rankSuffix(row.AP)}
+            {titleRoleSuffix(false)}
+            <TeamBetRecord name={at} />
+          </span>
+          <span className="detail-title-badges">
+            {rt ? <RtBadge label={rt} /> : <DdongBadge row={row} />}
+            {!row.MY_BET && <PickVerdictBadge row={row} />}
+            <DdongsaBadge row={row} />
+            <MyBetBadge row={row} />
+            {row.MY_BET && <PickVerdictBadge row={row} />}
+          </span>
         </h2>
-        <p className="modal-meta">
-          {row.S} · {row.R}
-          {row.DT ? ` · ${formatDt(row.DT)}` : ''}
-          {formatTime(row.TM) ? ` ${formatTime(row.TM)}` : ''}
-          &nbsp;&nbsp;
-          {rt ? <RtBadge label={rt} /> : <span className="modal-scheduled">예정 경기</span>}
-          {!row.MY_BET && <PickVerdictBadge row={row} />}
-          <DdongsaBadge row={row} />
-          <MyBetBadge row={row} />
-          {row.MY_BET && <PickVerdictBadge row={row} />}
-        </p>
         <MyPickBar row={row} onSavePick={onSavePick} />
 
         <PickBand
