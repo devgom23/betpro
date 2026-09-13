@@ -980,10 +980,15 @@ def season_sample(code: str, scope: str = PATHS.SCOPE_MASTER,
     counts_k_wl = engine.get_samples_fast(cache, "K-WL", row_dict)
     counts_f_wl = engine.get_samples_fast(cache, "F-WL", row_dict)
 
-    fav_matches = _season_sample_match_cards(season_df, code, season, round, no, "fav", fav_code, row)
-    pl_matches = _season_sample_match_cards(season_df, code, season, round, no, "pl", None, row)
-    k_wl_matches = _season_sample_match_cards(season_df, code, season, round, no, "k_wl", None, row)
-    f_wl_matches = _season_sample_match_cards(season_df, code, season, round, no, "f_wl", None, row)
+    # 표본 경기 카드는 '시즌'이 아니라 '통합'(season_pool, 시즌 필터 없음) 전체에서
+    # 최신순으로 5건 뽑는다(2026-09-13 사용자 지정 — 실측으로 확인: 시즌 표본이 이미
+    # 통합 표본 중 가장 최신 자리를 그대로 차지하고 있어서, 시즌 표본이 5건 미만일
+    # 때만 통합 쪽이 지난 시즌 경기로 더 채워 보여준다 — 카드가 아예 안 뜨던 경우가
+    # 줄어든다). '시즌' 줄 숫자(정/플/국승패/해승패 4칸 카운트)는 그대로 이번 시즌만 센다.
+    fav_matches = _season_sample_match_cards(season_pool, code, season, round, no, "fav", fav_code, row)
+    pl_matches = _season_sample_match_cards(season_pool, code, season, round, no, "pl", None, row)
+    k_wl_matches = _season_sample_match_cards(season_pool, code, season, round, no, "k_wl", None, row)
+    f_wl_matches = _season_sample_match_cards(season_pool, code, season, round, no, "f_wl", None, row)
 
     return {
         "season": season, "fav_code": fav_code, "정": counts_fav, "플": counts_pl,
@@ -993,13 +998,20 @@ def season_sample(code: str, scope: str = PATHS.SCOPE_MASTER,
     }
 
 
-def _season_sample_match_cards(season_df, code, season, round, no, kind, fav_code, row):  # noqa: A002
-    """'정배·플핸 시즌표' 옆 카드 목록용 — season_sample이 표본 '건수'만 셀 때 쓰는
-    engine.get_samples_fast의 매칭 조건을 여기서 그대로 다시 적어(행 단위 불리언
-    마스크), 실제로 어느 경기들이 그 건수에 들어갔는지 최신순 3건만 뽑는다.
+def _season_sample_match_cards(pool, code, season, round, no, kind, fav_code, row):  # noqa: A002
+    """'정배·플핸 시즌표'·'승+패 시즌표' 옆 카드 목록용 — season_sample이 표본 '건수'만
+    셀 때 쓰는 engine.get_samples_fast의 매칭 조건을 여기서 그대로 다시 적어(행 단위
+    불리언 마스크), 실제로 어느 경기들이 그 건수에 들어갔는지 최신순 5건만 뽑는다.
     ⚠ engine.py 함수는 안 부른다(카운트만 반환하고 매칭된 행 자체는 안 돌려줘서) —
-    대신 get_samples_fast의 'K-W'/'K-L'/'K-PL' 분기와 완전히 같은 조건식을 그대로
-    복붙해 옮겼다. engine.py 파일 자체는 한 글자도 안 건드렸다(4번 원칙)."""
+    대신 get_samples_fast의 'K-W'/'K-L'/'K-PL' 등 분기와 완전히 같은 조건식을 그대로
+    복붙해 옮겼다. engine.py 파일 자체는 한 글자도 안 건드렸다(4번 원칙).
+
+    pool은 '통합'(시즌 필터 없는 6대리그 전체, season_sample의 season_pool)을 받는다 —
+    '시즌'으로 좁힌 season_df가 아니다(2026-09-13 사용자 지정 — 실측으로 확인: 시즌
+    표본은 어차피 통합 표본 중 가장 최신 자리를 그대로 차지하므로, 통합에서 최신 5건을
+    뽑으면 시즌 표본이 5건 이상일 때 결과가 완전히 같고, 5건 미만일 때만 통합 쪽이
+    지난 시즌 경기로 더 채워 보여준다 — '표본 없음'으로 비던 카드가 줄어든다). 표의
+    '시즌' 줄 숫자(4칸 카운트)는 이 함수와 별개로 여전히 season_df만 쓴다."""
 
     def _pos(v):
         try:
@@ -1009,9 +1021,9 @@ def _season_sample_match_cards(season_df, code, season, round, no, kind, fav_cod
         return f if f > 0 else None
 
     def _round2(colname):
-        if colname not in season_df.columns:
-            return pd.Series(np.nan, index=season_df.index)
-        return pd.to_numeric(season_df[colname], errors="coerce").round(2)
+        if colname not in pool.columns:
+            return pd.Series(np.nan, index=pool.index)
+        return pd.to_numeric(pool[colname], errors="coerce").round(2)
 
     cKW, cKL, cKHW, cKHL = _round2("KW"), _round2("KL"), _round2("KHW"), _round2("KHL")
     cFW, cFL = _round2("FW"), _round2("FL")
@@ -1045,24 +1057,24 @@ def _season_sample_match_cards(season_df, code, season, round, no, kind, fav_cod
             return {"total": 0, "matches": []}
         cond = (cFW == fw) & (cFL == fl)
 
-    if "Source_League" in season_df.columns:
+    if "Source_League" in pool.columns:
         self_mask = (
-            (season_df["Source_League"] == code)
-            & (season_df["S"].astype(str) == str(season))
-            & (season_df["R"].astype(str) == str(round))
-            & (pd.to_numeric(season_df["No"], errors="coerce") == no)
+            (pool["Source_League"] == code)
+            & (pool["S"].astype(str) == str(season))
+            & (pool["R"].astype(str) == str(round))
+            & (pd.to_numeric(pool["No"], errors="coerce") == no)
         )
     else:
         self_mask = (
-            (season_df["S"].astype(str) == str(season))
-            & (season_df["R"].astype(str) == str(round))
-            & (pd.to_numeric(season_df["No"], errors="coerce") == no)
+            (pool["S"].astype(str) == str(season))
+            & (pool["R"].astype(str) == str(round))
+            & (pd.to_numeric(pool["No"], errors="coerce") == no)
         )
 
     # 위 시즌표 숫자(핸승/핸무/무/역 합)는 RT가 있는 경기만 센다(engine.get_samples_fast가
     # cRT[m]==1~4로만 카운트) — 카드 건수도 여기 맞춰 RT 없는(아직 안 치러진) 경기는 뺀다.
-    rt_known = pd.to_numeric(season_df["RT"], errors="coerce").isin([1, 2, 3, 4])
-    sub = season_df[cond.fillna(False) & ~self_mask & rt_known]
+    rt_known = pd.to_numeric(pool["RT"], errors="coerce").isin([1, 2, 3, 4])
+    sub = pool[cond.fillna(False) & ~self_mask & rt_known]
     total = len(sub)
     if total == 0:
         return {"total": 0, "matches": []}
