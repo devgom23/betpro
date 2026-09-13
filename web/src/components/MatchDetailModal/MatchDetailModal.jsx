@@ -4052,6 +4052,10 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
   const matchKey = [row.S, row.R, row.No, row.HT, row.AT].join('|')
   // 지표별 표본은 기본이 '접힘' — 판단에 쓰는 7줄만 보여주고, 펼치면 전체 지표가 나온다.
   const [sampleExpanded, setSampleExpanded] = useState(false)
+  // 정배·플핸 시즌표 / 승+패 시즌표 — 둘 다 기본은 펼침, 각자 따로 접고 펼 수 있다
+  // (2026-09-14 사용자 지정). 표본 카드까지 있어 세로로 길어서, 안 볼 때는 접어 둘 수 있게.
+  const [seasonFavCollapsed, setSeasonFavCollapsed] = useState(false)
+  const [seasonWlCollapsed, setSeasonWlCollapsed] = useState(false)
   const [showSeasonLegend, setShowSeasonLegend] = useState(false)
   const [pickData, setPickData] = useState(null)
   const [pickError, setPickError] = useState('')
@@ -4271,8 +4275,18 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
             해당 영역의 박스 너비를 팝업에 꽉차게, 배당 영역과 동일하게"). modal-columns
             2단 그리드 바깥(PickBand와 같은 레벨)에 둬야 폭이 팝업 전체를 채운다. */}
         <section className="detail-section">
-          <h3>정배·플핸 시즌표</h3>
-          <SeasonSampleTable row={row} seasonCounts={seasonSample} />
+          <h3>
+            <button
+              className="sample-fold-btn"
+              onClick={() => setSeasonFavCollapsed((v) => !v)}
+              title={seasonFavCollapsed ? '펼치기' : '접기'}
+              aria-expanded={!seasonFavCollapsed}
+            >
+              {seasonFavCollapsed ? '▸' : '▾'}
+            </button>
+            정배·플핸 시즌표
+          </h3>
+          {!seasonFavCollapsed && <SeasonSampleTable row={row} seasonCounts={seasonSample} />}
         </section>
 
         {/* 승+패 시즌표 — 정배·플핸 시즌표 바로 아래, 완전히 같은 스타일(2026-09-13
@@ -4281,8 +4295,18 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
             찾는 지표(K-WL/F-WL, 이미 저장된 26개 지표 중 하나)라 fav_code 같은 방향
             판단이 필요 없다. 같은 /season_sample 응답을 그대로 재사용한다. */}
         <section className="detail-section">
-          <h3>승+패 시즌표</h3>
-          <SeasonWlTable row={row} seasonCounts={seasonSample} />
+          <h3>
+            <button
+              className="sample-fold-btn"
+              onClick={() => setSeasonWlCollapsed((v) => !v)}
+              title={seasonWlCollapsed ? '펼치기' : '접기'}
+              aria-expanded={!seasonWlCollapsed}
+            >
+              {seasonWlCollapsed ? '▸' : '▾'}
+            </button>
+            승+패 시즌표
+          </h3>
+          {!seasonWlCollapsed && <SeasonWlTable row={row} seasonCounts={seasonSample} />}
         </section>
 
         <div className="modal-columns" ref={columnsRef}>
