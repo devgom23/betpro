@@ -1141,6 +1141,15 @@
   font-weight: 700;
 }
 
+/* 배당 줄이 어느 시장인지(국)/해) 또는 일)/핸)) 첫 숫자 바로 앞에 작게 붙인다
+   (2026-09-13 사용자 지정 — "그냥 숫자 바로 앞에 넣어줘"). 강조색(.season-sample-card-hl)이
+   앞에 걸려도 라벨 글자만은 흐리게 그대로 둔다. */
+.season-sample-card-prefix {
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-right: 1px;
+}
+
 /* 결과 배지는 이 줄 오른쪽 끝(2026-09-13 사용자 지정 — 처음엔 왼쪽으로 뒀다가
    "아 오른쪽이다"로 정정). justify-content:space-between이 리그·라운드·날짜를
    왼쪽에, 배지를 오른쪽에 붙인다. */

@@ -974,13 +974,22 @@ def season_sample(code: str, scope: str = PATHS.SCOPE_MASTER,
     row_dict = row.to_dict()
     counts_fav = engine.get_samples_fast(cache, fav_code, row_dict) if fav_code else None
     counts_pl = engine.get_samples_fast(cache, "K-PL", row_dict)
+    # 승+패(국)승+패/해)승+패) — 정배 방향과 무관하게 홈·원정 배당이 둘 다 같은 경기를
+    # 찾는 지표(K-WL/F-WL, 저장된 26개 지표 중 하나). '정배·플핸 시즌표' 바로 아래
+    # '승+패 시즌표'용으로 2026-09-13 추가 — fav_code 같은 방향 판단이 필요 없다.
+    counts_k_wl = engine.get_samples_fast(cache, "K-WL", row_dict)
+    counts_f_wl = engine.get_samples_fast(cache, "F-WL", row_dict)
 
     fav_matches = _season_sample_match_cards(season_df, code, season, round, no, "fav", fav_code, row)
     pl_matches = _season_sample_match_cards(season_df, code, season, round, no, "pl", None, row)
+    k_wl_matches = _season_sample_match_cards(season_df, code, season, round, no, "k_wl", None, row)
+    f_wl_matches = _season_sample_match_cards(season_df, code, season, round, no, "f_wl", None, row)
 
     return {
         "season": season, "fav_code": fav_code, "정": counts_fav, "플": counts_pl,
         "정_경기": fav_matches, "플_경기": pl_matches,
+        "국승패": counts_k_wl, "해승패": counts_f_wl,
+        "국승패_경기": k_wl_matches, "해승패_경기": f_wl_matches,
     }
 
 
@@ -1005,13 +1014,14 @@ def _season_sample_match_cards(season_df, code, season, round, no, kind, fav_cod
         return pd.to_numeric(season_df[colname], errors="coerce").round(2)
 
     cKW, cKL, cKHW, cKHL = _round2("KW"), _round2("KL"), _round2("KHW"), _round2("KHL")
+    cFW, cFL = _round2("FW"), _round2("FL")
 
     if kind == "fav":
         if not fav_code:
             return {"total": 0, "matches": []}
         kw, kl = _pos(row.get("KW")), _pos(row.get("KL"))
         cond = (cKW == kw) if fav_code == "K-W" else (cKL == kl)
-    else:  # 'pl' — engine.get_samples_fast의 K-PL 분기와 동일한 조건
+    elif kind == "pl":  # engine.get_samples_fast의 K-PL 분기와 동일한 조건
         kw, kl = _pos(row.get("KW")), _pos(row.get("KL"))
         khw, khl = _pos(row.get("KHW")), _pos(row.get("KHL"))
         if kw is None or kl is None or kw == kl:
@@ -1024,6 +1034,16 @@ def _season_sample_match_cards(season_df, code, season, round, no, kind, fav_cod
         db_home_dog = cKW > cKL
         db_pl = cKHW.where(db_home_dog, cKHL)
         cond = valid & (db_home_dog == home_dog) & (db_pl == pl_odds)
+    elif kind == "k_wl":  # engine.get_samples_fast의 K-WL/TK-WL 분기 — 방향 무관, 홈·원정 둘 다 일치
+        kw, kl = _pos(row.get("KW")), _pos(row.get("KL"))
+        if kw is None or kl is None:
+            return {"total": 0, "matches": []}
+        cond = (cKW == kw) & (cKL == kl)
+    else:  # 'f_wl' — engine.get_samples_fast의 F-WL/TF-WL 분기
+        fw, fl = _pos(row.get("FW")), _pos(row.get("FL"))
+        if fw is None or fl is None:
+            return {"total": 0, "matches": []}
+        cond = (cFW == fw) & (cFL == fl)
 
     if "Source_League" in season_df.columns:
         self_mask = (
@@ -1062,6 +1082,7 @@ def _season_sample_match_cards(season_df, code, season, round, no, kind, fav_cod
             "ht": r.get("HT"), "hs": r.get("HS"), "at": r.get("AT"), "as_": r.get("AS"), "rt": r.get("RT"),
             "kw": r.get("KW"), "kd": r.get("KD"), "kl": r.get("KL"),
             "khw": r.get("KHW"), "khd": r.get("KHD"), "khl": r.get("KHL"),
+            "fw": r.get("FW"), "fd": r.get("FD"), "fl": r.get("FL"),
         })
     return {"total": total, "matches": DATA.df_to_records(pd.DataFrame(matches))}
 

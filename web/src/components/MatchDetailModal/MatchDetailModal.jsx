@@ -990,27 +990,9 @@ function seasonSampleCells(vals) {
   )
 }
 
-function SeasonSampleTable({ row, code, scope }) {
-  // undefined=불러오는 중 · null=실패(또는 아직 값 없음) · {정,플}=성공.
-  const [seasonCounts, setSeasonCounts] = useState(undefined)
-
-  useEffect(() => {
-    let cancelled = false
-    setSeasonCounts(undefined)
-    const params = new URLSearchParams({ scope, season: String(row.S ?? ''), round: String(row.R ?? '') })
-    if (row.No !== undefined && row.No !== null && row.No !== '') params.set('no', String(row.No))
-    api.get(`/api/leagues/${code}/season_sample?${params.toString()}`)
-      .then((res) => {
-        if (!cancelled) setSeasonCounts(res)
-      })
-      .catch(() => {
-        if (!cancelled) setSeasonCounts(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [code, scope, row.S, row.R, row.No])
-
+function SeasonSampleTable({ row, seasonCounts }) {
+  // seasonCounts: undefined=불러오는 중 · null=실패 · {정,플,...}=성공(부모 MatchDetailModal이
+  // /season_sample을 한 번만 불러 이 표와 SeasonWlTable에 같이 내려준다, 2026-09-13).
   const favCode = seasonFavCode(row)
   const favTotalCode = favCode === 'K-W' ? 'TK-W' : favCode === 'K-L' ? 'TK-L' : null
 
@@ -1062,6 +1044,62 @@ function SeasonSampleTable({ row, code, scope }) {
   )
 }
 
+// ── 승+패 시즌표 — 정배·플핸 시즌표 바로 아래, 완전히 같은 구조·스타일(2026-09-13
+// 사용자 지정). 국)승+패(K-WL)·해)승+패(F-WL)는 정배 방향과 무관하게 "홈·원정 배당이
+// 둘 다 같은" 경기를 찾는 이미 저장된 지표라 favCode 판단이 없다 — 그 점만 빼면
+// SeasonSampleTable과 완전히 같은 모양(통합/리그/시즌 + 카드).
+function SeasonWlTable({ row, seasonCounts }) {
+  // '국)승+패'는 '국)정배'보다 한 글자 길어(승+패=3자) 같은 60px 칸에서 줄바꿈이 어색하게
+  // 걸린다 — 억지로 한 줄에 우겨넣는 대신 '국)' 다음에 직접 줄을 바꾼다(2026-09-13
+  // 사용자 지정 — "국) 한 칸 내리고 승+패 이렇게 처리해줘").
+  function group(label, leagueCode, totalCode, seasonKey) {
+    const prefix = label.slice(0, 2)   // '국)' 또는 '해)'
+    const rest = label.slice(2)        // '승+패'
+    const rows = [
+      ['통합', seasonCountsOf(row, totalCode)],
+      ['리그', seasonCountsOf(row, leagueCode)],
+      ['시즌', seasonCounts === undefined ? undefined : (seasonCounts?.[seasonKey] ?? null)],
+    ]
+    return rows.map(([sub, vals], i) => (
+      <tr key={`${label}-${sub}`}>
+        {i === 0 && (
+          <td className="row-label season-sample-group" rowSpan={rows.length}>
+            {prefix}
+            <br />
+            {rest}
+          </td>
+        )}
+        <td className="row-label season-sample-sub">{sub}</td>
+        {seasonSampleCells(vals)}
+      </tr>
+    ))
+  }
+
+  return (
+    <div className="season-sample-wrap">
+      <table className="detail-table season-sample-table">
+        <thead>
+          <tr>
+            <th className="row-label" colSpan={2}>구분</th>
+            <th className="col-hs">핸승</th>
+            <th className="col-hm">핸무</th>
+            <th className="col-mu">무</th>
+            <th className="col-yk">역</th>
+          </tr>
+        </thead>
+        <tbody>
+          {group('국)승+패', 'K-WL', 'TK-WL', '국승패')}
+          {group('해)승+패', 'F-WL', 'TF-WL', '해승패')}
+        </tbody>
+      </table>
+      <div className="season-sample-cardcols">
+        <SeasonSampleCardGroup kind="k_wl" data={seasonCounts === undefined ? undefined : seasonCounts?.국승패_경기} />
+        <SeasonSampleCardGroup kind="f_wl" data={seasonCounts === undefined ? undefined : seasonCounts?.해승패_경기} />
+      </div>
+    </div>
+  )
+}
+
 // data: undefined(불러오는 중) · null/없음(재료 부족) · {total, matches}(성공, matches는
 // 최신순 최대 3건 — 그 이상은 서버가 아예 안 돌려준다, 2026-09-13 사용자 지정).
 function SeasonSampleCardGroup({ kind, favCode, data }) {
@@ -1103,10 +1141,23 @@ function SeasonSampleCard({ m, kind, favCode }) {
   const rowKl = numOrNull(m.kl)
   const oddsKnown = rowKw !== null && rowKl !== null
   const homeDog = oddsKnown && rowKw > rowKl
-  const hlKw = kind === 'fav' && favCode === 'K-W'
-  const hlKl = kind === 'fav' && favCode === 'K-L'
+  // 승+패(k_wl/f_wl)는 방향 판단이 없다 — 홈·원정 배당 둘 다 같아야 표본에 들어오므로
+  // 두 칸을 같이 강조한다(2026-09-13 추가, SeasonWlTable 주석 참고).
+  const hlKw = (kind === 'fav' && favCode === 'K-W') || kind === 'k_wl'
+  const hlKl = (kind === 'fav' && favCode === 'K-L') || kind === 'k_wl'
   const hlKhw = kind === 'pl' && homeDog
   const hlKhl = kind === 'pl' && oddsKnown && !homeDog
+  const hlFw = kind === 'f_wl'
+  const hlFl = kind === 'f_wl'
+  // 정배·플핸 카드는 둘째 줄에 핸디(khw/khd/khl)를, 승+패 카드는 그 자리에 해외
+  // 배당(fw/fd/fl)을 보여준다 — 국)승+패/해)승+패 둘 다 해외 배당을 참고로 같이
+  // 보여주고, 해)승+패일 때만 그 칸을 강조한다.
+  const isWl = kind === 'k_wl' || kind === 'f_wl'
+  // 어느 시장인지 숫자 앞에 바로 붙인다(2026-09-13 사용자 지정 — "그냥 숫자 바로
+  // 앞에 넣어줘"). 승+패 카드는 국내/해외 배당 두 줄이라 국)/해), 정배·플핸 카드는
+  // 국내 일반/핸디 배당 두 줄이라 일)/핸).
+  const row1Prefix = isWl ? '국)' : '일)'
+  const row2Prefix = isWl ? '해)' : '핸)'
 
   return (
     <div className="season-sample-card">
@@ -1128,15 +1179,32 @@ function SeasonSampleCard({ m, kind, favCode }) {
         <span className="season-sample-card-at">{m.at}</span>
       </div>
       <div className="season-sample-card-row">
-        <span className={hl(hlKw)}>{fmt(m.kw)}</span>
+        <span className={hl(hlKw)}>
+          <span className="season-sample-card-prefix">{row1Prefix}</span>
+          {fmt(m.kw)}
+        </span>
         <span>{fmt(m.kd)}</span>
         <span className={hl(hlKl)}>{fmt(m.kl)}</span>
       </div>
-      <div className="season-sample-card-row">
-        <span className={hl(hlKhw)}>{fmt(m.khw)}</span>
-        <span>{fmt(m.khd)}</span>
-        <span className={hl(hlKhl)}>{fmt(m.khl)}</span>
-      </div>
+      {isWl ? (
+        <div className="season-sample-card-row">
+          <span className={hl(hlFw)}>
+            <span className="season-sample-card-prefix">{row2Prefix}</span>
+            {fmt(m.fw)}
+          </span>
+          <span>{fmt(m.fd)}</span>
+          <span className={hl(hlFl)}>{fmt(m.fl)}</span>
+        </div>
+      ) : (
+        <div className="season-sample-card-row">
+          <span className={hl(hlKhw)}>
+            <span className="season-sample-card-prefix">{row2Prefix}</span>
+            {fmt(m.khw)}
+          </span>
+          <span>{fmt(m.khd)}</span>
+          <span className={hl(hlKhl)}>{fmt(m.khl)}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -4027,6 +4095,25 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, weekRank,
     }
   }, [code, scope, matchKey, archiveTick])
 
+  // 정배·플핸 시즌표 + 승+패 시즌표가 같은 응답(국승패/해승패도 한 번에 같이 옴)을
+  // 나눠 쓴다 — 여기서 한 번만 불러와 두 표에 내려준다(2026-09-13, 표를 하나 더
+  // 추가하면서 같은 API를 두 번 부르지 않게 끌어올렸다). undefined=불러오는 중,
+  // null=실패.
+  const [seasonSample, setSeasonSample] = useState(undefined)
+  useEffect(() => {
+    let alive = true
+    setSeasonSample(undefined)
+    const r = rowRef.current
+    const params = new URLSearchParams({ scope, season: String(r.S ?? ''), round: String(r.R ?? '') })
+    if (r.No !== undefined && r.No !== null && r.No !== '') params.set('no', String(r.No))
+    api.get(`/api/leagues/${code}/season_sample?${params.toString()}`)
+      .then((res) => alive && setSeasonSample(res))
+      .catch(() => alive && setSeasonSample(null))
+    return () => {
+      alive = false
+    }
+  }, [code, scope, matchKey])
+
   // 지표별 표본은 그 경기 데이터양대로 자연스러운 높이 그대로 두고, 상대전적(히스토리가
   // 많을수록 길어짐) 쪽의 아래 테두리를 지표별 표본의 아래 테두리와 맞춘다.
   // 단순히 "지표별 표본 자기 높이"를 상대전적 max-height로 그대로 쓰면 안 된다 — 왼쪽
@@ -4178,7 +4265,17 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, weekRank,
             2단 그리드 바깥(PickBand와 같은 레벨)에 둬야 폭이 팝업 전체를 채운다. */}
         <section className="detail-section">
           <h3>정배·플핸 시즌표</h3>
-          <SeasonSampleTable row={row} code={code} scope={scope} />
+          <SeasonSampleTable row={row} seasonCounts={seasonSample} />
+        </section>
+
+        {/* 승+패 시즌표 — 정배·플핸 시즌표 바로 아래, 완전히 같은 스타일(2026-09-13
+            사용자 지정 — "스타일은 바로위 정배플핸 시즌표와 완전동일하게"). 국)정배/
+            국)플핸과 달리 정배 방향과 무관하게 홈·원정 배당이 '둘 다' 같은 경기를
+            찾는 지표(K-WL/F-WL, 이미 저장된 26개 지표 중 하나)라 fav_code 같은 방향
+            판단이 필요 없다. 같은 /season_sample 응답을 그대로 재사용한다. */}
+        <section className="detail-section">
+          <h3>승+패 시즌표</h3>
+          <SeasonWlTable row={row} seasonCounts={seasonSample} />
         </section>
 
         <div className="modal-columns" ref={columnsRef}>
