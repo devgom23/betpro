@@ -1100,6 +1100,15 @@
   font-size: 11px;
 }
 
+/* 카드가 이제 통합 전체에서 뽑혀 지난 시즌 경기도 섞여 나온다 — 지금 보는 경기와
+   같은(이번) 시즌인 카드만 노란 테두리로 구분한다(2026-09-13 사용자 지정). RtBadge의
+   matched 테두리와 같은 톤(--chip-yellow-fg)을 재사용한다. */
+.season-sample-card-thisseason {
+  border-color: var(--chip-yellow-fg);
+  border-width: 2px;
+  padding: 5px;
+}
+
 .season-sample-card-row {
   display: flex;
   align-items: center;

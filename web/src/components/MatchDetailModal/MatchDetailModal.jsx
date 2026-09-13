@@ -1037,8 +1037,8 @@ function SeasonSampleTable({ row, seasonCounts }) {
         </tbody>
       </table>
       <div className="season-sample-cardcols">
-        <SeasonSampleCardGroup kind="fav" favCode={favCode} data={seasonCounts === undefined ? undefined : seasonCounts?.정_경기} />
-        <SeasonSampleCardGroup kind="pl" data={seasonCounts === undefined ? undefined : seasonCounts?.플_경기} />
+        <SeasonSampleCardGroup kind="fav" favCode={favCode} season={row.S} data={seasonCounts === undefined ? undefined : seasonCounts?.정_경기} />
+        <SeasonSampleCardGroup kind="pl" season={row.S} data={seasonCounts === undefined ? undefined : seasonCounts?.플_경기} />
       </div>
     </div>
   )
@@ -1093,8 +1093,8 @@ function SeasonWlTable({ row, seasonCounts }) {
         </tbody>
       </table>
       <div className="season-sample-cardcols">
-        <SeasonSampleCardGroup kind="k_wl" data={seasonCounts === undefined ? undefined : seasonCounts?.국승패_경기} />
-        <SeasonSampleCardGroup kind="f_wl" data={seasonCounts === undefined ? undefined : seasonCounts?.해승패_경기} />
+        <SeasonSampleCardGroup kind="k_wl" season={row.S} data={seasonCounts === undefined ? undefined : seasonCounts?.국승패_경기} />
+        <SeasonSampleCardGroup kind="f_wl" season={row.S} data={seasonCounts === undefined ? undefined : seasonCounts?.해승패_경기} />
       </div>
     </div>
   )
@@ -1102,7 +1102,7 @@ function SeasonWlTable({ row, seasonCounts }) {
 
 // data: undefined(불러오는 중) · null/없음(재료 부족) · {total, matches}(성공, matches는
 // 최신순 최대 3건 — 그 이상은 서버가 아예 안 돌려준다, 2026-09-13 사용자 지정).
-function SeasonSampleCardGroup({ kind, favCode, data }) {
+function SeasonSampleCardGroup({ kind, favCode, season, data }) {
   const total = data?.total ?? 0
   const matches = data?.matches ?? []
   return (
@@ -1114,7 +1114,7 @@ function SeasonSampleCardGroup({ kind, favCode, data }) {
       ) : (
         <div className="season-sample-cards">
           {matches.map((m, i) => (
-            <SeasonSampleCard key={`${m.league}-${m.s}-${m.r}-${i}`} m={m} kind={kind} favCode={favCode} />
+            <SeasonSampleCard key={`${m.league}-${m.s}-${m.r}-${i}`} m={m} kind={kind} favCode={favCode} season={season} />
           ))}
         </div>
       )}
@@ -1122,7 +1122,7 @@ function SeasonSampleCardGroup({ kind, favCode, data }) {
   )
 }
 
-function SeasonSampleCard({ m, kind, favCode }) {
+function SeasonSampleCard({ m, kind, favCode, season }) {
   const fmt = (v) => {
     const n = numOrNull(v)
     return n === null ? '-' : n.toFixed(2)
@@ -1158,9 +1158,13 @@ function SeasonSampleCard({ m, kind, favCode }) {
   // 국내 일반/핸디 배당 두 줄이라 일)/핸).
   const row1Prefix = isWl ? '국)' : '일)'
   const row2Prefix = isWl ? '해)' : '핸)'
+  // 통합 표본 중에서 뽑다 보니(2026-09-13) 지난 시즌 경기도 같이 나올 수 있다 —
+  // 지금 보는 경기와 같은 시즌(이번 시즌)인 카드만 테두리를 노란색으로 강조해서
+  // 한눈에 구분되게 한다(2026-09-13 사용자 지정).
+  const isCurrentSeason = season !== undefined && String(m.s) === String(season)
 
   return (
-    <div className="season-sample-card">
+    <div className={`season-sample-card${isCurrentSeason ? ' season-sample-card-thisseason' : ''}`}>
       <div className="season-sample-card-row season-sample-card-info">
         <span className="season-sample-card-info-meta">{LEAGUE_LABELS_SHORT[m.league] || m.league} · {m.r} · {dateShort}</span>
         {hasScore && <RtBadge label={rtLabel(m.rt)} />}
