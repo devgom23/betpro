@@ -18,6 +18,10 @@ import {
   marketSetMoved, RISK_FIELD_MARKET, DIRECTION_SCOPE_MARKET, ODDS_SCOPE_MARKET,
 } from '../../utils/verdictCalc'
 import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
+import {
+  archiveTargetText, archiveSpanText, archiveSourceText, archiveStatsText, archiveStatsLines, archiveDateText,
+} from '../../utils/archiveTags'
+import ArchiveTagModal from '../ArchiveTagModal/ArchiveTagModal'
 import './MatchDetailModal.css'
 
 
@@ -686,14 +690,42 @@ function plhan85Chips(row, verdict) {
   ]
 }
 
-function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds, xg }) {
+// 아카이브 뱃지 — 내가 이 팀·맞대결에 달아 둔 태그(📌). 다른 뱃지는 데이터가 만든 신호지만
+// 이건 내가 직접 남긴 경고라 경기지표 맨 앞에 둔다(2026-09-13). 판정·별점에는 반영 안 한다.
+// '이후 성적'은 서버가 이 경기 직전까지만 센 값이다(/api/archive/for_match).
+function archiveChips(tags) {
+  if (!tags?.length) return []
+  return tags.map((t) => {
+    const title = [
+      `내가 단 태그 · ${archiveSpanText(t)}`,
+      t.memo ? `메모: ${t.memo}` : null,
+      `근거 경기: ${archiveSourceText(t)} (등록 ${archiveDateText(t.created_dt)})`,
+      `태그 이후(이 경기 직전까지): ${archiveStatsText(t.stats)}`,
+      ...archiveStatsLines(t.stats),
+      '※ 표시만 합니다 — 판정 %·별점에는 반영하지 않습니다. 해제는 📌 아카이브 버튼이나 아카이브 탭에서.',
+    ].filter(Boolean).join('\n')
+    return (
+      <MatchChip
+        key={`archive-${t.id}`}
+        label={t.kind === 'matchup' ? `📌 ${archiveTargetText(t)}` : `📌 ${t.team_a})`}
+        tone="purple"
+        title={title}
+      >
+        {t.tag}
+      </MatchChip>
+    )
+  })
+}
+
+function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds, xg, archiveTags }) {
   // 똥배 → 국/해 엇갈림 → 전적 → 무 → 동배당을 세로로 쌓는다.
   // (배당차 뱃지는 2026-09-02에 옆 칸 표로 뺐다가 2026-09-05에 아예 삭제했다 —
   //  정배배당을 다시 적은 값이라 확률 지표와 중복이었다. DirectionScopeTable 주석 참고.)
   // 플핸85는 맨 앞에 둔다 — 다른 뱃지가 '이 경기가 어떤 경기인가'를 말하는 데 비해
   // 이것만 "그래서 어떻게 하라"에 가장 가까운 결론이라 눈에 먼저 들어와야 한다.
   // 시즌막판(정무 주의)도 '어떻게 하라'에 가까워 플핸85 바로 뒤에 둔다.
-  const chips = [...plhan85Chips(row, verdict), ...seasonStakeChips(row),
+  // 아카이브(📌 내가 단 태그)는 그보다도 앞 — archiveChips 주석 참고.
+  const chips = [...archiveChips(archiveTags), ...plhan85Chips(row, verdict), ...seasonStakeChips(row),
     ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
     ...favFlipChips(row),
     ...xgChips(row, xg),
@@ -3845,7 +3877,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank }) {
+function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank, archiveTags }) {
   // '경기지표'의 무·전적 뱃지와 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -3882,6 +3914,7 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg, w
                   pick={pick}
                   sameOdds={sameOdds}
                   xg={xg}
+                  archiveTags={archiveTags}
                 />
               </div>
               {/* 방향성·배당 두 표를 한 덩어리로 묶고, 그 아래에 구분선 + 시스템
@@ -3974,6 +4007,26 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, weekRank,
     }
   }, [code, scope, matchKey])
 
+  // 아카이브 — 이 경기에 걸리는 내 태그(📌). 태그 팝업에서 저장·해제하면 archiveTick을
+  // 올려 다시 불러온다(경기지표 뱃지와 팝업의 '이 경기에 걸린 태그' 목록이 같이 갱신).
+  const [archiveTags, setArchiveTags] = useState([])
+  const [archiveTick, setArchiveTick] = useState(0)
+  const [showArchive, setShowArchive] = useState(false)
+  useEffect(() => {
+    let alive = true
+    const r = rowRef.current
+    const params = new URLSearchParams({
+      scope, code, season: String(r.S ?? ''), round: String(r.R ?? ''), no: String(r.No ?? ''),
+      home: String(r.HT ?? ''), away: String(r.AT ?? ''),
+    })
+    api.get(`/api/archive/for_match?${params.toString()}`)
+      .then((res) => alive && setArchiveTags(res.tags || []))
+      .catch(() => alive && setArchiveTags([]))
+    return () => {
+      alive = false
+    }
+  }, [code, scope, matchKey, archiveTick])
+
   // 지표별 표본은 그 경기 데이터양대로 자연스러운 높이 그대로 두고, 상대전적(히스토리가
   // 많을수록 길어짐) 쪽의 아래 테두리를 지표별 표본의 아래 테두리와 맞춘다.
   // 단순히 "지표별 표본 자기 높이"를 상대전적 max-height로 그대로 쓰면 안 된다 — 왼쪽
@@ -4042,17 +4095,24 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, weekRank,
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="detail-header-actions">
           <button
-            className="detail-download-btn"
+            className="detail-header-btn"
+            onClick={() => setShowArchive(true)}
+            title="이 경기의 팀·맞대결에 내 판단 태그를 단다 — 다음에 또 나오면 경기지표에 뜬다"
+          >
+            📌 아카이브
+          </button>
+          <button
+            className="detail-header-btn"
             onClick={handleDownload}
             disabled={downloading}
             title="지금 화면 그대로 엑셀로 받기"
           >
             {downloading ? '다운로드 중...' : '⬇ 엑셀 다운로드'}
           </button>
-          <button className="modal-close" onClick={onClose} aria-label="닫기">
-            ✕
-          </button>
         </div>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">
+          ✕
+        </button>
         {downloadError && <p className="detail-download-error">{downloadError}</p>}
 
         {/* 2026-09-12: 날짜/별표/팀/결과 배지를 한 줄로 합쳤다(예전엔 제목줄+메타줄 2줄).
@@ -4108,6 +4168,7 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, weekRank,
           h2hLoading={!pickData && !pickError}
           xg={seasonXg}
           weekRank={weekRank}
+          archiveTags={archiveTags}
         />
 
         {/* 정배·플핸 시즌표 — 배당(PickBand) 칸 안에 넣었다가(2026-09-12) 확률 지표·
@@ -4264,6 +4325,16 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, weekRank,
       </div>
     </div>
     {showSeasonLegend && <SeasonRecordLegend onClose={() => setShowSeasonLegend(false)} />}
+    {showArchive && (
+      <ArchiveTagModal
+        row={row}
+        code={code}
+        scope={scope}
+        tags={archiveTags}
+        onClose={() => setShowArchive(false)}
+        onChanged={() => setArchiveTick((n) => n + 1)}
+      />
+    )}
     </>
   )
 }

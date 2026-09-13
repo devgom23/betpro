@@ -1,0 +1,187 @@
+/* 아카이브 탭 — 베팅내역(.bh-*)과 같은 톤의 표 화면. */
+.ar-page {
+  padding: 16px;
+}
+
+.ar-title {
+  margin: 0 0 4px;
+}
+
+.ar-desc {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.ar-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ar-toolbar select {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.ar-kind-tabs {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ar-kind-tabs button {
+  padding: 7px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ar-kind-tabs button + button {
+  border-left: 1px solid var(--border-strong);
+}
+
+.ar-kind-tabs button.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.ar-count {
+  margin-left: 4px;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.ar-inactive-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.ar-error {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--danger-text);
+}
+
+.ar-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.ar-table-wrap {
+  overflow-x: auto;
+}
+
+.ar-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.ar-table th,
+.ar-table td {
+  border: 1px solid var(--border-strong);
+  padding: 6px 10px;
+  text-align: center;
+}
+
+.ar-table th {
+  background: var(--bg-surface-2);
+  font-weight: 600;
+}
+
+.ar-table select,
+.ar-table input {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.ar-table td.ar-target {
+  font-weight: 700;
+  color: var(--chip-purple-fg);
+}
+
+.ar-table td.ar-memo-cell input {
+  width: 100%;
+  min-width: 160px;
+}
+
+.ar-table td.ar-stats {
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+.ar-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ar-link:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.ar-state,
+.ar-delete {
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ar-state-on {
+  border-color: transparent;
+  background: var(--chip-purple-bg);
+  color: var(--chip-purple-fg);
+  font-weight: 700;
+}
+
+.ar-state-off {
+  color: var(--text-muted);
+}
+
+.ar-delete {
+  color: var(--danger-text);
+}
+
+.ar-delete:hover,
+.ar-state-off:hover {
+  background: var(--border);
+}
+
+/* 해제된 태그는 흐리게 — 목록에는 남되 경기지표에는 안 뜨는 상태라는 표시. */
+.ar-table tr.ar-row-inactive td {
+  color: var(--text-muted);
+}
+
+.ar-table tr.ar-row-inactive td.ar-target {
+  color: var(--text-muted);
+}

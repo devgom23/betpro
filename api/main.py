@@ -85,6 +85,7 @@ import scoreman_odds as SCOREMAN  # noqa: E402
 import final_indicators as FINALIND  # noqa: E402
 import my_picks as MYPICKS     # noqa: E402
 import bet_slips as BETSLIPS   # noqa: E402
+import archive as ARCHIVE      # noqa: E402
 import pick_ai as PICKAI       # noqa: E402
 import standings               # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
@@ -1766,6 +1767,197 @@ def head_to_head(scope: str = PATHS.SCOPE_MASTER,
     db = _resolve_scope_db(scope, user)
     df = _h2h_source_df(db, scope, code)
     return _head_to_head_calc(df, home, away, cross=cross, limit=limit)
+
+
+# ─────────────────────────── 아카이브(팀·맞대결 태그) ───────────────────────────
+# 저장은 archive.py, 스키마 설명은 betpro_paths._SCHEMA_ARCHIVE_TAGS. 판정·집계에는 안
+# 쓰고 보여주기만 한다(시즌막판 뱃지와 같은 원칙).
+def _archive_source_df(db: str, scope: str, code: str) -> pd.DataFrame:
+    """태그가 걸린 리그 한 곳의 경기 목록(상대전적용 슬림 표 — 스코어·결과만 있으면 된다).
+    공식 데이터는 통합 슬림 표에서 그 리그만, 내 데이터는 그 리그 표 그대로."""
+    if scope != PATHS.SCOPE_USER:
+        df = DATA.load_total_h2h_df(db)
+        if df.empty or "Source_League" not in df.columns:
+            return pd.DataFrame()
+        return df[df["Source_League"] == code]
+    return DATA.load_league_h2h_df(db, code)
+
+
+def _archive_tag_base_key(t: dict) -> tuple:
+    return standings.chrono_key(t.get("S"), t.get("R"), t.get("No"))
+
+
+def _archive_after_stats(df: pd.DataFrame, t: dict, upto: tuple | None = None, limit: int = 10) -> dict:
+    """태그를 단 근거 경기 '다음부터'(upto를 주면 그 경기 직전까지만) 태그 대상이 치른
+    경기의 승/무/패. 팀 태그는 그 팀 기준, 맞대결 태그는 주어 팀(team_a)이 상대(team_b)를
+    상대로 거둔 결과다. span='season'이면 태그를 단 시즌 안에서만 센다."""
+    out = {"n": 0, "w": 0, "d": 0, "l": 0, "matches": []}
+    need = {"S", "R", "No", "HT", "AT", "HS", "AS"}
+    if df is None or df.empty or not need.issubset(df.columns):
+        return out
+    a = str(t.get("team_a") or "").strip()
+    b = str(t.get("team_b") or "").strip()
+    h = df["HT"].astype(str).str.strip()
+    aw = df["AT"].astype(str).str.strip()
+    if t.get("kind") == "matchup":
+        mask = ((h == a) & (aw == b)) | ((h == b) & (aw == a))
+    else:
+        mask = (h == a) | (aw == a)
+    if t.get("span") == "season":
+        mask &= df["S"].astype(str) == str(t.get("S"))
+    m = df[mask]
+    if m.empty:
+        return out
+    base = _archive_tag_base_key(t)
+    keys = [standings.chrono_key(s, r, n) for s, r, n in zip(m["S"], m["R"], m["No"])]
+    keep = [k > base and (upto is None or k < upto) for k in keys]
+    m = m[keep]
+    hs = pd.to_numeric(m["HS"], errors="coerce")
+    as_ = pd.to_numeric(m["AS"], errors="coerce")
+    m = m[hs.notna() & as_.notna()]
+    if m.empty:
+        return out
+    rows = []
+    for _, r in m.iterrows():
+        home = str(r["HT"]).strip() == a
+        mine, theirs = (r["HS"], r["AS"]) if home else (r["AS"], r["HS"])
+        mine, theirs = float(mine), float(theirs)
+        letter = "W" if mine > theirs else "L" if mine < theirs else "D"
+        out[letter.lower()] += 1
+        rows.append({
+            "key": standings.chrono_key(r["S"], r["R"], r["No"]),
+            "S": r["S"], "R": r["R"], "DT": r.get("DT"),
+            "HT": r["HT"], "HS": _score_int(r["HS"]), "AS": _score_int(r["AS"]), "AT": r["AT"],
+            "RT_label": _rt_label(r.get("RT")), "letter": letter,
+        })
+    rows.sort(key=lambda x: x["key"], reverse=True)
+    out["n"] = len(rows)
+    out["matches"] = [{k: v for k, v in x.items() if k != "key"} for x in rows[:limit]]
+    return out
+
+
+def _archive_labels(user: dict) -> dict:
+    """(scope, code) → 리그 이름. 공식은 6대리그 고정 이름, 내 데이터는 내가 만든 리그 이름."""
+    labels = {(PATHS.SCOPE_MASTER, lg): PATHS.LEAGUE_LABEL[lg] for lg in PATHS.LEAGUES}
+    for lg in USERLG.list_leagues(_user_db_of(user)):
+        labels[(PATHS.SCOPE_USER, lg["code"])] = lg["label"]
+    return labels
+
+
+class ArchiveTagBody(BaseModel):
+    kind: str
+    scope: str
+    code: str
+    team_a: str
+    team_b: Optional[str] = None
+    tag: str
+    memo: Optional[str] = None
+    span: str = "season"
+    S: Union[str, int, float]
+    R: Union[str, int, float, None] = None
+    No: Union[str, int, float, None] = None
+    HT: str = ""
+    AT: str = ""
+
+
+class ArchiveTagUpdateBody(BaseModel):
+    tag: Optional[str] = None
+    memo: Optional[str] = None
+    span: Optional[str] = None
+    active: Optional[bool] = None
+
+
+@app.get("/api/archive/tags")
+def archive_tags(user: dict = Depends(get_current_user)):
+    """아카이브 탭 — 이 계정의 태그 전부(해제된 것 포함)와 태그 이후 성적."""
+    tags = ARCHIVE.list_tags(user["username"])
+    labels = _archive_labels(user)
+    sources: dict = {}
+    for t in tags:
+        k = (t["scope"], t["code"])
+        t["league_label"] = labels.get(k, t["code"])
+        if k not in sources:
+            try:
+                sources[k] = _archive_source_df(_resolve_scope_db(t["scope"], user), t["scope"], t["code"])
+            except Exception:
+                sources[k] = pd.DataFrame()
+        t["stats"] = _archive_after_stats(sources[k], t)
+    return {"tags": tags}
+
+
+@app.post("/api/archive/tags")
+def archive_tag_create(body: ArchiveTagBody, user: dict = Depends(get_current_user)):
+    _check_league_for(body.code, body.scope, user)
+    if body.kind not in ARCHIVE.KINDS:
+        raise HTTPException(status_code=400, detail="태그 대상(팀/맞대결)이 올바르지 않습니다.")
+    if body.span not in ARCHIVE.SPANS:
+        raise HTTPException(status_code=400, detail="범위(시즌/전체)가 올바르지 않습니다.")
+    team_a = body.team_a.strip()
+    team_b = (body.team_b or "").strip()
+    ht, at = body.HT.strip(), body.AT.strip()
+    if not body.tag.strip():
+        raise HTTPException(status_code=400, detail="태그를 골라주세요.")
+    if team_a not in (ht, at):
+        raise HTTPException(status_code=400, detail="이 경기에 나오는 팀에만 태그를 달 수 있습니다.")
+    if body.kind == "matchup" and (team_b not in (ht, at) or team_b == team_a):
+        raise HTTPException(status_code=400, detail="맞대결 태그는 이 경기의 두 팀이어야 합니다.")
+    tag_id = ARCHIVE.create_tag(
+        user["username"], kind=body.kind, scope=body.scope, code=body.code,
+        team_a=team_a, team_b=team_b if body.kind == "matchup" else None,
+        tag=body.tag, memo=body.memo, span=body.span,
+        s=body.S, r=body.R, no=body.No, ht=ht, at=at,
+    )
+    return {"ok": True, "id": tag_id}
+
+
+@app.post("/api/archive/tags/{tag_id}/update")
+def archive_tag_update(tag_id: int, body: ArchiveTagUpdateBody, user: dict = Depends(get_current_user)):
+    if body.span is not None and body.span not in ARCHIVE.SPANS:
+        raise HTTPException(status_code=400, detail="범위(시즌/전체)가 올바르지 않습니다.")
+    if body.tag is not None and not body.tag.strip():
+        raise HTTPException(status_code=400, detail="태그를 비울 수는 없습니다.")
+    if not ARCHIVE.update_tag(user["username"], tag_id, body.model_dump()):
+        raise HTTPException(status_code=404, detail="태그를 찾을 수 없습니다.")
+    return {"ok": True}
+
+
+@app.post("/api/archive/tags/{tag_id}/delete")
+def archive_tag_delete(tag_id: int, user: dict = Depends(get_current_user)):
+    if not ARCHIVE.delete_tag(user["username"], tag_id):
+        raise HTTPException(status_code=404, detail="태그를 찾을 수 없습니다.")
+    return {"ok": True}
+
+
+@app.get("/api/archive/for_match")
+def archive_for_match(scope: str = PATHS.SCOPE_MASTER, code: str = "",
+                      season: str = "", round: str = "",   # noqa: A002
+                      no: str = "", home: str = "", away: str = "",
+                      user: dict = Depends(get_current_user)):
+    """상세보기 경기지표 뱃지용 — 이 경기에 걸리는 켜진 태그만. 태그를 단 근거 경기
+    이후(근거 경기 자신 포함)에만 뜬다. '태그 이후 성적'은 이 경기 직전까지만 센다 —
+    지난 경기를 다시 열어봤을 때 그 뒤 결과가 섞여 들어가지 않게."""
+    _check_league_for(code, scope, user)
+    ht, at = home.strip(), away.strip()
+    key = standings.chrono_key(season, round, no)
+    hits = []
+    for t in ARCHIVE.list_tags(user["username"]):
+        if not t["active"] or t["scope"] != scope or t["code"] != code:
+            continue
+        if t["span"] == "season" and str(t["S"]) != str(season):
+            continue
+        if key < _archive_tag_base_key(t):
+            continue
+        if t["kind"] == "matchup":
+            if {t["team_a"], t["team_b"]} != {ht, at}:
+                continue
+        elif t["team_a"] not in (ht, at):
+            continue
+        hits.append(t)
+    if hits:
+        df = _archive_source_df(_resolve_scope_db(scope, user), scope, code)
+        for t in hits:
+            t["stats"] = _archive_after_stats(df, t, upto=key, limit=5)
+    return {"tags": hits}
 
 
 class PickAiBody(BaseModel):

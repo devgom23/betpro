@@ -347,6 +347,33 @@ CREATE TABLE IF NOT EXISTS bet_slip_legs (
 )
 """
 
+# 아카이브 — 내가 팀·맞대결에 붙여 두는 판단 태그(2026-09-13). 그 팀/맞대결이 다시
+# 나오면 상세보기 경기지표에 뱃지로 뜬다. my_picks처럼 리그 표와 분리된 predlog.db에 둔다.
+#   kind   : 'team'(팀 하나 — team_a) | 'matchup'(맞대결 — team_a가 주어, team_b가 상대.
+#            "시타르가 아약스를 못 이긴다"면 a=시타르, b=아약스라 방향이 있다)
+#   span   : 'season'(태그를 단 시즌 안에서만) | 'all'(시즌 상관없이 계속)
+#   S/R/No/HT/AT : 태그를 달 때 보고 있던 '근거 경기' — 그 경기부터 뒤로만 뱃지가 뜨고,
+#            아카이브의 '태그 이후 성적'도 이 경기 다음부터 센다.
+#   active : 1=켜짐 / 0=해제(사용자가 직접 끈다 — 유효기간은 두지 않는다, 사용자 지정)
+_SCHEMA_ARCHIVE_TAGS = """
+CREATE TABLE IF NOT EXISTS archive_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    code TEXT NOT NULL,
+    team_a TEXT NOT NULL,
+    team_b TEXT,
+    tag TEXT NOT NULL,
+    memo TEXT,
+    span TEXT NOT NULL DEFAULT 'season',
+    S TEXT NOT NULL,
+    R TEXT, No TEXT, HT TEXT, AT TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_dt TEXT NOT NULL,
+    updated_dt TEXT
+)
+"""
+
 _SCHEMA_ACCESS_LOG = """
 CREATE TABLE IF NOT EXISTS access_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -439,6 +466,7 @@ def ensure_predlog_db(username: str) -> str:
             con.execute("ALTER TABLE bet_slip_legs ADD COLUMN odds REAL")
         if "scope" not in leg_cols:
             con.execute("ALTER TABLE bet_slip_legs ADD COLUMN scope TEXT")
+        con.execute(_SCHEMA_ARCHIVE_TAGS)
         con.commit()
     finally:
         con.close()

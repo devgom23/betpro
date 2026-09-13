@@ -12,6 +12,7 @@ import BetHistoryPage from './BetHistoryPage'
 import WeeklyPickPage from './WeeklyPickPage'
 import WeekListPage from './WeekListPage'
 import WeekTopPage from './WeekTopPage'
+import ArchivePage from './ArchivePage'
 import UserLeagueModal from '../components/UserLeagueModal/UserLeagueModal'
 import './MainPage.css'
 
@@ -111,6 +112,9 @@ export default function MainPage() {
           <button className={view === 'bet_history' ? 'active' : ''} onClick={() => setView('bet_history')}>
             베팅내역
           </button>
+          <button className={view === 'archive' ? 'active' : ''} onClick={() => setView('archive')}>
+            아카이브
+          </button>
         </div>
 
         <div className="top-bar-spacer" />
@@ -204,6 +208,7 @@ export default function MainPage() {
         {view === 'week_top20' && <WeekTopPage />}
         {view === 'weekly' && <WeeklyPickPage onGoBetHistory={() => setView('bet_history')} />}
         {view === 'bet_history' && <BetHistoryPage scope={scope} />}
+        {view === 'archive' && <ArchivePage />}
         {view === 'leagues' && <>
         {!isUser && activeTab === 'total' && <TotalDbPage scope={scope} />}
         {!isUser && activeTab === 'h2h' && <HeadToHeadPage scope={scope} />}

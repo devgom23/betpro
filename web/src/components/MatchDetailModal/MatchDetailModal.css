@@ -42,14 +42,19 @@
   background: var(--border);
 }
 
-/* 엑셀 다운로드 버튼 — 닫기(✕) 버튼 바로 왼쪽. .detail-header-actions 자체는 위치
-   지정을 하지 않는다(감싸는 용도일 뿐) — .modal-close가 다른 팝업과 공유하는
-   .modal-card 기준 absolute 좌표(top:14px/right:14px)를 그대로 써야 해서, 이 버튼도
-   같은 기준으로 그 왼쪽에 자리만 잡는다(30px + 8px 간격 = 52px). */
-.detail-download-btn {
+/* 닫기(✕) 왼쪽 버튼 묶음(📌 아카이브 · 엑셀 다운로드). .modal-close는 다른 팝업과
+   공유하는 .modal-card 기준 absolute 좌표(top:14px/right:14px)를 그대로 쓰고, 이 묶음은
+   그 왼쪽(30px + 8px 간격 = 52px)에 한 덩어리로 앉는다 — 버튼마다 따로 absolute를 주면
+   버튼이 늘 때마다 right 값을 손으로 다시 계산해야 해서 묶음 자체를 flex로 둔다. */
+.detail-header-actions {
   position: absolute;
   top: 14px;
   right: 52px;
+  display: flex;
+  gap: 8px;
+}
+
+.detail-header-btn {
   height: 30px;
   padding: 0 12px;
   border-radius: 6px;
@@ -61,11 +66,11 @@
   white-space: nowrap;
 }
 
-.detail-download-btn:hover:not(:disabled) {
+.detail-header-btn:hover:not(:disabled) {
   background: var(--border);
 }
 
-.detail-download-btn:disabled {
+.detail-header-btn:disabled {
   opacity: 0.6;
   cursor: default;
 }
@@ -90,10 +95,10 @@
   padding-right: 30px; /* 오른쪽 위 닫기(✕) 버튼과 안 겹치게 */
 }
 
-/* 이 팝업만 닫기 왼쪽에 다운로드 버튼까지 있어 더 넓게 비운다(다른 모달의
+/* 이 팝업만 닫기 왼쪽에 아카이브·다운로드 버튼까지 있어 더 넓게 비운다(다른 모달의
    .modal-title은 위 30px 그대로 — 여긴 이 클래스로만 덮어쓴다). */
 .detail-modal-title {
-  padding-right: 170px;
+  padding-right: 280px;
 }
 
 .modal-title .star-btn {

@@ -1,0 +1,118 @@
+/* 상세보기 위에 한 겹 더 뜨는 팝업이라 z-index를 상세보기(50)보다 높인다. */
+.modal-backdrop.archive-tag-back {
+  z-index: 60;
+}
+
+.modal-card.archive-tag-card {
+  max-width: 520px;
+  width: 100%;
+}
+
+.archive-tag-desc {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.archive-tag-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.archive-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.archive-tag-label {
+  flex: none;
+  width: 36px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.archive-tag-row select,
+.archive-tag-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.archive-tag-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.archive-tag-message {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.archive-tag-subtitle {
+  margin: 20px 0 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.archive-tag-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.archive-tag-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.archive-tag-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.archive-tag-chip {
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--chip-purple-bg);
+  color: var(--chip-purple-fg);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.archive-tag-meta {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.archive-tag-release {
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.archive-tag-release:hover {
+  background: var(--border);
+}
