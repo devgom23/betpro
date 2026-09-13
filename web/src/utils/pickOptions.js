@@ -9,7 +9,7 @@
 // (판정 규칙은 columnGroups.js의 PICK_VERDICT_MAP, 서버는 api/main.py의
 //  _MY_PICK_VERDICT_MAP — 둘은 같은 값을 내야 한다).
 export const PICK_OPTIONS = [
-  '대기', '플핸', '플핸무', '플핸승', '정', '정무', '정역', '핸승', '핸무', '무', '역', '무핸무',
+  '대기', '플핸', '플핸무', '플핸승', '정', '정무', '정역', '핸승', '핸무', '핸승핸무', '무', '역', '무핸무',
 ]
 
 // 배답픽 — 내픽과 선택지가 완전히 다른, 별도의 참고용 태그(MatchDetailModal.jsx
