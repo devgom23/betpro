@@ -798,6 +798,7 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
         row["MEMO_PRE"] = p["memo_pre"] if p else None
         row["REASON_TAG"] = p["reason_tag"] if p else None
         row["MY_ODDS_PICK"] = p["odds_pick"] if p else None
+        row["MY_ODDS_BET"] = p["odds_bet"] if p else None
         row["MY_BET"] = "P" if key in bet_keys else None
 
 
@@ -878,17 +879,18 @@ class MyPickBody(BaseModel):
     memo_pre: Optional[str] = None
     reason_tag: Optional[str] = None
     odds_pick: Optional[str] = None
+    odds_bet: Optional[str] = None
 
 
 @app.post("/api/leagues/{code}/my_picks")
 def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_user)):
-    """중요 별표/내픽/P태그/적중여부/메모(경기전·결과반성)/결과반성 태그/배답픽 저장 —
+    """중요 별표/내픽/P태그/적중여부/메모(경기전·결과반성)/결과반성 태그/배답픽/배답벳 저장 —
     계정 개인 기록이라 scope(공식/내 데이터)와 무관하게 본인만 본다."""
     MYPICKS.upsert_my_pick(
         user["username"], code, body.scope,
         body.S, body.R, body.No, body.HT, body.AT,
         body.starred, body.pick, body.hit, body.memo, body.p, body.reason_tag,
-        body.memo_pre, body.odds_pick,
+        body.memo_pre, body.odds_pick, body.odds_bet,
     )
     return {"ok": True}
 

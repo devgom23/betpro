@@ -5,7 +5,7 @@ import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { formatTime, formatDt, scoreClass, LEAGUE_LABELS_SHORT } from '../../utils/format'
 import { computeAutoVerdict, pickVerdictStyle } from '../LeagueTable/columnGroups'
-import { PICK_OPTIONS, ODDS_PICK_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
+import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
 import {
@@ -2100,6 +2100,9 @@ function MyPickBar({ row, onSavePick }) {
   // 상세픽(p)처럼 어떤 집계·판정에도 안 쓰인다(2026-09-12 추가, 사용자 지정 —
   // 처음엔 PICK_OPTIONS를 그대로 재사용했다가, 같은 날 전용 선택지로 교체했다).
   const [oddsPick, setOddsPick] = useState(row.MY_ODDS_PICK || '')
+  // 배답벳 — 배답픽과 마찬가지로 내픽과 완전히 별개인 참고용 태그(ODDS_BET_OPTIONS).
+  // 어떤 집계·판정에도 안 쓰인다(2026-09-13 추가, 결과반성 드롭박스 왼쪽에 둔다).
+  const [oddsBet, setOddsBet] = useState(row.MY_ODDS_BET || '')
   // memoPre = 경기 전에 적는 메모, memo = 결과가 나온 뒤 적는 회고 메모 — 시점이
   // 다른 별개의 글이라 따로 관리한다(결과반성 칸 앞/뒤에 하나씩 둔다).
   const [memoPre, setMemoPre] = useState(row.MEMO_PRE || '')
@@ -2135,6 +2138,12 @@ function MyPickBar({ row, onSavePick }) {
     const next = e.target.value
     setOddsPick(next)
     onSavePick({ oddsPick: next || null })
+  }
+
+  function handleOddsBetChange(e) {
+    const next = e.target.value
+    setOddsBet(next)
+    onSavePick({ oddsBet: next || null })
   }
 
   function saveMemoPreIfChanged() {
@@ -2202,6 +2211,16 @@ function MyPickBar({ row, onSavePick }) {
             if (e.key === 'Enter') e.currentTarget.blur()
           }}
         />
+      </label>
+      <label className="mypick-bar-field">
+        <select value={oddsBet} onChange={handleOddsBetChange}>
+          <option value="">배답벳</option>
+          {ODDS_BET_OPTIONS.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="mypick-bar-field" title="이 픽을 왜 이렇게 봤는지 — 결과반성용, 판정에는 안 쓰인다">
         <select value={reasonTag} onChange={handleReasonTagChange}>
