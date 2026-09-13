@@ -8,12 +8,11 @@ import {
 import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
 import { seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
 import { LEAGUE_LABELS } from '../../utils/format'
-import { rankByKind, rankInfoOf, top20Score } from '../../utils/weekTop20'
-import { buildRankBadge } from '../../utils/weekRankBadge'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { api } from '../../api/client'
+import { pickPatchBody } from '../../utils/pickSave'
 import { useFontSize } from '../../context/FontSizeContext'
 import './LeagueTable.css'
 
@@ -83,8 +82,6 @@ function roundKey(dt) {
   return `${f.getFullYear()}-${pad(f.getMonth() + 1)}-${pad(f.getDate())}`
 }
 
-const matchIdent = (r) => `${r?.L}|${r?.S}|${r?.R}|${r?.No}|${r?.HT}|${r?.AT}`
-
 const VISIBLE_ROWS = 20
 // 화면 위아래로 미리 그려둘 여유 행수. 스크롤할 때 빈 칸이 스치는 걸 막아준다.
 const OVERSCAN = 10
@@ -148,47 +145,6 @@ export function selectKey(row) {
   return `${row.L ?? ''}|${row.scope ?? ''}|${row.S}|${row.R}|${row.No}|${row.HT}|${row.AT}`
 }
 
-// 상세보기를 '이번주 TOP30'(rankOf prop)이 아니라 다른 화면(리그 조회·상대전적 등)
-// 에서 열었을 때도 순위를 자동으로 찾아 보여준다(2026-09-13 사용자 지정 — "공식데이터/
-// 내 데이터 등 상세보기에서 모두다 보여야지"). 내 데이터(scope==='user')는 애초에
-// weekTop20.rankByKind가 걸러내는 대상이 아니라서 항상 null이다. '직전 순위' 저장
-// (POST)은 이번주 TOP30 화면(WeekTopPage)만 한다 — 여기서는 읽기만 해서, 다른 화면을
-// 열 때마다 등락 화살표 기준이 덮어써지지 않게 한다.
-//
-// ⚠ top20Key(row)로는 못 찾는다 — /api/week_list가 주는 row.L은 리그 코드('LALIGA')인데
-// 일반 리그 조회(/api/leagues/{code})가 주는 row.L은 표시용 약어('La')라 같은 경기도
-// 키가 달라진다(실측 확인, 2026-09-13). L·scope 대신 코드(effectiveCode)로 직접
-// 맞춰서 찾는다.
-function useAutoWeekRank(row, effectiveCode, effectiveScope, skip) {
-  const [info, setInfo] = useState(null)
-  useEffect(() => {
-    let alive = true
-    setInfo(null)
-    if (skip || !row || effectiveScope === 'user') return undefined
-    const score = top20Score(row)
-    if (!score) return undefined
-    ;(async () => {
-      try {
-        const list = await api.get('/api/week_list')
-        const q = new URLSearchParams({ start: list.start || '', end: list.end || '', kind: score.pick })
-        const members = await api.get(`/api/week_top20/members?${q}`).catch(() => ({ keys: [] }))
-        const prevRanks = new Map((members.keys || []).map((k, i) => [k, i + 1]))
-        const ranked = rankByKind(list.rows || [], score.pick, prevRanks)
-        const c = ranked.top.find((x) =>
-          (x.row.L === effectiveCode || x.row.Source_League === effectiveCode)
-          && String(x.row.S) === String(row.S) && String(x.row.R) === String(row.R)
-          && Number(x.row.No) === Number(row.No) && x.row.HT === row.HT && x.row.AT === row.AT)
-        if (!alive) return
-        setInfo(c ? buildRankBadge(rankInfoOf(c, score.pick, row)) : null)
-      } catch {
-        if (alive) setInfo(null)
-      }
-    })()
-    return () => { alive = false }
-  }, [row, effectiveCode, effectiveScope, skip])
-  return info
-}
-
 export default function LeagueTable({
   code, columns, rows, scope, highlightCols = [],
   selectable = false, selectedKeys, onToggleRow, hideIndicators = false,
@@ -217,14 +173,11 @@ export default function LeagueTable({
   const rowCode = (row) => (row?.scope ? row.L : null) || row?.Source_League || code
   const rowScope = (row) => row?.scope || scope
   const groups = useMemo(() => buildColumnGroups(columns || [], { hideIndicators }), [columns, hideIndicators])
+  // 상세보기로 열 경기 — 이 행에서는 "어떤 경기인지"만 넘기고, 화면 값은 상세보기가
+  // /api/match_detail에서 새로 받는다(MatchDetailModal.jsx 맨 아래 참고).
   const [detailRow, setDetailRow] = useState(null)
-  // rankOf가 이미 있으면(이번주 TOP30 화면 자신) 그 값을 그대로 쓰고, 없으면
-  // 자동으로 찾는다 — 훅은 조건 없이 항상 부른다(Rules of Hooks), skip으로 끈다.
-  const autoWeekRank = useAutoWeekRank(
-    detailRow, detailRow ? rowCode(detailRow) : null, detailRow ? rowScope(detailRow) : null, !!rankOf,
-  )
-  const weekRank = detailRow ? (rankOf ? rankOf(detailRow) : autoWeekRank) : null
   // '회차|국내 정배배당' → 그 배당으로 뜬 경기들. 행 전체를 한 번만 훑는다.
+  // 표 안 2중 밑줄 전용이다 — 상세보기 '동배당' 뱃지는 서버가 6대리그 전체에서 따로 찾는다.
   const sameOddsIndex = useMemo(() => {
     const idx = new Map()
     for (const r of rows || []) {
@@ -257,29 +210,6 @@ export default function LeagueTable({
     }
     return out
   }, [sameOddsIndex])
-  // 지금 열어 둔 경기와 같은 회차·같은 국내 정배배당인 다른 경기들.
-  const sameOdds = useMemo(() => {
-    if (!detailRow) return null
-    const rk = roundKey(detailRow.DT)
-    const odds = favOddsKey(detailRow, SAME_ODDS_W, SAME_ODDS_L)
-    if (rk === null || odds === null) return null
-    const self = matchIdent(detailRow)
-    const others = (sameOddsIndex.get(`${rk}|${odds}`) || [])
-      .filter((r) => matchIdent(r) !== self)
-      .map((r) => {
-        const raw = String(r.L || '').trim()
-        return {
-          league: LEAGUE_LABELS[raw] || raw,
-          round: String(r.R || '').trim(),
-          dt: r.DT,
-          tm: r.TM,
-          home: String(r.HT || '').trim(),
-          away: String(r.AT || '').trim(),
-          homeFav: Number(r[SAME_ODDS_W]) < Number(r[SAME_ODDS_L]),
-        }
-      })
-    return others.length ? { odds, others } : null
-  }, [detailRow, sameOddsIndex])
   // 별표/내픽/메모 클릭 즉시 반영용 오버레이. 새로 조회하면(rows가 바뀌면) 서버가 다시
   // 내려준 최신값으로 자연히 대체되므로 초기화한다.
   // ref로도 같은 값을 들고 있는 이유: React state 갱신은 비동기라 "별표 클릭 직후 곧바로
@@ -367,9 +297,9 @@ export default function LeagueTable({
     }
   }
 
-  // 별표/내픽/P태그/적중여부/메모(경기전·결과반성)/결과반성태그 공용 저장 — patch에
-  // 준 필드만 바꾸고 나머지는 현재 값을 유지한 채 전체 상태를 다시 올린다(서버는
-  // 매번 값을 다 받아 upsert).
+  // 별표/내픽/P태그/적중여부/메모(경기전·결과반성)/결과반성태그 공용 저장 — 화면에는
+  // patch를 얹은 전체 상태를 바로 보여주고, 서버에는 patch에 준 칸만 보낸다(이 표가 들고
+  // 있던 옛 값으로 다른 메뉴에서 바꾼 칸을 덮어쓰지 않게).
   async function savePick(row, patch) {
     const key = matchKey(row)
     const prevValue = pickOverridesRef.current[key] ?? {
@@ -387,23 +317,7 @@ export default function LeagueTable({
     pickOverridesRef.current = { ...pickOverridesRef.current, [key]: next }
     setPickOverrides(pickOverridesRef.current)
     try {
-      await api.post(`/api/leagues/${rowCode(row)}/my_picks`, {
-        scope: rowScope(row),
-        S: row.S,
-        R: row.R,
-        No: row.No,
-        HT: row.HT,
-        AT: row.AT,
-        starred: next.important,
-        pick: next.pick || null,
-        p: next.p || null,
-        hit: next.hit || null,
-        memo: next.memo || null,
-        memo_pre: next.memoPre || null,
-        reason_tag: next.reasonTag || null,
-        odds_pick: next.oddsPick || null,
-        odds_bet: next.oddsBet || null,
-      })
+      await api.post(`/api/leagues/${rowCode(row)}/my_picks`, pickPatchBody(rowScope(row), row, patch))
     } catch {
       // 저장 실패 시 원래 상태로 되돌린다
       pickOverridesRef.current = { ...pickOverridesRef.current, [key]: prevValue }
@@ -1069,23 +983,14 @@ export default function LeagueTable({
         {detailRow && (
           <MatchDetailModal
             code={rowCode(detailRow)}
-            row={{
-              ...detailRow,
-              IMPORTANT: effectivePick(detailRow).important,
-              MY_PICK: effectivePick(detailRow).pick,
-              MY_P: effectivePick(detailRow).p,
-              MY_HIT: effectivePick(detailRow).hit,
-              MEMO: effectivePick(detailRow).memo,
-              MEMO_PRE: effectivePick(detailRow).memoPre,
-              REASON_TAG: effectivePick(detailRow).reasonTag,
-              MY_ODDS_PICK: effectivePick(detailRow).oddsPick,
-              MY_ODDS_BET: effectivePick(detailRow).oddsBet,
-            }}
             scope={rowScope(detailRow)}
-            sameOdds={sameOdds}
-            weekRank={weekRank}
+            row={detailRow}
             onClose={() => setDetailRow(null)}
-            onSavePick={(patch) => savePick(detailRow, patch)}
+            onPickSaved={(next) => {
+              const key = matchKey(detailRow)
+              pickOverridesRef.current = { ...pickOverridesRef.current, [key]: next }
+              setPickOverrides(pickOverridesRef.current)
+            }}
           />
         )}
 

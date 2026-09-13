@@ -78,24 +78,31 @@ def hide_from_weekly_picks(username: str, items: list[dict]) -> int:
         con.close()
 
 
+PICK_COLUMNS = ("starred", "pick", "p", "hit", "memo", "memo_pre", "reason_tag", "odds_pick", "odds_bet")
+
+
 def upsert_my_pick(username: str, code: str, scope: str,
-                    s: str, r: str, no: str, ht: str, at: str,
-                    starred: int, pick: str | None, hit: str | None, memo: str | None,
-                    p: str | None = None, reason_tag: str | None = None,
-                    memo_pre: str | None = None, odds_pick: str | None = None,
-                    odds_bet: str | None = None) -> None:
+                   s: str, r: str, no: str, ht: str, at: str,
+                   starred: int, pick: str | None, hit: str | None, memo: str | None,
+                   p: str | None = None, reason_tag: str | None = None,
+                   memo_pre: str | None = None, odds_pick: str | None = None,
+                   odds_bet: str | None = None, fields: list[str] | None = None) -> None:
+    """fields를 주면 이미 있는 기록에서는 그 칸만 바꾸고 나머지는 DB 값을 그대로 둔다.
+    화면이 들고 있던 옛 값으로 다른 칸(다른 메뉴에서 쓴 메모 등)을 덮어쓰지 않게 하려는 것
+    (2026-09-13). 처음 생기는 기록은 안 준 칸이 빈 값으로 들어간다."""
+    cols = [c for c in PICK_COLUMNS if fields is None or c in fields]
+    if not cols:
+        return
+    update_set = ", ".join(f"{c} = excluded.{c}" for c in cols)
     con = _connect(username)
     try:
         con.execute(
-            """
+            f"""
             INSERT INTO my_picks
                 (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, reason_tag, odds_pick, odds_bet, wp_hidden, updated_dt)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
             ON CONFLICT(code, scope, S, R, No, HT, AT)
-            DO UPDATE SET starred = excluded.starred, pick = excluded.pick, p = excluded.p,
-                          hit = excluded.hit, memo = excluded.memo, memo_pre = excluded.memo_pre,
-                          reason_tag = excluded.reason_tag, odds_pick = excluded.odds_pick,
-                          odds_bet = excluded.odds_bet,
+            DO UPDATE SET {update_set},
                           wp_hidden = 0, updated_dt = excluded.updated_dt
             """,
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),

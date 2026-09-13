@@ -22,6 +22,9 @@ import {
   archiveTargetText, archiveSpanText, archiveSourceText, archiveStatsText, archiveStatsLines, archiveDateText,
 } from '../../utils/archiveTags'
 import ArchiveTagModal from '../ArchiveTagModal/ArchiveTagModal'
+import { rankByKind, rankInfoOf, top20Score } from '../../utils/weekTop20'
+import { buildRankBadge } from '../../utils/weekRankBadge'
+import { pickPatchBody } from '../../utils/pickSave'
 import './MatchDetailModal.css'
 
 
@@ -4016,7 +4019,7 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg, w
   )
 }
 
-export default function MatchDetailModal({ code, row, scope, sameOdds, weekRank, onClose, onSavePick }) {
+function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSavePick }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
   const rt = rtLabel(row.RT)
@@ -4436,6 +4439,143 @@ export default function MatchDetailModal({ code, row, scope, sameOdds, weekRank,
         onChanged={() => setArchiveTick((n) => n + 1)}
       />
     )}
+    </>
+  )
+}
+
+// ── 상세보기 입구 — 모든 메뉴 공용 ──────────────────────────────────────────
+// 어느 메뉴에서 열든 받는 건 "어떤 경기인지"(code·scope·S/R/No/HT/AT)뿐이고, 그릴 값은
+// 열 때마다 /api/match_detail 하나에서 새로 받는다(2026-09-13 사용자 지정 — "상세보기는
+// 모든 메뉴에서 동일한 정보가 최신으로"). 예전엔 메뉴마다 자기 목록이 들고 있던 행을 그대로
+// 그려서, 목록을 조회한 뒤 다른 곳에서 바뀐 값이 안 보이거나 메뉴마다 붙은 컬럼이 달랐다.
+// 같은 회차·같은 배당 경기(sameOdds)와 이번주 순위(weekRank)도 여기서 메뉴와 무관하게 구한다.
+const PICK_FIELD_OF = {
+  important: 'IMPORTANT', pick: 'MY_PICK', p: 'MY_P', hit: 'MY_HIT', memo: 'MEMO',
+  memoPre: 'MEMO_PRE', reasonTag: 'REASON_TAG', oddsPick: 'MY_ODDS_PICK', oddsBet: 'MY_ODDS_BET',
+}
+
+function pickStateOf(row) {
+  const out = {}
+  for (const [k, f] of Object.entries(PICK_FIELD_OF)) {
+    out[k] = k === 'important' ? starLevel(row[f]) : row[f] || ''
+  }
+  return out
+}
+
+// 이번주 TOP30 순위 — /api/week_list(현재 회차) 기준. 이번주 TOP30 화면이 순위를 매기는
+// 재료와 같다. 내 데이터(scope==='user')는 순위 대상이 아니라 항상 null.
+function useWeekRank(row, code, scope, loadedKey) {
+  const [info, setInfo] = useState(null)
+  const rowRef = useRef(row)
+  rowRef.current = row
+  useEffect(() => {
+    let alive = true
+    setInfo(null)
+    const r = rowRef.current
+    if (!loadedKey || !r || scope === 'user') return undefined
+    const score = top20Score(r)
+    if (!score) return undefined
+    ;(async () => {
+      try {
+        const list = await api.get('/api/week_list')
+        const q = new URLSearchParams({ start: list.start || '', end: list.end || '', kind: score.pick })
+        const members = await api.get(`/api/week_top20/members?${q}`).catch(() => ({ keys: [] }))
+        const prevRanks = new Map((members.keys || []).map((k, i) => [k, i + 1]))
+        const ranked = rankByKind(list.rows || [], score.pick, prevRanks)
+        const c = ranked.top.find((x) =>
+          x.row.L === code && x.row.scope === scope
+          && String(x.row.S) === String(r.S) && String(x.row.R) === String(r.R)
+          && Number(x.row.No) === Number(r.No) && x.row.HT === r.HT && x.row.AT === r.AT)
+        if (alive) setInfo(c ? buildRankBadge(rankInfoOf(c, score.pick, r)) : null)
+      } catch {
+        if (alive) setInfo(null)
+      }
+    })()
+    return () => { alive = false }
+  }, [code, scope, loadedKey])
+  return info
+}
+
+export default function MatchDetailModal({ code, scope, row: ident, onClose, onPickSaved }) {
+  const S = ident?.S
+  const R = ident?.R
+  const No = ident?.No
+  const HT = ident?.HT
+  const AT = ident?.AT
+  const identKey = [code, scope, S, R, No, HT, AT].join('|')
+  const [loaded, setLoaded] = useState({ key: null, data: null, error: '' })
+  const [saveError, setSaveError] = useState('')
+  const pickRef = useRef(null)
+  const saveChain = useRef(Promise.resolve())
+
+  useEffect(() => {
+    let alive = true
+    const params = new URLSearchParams({
+      code, scope: scope || 'master',
+      S: String(S ?? ''), R: String(R ?? ''), HT: String(HT ?? ''), AT: String(AT ?? ''),
+    })
+    if (No !== undefined && No !== null && No !== '') params.set('No', String(No))
+    api.get(`/api/match_detail?${params.toString()}`)
+      .then((res) => {
+        if (!alive) return
+        pickRef.current = pickStateOf(res.row)
+        setLoaded({ key: identKey, data: res, error: '' })
+      })
+      .catch((err) => alive && setLoaded({ key: identKey, data: null, error: err.message }))
+    return () => { alive = false }
+  }, [identKey, code, scope, S, R, No, HT, AT])
+
+  const ready = loaded.key === identKey && loaded.data
+  const row = ready ? loaded.data.row : null
+  const weekRank = useWeekRank(row, code, scope, ready ? identKey : null)
+
+  function handleSavePick(patch) {
+    if (!ready) return
+    const next = { ...pickRef.current, ...patch }
+    for (const k of Object.keys(next)) if (k !== 'important' && next[k] == null) next[k] = ''
+    pickRef.current = next
+    setLoaded((l) => {
+      if (!l.data) return l
+      const nextRow = { ...l.data.row }
+      for (const [k, f] of Object.entries(PICK_FIELD_OF)) nextRow[f] = next[k]
+      return { ...l, data: { ...l.data, row: nextRow } }
+    })
+    onPickSaved?.(next)
+    const body = pickPatchBody(scope, row, patch)
+    // 저장은 한 줄로 세운다 — 같은 칸을 연달아 바꿔도 나중에 누른 값이 서버에 마지막으로 남게.
+    saveChain.current = saveChain.current
+      .then(() => api.post(`/api/leagues/${code}/my_picks`, body))
+      .then(() => setSaveError(''))
+      .catch((err) => setSaveError(`저장 실패 — ${err.message}`))
+  }
+
+  if (!ready) {
+    const error = loaded.key === identKey ? loaded.error : ''
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-card detail-loading-card" onClick={(e) => e.stopPropagation()}>
+          <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
+          <p className={error ? 'detail-loading-error' : 'detail-loading-text'}>
+            {error ? `상세보기를 불러오지 못했습니다 — ${error}` : '최신 경기 정보를 불러오는 중...'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <MatchDetailBody
+        key={identKey}
+        code={code}
+        row={row}
+        scope={scope}
+        sameOdds={loaded.data.same_odds}
+        weekRank={weekRank}
+        onClose={onClose}
+        onSavePick={handleSavePick}
+      />
+      {saveError && <div className="detail-save-error" role="alert">{saveError}</div>}
     </>
   )
 }

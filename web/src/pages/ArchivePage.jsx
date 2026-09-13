@@ -11,12 +11,6 @@ import './ArchivePage.css'
 // 본다(2026-09-13). 태그·범위·메모는 표에서 바로 고치고, 해제/복원·삭제도 여기서 한다.
 // '태그 이후 성적'은 근거 경기 다음부터 지금까지(팀=그 팀 기준, 맞대결=주어 팀 기준).
 
-// 상세보기 저장(onSavePick) 패치 키 → 행 컬럼 — LeagueTable.savePick과 같은 짝.
-const PICK_FIELDS = {
-  important: 'IMPORTANT', pick: 'MY_PICK', p: 'MY_P', hit: 'MY_HIT', memo: 'MEMO',
-  memoPre: 'MEMO_PRE', reasonTag: 'REASON_TAG', oddsPick: 'MY_ODDS_PICK', oddsBet: 'MY_ODDS_BET',
-}
-
 export default function ArchivePage() {
   const [tags, setTags] = useState(null)
   const [error, setError] = useState('')
@@ -24,7 +18,6 @@ export default function ArchivePage() {
   const [kind, setKind] = useState('team')
   const [showInactive, setShowInactive] = useState(false)
   const [detail, setDetail] = useState(null)
-  const [opening, setOpening] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -75,44 +68,10 @@ export default function ArchivePage() {
   }
 
   // 근거 경기 열기 — 그 시즌·라운드 표를 받아 경기를 찾아 상세보기를 바로 띄운다.
-  async function openSource(t) {
-    setOpening(t.id)
-    try {
-      const params = new URLSearchParams({ scope: t.scope, season: t.S, round: t.R ?? 'ALL', limit: '500' })
-      const res = await api.get(`/api/leagues/${t.code}?${params.toString()}`)
-      const row = (res.rows || []).find((r) =>
-        String(r.HT).trim() === t.HT && String(r.AT).trim() === t.AT
-        && (t.No == null || t.No === '' || Number(r.No) === Number(t.No)))
-      if (!row) {
-        setError(`근거 경기를 찾지 못했습니다 — ${archiveSourceText(t)}`)
-        return
-      }
-      setDetail({ code: t.code, scope: t.scope, row })
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setOpening(null)
-    }
-  }
-
-  async function saveDetailPick(patch) {
-    if (!detail) return
-    const next = { ...detail.row }
-    for (const [k, v] of Object.entries(patch)) {
-      if (PICK_FIELDS[k]) next[PICK_FIELDS[k]] = v
-    }
-    setDetail((d) => (d ? { ...d, row: next } : d))
-    try {
-      await api.post(`/api/leagues/${detail.code}/my_picks`, {
-        scope: detail.scope, S: next.S, R: next.R, No: next.No, HT: next.HT, AT: next.AT,
-        starred: Number(next.IMPORTANT) || 0,
-        pick: next.MY_PICK || null, p: next.MY_P || null, hit: next.MY_HIT || null,
-        memo: next.MEMO || null, memo_pre: next.MEMO_PRE || null, reason_tag: next.REASON_TAG || null,
-        odds_pick: next.MY_ODDS_PICK || null, odds_bet: next.MY_ODDS_BET || null,
-      })
-    } catch (err) {
-      setError(err.message)
-    }
+  // 근거 경기 열기 — 상세보기가 어떤 메뉴에서든 /api/match_detail로 직접 받아오므로
+  // 여기서는 "어떤 경기인지"만 넘긴다(못 찾으면 상세보기 창이 이유를 보여준다).
+  function openSource(t) {
+    setDetail({ code: t.code, scope: t.scope, row: { S: t.S, R: t.R, No: t.No, HT: t.HT, AT: t.AT } })
   }
 
   const tagOptions = kind === 'matchup' ? MATCHUP_TAG_OPTIONS : TEAM_TAG_OPTIONS
@@ -208,8 +167,8 @@ export default function ArchivePage() {
                     />
                   </td>
                   <td>
-                    <button className="ar-link" onClick={() => openSource(t)} disabled={opening === t.id}>
-                      {opening === t.id ? '여는 중...' : archiveSourceText(t)}
+                    <button className="ar-link" onClick={() => openSource(t)}>
+                      {archiveSourceText(t)}
                     </button>
                   </td>
                   <td>{archiveDateText(t.created_dt)}</td>
@@ -240,13 +199,10 @@ export default function ArchivePage() {
           code={detail.code}
           row={detail.row}
           scope={detail.scope}
-          sameOdds={null}
-          weekRank={null}
           onClose={() => {
             setDetail(null)
             load()
           }}
-          onSavePick={saveDetailPick}
         />
       )}
     </div>

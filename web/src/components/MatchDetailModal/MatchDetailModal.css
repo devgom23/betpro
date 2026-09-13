@@ -85,6 +85,42 @@
   white-space: nowrap;
 }
 
+/* 상세보기를 열고 최신 경기 정보를 받는 동안(보통 0.1초 안팎) 잠깐 뜨는 작은 카드.
+   .modal-card가 두 CSS 파일에서 폭이 달라(1320/1520) 합친 클래스로 폭을 못 박는다. */
+.modal-card.detail-loading-card {
+  max-width: 420px;
+  padding: 28px 28px 24px;
+}
+
+.detail-loading-text,
+.detail-loading-error {
+  margin: 0;
+  font-size: 13px;
+}
+
+.detail-loading-text {
+  color: var(--text-muted);
+}
+
+.detail-loading-error {
+  color: var(--danger-text);
+  padding-right: 24px;
+}
+
+.detail-save-error {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 2000;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .modal-title {
   margin: 0 0 4px;
   font-size: 20px;

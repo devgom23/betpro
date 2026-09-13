@@ -625,6 +625,95 @@ def league_rows(code: str,
     }
 
 
+# ───────────────── 상세보기 (경기 1개 — 모든 메뉴 공용) ─────────────────
+# 상세보기는 어느 메뉴(공식/내 데이터·통합DB·이번주 리스트/픽/TOP30·아카이브)에서 열든
+# 반드시 여기 하나만 거쳐 그 순간의 DB 값으로 그린다(2026-09-13 사용자 지정). 예전엔
+# 메뉴마다 자기 목록 API가 준 행을 그대로 넘겨서, 목록을 조회한 뒤 다른 곳에서 바뀐 값이
+# 안 보이거나(낡은 값) 메뉴마다 붙는 컬럼이 달랐다(통합DB는 EV·내픽 없음, 이번주 픽은
+# 결과반성·배답픽·배답벳 없음). 행 모양은 리그 조회(/api/leagues/{code})와 똑같다.
+
+def _same_odds_for(row: dict) -> Optional[dict]:
+    """같은 베팅 회차(금~월)·같은 국내 정배배당(KW/KL 중 낮은 쪽)으로 뜬 6대리그 다른 경기.
+    예전엔 상세보기를 연 화면이 들고 있던 목록 안에서만 찾아서, 리그 화면에서 열면 다른
+    리그 경기가 빠졌다 — 이제는 메뉴와 상관없이 공식 데이터 6대리그 전체에서 찾는다."""
+    try:
+        w, lo = float(row.get("KW")), float(row.get("KL"))
+    except (TypeError, ValueError):
+        return None
+    if not (np.isfinite(w) and np.isfinite(lo)) or w <= 0 or lo <= 0 or w == lo:
+        return None
+    try:
+        fri, mon = BETSLIPS._round_range(row.get("DT"))
+    except ValueError:
+        return None
+    odds = f"{min(w, lo):.2f}"
+    self_key = _my_pick_key(row.get("S"), row.get("R"), row.get("No"), row.get("HT"), row.get("AT"))
+    raw_lo = (fri - timedelta(days=3)).strftime("%y-%m-%d")   # 화~목 경기도 이 회차 소속
+    raw_hi = mon.strftime("%y-%m-%d")
+    db = PATHS.get_master_db()
+    others = []
+    for code in PATHS.LEAGUES:
+        df = DATA.load_league_df(db, code)
+        if df.empty or not {"DT", "KW", "KL"}.issubset(df.columns):
+            continue
+        dt_str = df["DT"].astype(str).str.slice(0, 8)
+        sub = df[(dt_str >= raw_lo) & (dt_str <= raw_hi)]
+        if sub.empty:
+            continue
+        kw = pd.to_numeric(sub["KW"], errors="coerce")
+        kl = pd.to_numeric(sub["KL"], errors="coerce")
+        fav = np.minimum(kw, kl).round(2)
+        sub = sub[(kw != kl) & (fav == float(odds))]
+        for r in sub.to_dict("records"):
+            if _my_pick_key(r.get("S"), r.get("R"), r.get("No"), r.get("HT"), r.get("AT")) == self_key:
+                continue
+            try:
+                if BETSLIPS._round_range(r.get("DT"))[0] != fri:
+                    continue
+            except ValueError:
+                continue
+            others.append({
+                "league": PATHS.LEAGUE_LABEL.get(code, code),
+                "round": str(r.get("R") or "").strip(),
+                "dt": r.get("DT"),
+                "tm": None if pd.isna(r.get("TM")) else r.get("TM"),
+                "home": str(r.get("HT") or "").strip(),
+                "away": str(r.get("AT") or "").strip(),
+                "homeFav": float(r["KW"]) < float(r["KL"]),
+            })
+    others.sort(key=lambda o: _betting_day_sort_key(o["dt"], o["tm"]))
+    return {"odds": odds, "others": others} if others else None
+
+
+@app.get("/api/match_detail")
+def match_detail(code: str,
+                 S: str,
+                 R: str,
+                 HT: str,
+                 AT: str,
+                 No: Optional[str] = None,
+                 scope: str = PATHS.SCOPE_MASTER,
+                 user: dict = Depends(get_current_user)):
+    _check_league_for(code, scope, user)
+    db = _resolve_scope_db(scope, user)
+    df = DATA.load_league_df_ev(db, code)
+    idx = _pick_key_index(db, code).get(_my_pick_key(S, R, No, HT, AT))
+    if idx is None and not df.empty:
+        # No가 비었거나 재편성으로 바뀐 경우 — 시즌·라운드·두 팀으로 한 번 더 찾는다(유일할 때만).
+        norm = MYPICKS.normalize
+        hit = df[(df["S"].map(norm) == norm(S)) & (df["R"].map(norm) == norm(R))
+                 & (df["HT"].map(norm) == norm(HT)) & (df["AT"].map(norm) == norm(AT))]
+        if len(hit) == 1:
+            idx = hit.index[0]
+    if idx is None:
+        raise HTTPException(status_code=404, detail=f"경기를 찾지 못했습니다 — {S} {R} {HT} vs {AT}")
+    records = DATA.df_to_records(df.loc[[idx]])
+    _attach_my_picks(records, user["username"], code, scope)
+    row = records[0]
+    same_odds = _same_odds_for(row) if scope == PATHS.SCOPE_MASTER and code in PATHS.VALID_LEAGUES else None
+    return {"code": code, "scope": scope, "row": row, "same_odds": same_odds}
+
+
 # ───────────────── 시즌 지표 (똥배 격자 / 결과 격자 / 라운드 이력) ─────────────────
 # 조회 조건이 "시즌 1개 + 라운드 1개"로 좁혀졌을 때만 만든다(사용자 지정) — 전체 조회에서는
 # 라운드 축 자체가 의미가 없어 계산하지 않는다.
@@ -882,17 +971,23 @@ class MyPickBody(BaseModel):
     reason_tag: Optional[str] = None
     odds_pick: Optional[str] = None
     odds_bet: Optional[str] = None
+    # 이번에 바꾼 칸 이름(PICK_COLUMNS 중) — 주면 그 칸만 저장하고 나머지는 DB 값을 유지한다.
+    fields: Optional[list[str]] = None
 
 
 @app.post("/api/leagues/{code}/my_picks")
 def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_user)):
     """중요 별표/내픽/P태그/적중여부/메모(경기전·결과반성)/결과반성 태그/배답픽/배답벳 저장 —
     계정 개인 기록이라 scope(공식/내 데이터)와 무관하게 본인만 본다."""
+    if body.fields is not None:
+        unknown = [f for f in body.fields if f not in MYPICKS.PICK_COLUMNS]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"알 수 없는 저장 칸: {', '.join(unknown)}")
     MYPICKS.upsert_my_pick(
         user["username"], code, body.scope,
         body.S, body.R, body.No, body.HT, body.AT,
         body.starred, body.pick, body.hit, body.memo, body.p, body.reason_tag,
-        body.memo_pre, body.odds_pick, body.odds_bet,
+        body.memo_pre, body.odds_pick, body.odds_bet, body.fields,
     )
     return {"ok": True}
 
