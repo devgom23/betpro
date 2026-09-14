@@ -24,6 +24,35 @@
   color: var(--text-secondary);
 }
 
+/* 상세보기(이 팝업)만 — 헤더(제목 줄)는 화면에 고정해 두고 그 아래 내용만 스크롤되게
+   한다(2026-09-14 사용자 지정). 처음엔 제목 줄에 position:sticky만 줬는데, 맨 위로
+   되돌려도 붙어 있던 자리가 안 지워지는 문제가 나서(.detail-modal-title.detail-title-line
+   주석 참고) 구조를 바꿨다 — 카드 자체를 세로 flex로 만들고 높이를 뷰포트에 맞춰 고정한
+   뒤(.modal-backdrop의 위아래 여백 40px씩 뺀 값), 제목 줄 아래를 별도 스크롤 영역
+   (.detail-modal-scroll)으로 감싼다. 다른 팝업(RiskLegendModal 등)은 그대로 원래
+   .modal-card(패딩 있는 채로 .modal-backdrop이 통째로 스크롤)를 쓰므로 영향 없다 —
+   이 클래스를 같이 준 곳만 바뀐다.
+   세로 패딩은 0으로 비우고 헤더·스크롤영역이 각자 나눠 갖는다(가로 28px는 그대로 물려받음). */
+.modal-card.detail-modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 80px);
+  padding-block: 0;
+  overflow: hidden;
+}
+
+/* 헤더(제목 줄) 아래, 팝업 나머지 전부를 담는 스크롤 영역. flex:1로 남는 높이를 다
+   차지하고, min-height:0이 있어야 안의 내용이 넘칠 때 부모 높이를 밀어내지 않고
+   자기 안에서 스크롤된다(flex item 기본값 min-height:auto면 안 줄어든다 — 흔한 함정).
+   맨 아래 여백(24px)은 예전 .modal-card 패딩 24px를 그대로 옮겨온 것 — 이제는 스크롤
+   해서 끝까지 내려야 보인다. */
+.detail-modal-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+
 .modal-close {
   position: absolute;
   top: 14px;
@@ -157,6 +186,17 @@
   /* 아래 여백도 4px(.modal-title 기본값)에서 16px로 — 예전보다 내용이 많아진 줄이라
      바로 아래 PickBand와 더 떨어져 보이게(2026-09-12 사용자 지정, 8px→16px로 재조정). */
   margin-bottom: 16px;
+  /* 정배/플핸/해배·승+패 4종 표본까지 붙으면서(2026-09-14) 팝업이 세로로 훨씬 길어져
+     스크롤이 많아졌다 — 처음엔 이 줄만 position:sticky로 화면 위에 붙였는데, 맨 위로
+     다시 스크롤해도 붙어 있던 자리가 안 사라지는 문제가 있었다(2026-09-14 사용자 제보).
+     그래서 스크롤 자체를 이 줄 아래(.detail-modal-scroll)로 옮기는 방식으로 바꿨다 —
+     이 줄은 그냥 고정된 헤더고, sticky가 아니라서 그런 버그 자체가 날 수 없다.
+     .modal-card가 세로 패딩을 안 주는 대신(.detail-modal-card padding-block:0) 여기서
+     24px를 준다 — margin-top:-8px와 합쳐 예전과 똑같이 카드 위에서 16px 내려온 자리에
+     온다(24-8=16, 예전 계산: 모달카드 패딩 24px + 이 여백 -8px = 16px와 동일). */
+  padding-top: 24px;
+  /* 아래로 스크롤되는 내용과 구분되는 옅은 경계선. */
+  border-bottom: 1px solid var(--border);
 }
 
 .detail-title-date {
@@ -170,6 +210,22 @@
   align-items: center;
   gap: 6px;
   font-size: 13px;
+  font-weight: 400;
+}
+
+/* 초기 배당(정/역 · 일반/핸디) — 6-2장 관례(가운뎃점 나열, 구분자는 gap으로)대로
+   .odds-role-fav/.odds-role-dog(파랑/빨강, 팀명 옆 (정)/(역)과 같은 색)로 값을 밝히고
+   구분자만 흐리게 둔다. */
+.detail-title-init-odds {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.detail-title-init-sep {
+  color: var(--text-muted);
   font-weight: 400;
 }
 

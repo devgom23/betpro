@@ -4174,7 +4174,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
   return (
     <>
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card detail-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="detail-header-actions">
           <button
             className="detail-header-btn"
@@ -4239,7 +4239,26 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
             <MyBetBadge row={row} />
             {row.MY_BET && <PickVerdictBadge row={row} />}
           </span>
+          {/* 초기 배당(정/역 · 일반배당/핸디배당) — 스크롤해도 안 사라지는 헤더에 바로
+              보여서, 아래로 내려가 '배당' 카드를 다시 안 봐도 기준값을 바로 알 수 있게
+              한다(2026-09-14 사용자 지정). 배변(최종배당)이 아니라 초기 배당(KW/KL·
+              KHW/KHL)만 — 정배가 홈인지 원정인지는 homeIsFav와 완전히 같은 기준으로
+              가른다. 방향을 못 가리면(배당 없음/동배) 아예 안 보여준다. */}
+          {homeFav !== null && (
+            <span className="detail-title-init-odds">
+              <span className="odds-role-fav">
+                정 {numOrDash(homeFav ? row.KW : row.KL)}/{numOrDash(homeFav ? row.KHW : row.KHL)}
+              </span>
+              <span className="detail-title-init-sep">·</span>
+              <span className="odds-role-dog">
+                역 {numOrDash(homeFav ? row.KL : row.KW)}/{numOrDash(homeFav ? row.KHL : row.KHW)}
+              </span>
+            </span>
+          )}
         </h2>
+        {/* 제목 줄 아래 전부를 스크롤 영역으로 묶는다(2026-09-14 사용자 지정 — 헤더는
+            고정, 아래만 스크롤). .detail-modal-card 주석 참고. */}
+        <div className="detail-modal-scroll">
         <MyPickBar row={row} onSavePick={onSavePick} />
 
         <PickBand
@@ -4432,6 +4451,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
               />
             </section>
           </div>
+        </div>
         </div>
       </div>
     </div>
