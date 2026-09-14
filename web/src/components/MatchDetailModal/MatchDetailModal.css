@@ -213,22 +213,6 @@
   font-weight: 400;
 }
 
-/* 초기 배당(정/역 · 일반/핸디) — 6-2장 관례(가운뎃점 나열, 구분자는 gap으로)대로
-   .odds-role-fav/.odds-role-dog(파랑/빨강, 팀명 옆 (정)/(역)과 같은 색)로 값을 밝히고
-   구분자만 흐리게 둔다. */
-.detail-title-init-odds {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.detail-title-init-sep {
-  color: var(--text-muted);
-  font-weight: 400;
-}
-
 /* 결과가 있는 경기는 팀 사이 'vs' 대신 스코어를 넣는다. 이긴 쪽만 앱 전체 관례와
    같은 빨강(winner-score) — 원본 규칙(.detail-table .winner-score)은 표 안쪽에만
    걸려 있어 제목줄에서는 여기서 한 번 더 준다(.recent-tip .winner-score와 같은 패턴). */

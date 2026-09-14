@@ -4009,10 +4009,20 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
   const rt = rtLabel(row.RT)
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
   const homeFav = homeIsFav(row)
+  // (정)/(역) 옆에 초기 배당(일반배당/핸디배당)을 바로 붙인다 — 뱃지 줄에 따로 두면
+  // 어느 팀 배당인지 눈으로 안 이어진다는 지적으로, 팀명·순위 바로 옆으로 옮겼다
+  // (2026-09-14 사용자 지정 — 시안으로 먼저 확인받음). 배변(최종배당)이 아니라 초기
+  // 배당(KW/KL·KHW/KHL)만 보여준다.
   const titleRoleSuffix = (isHome) => {
     if (homeFav === null) return null
     const isFav = isHome ? homeFav : !homeFav
-    return <span className={isFav ? 'odds-role-fav' : 'odds-role-dog'}> {isFav ? '(정)' : '(역)'}</span>
+    const wKey = isHome ? 'KW' : 'KL'
+    const hKey = isHome ? 'KHW' : 'KHL'
+    return (
+      <span className={isFav ? 'odds-role-fav' : 'odds-role-dog'}>
+        {' '}({isFav ? '정' : '역'} {numOrDash(row[wKey])}/{numOrDash(row[hKey])})
+      </span>
+    )
   }
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState('')
@@ -4239,22 +4249,6 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
             <MyBetBadge row={row} />
             {row.MY_BET && <PickVerdictBadge row={row} />}
           </span>
-          {/* 초기 배당(정/역 · 일반배당/핸디배당) — 스크롤해도 안 사라지는 헤더에 바로
-              보여서, 아래로 내려가 '배당' 카드를 다시 안 봐도 기준값을 바로 알 수 있게
-              한다(2026-09-14 사용자 지정). 배변(최종배당)이 아니라 초기 배당(KW/KL·
-              KHW/KHL)만 — 정배가 홈인지 원정인지는 homeIsFav와 완전히 같은 기준으로
-              가른다. 방향을 못 가리면(배당 없음/동배) 아예 안 보여준다. */}
-          {homeFav !== null && (
-            <span className="detail-title-init-odds">
-              <span className="odds-role-fav">
-                정 {numOrDash(homeFav ? row.KW : row.KL)}/{numOrDash(homeFav ? row.KHW : row.KHL)}
-              </span>
-              <span className="detail-title-init-sep">·</span>
-              <span className="odds-role-dog">
-                역 {numOrDash(homeFav ? row.KL : row.KW)}/{numOrDash(homeFav ? row.KHL : row.KHW)}
-              </span>
-            </span>
-          )}
         </h2>
         {/* 제목 줄 아래 전부를 스크롤 영역으로 묶는다(2026-09-14 사용자 지정 — 헤더는
             고정, 아래만 스크롤). .detail-modal-card 주석 참고. */}
