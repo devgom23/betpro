@@ -1349,6 +1349,64 @@ def weekly_picks(user: dict = Depends(get_current_user)):
     return {"columns": columns, "rows": rows, "total": len(rows)}
 
 
+# ─────────────────────────── 아카이브 "배답벳" 탭 (모아보기) ───────────────────────────
+@app.get("/api/archive/odds_bet_picks")
+def archive_odds_bet_picks(user: dict = Depends(get_current_user)):
+    """상세보기 '배답벳' 드롭박스에 뭔가 골라 둔 경기를 전부 모아 보여준다(2026-09-14,
+    아카이브 '배답벳' 탭). weekly_picks와 거의 같은 방식이지만 별표(starred==2) 대신
+    odds_bet 값이 있는지로 고르고, "이번주"로 기간을 좁히지 않는다 — 지금까지 찍어 둔
+    배답벳 전부가 대상이다."""
+    username = user["username"]
+    bet_keys = _bet_leg_keys(username)
+    rows: list[dict] = []
+    for scope in (PATHS.SCOPE_MASTER, PATHS.SCOPE_USER):
+        try:
+            db = _resolve_scope_db(scope, user)
+        except HTTPException:
+            continue
+        labels = _scope_league_labels(scope, user)
+        for code in _scope_league_codes(scope, user):
+            picked = {
+                _my_pick_key(p["S"], p["R"], p["No"], p["HT"], p["AT"]): p
+                for p in MYPICKS.list_my_picks(username, code, scope)
+                if p["odds_bet"]
+            }
+            if not picked:
+                continue
+            df = DATA.load_league_df_ev(db, code)
+            if df.empty:
+                continue
+            key_index = _pick_key_index(db, code)
+            keep_idx = sorted(key_index[k] for k in picked if k in key_index)
+            if not keep_idx:
+                continue
+            for rec in DATA.df_to_records(df.loc[keep_idx]):
+                key = _my_pick_key(rec.get("S"), rec.get("R"), rec.get("No"),
+                                   rec.get("HT"), rec.get("AT"))
+                p = picked.get(key)
+                if p is None:
+                    continue
+                rec["L"] = code
+                rec["L_LABEL"] = labels.get(code, code)
+                rec["scope"] = scope
+                rec["IMPORTANT"] = int(p["starred"] or 0)
+                rec["MY_PICK"] = p["pick"]
+                rec["MY_P"] = p["p"]
+                rec["MY_HIT"] = p["hit"]
+                rec["MEMO"] = p["memo"]
+                rec["MEMO_PRE"] = p["memo_pre"]
+                rec["REASON_TAG"] = p["reason_tag"]
+                rec["MY_ODDS_PICK"] = p["odds_pick"]
+                rec["MY_ODDS_BET"] = p["odds_bet"]
+                rec["MY_BET"] = "P" if key in bet_keys else None
+                rows.append(rec)
+
+    rows.sort(key=lambda r: _betting_day_sort_key(r.get("DT"), r.get("TM")))
+    columns = ["L"] + [c for c in (list(rows[0].keys()) if rows else [])
+                       if c not in ("L", "L_LABEL", "scope")]
+    return {"columns": columns, "rows": rows, "total": len(rows)}
+
+
 # ─────────────────────────── 이번주 리스트 (요일별 전체 목록) ───────────────────────────
 # 국내 프로토는 한 주를 '금~화'와 '수~목' 두 회차로 끊는다. 이 화면도 같은 단위로 보여준다
 # — 오늘이 속한 묶음 하나만 띄우고, 수요일이 되면 자동으로 '수~목' 묶음으로 넘어간다.

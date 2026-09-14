@@ -58,6 +58,18 @@ const MYPICK_COLS = [
   ['MY_BET', '벳'],
 ]
 
+// 배답픽·배답벳 — 상세보기 '배답픽'/'배답벳' 드롭박스에서 고른 값(MatchDetailModal.jsx
+// MyPickBar 참고). 다른 표에서는 안 보여주고 아카이브 '배답벳' 탭에서만 쓴다
+// (buildColumnGroups의 showOddsBet 옵션으로 켠다, 2026-09-14 사용자 지정 —
+// "배답벳 화면에서만 보여지는거야"). available(그 표의 columns)에 실제로 있어도
+// showOddsBet이 꺼져 있으면 그리지 않는다 — 다른 목록형 API(예: 이번주 리스트)도
+// _attach_my_picks가 이 두 컬럼을 행에는 채워 넣어서(값이 없어도 None으로) 컬럼
+// 목록에 같이 실리는 경우가 있기 때문.
+const MY_ODDS_COLS = [
+  ['MY_ODDS_PICK', '배답픽'],
+  ['MY_ODDS_BET', '배답벳'],
+]
+
 // 똥배 — 국내배당 KW/KL이 1.49 이하로 나온 "똥[안전]배당" 경기를 그 라운드 안에서
 // 낮은 순으로 똥1, 똥2...로 매긴 값(DDONG), 그 경기가 무/역으로 뒤집힐 확률(DDONG_RISK),
 // 실제 결과가 무/역이면 붙는 똥사(DDONGSA).
@@ -313,7 +325,7 @@ function rtCodeOf(v) {
 // ── 컬럼 그룹 트리 만들기: 실제로 존재하는(백엔드가 내려준) 컬럼만 순서대로 배치 ──
 // hideIndicators: 26개 지표 그룹(1~26번)을 아예 빼고 만든다 — 이번주 픽처럼 여러 리그를
 // 한 표에 모아 보여줄 때, 그 표에서 다시 26개 지표까지 볼 일은 없어서 생략용으로 쓴다.
-export function buildColumnGroups(availableCols, { hideIndicators = false } = {}) {
+export function buildColumnGroups(availableCols, { hideIndicators = false, showOddsBet = false } = {}) {
   const available = new Set(availableCols)
   const groups = []
 
@@ -332,6 +344,13 @@ export function buildColumnGroups(availableCols, { hideIndicators = false } = {}
 
   addFlatGroup('국내배당', '승(W) / 무(D) / 패(L)', K_ODDS_COLS)
   addFlatGroup('해외배당', '승(W) / 무(D) / 패(L)', F_ODDS_COLS)
+
+  // 배답 — 아카이브 '배답벳' 탭 전용(showOddsBet). 해외배당 바로 뒤·판정 바로 앞에
+  // 둔다(2026-09-14 사용자 지정 — "판정 왼쪽으로 배치해줘").
+  if (showOddsBet) {
+    const oddsLeaves = MY_ODDS_COLS.filter(([k]) => available.has(k)).map(([k, sub]) => ({ key: k, sub }))
+    if (oddsLeaves.length) groups.push({ label1: '배답', label2: '', kind: 'flat', cols: oddsLeaves })
+  }
 
   // 판정 — 시스템 판정(새)의 픽. 위(초기)/아래(배변) 두 줄로 갈린다(국내배당·해외배당과
   // 같은 꼴). 저장된 컬럼이 아니라 그때그때 계산한다(utils/verdictCalc.js — 상세보기
@@ -635,6 +654,14 @@ export function myHitStyle(value) {
   if (value === '축-Si' || value === '축-사이드') return { background: '#00695C', color: '#fff', fontWeight: 700 }
   if (value === 'B-Ma' || value === 'B-메인' || value === '메인벳') return { background: '#1565C0', color: '#fff', fontWeight: 700 }
   if (value === 'B-Si' || value === 'B-사이드' || value === 'S벳') return { background: '#6A1B9A', color: '#fff', fontWeight: 700 }
+  return null
+}
+
+// 배답벳 '메인축' — 실제로 축(메인으로 미는 벳)을 쓴다는 뜻이라, 의견 칸의 '축-플'·'축-정'과
+// 같은 색(진한 청록)을 그대로 쓴다(2026-09-14 사용자 지정). 나머지 값(메인벳/사드축/사드벳)은
+// 아직 지정된 색이 없어 일반 글자로 둔다.
+export function oddsBetStyle(value) {
+  if (value === '메인축') return { background: '#00897B', color: '#fff', fontWeight: 700 }
   return null
 }
 

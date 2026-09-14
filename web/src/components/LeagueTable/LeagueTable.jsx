@@ -1,6 +1,6 @@
 import { cloneElement, Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, formStyle, bettingDayStyle,
+  buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, oddsBetStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
   collapsedWidth, splitsOnFinal, oddsMoveDir, oddsUnmoved, riskUnmoved, riskMoveDir, toFinalRow, rtToText,
   VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemPick, verdictAnyMarketMoved,
@@ -163,6 +163,9 @@ export default function LeagueTable({
   // 행마다 맨 앞에 붙일 순위 칸 — (row) => { label, title } | null. 이번주 TOP20 전용.
   rankOf = null,
   rankHeader = '순위',
+  // true면 '배답' 그룹(배답픽/배답벳)을 해외배당·판정 옆에 보여준다 — 아카이브 '배답벳'
+  // 탭 전용(2026-09-14 사용자 지정). 다른 화면은 이 값이 columns에 있어도 안 켠다.
+  showOddsBet = false,
 }) {
   // 이번주 픽처럼 여러 리그·스코프를 한 표에 모아 보여줄 때는 행마다 실제 소속
   // 리그(L)·스코프(scope)가 다를 수 있다 — LeagueTable에 준 code/scope prop은
@@ -172,7 +175,10 @@ export default function LeagueTable({
   // 있을 때만("이 행은 여러 리그를 모은 표에서 왔다") row.L을 코드로 신뢰한다.
   const rowCode = (row) => (row?.scope ? row.L : null) || row?.Source_League || code
   const rowScope = (row) => row?.scope || scope
-  const groups = useMemo(() => buildColumnGroups(columns || [], { hideIndicators }), [columns, hideIndicators])
+  const groups = useMemo(
+    () => buildColumnGroups(columns || [], { hideIndicators, showOddsBet }),
+    [columns, hideIndicators, showOddsBet],
+  )
   // 상세보기로 열 경기 — 이 행에서는 "어떤 경기인지"만 넘기고, 화면 값은 상세보기가
   // /api/match_detail에서 새로 받는다(MatchDetailModal.jsx 맨 아래 참고).
   const [detailRow, setDetailRow] = useState(null)
@@ -929,6 +935,20 @@ export default function LeagueTable({
                               <span className={`cell-badge${hasMemo ? ' cell-badge-memo' : ''}`} style={badgeStyle}>
                                 {text}
                               </span>
+                            ) : (
+                              text
+                            )}
+                          </td>
+                        )
+                      }
+                      // 배답벳 '메인축'만 우리가 쓰는 '축' 뱃지로 보여준다(2026-09-14
+                      // 사용자 지정) — 나머지 값(메인벳/사드축/사드벳)은 그냥 글자 그대로.
+                      if (g.label1 === '배답' && c.key === 'MY_ODDS_BET') {
+                        const badgeStyle = oddsBetStyle(value)
+                        return (
+                          <td key={`${gi}-${ci}`} className={classNames || undefined}>
+                            {badgeStyle ? (
+                              <span className="cell-badge" style={badgeStyle}>{text}</span>
                             ) : (
                               text
                             )}
