@@ -956,17 +956,29 @@ function OddsTable({ row, weekRank }) {
   )
 }
 
+// 흐름 — (핸승×2+핸무)-(무+역×2). 핸승·핸무는 정배 쪽 결과, 무·역은 플핸 쪽 결과라
+// '핸승/핸무가 많을수록 + , 역/무가 많을수록 -'가 되게 핸승·역에 가중치 2를 준다
+// (2026-09-15 사용자 지정). 양수=파랑(정배 쪽으로 기움), 음수=빨강(플핸 쪽으로 기움).
+function flowValue(vals) {
+  const [hs, hm, mu, yk] = vals
+  return (hs * 2 + hm) - (mu + yk * 2)
+}
+
 // vals: [핸승,핸무,무,역] 또는 null(재료 없음) 또는 undefined(아직 불러오는 중).
 function seasonSampleCells(vals) {
   if (vals === undefined) {
-    return <td colSpan={4} className="season-sample-loading">불러오는 중…</td>
+    return <td colSpan={5} className="season-sample-loading">불러오는 중…</td>
   }
   const total = vals ? vals.reduce((a, b) => a + b, 0) : 0
+  const hasSample = vals && total > 0
+  const flow = hasSample ? flowValue(vals) : null
+  const flowClass = flow === null ? undefined : flow > 0 ? 'season-sample-flow-pos' : flow < 0 ? 'season-sample-flow-neg' : undefined
   return (
     <>
       {[0, 1, 2, 3].map((i) => (
-        <td key={i}>{vals && total > 0 ? vals[i] : '-'}</td>
+        <td key={i}>{hasSample ? vals[i] : '-'}</td>
       ))}
+      <td className={flowClass}>{flow === null ? '-' : (flow > 0 ? `+${flow}` : flow)}</td>
     </>
   )
 }
@@ -1012,6 +1024,7 @@ function DirectionSampleTable({ kind, entries, season }) {
             <th className="col-hm">핸무</th>
             <th className="col-mu">무</th>
             <th className="col-yk">역</th>
+            <th className="col-flow">흐름</th>
           </tr>
         </thead>
         <tbody>
