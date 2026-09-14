@@ -318,13 +318,12 @@
   margin-bottom: 0;
 }
 
-/* 지표별 표본 카드 — 위 PickBand 왼쪽 칸(배당, pick-band-risk-cols, 452px 고정)과
-   내용 폭을 맞춘다. 원래는 modal-col의 flex-stretch를 그대로 받아 창 너비에 따라
-   흔들렸다(이 창 크기에서 우연히 451이었을 뿐 — 좁아지면 더 줄어든다). 이 팝업은
-   반응형이 필요 없다고 확정했으니 그냥 못박는다: 482px(border-box) − 패딩 28px −
-   테두리 2px = 안쪽 452px, 위 칸과 정확히 같은 값. flex:none으로 stretch를 끈다. */
+/* 지표별 표본 카드 — 표 자체(.sample-table, 안쪽 100+99.25×4+50=547px)가 다 들어가게
+   카드 너비를 못박는다. flex:none으로 modal-col의 flex-stretch를 끈다.
+   482px → 543px(2026-09-15 사용자 지정 — 표만 넓히고 카드는 그대로면 표 옆에
+   여전히 빈 칸이 남아 소용없다며, 카드 자체 너비를 표 폭에 맞춰 넓혀 달라고 함). */
 .detail-section-pinned {
-  width: 482px;
+  width: 543px;
   flex: none;
 }
 
@@ -822,15 +821,19 @@
   width: 50px;
 }
 
-/* 핸승/핸무/무/역 네 칸 폭을 75px로 고정 — 지표별 표본 표의 폭을 항상 같아
-   보이게 한다. .sample-table로 좁혀서 다른 표(상대전적 등, HeadToHeadResult.css가
-   같은 이름의 .detail-table .col-hs를 색상 용도로만 재사용한다)에는 번지지
-   않게 한다. */
+/* 핸승/핸무/무/역 네 칸 폭 — 지표별 표본 표의 폭을 항상 같아 보이게 고정한다.
+   .sample-table로 좁혀서 다른 표(상대전적 등, HeadToHeadResult.css가 같은 이름의
+   .detail-table .col-hs를 색상 용도로만 재사용한다)에는 번지지 않게 한다.
+   75px → 90.75px(2026-09-15 사용자 지정) — 카드(.detail-section-pinned)를
+   482px→543px로 넓힌 데 맞춰, 표가 그 안쪽 공간(543 − 패딩28 − 테두리2 = 513px)을
+   꽉 채우도록 계산했다: row-label 100 + col-total 50을 뺀 나머지 363px을 4칸에
+   나눔(363÷4 = 90.75). 이 표는 width:auto(칸 폭의 합으로 표 크기 고정, 594번째 줄
+   주석 참고)라 카드만 넓히고 칸 폭을 그대로 두면 표 오른쪽에 빈 공간만 남는다. */
 .sample-table .col-hs,
 .sample-table .col-hm,
 .sample-table .col-mu,
 .sample-table .col-yk {
-  width: 75px;
+  width: 90.75px;
 }
 
 /* 배경 하이라이트 없이 굵은 선 하나로만 "여기서부터 요약 행" 표시 — 회색 배경

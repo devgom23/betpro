@@ -1005,6 +1005,17 @@ const DIRECTION_SAMPLE_LABEL_LINES = {
   k_wdl: ['국)', '승+무', '+패'], f_wdl: ['해)', '승+무', '+패'],
 }
 
+// 표본이 한 개도 없는 섹션인지 — 기본으로 접어 둘지 정하는 데 쓴다(2026-09-15
+// 사용자 지정). entries가 []면(방향을 가릴 배당 자체가 없음) 당연히 없는 것이고,
+// [이 경기, 반대] 두 줄이 있어도 통합·리그·시즌 전부 0건이면 역시 없는 것이다.
+// undefined(불러오는 중)·null(실패)은 아직 판단할 재료가 없으니 "있음"으로 둔다.
+function sectionHasNoSample(entries) {
+  if (!entries) return false
+  if (!entries.length) return true
+  const sum = (vals) => (vals ? vals.reduce((a, b) => a + b, 0) : 0)
+  return entries.every((e) => sum(e.total) === 0 && sum(e.league) === 0 && sum(e.season) === 0)
+}
+
 // entries: undefined(불러오는 중) · null(불러오기 실패) · [](방향을 못 가림 — 배당 없음/동률,
 // fav/pl/ffav만 해당) · [이 경기 방향(또는 그대로), 반대 방향(또는 거울)]
 function DirectionSampleTable({ kind, entries, season }) {
@@ -4059,10 +4070,18 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
   const matchKey = [row.S, row.R, row.No, row.HT, row.AT].join('|')
   // 지표별 표본은 기본이 '접힘' — 판단에 쓰는 7줄만 보여주고, 펼치면 전체 지표가 나온다.
   const [sampleExpanded, setSampleExpanded] = useState(false)
-  // 정배 표본 / 플핸 표본 / 해배 표본 / 승+패 시즌표 — 전부 기본은 펼침, 각자 따로 접고
-  // 펼 수 있다(2026-09-14 사용자 지정). 표본 카드까지 있어 세로로 길어서, 안 볼 때는 접어 둔다.
+  // 정배 표본 / 플핸 표본 / 해배 표본 / 승+패 시즌표 — 기본은 펼침이되, 표본이 한 개도
+  // 없는 섹션은 기본으로 접혀 있다(2026-09-15 사용자 지정, 아래 useEffect 참고). 각자
+  // 따로 접고 펼 수 있다(2026-09-14 사용자 지정). 표본 카드까지 있어 세로로 길어서,
+  // 안 볼 때는 접어 둔다.
   const [sampleCollapsed, setSampleCollapsed] = useState({})
-  const toggleSample = (key) => setSampleCollapsed((s) => ({ ...s, [key]: !s[key] }))
+  // 사용자가 손으로 한 번이라도 접었다 폈다 한 섹션은 자동 접기 판단에서 빼서(아래
+  // useEffect), 표본이 새로 로딩돼도 사용자가 정한 상태를 덮어쓰지 않는다.
+  const touchedSampleKeysRef = useRef(new Set())
+  const toggleSample = (key) => {
+    touchedSampleKeysRef.current.add(key)
+    setSampleCollapsed((s) => ({ ...s, [key]: !s[key] }))
+  }
   const [showSeasonLegend, setShowSeasonLegend] = useState(false)
   const [pickData, setPickData] = useState(null)
   const [pickError, setPickError] = useState('')
@@ -4131,6 +4150,26 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
       alive = false
     }
   }, [code, scope, matchKey])
+
+  // 정배·플핸·해배·승+패·승+무+패 일곱 섹션 중 표본이 한 개도 없는 섹션은 기본으로
+  // 접어 둔다(2026-09-15 사용자 지정) — 사용자가 손댄 적 없는 섹션만 대상으로, 표본이
+  // 새로 로딩될 때마다(경기를 바꿔도) 다시 판단한다.
+  useEffect(() => {
+    if (!seasonSample || !seasonSample.samples) return
+    setSampleCollapsed((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const key of Object.keys(DIRECTION_SAMPLE_LABEL_LINES)) {
+        if (touchedSampleKeysRef.current.has(key)) continue
+        const noSample = sectionHasNoSample(seasonSample.samples[key] ?? [])
+        if (next[key] !== noSample) {
+          next[key] = noSample
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [seasonSample])
 
   // 지표별 표본은 그 경기 데이터양대로 자연스러운 높이 그대로 두고, 상대전적(히스토리가
   // 많을수록 길어짐) 쪽의 아래 테두리를 지표별 표본의 아래 테두리와 맞춘다.
