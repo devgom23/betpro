@@ -1,12 +1,27 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
-import { TEAM_TAG_OPTIONS, MATCHUP_TAG_OPTIONS } from '../../utils/pickOptions'
+import { TEAM_TAG_OPTIONS, MATCHUP_TAG_OPTIONS, ARCHIVE_ODDS_TAG_OPTIONS } from '../../utils/pickOptions'
 import { archiveTargetText, archiveSpanText, archiveStatsText } from '../../utils/archiveTags'
 import './ArchiveTagModal.css'
 
-// 상세보기 📌 아카이브 버튼 → 이 경기의 팀·맞대결에 내 판단 태그를 단다(2026-09-13).
-// 달아 둔 태그는 그 팀/맞대결이 다시 나올 때 경기지표에 뱃지로 뜨고, 아카이브 탭에 모인다.
-// 지금 보는 경기가 '근거 경기'로 같이 저장된다(태그 이후 성적도 이 경기 다음부터 센다).
+// 배당 태그 대상 3종(승/무/패) — 값이 실제로 있을 때만 목록에 넣는다. 공식 데이터
+// (6대리그)에서만 단다 — 다른 리그끼리 배당을 비교할 수 없어서다(archive.py ODDS_SIDES
+// 주석 참고). 값은 소수 둘째 자리로 맞춰 저장·비교한다(서버 매칭도 ±0.005 오차).
+function oddsTargets(row, scope) {
+  if (scope !== 'master') return []
+  const sides = [['W', '승배당', row.KW], ['D', '무배당', row.KD], ['L', '패배당', row.KL]]
+  return sides
+    .filter(([, , v]) => Number.isFinite(Number(v)))
+    .map(([side, label, v]) => {
+      const value = Number(Number(v).toFixed(2))
+      return { value: `odds-${side}`, label: `${label} ${value.toFixed(2)}`, kind: 'odds', side, oddsValue: value }
+    })
+}
+
+// 상세보기 📌 아카이브 버튼 → 이 경기의 팀·맞대결·배당에 내 판단 태그를 단다(2026-09-13,
+// 배당은 2026-09-14 추가). 달아 둔 태그는 그 팀/맞대결/배당값이 다시 나올 때 경기지표에
+// 뱃지로 뜨고, 아카이브 탭에 모인다. 지금 보는 경기가 '근거 경기'로 같이 저장된다
+// (태그 이후 성적도 이 경기 다음부터 센다).
 export default function ArchiveTagModal({ row, code, scope, tags, onClose, onChanged }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
@@ -15,6 +30,7 @@ export default function ArchiveTagModal({ row, code, scope, tags, onClose, onCha
     { value: 'away', label: `${at} (원정팀)`, kind: 'team', a: at, b: null },
     { value: 'h2a', label: `맞대결 ${ht} → ${at}`, kind: 'matchup', a: ht, b: at },
     { value: 'a2h', label: `맞대결 ${at} → ${ht}`, kind: 'matchup', a: at, b: ht },
+    ...oddsTargets(row, scope),
   ]
   const [target, setTarget] = useState('home')
   const [tag, setTag] = useState('')
@@ -23,7 +39,9 @@ export default function ArchiveTagModal({ row, code, scope, tags, onClose, onCha
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const cur = targets.find((t) => t.value === target)
-  const options = cur.kind === 'matchup' ? MATCHUP_TAG_OPTIONS : TEAM_TAG_OPTIONS
+  const options = cur.kind === 'matchup' ? MATCHUP_TAG_OPTIONS
+    : cur.kind === 'odds' ? ARCHIVE_ODDS_TAG_OPTIONS
+      : TEAM_TAG_OPTIONS
 
   useEffect(() => {
     function onKey(e) {
@@ -39,8 +57,9 @@ export default function ArchiveTagModal({ row, code, scope, tags, onClose, onCha
   function changeTarget(value) {
     setTarget(value)
     setTag('')
-    // 맞대결은 시즌이 바뀌어도 이어지는 경우가 많아 기본을 '전체'로, 팀은 '이번 시즌'으로.
-    setSpan(targets.find((t) => t.value === value).kind === 'matchup' ? 'all' : 'season')
+    // 맞대결·배당은 시즌이 바뀌어도 이어지는 경우가 많아 기본을 '전체'로, 팀은
+    // '이번 시즌'으로.
+    setSpan(targets.find((t) => t.value === value).kind === 'team' ? 'season' : 'all')
   }
 
   async function save() {
@@ -51,11 +70,13 @@ export default function ArchiveTagModal({ row, code, scope, tags, onClose, onCha
     setSaving(true)
     setMessage('')
     try {
-      await api.post('/api/archive/tags', {
-        kind: cur.kind, scope, code, team_a: cur.a, team_b: cur.b, tag, memo, span,
-        S: row.S, R: row.R, No: row.No, HT: ht, AT: at,
-      })
-      setMessage(`저장했습니다 — 📌 ${cur.kind === 'matchup' ? `${cur.a}→${cur.b}` : cur.a} ${tag}`)
+      const body = cur.kind === 'odds'
+        ? { kind: 'odds', scope, code, tag, memo, span, odds_side: cur.side, odds_value: cur.oddsValue,
+            S: row.S, R: row.R, No: row.No, HT: ht, AT: at }
+        : { kind: cur.kind, scope, code, team_a: cur.a, team_b: cur.b, tag, memo, span,
+            S: row.S, R: row.R, No: row.No, HT: ht, AT: at }
+      await api.post('/api/archive/tags', body)
+      setMessage(`저장했습니다 — 📌 ${cur.label} ${tag}`)
       setTag('')
       setMemo('')
       onChanged()
@@ -139,7 +160,7 @@ export default function ArchiveTagModal({ row, code, scope, tags, onClose, onCha
               <li key={t.id}>
                 <span className="archive-tag-chip">📌 {archiveTargetText(t)} · {t.tag}</span>
                 <span className="archive-tag-meta">
-                  {archiveSpanText(t)} · 이후 {archiveStatsText(t.stats)}
+                  {archiveSpanText(t)} · 이후 {archiveStatsText(t)}
                   {t.memo ? ` · ${t.memo}` : ''}
                 </span>
                 <button className="archive-tag-release" onClick={() => release(t)}>해제</button>

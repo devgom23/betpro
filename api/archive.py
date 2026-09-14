@@ -9,9 +9,15 @@ import sqlite3
 
 import betpro_paths as PATHS
 
-KINDS = ("team", "matchup")
+KINDS = ("team", "matchup", "odds")
 SPANS = ("season", "all")
 _EDITABLE = ("tag", "memo", "span", "active")
+# 배당 태그(kind='odds')의 대상 — 국내 승/무/패 배당 중 어느 쪽인지. 6대리그(공식 데이터)
+# 배당끼리만 값이 서로 비교할 만하다(K1/K2는 배당 형성 방식이 달라 안 섞는다는 기존 규칙과
+# 같은 이유 — LeagueTable.jsx MAJOR_LEAGUES 주석 참고). main.py archive_tag_create가
+# scope=master만 허용해 이 규칙을 지킨다.
+ODDS_SIDES = ("W", "D", "L")
+ODDS_SIDE_LABEL = {"W": "승배당", "D": "무배당", "L": "패배당"}
 
 
 def _connect(username: str) -> sqlite3.Connection:
@@ -44,19 +50,21 @@ def get_tag(username: str, tag_id: int) -> dict | None:
 
 def create_tag(username: str, *, kind: str, scope: str, code: str, team_a: str,
                team_b: str | None, tag: str, memo: str | None, span: str,
-               s, r, no, ht: str, at: str) -> int:
+               s, r, no, ht: str, at: str,
+               odds_side: str | None = None, odds_value: float | None = None) -> int:
     con = _connect(username)
     try:
         cur = con.execute(
             """
             INSERT INTO archive_tags
                 (kind, scope, code, team_a, team_b, tag, memo, span, S, R, No, HT, AT,
-                 active, created_dt, updated_dt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now', 'localtime'),
+                 odds_side, odds_value, active, created_dt, updated_dt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now', 'localtime'),
                     datetime('now', 'localtime'))
             """,
             (kind, scope, code, _clean(team_a), _clean(team_b) or None, _clean(tag),
-             _clean(memo) or None, span, _clean(s), _clean(r), _clean(no), _clean(ht), _clean(at)),
+             _clean(memo) or None, span, _clean(s), _clean(r), _clean(no), _clean(ht), _clean(at),
+             odds_side, odds_value),
         )
         con.commit()
         return int(cur.lastrowid)

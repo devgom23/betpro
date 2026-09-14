@@ -703,14 +703,14 @@ function archiveChips(tags) {
       `내가 단 태그 · ${archiveSpanText(t)}`,
       t.memo ? `메모: ${t.memo}` : null,
       `근거 경기: ${archiveSourceText(t)} (등록 ${archiveDateText(t.created_dt)})`,
-      `태그 이후(이 경기 직전까지): ${archiveStatsText(t.stats)}`,
-      ...archiveStatsLines(t.stats),
+      `태그 이후(이 경기 직전까지): ${archiveStatsText(t)}`,
+      ...archiveStatsLines(t),
       '※ 표시만 합니다 — 판정 %·별점에는 반영하지 않습니다. 해제는 📌 아카이브 버튼이나 아카이브 탭에서.',
     ].filter(Boolean).join('\n')
     return (
       <MatchChip
         key={`archive-${t.id}`}
-        label={t.kind === 'matchup' ? `📌 ${archiveTargetText(t)}` : `📌 ${t.team_a})`}
+        label={`📌 ${archiveTargetText(t)}`}
         tone="purple"
         title={title}
       >
@@ -1040,8 +1040,14 @@ function SeasonSampleTable({ row, seasonCounts }) {
         </tbody>
       </table>
       <div className="season-sample-cardcols">
-        <SeasonSampleCardGroup kind="fav" favCode={favCode} season={row.S} data={seasonCounts === undefined ? undefined : seasonCounts?.정_경기} />
-        <SeasonSampleCardGroup kind="pl" season={row.S} data={seasonCounts === undefined ? undefined : seasonCounts?.플_경기} />
+        <SeasonSampleCardGroup
+          kind="fav" favCode={favCode} season={row.S} curRow={row}
+          data={seasonCounts === undefined ? undefined : seasonCounts?.정_경기}
+        />
+        <SeasonSampleCardGroup
+          kind="pl" season={row.S} curRow={row}
+          data={seasonCounts === undefined ? undefined : seasonCounts?.플_경기}
+        />
       </div>
     </div>
   )
@@ -1105,7 +1111,7 @@ function SeasonWlTable({ row, seasonCounts }) {
 
 // data: undefined(불러오는 중) · null/없음(재료 부족) · {total, matches}(성공, matches는
 // 최신순 최대 3건 — 그 이상은 서버가 아예 안 돌려준다, 2026-09-13 사용자 지정).
-function SeasonSampleCardGroup({ kind, favCode, season, data }) {
+function SeasonSampleCardGroup({ kind, favCode, season, data, curRow }) {
   const total = data?.total ?? 0
   const matches = data?.matches ?? []
   return (
@@ -1117,7 +1123,10 @@ function SeasonSampleCardGroup({ kind, favCode, season, data }) {
       ) : (
         <div className="season-sample-cards">
           {matches.map((m, i) => (
-            <SeasonSampleCard key={`${m.league}-${m.s}-${m.r}-${i}`} m={m} kind={kind} favCode={favCode} season={season} />
+            <SeasonSampleCard
+              key={`${m.league}-${m.s}-${m.r}-${i}`}
+              m={m} kind={kind} favCode={favCode} season={season} curRow={curRow}
+            />
           ))}
         </div>
       )}
@@ -1125,7 +1134,7 @@ function SeasonSampleCardGroup({ kind, favCode, season, data }) {
   )
 }
 
-function SeasonSampleCard({ m, kind, favCode, season }) {
+function SeasonSampleCard({ m, kind, favCode, season, curRow }) {
   const fmt = (v) => {
     const n = numOrNull(v)
     return n === null ? '-' : n.toFixed(2)
@@ -1152,6 +1161,30 @@ function SeasonSampleCard({ m, kind, favCode, season }) {
   const hlKhl = kind === 'pl' && oddsKnown && !homeDog
   const hlFw = kind === 'f_wl'
   const hlFl = kind === 'f_wl'
+  // 정배 카드는 표본 조건이 KW 또는 KL '한쪽'만 요구한다(_season_sample_match_cards
+  // 주석 참고) — 무(KD)·반대쪽·핸디 3칸은 조건과 무관해서 원래 그냥 숫자다. 그런데
+  // 우연히 이 값들까지 지금 보는 경기와 똑같이 겹치는 카드가 실제로 나왔다(헤타페-
+  // 데포르 vs 시즌표의 헤타페-셀타비고, 배당 6칸이 전부 같았고 결과도 같게 나옴 —
+  // 2026-09-14 사용자 제보). "우연히 겹친 칸"은 hl(파랑, 표본 조건)과 구분해서
+  // hl2(다른 색)로 짚어 주고, 6칸이 전부 겹치면 카드 테두리도 따로 표시한다.
+  const eq2 = (a, b) => a !== null && b !== null && Math.abs(a - b) < 0.005
+  const curKw = numOrNull(curRow?.KW)
+  const curKd = numOrNull(curRow?.KD)
+  const curKl = numOrNull(curRow?.KL)
+  const curKhw = numOrNull(curRow?.KHW)
+  const curKhd = numOrNull(curRow?.KHD)
+  const curKhl = numOrNull(curRow?.KHL)
+  const isFav = kind === 'fav'
+  const extraKw = isFav && favCode !== 'K-W' && eq2(rowKw, curKw)
+  const extraKl = isFav && favCode !== 'K-L' && eq2(rowKl, curKl)
+  const extraKd = isFav && eq2(numOrNull(m.kd), curKd)
+  const extraKhw = isFav && eq2(numOrNull(m.khw), curKhw)
+  const extraKhd = isFav && eq2(numOrNull(m.khd), curKhd)
+  const extraKhl = isFav && eq2(numOrNull(m.khl), curKhl)
+  const isFullMatch = isFav && extraKd && extraKhw && extraKhd && extraKhl
+    && (favCode === 'K-W' ? extraKl : extraKw)
+  const hl2 = (on) => (on ? 'season-sample-card-hl2' : undefined)
+  const cellClass = (required, extra) => hl(required) || hl2(extra)
   // 정배·플핸 카드는 둘째 줄에 핸디(khw/khd/khl)를, 승+패 카드는 그 자리에 해외
   // 배당(fw/fd/fl)을 보여준다 — 국)승+패/해)승+패 둘 다 해외 배당을 참고로 같이
   // 보여주고, 해)승+패일 때만 그 칸을 강조한다.
@@ -1165,9 +1198,12 @@ function SeasonSampleCard({ m, kind, favCode, season }) {
   // 지금 보는 경기와 같은 시즌(이번 시즌)인 카드만 테두리를 노란색으로 강조해서
   // 한눈에 구분되게 한다(2026-09-13 사용자 지정).
   const isCurrentSeason = season !== undefined && String(m.s) === String(season)
+  const cardClass = ['season-sample-card',
+    isCurrentSeason ? 'season-sample-card-thisseason' : '',
+    isFullMatch ? 'season-sample-card-fullmatch' : ''].filter(Boolean).join(' ')
 
   return (
-    <div className={`season-sample-card${isCurrentSeason ? ' season-sample-card-thisseason' : ''}`}>
+    <div className={cardClass} title={isFullMatch ? '배당 6칸이 전부 지금 보는 경기와 같습니다 — 우연히 겹친 것인지 확인해보세요' : undefined}>
       <div className="season-sample-card-row season-sample-card-info">
         <span className="season-sample-card-info-meta">{LEAGUE_LABELS_SHORT[m.league] || m.league} · {m.r} · {dateShort}</span>
         {hasScore && <RtBadge label={rtLabel(m.rt)} />}
@@ -1186,12 +1222,12 @@ function SeasonSampleCard({ m, kind, favCode, season }) {
         <span className="season-sample-card-at">{m.at}</span>
       </div>
       <div className="season-sample-card-row">
-        <span className={hl(hlKw)}>
+        <span className={cellClass(hlKw, extraKw)}>
           <span className="season-sample-card-prefix">{row1Prefix}</span>
           {fmt(m.kw)}
         </span>
-        <span>{fmt(m.kd)}</span>
-        <span className={hl(hlKl)}>{fmt(m.kl)}</span>
+        <span className={cellClass(false, extraKd)}>{fmt(m.kd)}</span>
+        <span className={cellClass(hlKl, extraKl)}>{fmt(m.kl)}</span>
       </div>
       {isWl ? (
         <div className="season-sample-card-row">
@@ -1204,12 +1240,12 @@ function SeasonSampleCard({ m, kind, favCode, season }) {
         </div>
       ) : (
         <div className="season-sample-card-row">
-          <span className={hl(hlKhw)}>
+          <span className={cellClass(hlKhw, extraKhw)}>
             <span className="season-sample-card-prefix">{row2Prefix}</span>
             {fmt(m.khw)}
           </span>
-          <span>{fmt(m.khd)}</span>
-          <span className={hl(hlKhl)}>{fmt(m.khl)}</span>
+          <span className={cellClass(false, extraKhd)}>{fmt(m.khd)}</span>
+          <span className={cellClass(hlKhl, extraKhl)}>{fmt(m.khl)}</span>
         </div>
       )}
     </div>

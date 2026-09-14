@@ -467,6 +467,15 @@ def ensure_predlog_db(username: str) -> str:
         if "scope" not in leg_cols:
             con.execute("ALTER TABLE bet_slip_legs ADD COLUMN scope TEXT")
         con.execute(_SCHEMA_ARCHIVE_TAGS)
+        # 아카이브 '배당' 태그(2026-09-14 추가) — 승/무/패 배당 자체에 정배방향/플핸방향
+        # 태그를 달아 두면, 나중에 같은 배당 값이 나오는 경기에 뱃지로 뜬다. 팀·맞대결
+        # 태그와 같은 표를 쓰되(team_a에는 '승배당'/'무배당'/'패배당' 라벨을 넣어 목록
+        # 표시를 그대로 재사용) 매칭 기준값만 이 두 컬럼에 따로 담는다.
+        archive_cols = {r[1] for r in con.execute("PRAGMA table_info(archive_tags)").fetchall()}
+        if "odds_side" not in archive_cols:
+            con.execute("ALTER TABLE archive_tags ADD COLUMN odds_side TEXT")
+        if "odds_value" not in archive_cols:
+            con.execute("ALTER TABLE archive_tags ADD COLUMN odds_value REAL")
         con.commit()
     finally:
         con.close()

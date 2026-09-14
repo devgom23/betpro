@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import MatchDetailModal from '../components/MatchDetailModal/MatchDetailModal'
 import LeagueTable from '../components/LeagueTable/LeagueTable'
 import { bettingDayOf } from '../components/LeagueTable/columnGroups'
-import { TEAM_TAG_OPTIONS, MATCHUP_TAG_OPTIONS } from '../utils/pickOptions'
+import { TEAM_TAG_OPTIONS, MATCHUP_TAG_OPTIONS, ARCHIVE_ODDS_TAG_OPTIONS } from '../utils/pickOptions'
 import {
   archiveTargetText, archiveSourceText, archiveStatsText, archiveStatsLines, archiveDateText,
 } from '../utils/archiveTags'
@@ -133,6 +133,7 @@ export default function ArchivePage() {
   const counts = {
     team: inLeague.filter((t) => t.kind === 'team' && (showInactive || t.active)).length,
     matchup: inLeague.filter((t) => t.kind === 'matchup' && (showInactive || t.active)).length,
+    odds: inLeague.filter((t) => t.kind === 'odds' && (showInactive || t.active)).length,
   }
   const rows = inLeague.filter((t) => t.kind === kind && (showInactive || t.active))
 
@@ -163,7 +164,10 @@ export default function ArchivePage() {
     setDetail({ code: t.code, scope: t.scope, row: { S: t.S, R: t.R, No: t.No, HT: t.HT, AT: t.AT } })
   }
 
-  const tagOptions = kind === 'matchup' ? MATCHUP_TAG_OPTIONS : TEAM_TAG_OPTIONS
+  const tagOptions = kind === 'matchup' ? MATCHUP_TAG_OPTIONS
+    : kind === 'odds' ? ARCHIVE_ODDS_TAG_OPTIONS
+      : TEAM_TAG_OPTIONS
+  const targetLabel = kind === 'matchup' ? '맞대결 (주어 → 상대)' : kind === 'odds' ? '배당' : '팀'
   const isOddsBet = kind === 'odds_bet'
 
   return (
@@ -172,6 +176,10 @@ export default function ArchivePage() {
       <p className="ar-desc">
         {isOddsBet ? (
           <>상세보기의 <b>배답벳</b> 드롭박스에서 고른 경기를 날짜별로 모아 봅니다(이번주 리스트와 같은 모양).</>
+        ) : kind === 'odds' ? (
+          <>상세보기의 <b>📌 아카이브</b> 버튼으로 국내 승/무/패 배당 값에 달아 둔 태그입니다(공식 데이터 6대리그
+          전용). 켜져 있는 태그는 어느 리그든 그 배당 값이 다시 나오면 경기지표에 뱃지로 뜹니다. 판정 %·별점에는
+          반영하지 않습니다.</>
         ) : (
           <>상세보기의 <b>📌 아카이브</b> 버튼으로 팀·맞대결에 달아 둔 태그입니다. 켜져 있는 태그는 그 팀/맞대결이
           다시 나오면 경기지표에 뱃지로 뜹니다. 판정 %·별점에는 반영하지 않습니다.</>
@@ -193,6 +201,9 @@ export default function ArchivePage() {
           </button>
           <button className={kind === 'matchup' ? 'active' : ''} onClick={() => setKind('matchup')}>
             맞대결 <span className="ar-count">{counts.matchup}</span>
+          </button>
+          <button className={kind === 'odds' ? 'active' : ''} onClick={() => setKind('odds')}>
+            배당 <span className="ar-count">{counts.odds}</span>
           </button>
           <button className={isOddsBet ? 'active' : ''} onClick={() => setKind('odds_bet')}>
             배답벳 <span className="ar-count">{oddsBet ? oddsBet.total : ''}</span>
@@ -223,7 +234,7 @@ export default function ArchivePage() {
       {!isOddsBet && tags === null && !error && <div className="ar-empty">불러오는 중...</div>}
       {!isOddsBet && tags !== null && rows.length === 0 && (
         <div className="ar-empty">
-          {kind === 'team' ? '팀' : '맞대결'} 태그가 없습니다. 상세보기에서 📌 아카이브 버튼으로 달 수 있습니다.
+          {targetLabel} 태그가 없습니다. 상세보기에서 📌 아카이브 버튼으로 달 수 있습니다.
         </div>
       )}
 
@@ -233,7 +244,7 @@ export default function ArchivePage() {
             <thead>
               <tr>
                 <th>리그</th>
-                <th>{kind === 'matchup' ? '맞대결 (주어 → 상대)' : '팀'}</th>
+                <th>{targetLabel}</th>
                 <th>태그</th>
                 <th>범위</th>
                 <th>메모</th>
@@ -281,8 +292,8 @@ export default function ArchivePage() {
                     </button>
                   </td>
                   <td>{archiveDateText(t.created_dt)}</td>
-                  <td className="ar-stats" title={archiveStatsLines(t.stats).join('\n') || undefined}>
-                    {archiveStatsText(t.stats)}
+                  <td className="ar-stats" title={archiveStatsLines(t).join('\n') || undefined}>
+                    {archiveStatsText(t)}
                   </td>
                   <td>
                     <button

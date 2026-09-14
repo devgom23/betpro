@@ -1145,6 +1145,17 @@
   padding: 5px;
 }
 
+/* 배당 6칸(정배·무·역배·핸디 3칸)이 전부 우연히 지금 보는 경기와 같은 카드 —
+   테두리를 빨간색으로 바꿔 눈에 띄게 한다(2026-09-14 사용자 제보: 헤타페-데포르
+   경기를 볼 때 시즌표의 헤타페-셀타비고 카드가 배당까지 완전히 똑같았는데 결과도
+   같게 나왔다 — "이런 경기는 체크가 필요"). 이번 시즌 테두리(노란색)와 같이 걸릴 수
+   있어 뒤에 둬서 빨간색이 이기게 한다.*/
+.season-sample-card-fullmatch {
+  border-color: var(--danger) !important;
+  border-width: 2px;
+  padding: 5px;
+}
+
 .season-sample-card-row {
   display: flex;
   align-items: center;
@@ -1183,6 +1194,15 @@
    하이라이트"). 배경을 칠하면 칩처럼 보여 RT·PICK 배지 톤과 겹치니 글자색+굵기로만. */
 .season-sample-card-hl {
   color: var(--accent) !important;
+  font-weight: 700;
+}
+
+/* 표본 조건(파랑, .season-sample-card-hl)과는 다른 이유로 겹친 칸 — 정배 카드는
+   정배 쪽 하나만 표본 조건이라, 무·반대쪽·핸디 3칸은 원래 조건과 무관하다. 그런데도
+   우연히 지금 보는 경기와 값이 같으면 이 색으로 따로 짚어 준다(2026-09-14 추가,
+   season-sample-card-fullmatch 주석 참고) — 파랑과 헷갈리지 않게 경고색을 쓴다. */
+.season-sample-card-hl2 {
+  color: var(--warning-text) !important;
   font-weight: 700;
 }
 

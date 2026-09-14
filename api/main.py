@@ -1120,13 +1120,20 @@ def _season_sample_match_cards(pool, code, season, round, no, kind, fav_code, ro
             return pd.Series(np.nan, index=pool.index)
         return pd.to_numeric(pool[colname], errors="coerce").round(2)
 
-    cKW, cKL, cKHW, cKHL = _round2("KW"), _round2("KL"), _round2("KHW"), _round2("KHL")
+    cKW, cKL, cKD = _round2("KW"), _round2("KL"), _round2("KD")
+    cKHW, cKHD, cKHL = _round2("KHW"), _round2("KHD"), _round2("KHL")
     cFW, cFL = _round2("FW"), _round2("FL")
 
+    # 정배 카드가 '완전 동일 배당'(정배 쪽 하나만 요구하는 표본 조건과 달리 6칸 전부가
+    # 이 경기와 같은 경우)인지 나중에 가려내려고 둔다 — kind가 'fav'가 아니면 전부 None.
+    kd = khw = khd = khl = None
     if kind == "fav":
         if not fav_code:
             return {"total": 0, "matches": []}
         kw, kl = _pos(row.get("KW")), _pos(row.get("KL"))
+        kd, khw, khd, khl = (
+            _pos(row.get("KD")), _pos(row.get("KHW")), _pos(row.get("KHD")), _pos(row.get("KHL")),
+        )
         cond = (cKW == kw) if fav_code == "K-W" else (cKL == kl)
     elif kind == "pl":  # engine.get_samples_fast의 K-PL 분기와 동일한 조건
         kw, kl = _pos(row.get("KW")), _pos(row.get("KL"))
@@ -1176,7 +1183,20 @@ def _season_sample_match_cards(pool, code, season, round, no, kind, fav_code, ro
 
     date_key = pd.to_datetime(sub["DT"].astype(str).str.split(" ").str[0], format="%y-%m-%d", errors="coerce")
     tm_key = pd.to_numeric(sub.get("TM"), errors="coerce").fillna(0)
-    order = pd.DataFrame({"d": date_key, "t": tm_key}, index=sub.index).sort_values(["d", "t"], ascending=False).index
+    # 정배 카드는 6칸(정배·무·역배·핸디 3칸)이 전부 이 경기와 같은 '완전 동일 배당'이면
+    # 최신순보다 먼저 보여준다(2026-09-14 사용자 지정) — 흔치 않은 경우라 나타나면 바로
+    # 눈에 띄어야 한다. 그 안에서는(완전동일끼리 · 나머지끼리) 여전히 최신순.
+    if kind == "fav" and None not in (kd, khw, khd, khl):
+        idx = sub.index
+        full_match = (
+            cKW.loc[idx].eq(kw) & cKL.loc[idx].eq(kl) & cKD.loc[idx].eq(kd)
+            & cKHW.loc[idx].eq(khw) & cKHD.loc[idx].eq(khd) & cKHL.loc[idx].eq(khl)
+        )
+    else:
+        full_match = pd.Series(False, index=sub.index)
+    order = pd.DataFrame(
+        {"not_full": ~full_match, "d": date_key, "t": tm_key}, index=sub.index,
+    ).sort_values(["not_full", "d", "t"], ascending=[True, False, False]).index
     # 최신 5건까지만(2026-09-13 — 3건→4건 이후, 카드 폭을 줄이면서 한 줄에 5개까지
     # 들어가는 걸 보고 5건으로 늘림).
     picked = sub.loc[order[:5]]
@@ -2031,11 +2051,74 @@ def _archive_labels(user: dict) -> dict:
     return labels
 
 
+# ── 배당 태그(kind='odds') 전용 매칭 ──────────────────────────────────────────
+# 팀·맞대결 태그와 달리 "어느 리그에서" 다시 나오는지가 아니라 "국내 배당 값 자체"가
+# 다시 나오는지를 본다 — 그래서 한 리그가 아니라 공식 데이터 6대리그를 통째로 훑는다
+# (K1/K2는 배당 형성 방식이 달라 섞지 않는다는 기존 규칙과 같은 이유 —
+# LeagueTable.jsx의 MAJOR_LEAGUES·api/main.py _same_odds_for와 같은 범위).
+_ARCHIVE_ODDS_SIDE_COL = {"W": "KW", "D": "KD", "L": "KL"}
+_ARCHIVE_ODDS_RT_KEY = {1: "hanseung", 2: "hanmu", 3: "mu", 4: "yeok"}
+_ARCHIVE_ODDS_RT_LABEL = {1: "핸승", 2: "핸무", 3: "무", 4: "역"}
+
+
+def _archive_odds_pool() -> pd.DataFrame:
+    """6대리그를 합친, 배당 태그 매칭에 필요한 컬럼만 남긴 슬림 표."""
+    db = PATHS.get_master_db()
+    need = {"S", "R", "No", "DT", "HT", "AT", "RT", "KW", "KD", "KL"}
+    frames = []
+    for code in PATHS.LEAGUES:
+        df = DATA.load_league_df(db, code)
+        if df.empty or not need.issubset(df.columns):
+            continue
+        sub = df[list(need)].copy()
+        sub["L"] = code
+        frames.append(sub)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def _archive_odds_after_stats(pool: pd.DataFrame, t: dict, upto: tuple | None = None, limit: int = 10) -> dict:
+    """배당 태그를 단 근거 경기 '다음부터'(upto를 주면 그 직전까지만), 국내 배당이 같은
+    값(±0.005)으로 다시 나온 6대리그 경기들의 결과(핸승/핸무/무/역) 분포 — 정배방향/
+    플핸방향 태그가 실제로 맞았는지 참고하라고 보여준다. span='season'이면 태그를 단
+    시즌 안에서만 센다."""
+    out = {"n": 0, "hanseung": 0, "hanmu": 0, "mu": 0, "yeok": 0, "matches": []}
+    col = _ARCHIVE_ODDS_SIDE_COL.get(t.get("odds_side"))
+    val = t.get("odds_value")
+    if pool is None or pool.empty or val is None or col is None:
+        return out
+    rt = pd.to_numeric(pool["RT"], errors="coerce")
+    odds = pd.to_numeric(pool[col], errors="coerce")
+    m = pool[rt.isin([1, 2, 3, 4]) & np.isclose(odds, float(val), atol=0.005)]
+    if t.get("span") == "season":
+        m = m[m["S"].astype(str) == str(t.get("S"))]
+    if m.empty:
+        return out
+    base = _archive_tag_base_key(t)
+    keys = [standings.chrono_key(s, r, n) for s, r, n in zip(m["S"], m["R"], m["No"])]
+    keep = [k > base and (upto is None or k < upto) for k in keys]
+    m = m[keep]
+    if m.empty:
+        return out
+    rows = []
+    for _, r in m.iterrows():
+        code = int(float(r["RT"]))
+        out[_ARCHIVE_ODDS_RT_KEY[code]] += 1
+        rows.append({
+            "key": standings.chrono_key(r["S"], r["R"], r["No"]),
+            "S": r["S"], "R": r["R"], "DT": r.get("DT"), "L": r.get("L"),
+            "HT": r["HT"], "AT": r["AT"], "RT_label": _ARCHIVE_ODDS_RT_LABEL[code],
+        })
+    rows.sort(key=lambda x: x["key"], reverse=True)
+    out["n"] = len(rows)
+    out["matches"] = [{k: v for k, v in x.items() if k != "key"} for x in rows[:limit]]
+    return out
+
+
 class ArchiveTagBody(BaseModel):
     kind: str
     scope: str
     code: str
-    team_a: str
+    team_a: str = ""
     team_b: Optional[str] = None
     tag: str
     memo: Optional[str] = None
@@ -2045,6 +2128,9 @@ class ArchiveTagBody(BaseModel):
     No: Union[str, int, float, None] = None
     HT: str = ""
     AT: str = ""
+    # 배당 태그(kind='odds') 전용 — 어느 배당(승/무/패)의 얼마짜리 값인지(2026-09-14 추가).
+    odds_side: Optional[str] = None
+    odds_value: Optional[float] = None
 
 
 class ArchiveTagUpdateBody(BaseModel):
@@ -2060,9 +2146,15 @@ def archive_tags(user: dict = Depends(get_current_user)):
     tags = ARCHIVE.list_tags(user["username"])
     labels = _archive_labels(user)
     sources: dict = {}
+    odds_pool = None
     for t in tags:
         k = (t["scope"], t["code"])
         t["league_label"] = labels.get(k, t["code"])
+        if t["kind"] == "odds":
+            if odds_pool is None:
+                odds_pool = _archive_odds_pool()
+            t["stats"] = _archive_odds_after_stats(odds_pool, t)
+            continue
         if k not in sources:
             try:
                 sources[k] = _archive_source_df(_resolve_scope_db(t["scope"], user), t["scope"], t["code"])
@@ -2076,14 +2168,31 @@ def archive_tags(user: dict = Depends(get_current_user)):
 def archive_tag_create(body: ArchiveTagBody, user: dict = Depends(get_current_user)):
     _check_league_for(body.code, body.scope, user)
     if body.kind not in ARCHIVE.KINDS:
-        raise HTTPException(status_code=400, detail="태그 대상(팀/맞대결)이 올바르지 않습니다.")
+        raise HTTPException(status_code=400, detail="태그 대상이 올바르지 않습니다.")
     if body.span not in ARCHIVE.SPANS:
         raise HTTPException(status_code=400, detail="범위(시즌/전체)가 올바르지 않습니다.")
-    team_a = body.team_a.strip()
-    team_b = (body.team_b or "").strip()
-    ht, at = body.HT.strip(), body.AT.strip()
     if not body.tag.strip():
         raise HTTPException(status_code=400, detail="태그를 골라주세요.")
+    ht, at = body.HT.strip(), body.AT.strip()
+
+    if body.kind == "odds":
+        # 배당 태그는 6대리그끼리만 값을 비교할 만해서(_archive_odds_pool 주석 참고)
+        # 공식 데이터 경기에서만 달 수 있다.
+        if body.scope != PATHS.SCOPE_MASTER:
+            raise HTTPException(status_code=400, detail="배당 태그는 공식 데이터 경기에서만 달 수 있습니다.")
+        if body.odds_side not in ARCHIVE.ODDS_SIDES or body.odds_value is None:
+            raise HTTPException(status_code=400, detail="배당 값을 확인할 수 없습니다.")
+        tag_id = ARCHIVE.create_tag(
+            user["username"], kind="odds", scope=body.scope, code=body.code,
+            team_a=ARCHIVE.ODDS_SIDE_LABEL[body.odds_side], team_b=None,
+            tag=body.tag, memo=body.memo, span=body.span,
+            s=body.S, r=body.R, no=body.No, ht=ht, at=at,
+            odds_side=body.odds_side, odds_value=float(body.odds_value),
+        )
+        return {"ok": True, "id": tag_id}
+
+    team_a = body.team_a.strip()
+    team_b = (body.team_b or "").strip()
     if team_a not in (ht, at):
         raise HTTPException(status_code=400, detail="이 경기에 나오는 팀에만 태그를 달 수 있습니다.")
     if body.kind == "matchup" and (team_b not in (ht, at) or team_b == team_a):
@@ -2126,9 +2235,10 @@ def archive_for_match(scope: str = PATHS.SCOPE_MASTER, code: str = "",
     _check_league_for(code, scope, user)
     ht, at = home.strip(), away.strip()
     key = standings.chrono_key(season, round, no)
+    all_tags = ARCHIVE.list_tags(user["username"])
     hits = []
-    for t in ARCHIVE.list_tags(user["username"]):
-        if not t["active"] or t["scope"] != scope or t["code"] != code:
+    for t in all_tags:
+        if not t["active"] or t["kind"] == "odds" or t["scope"] != scope or t["code"] != code:
             continue
         if t["span"] == "season" and str(t["S"]) != str(season):
             continue
@@ -2140,11 +2250,43 @@ def archive_for_match(scope: str = PATHS.SCOPE_MASTER, code: str = "",
         elif t["team_a"] not in (ht, at):
             continue
         hits.append(t)
+
+    # 배당 태그 — 리그가 달라도 상관없다. "지금 보는 경기의 국내 승/무/패 배당" 자체가
+    # 태그를 걸 때의 값과 같은지로만 판정한다(공식 데이터 6대리그에서만 — _archive_odds_pool
+    # 주석과 같은 이유). 그래서 scope/code로 거르지 않고, 이 경기의 실제 배당을 다시 읽어
+    # 태그 값과 대조한다.
+    odds_hits = []
+    active_odds_tags = [t for t in all_tags if t["active"] and t["kind"] == "odds"]
+    if scope == PATHS.SCOPE_MASTER and active_odds_tags:
+        db = _resolve_scope_db(scope, user)
+        idx = _pick_key_index(db, code).get(_my_pick_key(season, round, no, ht, at))
+        if idx is not None:
+            row = DATA.load_league_df(db, code).loc[idx]
+            cur_by_side = {
+                side: pd.to_numeric(pd.Series([row.get(col)]), errors="coerce").iloc[0]
+                for side, col in _ARCHIVE_ODDS_SIDE_COL.items()
+            }
+            for t in active_odds_tags:
+                v = cur_by_side.get(t.get("odds_side"))
+                if v is None or pd.isna(v) or t.get("odds_value") is None:
+                    continue
+                if abs(float(v) - float(t["odds_value"])) > 0.005:
+                    continue
+                if t["span"] == "season" and str(t["S"]) != str(season):
+                    continue
+                if key < _archive_tag_base_key(t):
+                    continue
+                odds_hits.append(t)
+
     if hits:
         df = _archive_source_df(_resolve_scope_db(scope, user), scope, code)
         for t in hits:
             t["stats"] = _archive_after_stats(df, t, upto=key, limit=5)
-    return {"tags": hits}
+    if odds_hits:
+        odds_pool = _archive_odds_pool()
+        for t in odds_hits:
+            t["stats"] = _archive_odds_after_stats(odds_pool, t, upto=key, limit=5)
+    return {"tags": hits + odds_hits}
 
 
 class PickAiBody(BaseModel):
