@@ -1021,12 +1021,11 @@ def season_sample(code: str, scope: str = PATHS.SCOPE_MASTER,
                   season: str = "", round: str = "",   # noqa: A002
                   no: Optional[float] = None,
                   user: dict = Depends(get_current_user)):
-    """상세보기 '정배·플핸 시즌표'용 — 국)정배(이 경기 정배 방향의 K-W 또는 K-L)와
-    국)플핸(K-PL)을 '이번 시즌 안에서만' 다시 센다(초기 배당 기준, 배변은 없음).
-    저장된 지표(K-W N 등)는 리그 전체 히스토리가 표본 풀이라 시즌 단위로 볼 값이
-    따로 없어서, 이 표를 열 때만 그 자리에서 계산한다.
+    """상세보기 '정배 표본'·'플핸 표본'·'해배 표본'·'승+패 시즌표'용 — 통합/리그/시즌 세
+    줄 숫자와 표본 경기 카드를 한 번에 돌려준다(초기 배당 기준, 배변은 없음). 시즌 줄은
+    저장된 지표가 없어 이 표를 열 때만 그 자리에서 센다(_direction_samples 주석 참고).
     ⚠ 계산 로직(engine._prep_db/get_samples_fast)은 한 글자도 안 건드린다 — 표본
-    풀로 넘기는 df만 이번 시즌 것으로 좁힌다(4번 원칙: engine.py 함수 보호).
+    풀로 넘기는 df와 경기 값만 바꿔 넣는다(4번 원칙: engine.py 함수 보호).
     """
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
@@ -1042,20 +1041,6 @@ def season_sample(code: str, scope: str = PATHS.SCOPE_MASTER,
         raise HTTPException(status_code=404, detail="경기를 찾을 수 없습니다.")
     row = target.iloc[0]
 
-    def _pos(v):
-        try:
-            f = float(v)
-        except (TypeError, ValueError):
-            return None
-        return f if f > 0 else None
-
-    kw, kl = _pos(row.get("KW")), _pos(row.get("KL"))
-    if kw is None or kl is None or kw == kl:
-        # 정배 방향을 못 가리면(배당 없음/동률) 국)정배는 낼 수 없다 — 국)플핸만 시도.
-        fav_code = None
-    else:
-        fav_code = "K-W" if kw < kl else "K-L"
-
     # 시즌 줄은 '이 리그의 이번 시즌'이 아니라 '6대리그 전체의 이번 시즌'이 표본 풀이다
     # (2026-09-13 사용자 지정 — 통합/리그는 전체 히스토리 기준으로 이미 나뉘어 있으니,
     # 시즌만 그 아래 한 단계 더(전체 시즌→이번 시즌) 좁힌 것으로 본다). 내 데이터는
@@ -1066,31 +1051,118 @@ def season_sample(code: str, scope: str = PATHS.SCOPE_MASTER,
         season_pool = df
     season_df = season_pool[season_pool["S"].astype(str) == str(season)]
     cache = engine._prep_db(season_df)
+
+    # 정배/플핸/해배/승+패/승+무+패 일곱 섹션 전부 여기 하나에서 만든다 — 통합/리그는
+    # 저장된 지표를 그대로 읽거나(이 경기 방향) 거울 경기로 다시 세고(반대 경우), 시즌은
+    # 둘 다 이 자리에서 season_cache로 센다. 카드도 같이 뽑는다(_direction_samples 주석 참고).
+    samples = _direction_samples(db, code, scope, df, season_pool, cache, row, season, round, no)
+
+    return {"season": season, "samples": samples}
+
+
+# ── 정배 표본 · 플핸 표본 · 해배 표본 (2026-09-14 사용자 지정) ──────────────────
+# 예전 '정배·플핸 시즌표'는 이 경기의 방향(정배가 홈이냐 원정이냐) 한쪽 표본만 보여줬다.
+# 이제는 같은 배당값을 홈에서 나온 경우 / 원정에서 나온 경우 두 줄로 나란히 보여준다
+# — 위 줄은 이 경기 자신의 방향, 아래 줄은 같은 값이 반대 방향으로 나온 경기들.
+#   정배 표본: 이 경기 국내 정배배당 값이 홈(K-W) / 원정(K-L)으로 나온 경기
+#   플핸 표본: 이 경기 플핸측 국내 핸디배당 값이 언더독 홈 / 언더독 원정으로 나온 경기(K-PL)
+#   해배 표본: 이 경기 해외 정배배당 값이 홈(F-W) / 원정(F-L)으로 나온 경기
+#
+# 반대 방향 줄은 '홈·원정을 맞바꾼 거울 경기'를 만들어 엔진(get_samples_fast)에 그대로
+# 넣어 센다 — engine.py는 한 글자도 안 건드린다(4번 원칙). 거울 경기의 KW 자리에 원래
+# KL 값이 들어가므로 K-W 매칭이 곧 "그 값이 홈에서 나온 경기"가 된다. 거울은 실제로
+# 없는 경기라 엔진의 '자기 자신 1건 빼기'가 엉뚱한 칸을 깎지 않도록 RT를 비운다.
+#
+# ⚠ 통합·리그 숫자: 이 경기 방향의 줄은 등록 때 저장해 둔 지표를 그대로 읽는다(26지표
+# 표와 같은 숫자 — '계산 시점 원칙'). 반대 방향 줄은 저장된 값이 없어 지금 DB로 센다.
+_MIRROR_SWAP = (("KW", "KL"), ("KHW", "KHL"), ("FW", "FL"))
+_SAMPLE_ODDS_KEYS = ("KW", "KD", "KL", "KHW", "KHD", "KHL", "FW", "FD", "FL")
+
+
+def _mirror_row(row_dict: dict) -> dict:
+    m = dict(row_dict)
+    for a, b in _MIRROR_SWAP:
+        m[a], m[b] = row_dict.get(b), row_dict.get(a)
+    m["RT"] = None
+    return m
+
+
+def _stored_counts(row_dict: dict, ind: str) -> list[int]:
+    out = []
+    for i in range(1, 5):
+        try:
+            v = float(row_dict.get(f"{ind} {i}"))
+        except (TypeError, ValueError):
+            v = float("nan")
+        out.append(0 if np.isnan(v) else int(v))
+    return out
+
+
+def _json_num(v):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if np.isnan(f) else f
+
+
+def _direction_samples(db, code, scope, league_df, total_pool, season_cache, row, season, round, no):  # noqa: A002
     row_dict = row.to_dict()
-    counts_fav = engine.get_samples_fast(cache, fav_code, row_dict) if fav_code else None
-    counts_pl = engine.get_samples_fast(cache, "K-PL", row_dict)
-    # 승+패(국)승+패/해)승+패) — 정배 방향과 무관하게 홈·원정 배당이 둘 다 같은 경기를
-    # 찾는 지표(K-WL/F-WL, 저장된 26개 지표 중 하나). '정배·플핸 시즌표' 바로 아래
-    # '승+패 시즌표'용으로 2026-09-13 추가 — fav_code 같은 방향 판단이 필요 없다.
-    counts_k_wl = engine.get_samples_fast(cache, "K-WL", row_dict)
-    counts_f_wl = engine.get_samples_fast(cache, "F-WL", row_dict)
+    mirror = _mirror_row(row_dict)
+    league_cache = DATA.cached_derive(
+        db, "sample_prep:league:" + code, lambda: engine._prep_db(league_df), tables=(code,))
+    if _is_user_scope(scope):
+        total_cache = league_cache
+    else:
+        total_cache = DATA.cached_derive(
+            db, "sample_prep:total", lambda: engine._prep_db(total_pool), tables=tuple(PATHS.LEAGUES))
 
-    # 표본 경기 카드는 '시즌'이 아니라 '통합'(season_pool, 시즌 필터 없음) 전체에서
-    # 최신순으로 5건 뽑는다(2026-09-13 사용자 지정 — 실측으로 확인: 시즌 표본이 이미
-    # 통합 표본 중 가장 최신 자리를 그대로 차지하고 있어서, 시즌 표본이 5건 미만일
-    # 때만 통합 쪽이 지난 시즌 경기로 더 채워 보여준다 — 카드가 아예 안 뜨던 경우가
-    # 줄어든다). '시즌' 줄 숫자(정/플/국승패/해승패 4칸 카운트)는 그대로 이번 시즌만 센다.
-    fav_matches = _season_sample_match_cards(season_pool, code, season, round, no, "fav", fav_code, row)
-    pl_matches = _season_sample_match_cards(season_pool, code, season, round, no, "pl", None, row)
-    k_wl_matches = _season_sample_match_cards(season_pool, code, season, round, no, "k_wl", None, row)
-    f_wl_matches = _season_sample_match_cards(season_pool, code, season, round, no, "f_wl", None, row)
+    def entry(side, ind, total_ind, mirrored, kind, fav_code):
+        src = mirror if mirrored else row_dict
+        if mirrored:
+            league = engine.get_samples_fast(league_cache, ind, src)
+            total = engine.get_samples_fast(total_cache, total_ind, src)
+        else:
+            league = _stored_counts(row_dict, ind)
+            total = _stored_counts(row_dict, total_ind)
+        return {
+            "side": side, "mirrored": mirrored, "kind": kind, "fav_code": fav_code,
+            "total": total, "league": league,
+            "season": engine.get_samples_fast(season_cache, ind, src),
+            "cards": _season_sample_match_cards(total_pool, code, season, round, no, kind, fav_code, src),
+            "odds": {k: _json_num(src.get(k)) for k in _SAMPLE_ODDS_KEYS},
+        }
 
-    return {
-        "season": season, "fav_code": fav_code, "정": counts_fav, "플": counts_pl,
-        "정_경기": fav_matches, "플_경기": pl_matches,
-        "국승패": counts_k_wl, "해승패": counts_f_wl,
-        "국승패_경기": k_wl_matches, "해승패_경기": f_wl_matches,
-    }
+    def pair(home_is_self, home_args, away_args):
+        home = entry("홈", *home_args[:2], not home_is_self, *home_args[2:])
+        away = entry("원", *away_args[:2], home_is_self, *away_args[2:])
+        return [home, away] if home_is_self else [away, home]
+
+    # 승+패·승+무+패는 홈·원정(K-WL 등)을 이미 '둘 다' 걸어 매칭하는 지표라 fav처럼
+    # 어느 한쪽 코드를 고를 필요가 없다 — 같은 지표 코드를 이 경기 그대로/거울(홈·원정
+    # 맞바꿈)에 각각 적용한 두 줄이다(2026-09-14 사용자 지정 — "반대 경우의 표본도").
+    def mirror_pair(ind, total_ind, kind):
+        return [entry("이 경기", ind, total_ind, False, kind, None),
+                entry("반대", ind, total_ind, True, kind, None)]
+
+    def _pos(v):
+        f = _json_num(v)
+        return f if f and f > 0 else None
+
+    out = {"fav": [], "pl": [], "ffav": []}
+    kw, kl = _pos(row_dict.get("KW")), _pos(row_dict.get("KL"))
+    if kw and kl and kw != kl:
+        out["fav"] = pair(kw < kl, ("K-W", "TK-W", "fav", "K-W"), ("K-L", "TK-L", "fav", "K-L"))
+        # 플핸의 '홈/원'은 플핸측(언더독)이 어느 쪽이었나다 — 정배가 원정이면 언더독이 홈.
+        out["pl"] = pair(kw > kl, ("K-PL", "TK-PL", "pl", None), ("K-PL", "TK-PL", "pl", None))
+    fw, fl = _pos(row_dict.get("FW")), _pos(row_dict.get("FL"))
+    if fw and fl and fw != fl:
+        out["ffav"] = pair(fw < fl, ("F-W", "TF-W", "ffav", "F-W"), ("F-L", "TF-L", "ffav", "F-L"))
+    out["k_wl"] = mirror_pair("K-WL", "TK-WL", "k_wl")
+    out["f_wl"] = mirror_pair("F-WL", "TF-WL", "f_wl")
+    out["k_wdl"] = mirror_pair("K-WDL", "TK-WDL", "k_wdl")
+    out["f_wdl"] = mirror_pair("F-WDL", "TF-WDL", "f_wdl")
+    return out
 
 
 def _season_sample_match_cards(pool, code, season, round, no, kind, fav_code, row):  # noqa: A002
@@ -1122,7 +1194,7 @@ def _season_sample_match_cards(pool, code, season, round, no, kind, fav_code, ro
 
     cKW, cKL, cKD = _round2("KW"), _round2("KL"), _round2("KD")
     cKHW, cKHD, cKHL = _round2("KHW"), _round2("KHD"), _round2("KHL")
-    cFW, cFL = _round2("FW"), _round2("FL")
+    cFW, cFD, cFL = _round2("FW"), _round2("FD"), _round2("FL")
 
     # 정배 카드가 '완전 동일 배당'(정배 쪽 하나만 요구하는 표본 조건과 달리 6칸 전부가
     # 이 경기와 같은 경우)인지 나중에 가려내려고 둔다 — kind가 'fav'가 아니면 전부 None.
@@ -1148,16 +1220,31 @@ def _season_sample_match_cards(pool, code, season, round, no, kind, fav_code, ro
         db_home_dog = cKW > cKL
         db_pl = cKHW.where(db_home_dog, cKHL)
         cond = valid & (db_home_dog == home_dog) & (db_pl == pl_odds)
+    elif kind == "ffav":  # 해배 표본 — engine.get_samples_fast의 F-W / F-L 분기와 같은 조건
+        if not fav_code:
+            return {"total": 0, "matches": []}
+        fw, fl = _pos(row.get("FW")), _pos(row.get("FL"))
+        cond = (cFW == fw) if fav_code == "F-W" else (cFL == fl)
     elif kind == "k_wl":  # engine.get_samples_fast의 K-WL/TK-WL 분기 — 방향 무관, 홈·원정 둘 다 일치
         kw, kl = _pos(row.get("KW")), _pos(row.get("KL"))
         if kw is None or kl is None:
             return {"total": 0, "matches": []}
         cond = (cKW == kw) & (cKL == kl)
-    else:  # 'f_wl' — engine.get_samples_fast의 F-WL/TF-WL 분기
+    elif kind == "f_wl":  # engine.get_samples_fast의 F-WL/TF-WL 분기
         fw, fl = _pos(row.get("FW")), _pos(row.get("FL"))
         if fw is None or fl is None:
             return {"total": 0, "matches": []}
         cond = (cFW == fw) & (cFL == fl)
+    elif kind == "k_wdl":  # engine.get_samples_fast의 K-WDL/TK-WDL 분기 — 홈·무·원정 셋 다 일치
+        kw, kd, kl = _pos(row.get("KW")), _pos(row.get("KD")), _pos(row.get("KL"))
+        if kw is None or kd is None or kl is None:
+            return {"total": 0, "matches": []}
+        cond = (cKW == kw) & (cKD == kd) & (cKL == kl)
+    else:  # 'f_wdl' — engine.get_samples_fast의 F-WDL/TF-WDL 분기
+        fw, fd, fl = _pos(row.get("FW")), _pos(row.get("FD")), _pos(row.get("FL"))
+        if fw is None or fd is None or fl is None:
+            return {"total": 0, "matches": []}
+        cond = (cFW == fw) & (cFD == fd) & (cFL == fl)
 
     if "Source_League" in pool.columns:
         self_mask = (

@@ -956,28 +956,6 @@ function OddsTable({ row, weekRank }) {
   )
 }
 
-// ── 정배·플핸 시즌표(2026-09-12 추가) ──────────────────────────────────
-// '배당' 표 바로 아래(확률 지표 칸 위)에 붙는다. 국)정배(이 경기 정배 방향의
-// K-W 또는 K-L)와 국)플핸(K-PL)을 통합(TK-)·리그(K-)·시즌(이번 시즌만) 세 단위로
-// 나란히 보여준다 — 초기 배당 기준만이고 배변 줄은 없다(사용자 지정).
-// 통합·리그는 이 경기 row에 이미 저장된 지표 컬럼을 그대로 읽고, 시즌만 저장된 값이
-// 없어서(리그 전체 히스토리가 표본 풀이라 시즌 단위로 뗀 값이 없다) 팝업을 열 때
-// /api/leagues/{code}/season_sample로 그 자리에서 계산해 받아온다.
-function seasonFavCode(row) {
-  const kw = numOrNull(row.KW)
-  const kl = numOrNull(row.KL)
-  if (kw === null || kl === null || kw === kl) return null
-  return kw < kl ? 'K-W' : 'K-L'
-}
-
-function seasonCountsOf(row, code) {
-  if (!code) return null
-  return [1, 2, 3, 4].map((i) => {
-    const v = Number(row[`${code} ${i}`])
-    return Number.isNaN(v) ? 0 : Math.trunc(v)
-  })
-}
-
 // vals: [핸승,핸무,무,역] 또는 null(재료 없음) 또는 undefined(아직 불러오는 중).
 function seasonSampleCells(vals) {
   if (vals === undefined) {
@@ -993,97 +971,37 @@ function seasonSampleCells(vals) {
   )
 }
 
-function SeasonSampleTable({ row, seasonCounts }) {
-  // seasonCounts: undefined=불러오는 중 · null=실패 · {정,플,...}=성공(부모 MatchDetailModal이
-  // /season_sample을 한 번만 불러 이 표와 SeasonWlTable에 같이 내려준다, 2026-09-13).
-  const favCode = seasonFavCode(row)
-  const favTotalCode = favCode === 'K-W' ? 'TK-W' : favCode === 'K-L' ? 'TK-L' : null
-
-  // 그룹 하나(국)정배 또는 국)플핸)의 통합/리그/시즌 세 줄. 통합·리그는 row에서 바로,
-  // 시즌은 seasonCounts가 아직 undefined면 로딩, null이면 값 없음(재료 부족 등)으로 본다.
-  // 국)정배/국)플핸 이름 칸을 구분 칸 앞에 다시 넣는다(2026-09-13 사용자 지정 —
-  // 한 번 뺐다가, 시즌표가 박스로 독립되면서 자리가 생겨 다시 넣었다).
-  function group(label, leagueCode, totalCode, seasonKey) {
-    const rows = [
-      ['통합', seasonCountsOf(row, totalCode)],
-      ['리그', seasonCountsOf(row, leagueCode)],
-      ['시즌', seasonCounts === undefined ? undefined : (seasonCounts?.[seasonKey] ?? null)],
-    ]
-    return rows.map(([sub, vals], i) => (
-      <tr key={`${label}-${sub}`}>
-        {i === 0 && (
-          <td className="row-label season-sample-group" rowSpan={rows.length}>
-            {label}
-          </td>
-        )}
-        <td className="row-label season-sample-sub">{sub}</td>
-        {seasonSampleCells(vals)}
-      </tr>
-    ))
-  }
-
-  return (
-    <div className="season-sample-wrap">
-      <table className="detail-table season-sample-table">
-        <thead>
-          <tr>
-            <th className="row-label" colSpan={2}>구분</th>
-            <th className="col-hs">핸승</th>
-            <th className="col-hm">핸무</th>
-            <th className="col-mu">무</th>
-            <th className="col-yk">역</th>
-          </tr>
-        </thead>
-        <tbody>
-          {group('국)정배', favCode, favTotalCode, '정')}
-          {group('국)플핸', 'K-PL', 'TK-PL', '플')}
-        </tbody>
-      </table>
-      <div className="season-sample-cardcols">
-        <SeasonSampleCardGroup
-          kind="fav" favCode={favCode} season={row.S} curRow={row}
-          data={seasonCounts === undefined ? undefined : seasonCounts?.정_경기}
-        />
-        <SeasonSampleCardGroup
-          kind="pl" season={row.S} curRow={row}
-          data={seasonCounts === undefined ? undefined : seasonCounts?.플_경기}
-        />
-      </div>
-    </div>
-  )
+// ── 정배 표본 · 플핸 표본 · 해배 표본(2026-09-14 사용자 지정) ────────────────
+// 예전 '정배·플핸 시즌표'를 세 섹션으로 나눴다. 섹션마다 같은 배당값을 홈에서 나온
+// 경기 / 원정에서 나온 경기 두 줄로 나란히 보여준다 — 위 줄은 이 경기 자신의 방향,
+// 아래 줄은 같은 값이 반대 방향으로 나온 경기들이다(플핸의 홈/원은 플핸측=언더독의 편).
+// 숫자·카드는 전부 서버(/season_sample의 samples)가 계산해 준다 — 이 경기 방향 줄의
+// 통합·리그는 등록 때 저장한 지표 그대로, 반대 방향 줄은 지금 DB로 센 값이다
+// (api/main.py _direction_samples 주석 참고).
+//
+// 승+패(k_wl/f_wl)·승+무+패(k_wdl/f_wdl)는 2026-09-14에 같은 구조로 합류했다 — 홈/원
+// 같은 '어느 쪽 지표를 쓸까' 구분이 없는 대신(K-WL 등은 이미 홈·원정을 둘 다 건다),
+// 이 경기 그대로 / 거울(홈·원정 맞바꿈) 두 줄로 "반대 경우"를 보여준다(사용자 지정 —
+// "승+패도 반대 경우, 승+무+패도 반대 경우의 표본도 처리해줘"). 라벨이 길어 60px 칸에서
+// 줄바꿈이 어색한 것들은(승+패=3자, 승+무+패=5자) 여러 줄로 미리 쪼개 둔다(2026-09-13·14
+// 사용자 지정 — "국) 한 칸 내리고 승+패", "국)[br]승+무[br]+패").
+// side 라벨(e.side)은 서버가 직접 내려준다 — 정배/플핸/해배는 '홈'/'원', 승+패·승+무+패는
+// '이 경기'/'반대'(_direction_samples의 pair/mirror_pair 참고).
+const DIRECTION_SAMPLE_LABEL_LINES = {
+  fav: ['국)정배'], pl: ['국)플핸'], ffav: ['해)정배'],
+  k_wl: ['국)', '승+패'], f_wl: ['해)', '승+패'],
+  k_wdl: ['국)', '승+무', '+패'], f_wdl: ['해)', '승+무', '+패'],
 }
 
-// ── 승+패 시즌표 — 정배·플핸 시즌표 바로 아래, 완전히 같은 구조·스타일(2026-09-13
-// 사용자 지정). 국)승+패(K-WL)·해)승+패(F-WL)는 정배 방향과 무관하게 "홈·원정 배당이
-// 둘 다 같은" 경기를 찾는 이미 저장된 지표라 favCode 판단이 없다 — 그 점만 빼면
-// SeasonSampleTable과 완전히 같은 모양(통합/리그/시즌 + 카드).
-function SeasonWlTable({ row, seasonCounts }) {
-  // '국)승+패'는 '국)정배'보다 한 글자 길어(승+패=3자) 같은 60px 칸에서 줄바꿈이 어색하게
-  // 걸린다 — 억지로 한 줄에 우겨넣는 대신 '국)' 다음에 직접 줄을 바꾼다(2026-09-13
-  // 사용자 지정 — "국) 한 칸 내리고 승+패 이렇게 처리해줘").
-  function group(label, leagueCode, totalCode, seasonKey) {
-    const prefix = label.slice(0, 2)   // '국)' 또는 '해)'
-    const rest = label.slice(2)        // '승+패'
-    const rows = [
-      ['통합', seasonCountsOf(row, totalCode)],
-      ['리그', seasonCountsOf(row, leagueCode)],
-      ['시즌', seasonCounts === undefined ? undefined : (seasonCounts?.[seasonKey] ?? null)],
-    ]
-    return rows.map(([sub, vals], i) => (
-      <tr key={`${label}-${sub}`}>
-        {i === 0 && (
-          <td className="row-label season-sample-group" rowSpan={rows.length}>
-            {prefix}
-            <br />
-            {rest}
-          </td>
-        )}
-        <td className="row-label season-sample-sub">{sub}</td>
-        {seasonSampleCells(vals)}
-      </tr>
-    ))
+// entries: undefined(불러오는 중) · null(불러오기 실패) · [](방향을 못 가림 — 배당 없음/동률,
+// fav/pl/ffav만 해당) · [이 경기 방향(또는 그대로), 반대 방향(또는 거울)]
+function DirectionSampleTable({ kind, entries, season }) {
+  if (entries === undefined) return <div className="season-sample-cards-empty">불러오는 중…</div>
+  if (entries === null) return <div className="season-sample-cards-empty">표본을 불러오지 못했습니다</div>
+  if (!entries.length) {
+    return <div className="season-sample-cards-empty">정배·언더독 방향을 가릴 배당이 없어 표본을 낼 수 없습니다</div>
   }
-
+  const labelLines = DIRECTION_SAMPLE_LABEL_LINES[kind]
   return (
     <div className="season-sample-wrap">
       <table className="detail-table season-sample-table">
@@ -1097,13 +1015,39 @@ function SeasonWlTable({ row, seasonCounts }) {
           </tr>
         </thead>
         <tbody>
-          {group('국)승+패', 'K-WL', 'TK-WL', '국승패')}
-          {group('해)승+패', 'F-WL', 'TF-WL', '해승패')}
+          {entries.map((e) => [['통합', e.total], ['리그', e.league], ['시즌', e.season]].map(([sub, vals], i) => (
+            <tr key={`${e.side}-${sub}`}>
+              {i === 0 && (
+                <td
+                  className="row-label season-sample-group"
+                  rowSpan={3}
+                  title={e.mirrored
+                    ? '같은 배당값이 반대 경우로 나온 경기들 — 통합·리그도 지금 DB로 센 값'
+                    : '이 경기와 같은 경우 — 통합·리그는 등록 때 저장된 지표'}
+                >
+                  {labelLines.map((line, li) => (
+                    <Fragment key={li}>
+                      {li > 0 && <br />}
+                      {line}
+                    </Fragment>
+                  ))}
+                  <br />
+                  {e.side}
+                </td>
+              )}
+              <td className="row-label season-sample-sub">{sub}</td>
+              {seasonSampleCells(vals)}
+            </tr>
+          )))}
         </tbody>
       </table>
       <div className="season-sample-cardcols">
-        <SeasonSampleCardGroup kind="k_wl" season={row.S} data={seasonCounts === undefined ? undefined : seasonCounts?.국승패_경기} />
-        <SeasonSampleCardGroup kind="f_wl" season={row.S} data={seasonCounts === undefined ? undefined : seasonCounts?.해승패_경기} />
+        {entries.map((e) => (
+          <SeasonSampleCardGroup
+            key={e.side}
+            kind={e.kind} favCode={e.fav_code} season={season} curRow={e.odds} data={e.cards}
+          />
+        ))}
       </div>
     </div>
   )
@@ -1153,14 +1097,18 @@ function SeasonSampleCard({ m, kind, favCode, season, curRow }) {
   const rowKl = numOrNull(m.kl)
   const oddsKnown = rowKw !== null && rowKl !== null
   const homeDog = oddsKnown && rowKw > rowKl
-  // 승+패(k_wl/f_wl)는 방향 판단이 없다 — 홈·원정 배당 둘 다 같아야 표본에 들어오므로
-  // 두 칸을 같이 강조한다(2026-09-13 추가, SeasonWlTable 주석 참고).
-  const hlKw = (kind === 'fav' && favCode === 'K-W') || kind === 'k_wl'
-  const hlKl = (kind === 'fav' && favCode === 'K-L') || kind === 'k_wl'
+  // 승+패(k_wl/f_wl)·승+무+패(k_wdl/f_wdl)는 방향 판단이 없다 — 홈·원정(무+패는 무까지)
+  // 배당이 전부 같아야 표본에 들어오므로 해당 칸을 전부 같이 강조한다(2026-09-13 추가,
+  // 2026-09-14 승+무+패 추가 — DirectionSampleTable 주석 참고).
+  const hlKw = (kind === 'fav' && favCode === 'K-W') || kind === 'k_wl' || kind === 'k_wdl'
+  const hlKl = (kind === 'fav' && favCode === 'K-L') || kind === 'k_wl' || kind === 'k_wdl'
+  const hlKd = kind === 'k_wdl'
   const hlKhw = kind === 'pl' && homeDog
   const hlKhl = kind === 'pl' && oddsKnown && !homeDog
-  const hlFw = kind === 'f_wl'
-  const hlFl = kind === 'f_wl'
+  // 해배 표본(ffav)은 해외 정배 쪽 한 칸(F-W면 FW, F-L이면 FL)만 표본 조건이다.
+  const hlFw = kind === 'f_wl' || kind === 'f_wdl' || (kind === 'ffav' && favCode === 'F-W')
+  const hlFl = kind === 'f_wl' || kind === 'f_wdl' || (kind === 'ffav' && favCode === 'F-L')
+  const hlFd = kind === 'f_wdl'
   // 정배 카드는 표본 조건이 KW 또는 KL '한쪽'만 요구한다(_season_sample_match_cards
   // 주석 참고) — 무(KD)·반대쪽·핸디 3칸은 조건과 무관해서 원래 그냥 숫자다. 그런데
   // 우연히 이 값들까지 지금 보는 경기와 똑같이 겹치는 카드가 실제로 나왔다(헤타페-
@@ -1185,10 +1133,10 @@ function SeasonSampleCard({ m, kind, favCode, season, curRow }) {
     && (favCode === 'K-W' ? extraKl : extraKw)
   const hl2 = (on) => (on ? 'season-sample-card-hl2' : undefined)
   const cellClass = (required, extra) => hl(required) || hl2(extra)
-  // 정배·플핸 카드는 둘째 줄에 핸디(khw/khd/khl)를, 승+패 카드는 그 자리에 해외
-  // 배당(fw/fd/fl)을 보여준다 — 국)승+패/해)승+패 둘 다 해외 배당을 참고로 같이
-  // 보여주고, 해)승+패일 때만 그 칸을 강조한다.
-  const isWl = kind === 'k_wl' || kind === 'f_wl'
+  // 정배·플핸 카드는 둘째 줄에 핸디(khw/khd/khl)를, 승+패·해배 카드는 그 자리에 해외
+  // 배당(fw/fd/fl)을 보여준다 — 해외 배당이 조건인 카드(해)승+패·해배 표본)일 때만
+  // 그 칸을 강조한다.
+  const isWl = kind === 'k_wl' || kind === 'f_wl' || kind === 'ffav' || kind === 'k_wdl' || kind === 'f_wdl'
   // 어느 시장인지 숫자 앞에 바로 붙인다(2026-09-13 사용자 지정 — "그냥 숫자 바로
   // 앞에 넣어줘"). 승+패 카드는 국내/해외 배당 두 줄이라 국)/해), 정배·플핸 카드는
   // 국내 일반/핸디 배당 두 줄이라 일)/핸).
@@ -1226,7 +1174,7 @@ function SeasonSampleCard({ m, kind, favCode, season, curRow }) {
           <span className="season-sample-card-prefix">{row1Prefix}</span>
           {fmt(m.kw)}
         </span>
-        <span className={cellClass(false, extraKd)}>{fmt(m.kd)}</span>
+        <span className={cellClass(hlKd, extraKd)}>{fmt(m.kd)}</span>
         <span className={cellClass(hlKl, extraKl)}>{fmt(m.kl)}</span>
       </div>
       {isWl ? (
@@ -1235,7 +1183,7 @@ function SeasonSampleCard({ m, kind, favCode, season, curRow }) {
             <span className="season-sample-card-prefix">{row2Prefix}</span>
             {fmt(m.fw)}
           </span>
-          <span>{fmt(m.fd)}</span>
+          <span className={hl(hlFd)}>{fmt(m.fd)}</span>
           <span className={hl(hlFl)}>{fmt(m.fl)}</span>
         </div>
       ) : (
@@ -4088,10 +4036,10 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
   const matchKey = [row.S, row.R, row.No, row.HT, row.AT].join('|')
   // 지표별 표본은 기본이 '접힘' — 판단에 쓰는 7줄만 보여주고, 펼치면 전체 지표가 나온다.
   const [sampleExpanded, setSampleExpanded] = useState(false)
-  // 정배·플핸 시즌표 / 승+패 시즌표 — 둘 다 기본은 펼침, 각자 따로 접고 펼 수 있다
-  // (2026-09-14 사용자 지정). 표본 카드까지 있어 세로로 길어서, 안 볼 때는 접어 둘 수 있게.
-  const [seasonFavCollapsed, setSeasonFavCollapsed] = useState(false)
-  const [seasonWlCollapsed, setSeasonWlCollapsed] = useState(false)
+  // 정배 표본 / 플핸 표본 / 해배 표본 / 승+패 시즌표 — 전부 기본은 펼침, 각자 따로 접고
+  // 펼 수 있다(2026-09-14 사용자 지정). 표본 카드까지 있어 세로로 길어서, 안 볼 때는 접어 둔다.
+  const [sampleCollapsed, setSampleCollapsed] = useState({})
+  const toggleSample = (key) => setSampleCollapsed((s) => ({ ...s, [key]: !s[key] }))
   const [showSeasonLegend, setShowSeasonLegend] = useState(false)
   const [pickData, setPickData] = useState(null)
   const [pickError, setPickError] = useState('')
@@ -4305,45 +4253,44 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
           archiveTags={archiveTags}
         />
 
-        {/* 정배·플핸 시즌표 — 배당(PickBand) 칸 안에 넣었다가(2026-09-12) 확률 지표·
-            경기지표가 눌리는 문제로 뺐고, 배당과 지표별 표본 사이에 배당과 같은 폭의
-            독립 카드로 둔다(2026-09-13 사용자 지정 — "배당과 지표별 표본 사이로,
-            해당 영역의 박스 너비를 팝업에 꽉차게, 배당 영역과 동일하게"). modal-columns
-            2단 그리드 바깥(PickBand와 같은 레벨)에 둬야 폭이 팝업 전체를 채운다. */}
-        <section className="detail-section">
-          <h3>
-            <button
-              className="sample-fold-btn"
-              onClick={() => setSeasonFavCollapsed((v) => !v)}
-              title={seasonFavCollapsed ? '펼치기' : '접기'}
-              aria-expanded={!seasonFavCollapsed}
-            >
-              {seasonFavCollapsed ? '▸' : '▾'}
-            </button>
-            정배·플핸 시즌표
-          </h3>
-          {!seasonFavCollapsed && <SeasonSampleTable row={row} seasonCounts={seasonSample} />}
-        </section>
-
-        {/* 승+패 시즌표 — 정배·플핸 시즌표 바로 아래, 완전히 같은 스타일(2026-09-13
-            사용자 지정 — "스타일은 바로위 정배플핸 시즌표와 완전동일하게"). 국)정배/
-            국)플핸과 달리 정배 방향과 무관하게 홈·원정 배당이 '둘 다' 같은 경기를
-            찾는 지표(K-WL/F-WL, 이미 저장된 26개 지표 중 하나)라 fav_code 같은 방향
-            판단이 필요 없다. 같은 /season_sample 응답을 그대로 재사용한다. */}
-        <section className="detail-section">
-          <h3>
-            <button
-              className="sample-fold-btn"
-              onClick={() => setSeasonWlCollapsed((v) => !v)}
-              title={seasonWlCollapsed ? '펼치기' : '접기'}
-              aria-expanded={!seasonWlCollapsed}
-            >
-              {seasonWlCollapsed ? '▸' : '▾'}
-            </button>
-            승+패 시즌표
-          </h3>
-          {!seasonWlCollapsed && <SeasonWlTable row={row} seasonCounts={seasonSample} />}
-        </section>
+        {/* 정배 표본 · 플핸 표본 · 해배 표본 · 국)승+패 · 해)승+패 · 국)승+무+패 · 해)승+무+패
+            — 배당(PickBand)과 지표별 표본 사이에 배당과 같은 폭의 독립 섹션으로 둔다
+            (2026-09-13 사용자 지정). modal-columns 2단 그리드 바깥(PickBand와 같은 레벨)에
+            둬야 폭이 팝업 전체를 채운다. 일곱 섹션 모두 같은 /season_sample 응답의
+            samples[key]를 그대로 DirectionSampleTable에 넘긴다 — 전부 '이 경기 방향(또는
+            그대로) / 반대'의 두 줄 구조다(2026-09-14, DirectionSampleTable 주석 참고). */}
+        {[
+          ['fav', '정배 표본'],
+          ['pl', '플핸 표본'],
+          ['ffav', '해배 표본'],
+          ['k_wl', '국)승+패'],
+          ['f_wl', '해)승+패'],
+          ['k_wdl', '국)승+무+패'],
+          ['f_wdl', '해)승+무+패'],
+        ].map(([key, title]) => (
+          <section className="detail-section" key={key}>
+            <h3>
+              <button
+                className="sample-fold-btn"
+                onClick={() => toggleSample(key)}
+                title={sampleCollapsed[key] ? '펼치기' : '접기'}
+                aria-expanded={!sampleCollapsed[key]}
+              >
+                {sampleCollapsed[key] ? '▸' : '▾'}
+              </button>
+              {title}
+            </h3>
+            {!sampleCollapsed[key] && (
+              <DirectionSampleTable
+                kind={key}
+                season={row.S}
+                entries={seasonSample === undefined ? undefined
+                  : seasonSample === null ? null
+                    : (seasonSample.samples?.[key] ?? [])}
+              />
+            )}
+          </section>
+        ))}
 
         <div className="modal-columns" ref={columnsRef}>
           <div className="modal-col">
