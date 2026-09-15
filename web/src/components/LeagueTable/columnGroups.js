@@ -681,9 +681,14 @@ const PICK_VERDICT_MAP = {
   핸승핸무: { hit: [1, 2], insure: [] },
   무: { hit: [3], insure: [] },
   역: { hit: [4], insure: [] },
+  // ±2 핸디(2026-09-15 추가). RT 핸승(1) = 정배 2골차 이상 승이라 2플핸은 RT만으로 갈린다.
+  '2플핸': { hit: [2, 3, 4], insure: [] },
+  // 2플핸무 — RT 핸승 안에서 '정확히 2골차'(보험)와 '3골차 이상'(미적)을 스코어로 가른다.
+  '2플핸무': { hit: [2, 3, 4], insure: [], insureIfMargin2: true },
 }
 
-export function computeAutoVerdict(pick, rt) {
+// row: 스코어(HS/AS)가 필요한 픽(2플핸무)만 쓴다. 스코어가 없으면 판정을 비워 둔다.
+export function computeAutoVerdict(pick, rt, row) {
   if (isBlank(pick)) return ''
   const rule = PICK_VERDICT_MAP[pick]
   if (!rule) return ''
@@ -691,6 +696,12 @@ export function computeAutoVerdict(pick, rt) {
   if (code === null || code < 1 || code > 4) return ''
   if (rule.hit.includes(code)) return '적중'
   if (rule.insure.includes(code)) return '보험'
+  if (rule.insureIfMargin2 && code === 1) {
+    const hs = toNum(row?.HS)
+    const as = toNum(row?.AS)
+    if (hs === null || as === null) return ''
+    return Math.abs(hs - as) === 2 ? '보험' : '미적'
+  }
   return '미적'
 }
 
@@ -709,7 +720,7 @@ export function finalSystemPick(row) {
 export function summarizeVerdicts(rows) {
   const counts = { 적중: 0, 보험: 0, 미적: 0 }
   for (const row of rows) {
-    const v = computeAutoVerdict(row.MY_PICK, row.RT)
+    const v = computeAutoVerdict(row.MY_PICK, row.RT, row)
     if (v === '적중' || v === '보험' || v === '미적') counts[v] += 1
   }
   const 총 = counts.적중 + counts.보험 + counts.미적
@@ -746,7 +757,7 @@ export function pickVerdictStyle(value) {
 // 정배 쪽(정무/정/핸승/핸무)과 플핸 쪽(플핸/플핸무/무/역/무핸무)을 셀 색만으로 바로
 // 구분하기 위한 그룹 — RtBadge와 같은 파랑/빨강 축을 그대로 쓴다.
 const MY_PICK_FAV_GROUP = new Set(['정무', '정역', '정', '핸승', '핸무', '핸승핸무'])
-const MY_PICK_DOG_GROUP = new Set(['플핸', '플핸무', '플핸승', '무', '역', '무핸무'])
+const MY_PICK_DOG_GROUP = new Set(['플핸', '플핸무', '플핸승', '2플핸', '2플핸무', '무', '역', '무핸무'])
 
 // 내 예측의 "내픽" 칸 색상 — 뱃지가 아니라 칸 전체 배경으로 정배 쪽/플핸 쪽을 구분한다.
 export function myPickStyle(value) {

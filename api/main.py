@@ -912,12 +912,17 @@ _MY_PICK_VERDICT_MAP = {
     "핸승핸무": ({1, 2}, set()),
     "무": ({3}, set()),
     "역": ({4}, set()),
+    # ±2 핸디(2026-09-15). RT 핸승(1) = 정배 2골차 이상 승이라 2플핸은 RT만으로 갈린다.
+    "2플핸": ({2, 3, 4}, set()),
+    # 2플핸무 — RT 핸승 안에서 정확히 2골차는 보험, 3골차 이상은 미적(스코어로 가른다).
+    "2플핸무": ({2, 3, 4}, set()),
 }
+_MY_PICK_INSURE_MARGIN2 = {"2플핸무"}
 
 
-def _my_pick_verdict(pick, rt) -> str:
+def _my_pick_verdict(pick, rt, hs=None, as_=None) -> str:
     """내픽 하나 + RT 하나 → 적중/보험/미적. ''(빈 값)은 아직 판정 불가한 경우
-    (내픽 없음·'대기'·결과 미정)."""
+    (내픽 없음·'대기'·결과 미정). hs/as_는 스코어가 필요한 픽(2플핸무)만 쓴다."""
     if not pick or pd.isna(rt):
         return ""
     rule = _MY_PICK_VERDICT_MAP.get(pick)
@@ -931,6 +936,14 @@ def _my_pick_verdict(pick, rt) -> str:
         return "적중"
     if code in insure:
         return "보험"
+    if pick in _MY_PICK_INSURE_MARGIN2 and code == 1:
+        try:
+            h, a = float(hs), float(as_)
+        except (TypeError, ValueError):
+            return ""
+        if pd.isna(h) or pd.isna(a):
+            return ""
+        return "보험" if abs(h - a) == 2 else "미적"
     return "미적"
 
 
@@ -947,9 +960,12 @@ def _my_pick_verdict_series(df: pd.DataFrame, username: str, code: str, scope: s
     no_col = df["No"] if "No" in df.columns else pd.Series(None, index=df.index)
     ht_col = df["HT"] if "HT" in df.columns else pd.Series(None, index=df.index)
     at_col = df["AT"] if "AT" in df.columns else pd.Series(None, index=df.index)
+    hs_col = df["HS"] if "HS" in df.columns else pd.Series(None, index=df.index)
+    as_col = df["AS"] if "AS" in df.columns else pd.Series(None, index=df.index)
     out = [
-        _my_pick_verdict(pick_map.get(_my_pick_key(s, r, no, ht, at)), rt)
-        for s, r, no, ht, at, rt in zip(s_col, r_col, no_col, ht_col, at_col, rt_num)
+        _my_pick_verdict(pick_map.get(_my_pick_key(s, r, no, ht, at)), rt, hs, as_)
+        for s, r, no, ht, at, rt, hs, as_ in zip(s_col, r_col, no_col, ht_col, at_col, rt_num,
+                                                 hs_col, as_col)
     ]
     return pd.Series(out, index=df.index, dtype=object)
 

@@ -765,7 +765,7 @@ export default function LeagueTable({
                           )
                         }
                         if (c.key === 'PICK_VERDICT') {
-                          const verdict = computeAutoVerdict(pickState.pick, row.RT)
+                          const verdict = computeAutoVerdict(pickState.pick, row.RT, row)
                           const badgeStyle = pickVerdictStyle(verdict)
                           return (
                             <td key={`${gi}-${ci}`} className={className}>

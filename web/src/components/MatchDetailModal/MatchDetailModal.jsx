@@ -468,7 +468,7 @@ function MyBetBadge({ row }) {
 // 그대로 쓴다. 벳(MY_BET) 배지가 있으면 그 옆에, 없으면(픽만 하고 벳은 안 넣은 경기)
 // RT 배지 옆에 바로 붙는다 — 어디에 붙이는지는 호출하는 쪽(제목줄의 detail-title-badges)이 정한다.
 function PickVerdictBadge({ row }) {
-  const verdict = computeAutoVerdict(row.MY_PICK, row.RT)
+  const verdict = computeAutoVerdict(row.MY_PICK, row.RT, row)
   if (!verdict) return null
   return (
     <span className="rt-badge" style={pickVerdictStyle(verdict)}>
