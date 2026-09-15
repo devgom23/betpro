@@ -2359,7 +2359,7 @@ function MyPickBar({ row, onSavePick }) {
           ))}
         </select>
       </label>
-      <div className="mypick-bar-field mypick-bar-memo" title="경기가 열리기 전에 적어 두는 메모">
+      <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-pre" title="경기가 열리기 전에 적어 두는 메모">
         <RichMemoInput
           value={memoPre}
           placeholder="경기 전 생각을 입력해주세요"
@@ -2386,7 +2386,7 @@ function MyPickBar({ row, onSavePick }) {
           ))}
         </select>
       </label>
-      <div className="mypick-bar-field mypick-bar-memo" title="결과가 나온 뒤 적는 회고 메모">
+      <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-post" title="결과가 나온 뒤 적는 회고 메모">
         <RichMemoInput
           value={memo}
           placeholder="결과 이후 생각을 입력해주세요"
@@ -4364,11 +4364,12 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
             {row.MY_BET && <PickVerdictBadge row={row} />}
           </span>
         </h2>
-        {/* 제목 줄 아래 전부를 스크롤 영역으로 묶는다(2026-09-14 사용자 지정 — 헤더는
+        {/* 내픽 바(MyPickBar)도 제목처럼 고정한다(2026-09-15 사용자 지정) — 스크롤 영역
+            바깥에 둬서 아래 내용을 스크롤해도 계속 보이게 한다. */}
+        <MyPickBar row={row} onSavePick={onSavePick} />
+        {/* 그 아래 전부를 스크롤 영역으로 묶는다(2026-09-14 사용자 지정 — 헤더는
             고정, 아래만 스크롤). .detail-modal-card 주석 참고. */}
         <div className="detail-modal-scroll">
-        <MyPickBar row={row} onSavePick={onSavePick} />
-
         <PickBand
           row={row}
           scope={scope}

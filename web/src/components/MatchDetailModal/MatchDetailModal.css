@@ -207,8 +207,6 @@
      24px를 준다 — margin-top:-8px와 합쳐 예전과 똑같이 카드 위에서 16px 내려온 자리에
      온다(24-8=16, 예전 계산: 모달카드 패딩 24px + 이 여백 -8px = 16px와 동일). */
   padding-top: 24px;
-  /* 아래로 스크롤되는 내용과 구분되는 옅은 경계선. */
-  border-bottom: 1px solid var(--border);
 }
 
 .detail-title-date {
@@ -246,7 +244,7 @@
 .mypick-bar {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 10px;
   margin: 0 0 16px;
   padding: 8px 12px;
   background: var(--bg-page);
@@ -273,13 +271,22 @@
 }
 
 .mypick-bar-memo {
-  flex: 1;
+  flex: none;
   min-width: 0;
 }
 
 .mypick-bar-memo input,
 .mypick-bar-memo .rich-memo {
   width: 100%;
+}
+
+/* 경기 전 생각 / 결과 이후 생각 — 폭을 각각 고정한다(2026-09-15 사용자 지정). */
+.mypick-bar-memo-pre {
+  width: 450px;
+}
+
+.mypick-bar-memo-post {
+  width: 260px;
 }
 
 .modal-columns {
