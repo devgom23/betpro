@@ -81,6 +81,8 @@ import match_excel as XLS     # noqa: E402
 import user_leagues as USERLG  # noqa: E402
 import crawler as CRAWL        # noqa: E402
 import kr_crawler as KRCRAWL   # noqa: E402
+import kr_extra_odds as KXODDS   # noqa: E402
+import f_ou_odds as FOUODDS   # noqa: E402
 import scoreman_odds as SCOREMAN  # noqa: E402
 import final_indicators as FINALIND  # noqa: E402
 import my_picks as MYPICKS     # noqa: E402
@@ -1748,6 +1750,59 @@ def _build_rt_index(df: pd.DataFrame) -> dict:
     return idx
 
 
+def _build_score_index(df: pd.DataFrame) -> dict:
+    """리그 df → {(S,R,No,HT,AT): (HS, AS, 홈이 정배인가)}. 추가배당 유형(2핸승·2.5언더 등)은
+    RT 하나로 판정할 수 없어 스코어로 판정한다(kr_extra_odds.judge).
+    정배는 이번주 벳 슬립(BetSlip.jsx oddsForPick)과 같은 기준 — 칸마다 최신배당(EK*)이
+    있으면 그것, 없으면 초기배당(K*)으로 승·패 배당을 비교해 낮은(같으면 홈) 쪽."""
+    idx: dict = {}
+    if df.empty or not {"S", "R", "No", "HT", "AT", "HS", "AS"}.issubset(df.columns):
+        return idx
+
+    def num(c):
+        return (pd.to_numeric(df[c], errors="coerce") if c in df.columns
+                else pd.Series(np.nan, index=df.index, dtype="float64"))
+
+    w = num("EKW").fillna(num("KW"))
+    l = num("EKL").fillna(num("KL"))
+    fav = [None if (pd.isna(a) or pd.isna(b)) else bool(a <= b) for a, b in zip(w, l)]
+    cols = ["S", "R", "No", "HT", "AT", "HS", "AS"]
+    for (s, r, no, ht, at, hs, as_), f in zip(df[cols].itertuples(index=False, name=None), fav):
+        idx[_my_pick_key(s, r, no, ht, at)] = (hs, as_, f)
+    return idx
+
+
+def _kx_index(db: str) -> dict:
+    """추가배당 전체 인덱스(kr_extra_odds) — 그 테이블이 바뀔 때만 다시 읽는다. 읽기 전용."""
+    return DATA.cached_derive(db, "kr_extra_index", lambda: KXODDS.load_index(db),
+                              tables=(KXODDS.TABLE,))
+
+
+class ExtraOddsLookupBody(BaseModel):
+    items: list = []    # [{scope, code, S, R, HT, AT}]
+
+
+@app.post("/api/kr_extra_odds/lookup")
+def kr_extra_odds_lookup(body: ExtraOddsLookupBody, user: dict = Depends(get_current_user)):
+    """이번주 벳 슬립이 유형(2핸승·2.5언더 등)을 고를 수 있게, 경기마다 쌓아 둔 추가배당
+    줄을 돌려준다. 결과는 요청한 순서 그대로의 목록이다(못 찾으면 그 자리는 빈 목록)."""
+    index_by_scope: dict[str, dict] = {}
+    out = []
+    for it in body.items:
+        sc = it.get("scope") or PATHS.SCOPE_MASTER
+        code = it.get("code")
+        try:
+            _check_league_for(code, sc, user)
+        except HTTPException:
+            out.append([])
+            continue
+        if sc not in index_by_scope:
+            index_by_scope[sc] = _kx_index(_resolve_scope_db(sc, user))
+        out.append(KXODDS.lookup(index_by_scope[sc], code, it.get("S"), it.get("R"),
+                                 it.get("HT"), it.get("AT")))
+    return {"items": out}
+
+
 def _attach_leg_hits(slips: list[dict], user: dict) -> None:
     """슬립 목록(BETSLIPS.list_slips*)에 다리별 실제 결과(actual/dt/hit)와 슬립 전체
     결과(result/payout/hit_amount)를 붙인다. /api/bet_slips와 /api/team_bet_record가
@@ -1789,10 +1844,37 @@ def _attach_leg_hits(slips: list[dict], user: dict) -> None:
                 return idx[key]
         return (None, None)
 
+    # 추가배당 유형(2핸승·2.5언더 등)은 RT가 아니라 스코어로 판정한다 — 그 경기가 들어 있는
+    # 스코프를 찾아 스코어와, 핸디면 그때 걸었던 줄(부호로 정배를 정함)을 같이 넘긴다.
+    def judge_extra(leg: dict) -> str:
+        scopes_to_try = [leg["scope"]] if leg.get("scope") else [PATHS.SCOPE_MASTER, PATHS.SCOPE_USER]
+        key = _my_pick_key(leg["S"], leg["R"], leg["No"], leg["HT"], leg["AT"])
+        for sc in scopes_to_try:
+            db = db_for(sc)
+            sidx = DATA.cached_derive(db, f"score_index:{leg['code']}",
+                                      lambda: _build_score_index(df_for(sc, leg["code"])),
+                                      tables=(leg["code"],))
+            if key not in sidx:
+                continue
+            hs, as_, home_fav = sidx[key]
+            handi = None
+            p = KXODDS.parse_pick(leg["pick_type"])
+            if p[0] == "H":
+                lines = KXODDS.lookup(_kx_index(db), leg["code"], leg["S"], leg["R"],
+                                      leg["HT"], leg["AT"])
+                handi = KXODDS.pick_handi_line(lines, p[1], home_fav)
+                if handi is None and home_fav is not None:
+                    handi = {"line": -p[1] if home_fav else p[1]}
+            return BETSLIPS.judge_extra_leg(leg["pick_type"], leg["actual"], hs, as_, handi)
+        return "대기"
+
     for slip in slips:
         for leg in slip["legs"]:
             leg["actual"], leg["dt"] = rt_for(leg)
-            leg["hit"] = BETSLIPS.judge_leg(leg["pick_type"], leg["actual"])
+            if KXODDS.parse_pick(leg["pick_type"]):
+                leg["hit"] = judge_extra(leg)
+            else:
+                leg["hit"] = BETSLIPS.judge_leg(leg["pick_type"], leg["actual"])
         slip["result"] = BETSLIPS.slip_result([l["hit"] for l in slip["legs"]])
         # 당첨금 = 뱃금액 × 배당(예상), 적중금 = 실제로 맞았을 때만 받는 금액
         slip["payout"] = (round(slip["stake"] * slip["odds"])
@@ -3013,6 +3095,15 @@ def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
     if not body.rows:
         raise HTTPException(status_code=400, detail="가져온 경기가 없습니다.")
 
+    # 추가배당(±2·±3.5 핸디·언더오버)은 리그 표 칸이 아니라 따로 쌓는다 — 표로 가기 전에 떼어
+    # 두고, 리그 저장이 실제로 끝났을 때만 kr_extra_odds에 쓴다(api/kr_extra_odds.py).
+    # 행의 R은 화면(해배 팝업)이 저장 라운드로 바꿔 보낸 값이라 여기서 읽어야 맞다.
+    extras = [(r.get("S"), r.get("R"), r.get("HT"), r.get("AT"), r.pop("_extra", None))
+              for r in body.rows]
+    # 해외 언더오버(스코어맨)도 같은 방식 — DB에 쌓기만 한다(api/f_ou_odds.py).
+    f_ous = [(r.get("S"), r.get("R"), r.get("HT"), r.get("AT"), r.pop("_fou", None))
+             for r in body.rows]
+
     # 업로드 양식과 같은 컬럼만 남긴다(_핸디기준 같은 참고용 필드는 저장하지 않는다)
     raw = pd.DataFrame(body.rows)
     # No를 화면 순번이 아니라 기존 경기 기준으로 다시 맞춘다(_reconcile_crawl_no 주석 참고).
@@ -3050,7 +3141,14 @@ def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
     if new.empty:
         raise HTTPException(status_code=400,
                             detail="유효한 경기가 없습니다. 홈팀·원정팀이 채워져 있는지 확인하세요.")
-    return _merge_and_save(db, body.code, body.scope, new, body.confirm)
+    result = _merge_and_save(db, body.code, body.scope, new, body.confirm)
+    if result.get("saved") and any(x[4] for x in extras):
+        with DATA.table_write(db, KXODDS.TABLE):
+            result["extra_odds_saved"] = KXODDS.upsert(db, body.code, extras)
+    if result.get("saved") and any(x[4] for x in f_ous):
+        with DATA.table_write(db, FOUODDS.TABLE):
+            result["f_ou_saved"] = FOUODDS.upsert(db, body.code, f_ous)
+    return result
 
 
 # ═══════════════════════ 국내배당(와이즈토토) 가져오기 ═══════════════════════
@@ -3226,6 +3324,8 @@ def crawl_kr_fetch(body: CrawlKrFetchBody, user: dict = Depends(get_current_user
                 # 초기배당만 반영되고 최종배당은 조용히 사라진다.
                 **{c: r.get(c) for c in XLS.FINAL_ODDS_COLS},
                 "_note": r.get("_note", ""),
+                # ±2·±3.5 핸디·언더오버 — 저장(/api/crawl/save) 때 kr_extra_odds로 따로 쓴다.
+                "_extra": r.get("_extra") or [],
             })
 
     return {
@@ -3500,6 +3600,10 @@ def crawl_next_round(body: NextRoundBody, user: dict = Depends(get_current_user)
                     if o.get(c) is not None:
                         r[c] = o[c]
                 overseas_filled += 1
+            # 해외 언더오버 — 저장(/api/crawl/save) 때 f_ou_odds로 따로 쓴다.
+            ou = FOUODDS.pick_ou(o)
+            if ou:
+                r["_fou"] = ou
             # 남의 서버 — 몰아치면 IP 단위로 막힌다(refresh_final_odds와 같은 텀).
             time.sleep(0.15)
         if not overseas_filled and not overseas_error:
@@ -3537,6 +3641,8 @@ def crawl_next_round(body: NextRoundBody, user: dict = Depends(get_current_user)
                               "EKW", "EKD", "EKL", "EKHW", "EKHD", "EKHL"):
                         if k.get(c) is not None:
                             r[c] = k[c]
+                    if k.get("_extra"):
+                        r["_extra"] = k["_extra"]
                     domestic_filled += 1
             except KRCRAWL.CrawlError as e:
                 domestic_error = str(e)
@@ -3631,10 +3737,14 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
                 aliases = CRAWL.list_aliases(udb, body.scope, code, source="kr")
                 rows = CRAWL.apply_aliases(raw["rows"], aliases)
                 kidx = {(r["HT"].strip(), r["AT"].strip()): r for r in rows}
+                kx_items = []
                 for i in idxs:
                     r = kidx.get((str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip()))
                     if not r:
                         continue
+                    if r.get("_extra"):
+                        kx_items.append((df.at[i, "S"], df.at[i, "R"], df.at[i, "HT"],
+                                         df.at[i, "AT"], r["_extra"]))
                     ekw, ekl = _f(r.get("EKW")), _f(r.get("EKL"))
                     if ekw is None:                 # 최종배당 자체가 없으면 건드리지 않는다
                         continue
@@ -3646,6 +3756,10 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
                     if ekl is not None:
                         df.at[i, "EKH"] = 1.0 if ekw > ekl else -1.0
                     kr_updated += 1
+                # 추가배당(±2·±3.5 핸디·언더오버)도 최신값으로 — 리그 표와 별개 테이블이다.
+                if kx_items:
+                    with DATA.table_write(db, KXODDS.TABLE):
+                        KXODDS.upsert(db, code, kx_items)
         except KRCRAWL.CrawlError as e:
             kr_error = str(e)
 
@@ -3669,6 +3783,7 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
             sidx = {}
             for g in sched:
                 sidx[(str(g.get("HT", "")).strip(), str(g.get("AT", "")).strip())] = g
+            fou_items = []
             for i in idxs:
                 g = sidx.get((str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip()))
                 if not g:
@@ -3677,6 +3792,9 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
                     o = SCOREMAN.match_odds(g["mid"])
                 except SCOREMAN.OddsError:
                     continue
+                ou = FOUODDS.pick_ou(o)
+                if ou:
+                    fou_items.append((df.at[i, "S"], df.at[i, "R"], df.at[i, "HT"], df.at[i, "AT"], ou))
                 # 경기당 한 번씩 남의 서버를 두드리는 것이라 살짝 텀을 둔다 — 짧은 시간에
                 # 몰아치면 사이트가 IP 단위로 한동안 막아 버린다(실측: 150건 연속 요청 후
                 # 차단, 시간이 지나도 안 풀리는 걸로 보아 쿨다운이 김. 버튼은 보통 한 라운드
@@ -3691,6 +3809,10 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
                 if efl is not None:
                     df.at[i, "EFH"] = 1.0 if efw > efl else -1.0
                 ef_updated += 1
+            # 해외 언더오버 — 리그 표와 별개 테이블에 쌓기만 한다(api/f_ou_odds.py).
+            if fou_items:
+                with DATA.table_write(db, FOUODDS.TABLE):
+                    FOUODDS.upsert(db, code, fou_items)
         except SCOREMAN.OddsError as e:
             ef_error = str(e)
 

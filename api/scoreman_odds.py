@@ -151,15 +151,39 @@ def _num(v):
     return f if f > 1.0 else None
 
 
+def _line(v):
+    """언더오버 기준점. '3.25'처럼 숫자로 오지만 '2.5/3' 꼴이면 둘의 평균(2.75)으로 읽는다."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        pass
+    try:
+        a, b = str(v).split("/")
+        return (float(a) + float(b)) / 2
+    except (TypeError, ValueError):
+        return None
+
+
+# 언더오버(오버/기준점/언더) — 리그 표 칸이 아니라 f_ou_odds 테이블로만 간다.
+OU_KEYS = ("FOU", "FOUO", "FOUU", "EFOU", "EFOUO", "EFOUU")
+
+
 def match_odds(mid) -> dict:
     """경기 하나의 Bet365 최초/라이브 배당.
 
     반환: {'FW','FD','FL','FHW','FHL',            (최초 — 지금 DB에 있는 값과 같은 기준)
-           'EFW','EFD','EFL','EFHW','EFHL'}       (라이브 = 최종배당)
+           'EFW','EFD','EFL','EFHW','EFHL',       (라이브 = 최종배당)
+           'FOU','FOUO','FOUU','EFOU','EFOUO','EFOUU'}  (언더오버 기준점·오버·언더, 최초/라이브)
     Bet365 배당이 없으면 값이 전부 None인 dict.
+
+    [언더오버 칸 — 2026-09-15 실측]
+      ou 블록은 u/g/d로 오는데, 스코어맨 경기 화면 자체의 표 틀이 "오버 | 기준점 | 언더"
+      머리글 아래 {OUHome}=ou.u, {OUDraw}=ou.g, {OUAway}=ou.d를 채운다 — u=오버, d=언더.
+      배당은 핸디처럼 홍콩식이라 1을 더한다(0.95 → 1.95). 기준점은 라인이 배변 때
+      움직이므로(3 → 3.25 실측) 최초·라이브를 따로 둔다.
     """
     empty = {k: None for k in
-             ("FW", "FD", "FL", "FHW", "FHL", "EFW", "EFD", "EFL", "EFHW", "EFHL")}
+             ("FW", "FD", "FL", "FHW", "FHL", "EFW", "EFD", "EFL", "EFHW", "EFHL") + OU_KEYS}
     d = _get_json(f"{BASE_MATCH}/ajax/soccerajax?type=14&t=1&id={mid}&h=0",
                   f"{BASE_MATCH}/match/data-{mid}")
     mix = ((d or {}).get("Data") or {}).get("mixodds") or []
@@ -175,7 +199,14 @@ def match_odds(mid) -> dict:
 
     ef, el = euro.get("f") or {}, euro.get("l") or {}
     af, al = ah.get("f") or {}, ah.get("l") or {}
+    ou = book.get("ou") or {}
+    of, ol = ou.get("f") or {}, ou.get("l") or {}
     return {
+        # 언더오버 — u=오버 g=기준점 d=언더(위 주석). 배당이 없으면 기준점도 비운다.
+        "FOU": _line(pick(of, "g")) if _dec(pick(of, "u")) else None,
+        "FOUO": _dec(pick(of, "u")), "FOUU": _dec(pick(of, "d")),
+        "EFOU": _line(pick(ol, "g")) if _dec(pick(ol, "u")) else None,
+        "EFOUO": _dec(pick(ol, "u")), "EFOUU": _dec(pick(ol, "d")),
         # 최초 — u=승 g=무 d=패
         "FW": _num(pick(ef, "u")), "FD": _num(pick(ef, "g")), "FL": _num(pick(ef, "d")),
         "FHW": _dec(pick(af, "u")), "FHL": _dec(pick(af, "d")),

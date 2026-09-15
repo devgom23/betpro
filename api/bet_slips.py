@@ -10,6 +10,7 @@ import uuid
 from datetime import date, timedelta
 
 import betpro_paths as PATHS
+import kr_extra_odds as KXODDS
 from my_picks import normalize
 
 # RT 결과와 직접 비교 가능한 핸디캡 계열 픽만 자동판정한다. 정무 등 다른 마켓은
@@ -43,6 +44,16 @@ def judge_leg(pick_type: str, rt_label: str | None) -> str:
         return "적중" if rt_label in ("무", "역") else "미적중"
     # 무 / 역
     return "적중" if rt_label == pick_type else "미적중"
+
+
+def judge_extra_leg(pick_type: str, rt_label: str | None, hs, as_, handi_line) -> str:
+    """추가배당 유형(2핸승·3.5플핸·2.5언더 등) 다리 판정 — 취소·연기·결과 전 처리는
+    judge_leg와 같고, 결과가 나온 경기는 스코어로 판정한다(kr_extra_odds.judge)."""
+    if not rt_label or rt_label == "연기":
+        return "대기"
+    if rt_label == "취소":
+        return "취소"
+    return KXODDS.judge(pick_type, hs, as_, handi_line) or "대기"
 
 
 def slip_result(leg_results: list[str]) -> str:

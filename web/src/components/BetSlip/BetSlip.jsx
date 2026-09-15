@@ -46,7 +46,8 @@ function latestOdds(row, ekKey, kKey) {
 // 얼마를 받을 수 있는가"를 알려줘야 하므로, 값과 똑같이 방향도 최신(배변 있으면 배변,
 // 없으면 초기) 기준으로 맞춘다. MatchDetailModal.jsx OddsTable 강조색 버그와 같은
 // 원인·같은 날 수정.
-export function oddsForPick(row, pick) {
+export function oddsForPick(row, pick, extraLines) {
+  if (EXTRA_PICK_TYPES.includes(pick)) return extraOddsForPick(row, pick, extraLines)
   const kd = latestOdds(row, 'EKD', 'KD')
   const khd = latestOdds(row, 'EKHD', 'KHD')
   if (pick === '무') return kd
@@ -64,7 +65,69 @@ export function oddsForPick(row, pick) {
   return null
 }
 
-const matchKey = (r) => `${r.L}|${r.S}|${r.R}|${r.No}|${r.HT}|${r.AT}`
+// ── 추가배당 유형(±2·±3.5 핸디, 언더오버) ────────────────────────────────
+// 리그 표에는 없고 와이즈토토 국배를 채집할 때 따로 쌓아 둔 줄(api/kr_extra_odds.py)에서
+// 배당을 찾는다(2026-09-15 사용자 지정). 그 경기에 배당이 있는 유형만 드롭박스에 뜬다.
+// 핸디는 기존 핸승/핸무/플핸(±1)과 같은 정배 기준 — 2핸승 = 정배가 3골차 이상 승,
+// 2핸무 = 정확히 2골차 승, 2플핸 = 그 외. 3.5는 무 칸이 없다.
+export const EXTRA_PICK_TYPES = [
+  '2핸승', '2핸무', '2플핸', '3.5핸승', '3.5플핸', '2.5언더', '2.5오버', '3.5언더', '3.5오버',
+]
+const EXTRA_HANDI_RE = /^(2|3\.5)(핸승|핸무|플핸)$/
+const EXTRA_OU_RE = /^(2\.5|3\.5)(언더|오버)$/
+
+// 배당 전용 숫자 변환 — 빈 배당(null)을 0으로 읽지 않는다. Number(null)이 0이라 toNum만
+// 쓰면 "배당 없음"이 0이 되어, 최신배당(EK*)이 비었을 때 초기배당(K*)으로 넘어가지 못한다.
+const oddsNum = (v) => (v == null || v === '' ? null : toNum(v))
+
+// 줄 하나의 칸(1/X/2)마다 최신배당(EK*)이 있으면 그것, 없으면 초기배당(K*).
+const extraLatest = (x, ek, k) => {
+  const v = oddsNum(x?.[ek])
+  return v != null ? v : oddsNum(x?.[k])
+}
+
+// 지금 정배가 홈인지 — 최신배당 우선, 없으면 초기배당으로 승·패 배당 비교. 모르면 null.
+// 서버 판정(main.py _build_score_index)과 같은 기준이다.
+function homeIsFavNow(row) {
+  const kw = extraLatest(row, 'EKW', 'KW')
+  const kl = extraLatest(row, 'EKL', 'KL')
+  return kw == null || kl == null ? null : kw <= kl
+}
+
+// lines: 그 경기의 추가배당 줄 [{market:'H'|'U', line, K1,KX,K2, EK1,EKX,EK2}].
+// H의 line은 와이즈토토 표기 그대로 홈 기준(-2.0 = 홈 정배 -2), 칸은 1=홈 승/X=무/2=홈 패.
+// U의 칸은 1=언더/2=오버.
+function extraOddsForPick(row, pick, lines) {
+  if (!lines?.length) return null
+  const ou = EXTRA_OU_RE.exec(pick)
+  if (ou) {
+    const size = Number(ou[1])
+    const x = lines.find((l) => l.market === 'U' && Math.abs(Number(l.line) - size) < 1e-6)
+    if (!x) return null
+    return ou[2] === '언더' ? extraLatest(x, 'EK1', 'K1') : extraLatest(x, 'EK2', 'K2')
+  }
+  const h = EXTRA_HANDI_RE.exec(pick)
+  if (!h) return null
+  const size = Number(h[1])
+  const cands = lines.filter((l) => l.market === 'H' && Math.abs(Math.abs(Number(l.line)) - size) < 1e-6)
+  if (!cands.length) return null
+  // 같은 크기의 -·+ 줄이 둘 다 남아 있으면(배당이 뒤집힌 경기) 지금 정배와 부호가 맞는 줄.
+  // 서버 판정(kr_extra_odds.pick_handi_line)과 같은 규칙이다.
+  const fav = homeIsFavNow(row)
+  const x = (cands.length > 1 && fav != null && cands.find((l) => (Number(l.line) < 0) === fav)) || cands[0]
+  const favHome = Number(x.line) < 0
+  if (h[2] === '핸무') return extraLatest(x, 'EKX', 'KX')
+  const winFav = h[2] === '핸승'
+  return winFav === favHome ? extraLatest(x, 'EK1', 'K1') : extraLatest(x, 'EK2', 'K2')
+}
+
+// 그 경기에 고를 수 있는 유형 — 기본 6종 + 배당이 실제로 있는 추가배당 유형.
+function pickOptionsFor(row, extraLines) {
+  if (!row) return PICK_TYPES
+  return [...PICK_TYPES, ...EXTRA_PICK_TYPES.filter((p) => extraOddsForPick(row, p, extraLines) != null)]
+}
+
+export const matchKey = (r) => `${r.L}|${r.S}|${r.R}|${r.No}|${r.HT}|${r.AT}`
 const legKey = (l) => `${matchKey(l.row)}|${l.pick}`
 
 // ── 보험 없는 단독 픽 경고 ────────────────────────────────────────────────
@@ -131,28 +194,39 @@ const fmtLegOdds = (v) => (v == null ? '-' : (Math.round((v + Number.EPSILON) * 
 const fmtNum = (v) => (v == null ? '-' : Math.round(v).toLocaleString())
 
 // 한 경기 그룹(선택 1 / 선택 2): 경기를 고르고 유형을 담는다.
-function SideBox({ index, rows, legs, onAdd, onRemove, onToggleCheck }) {
+function SideBox({ index, rows, extraOdds, legs, onAdd, onRemove, onToggleCheck }) {
   const [matchIdx, setMatchIdx] = useState('')
   const [pick, setPick] = useState(PICK_TYPES[0])
 
+  const row = matchIdx === '' ? null : rows[Number(matchIdx)]
+  const extraLines = row ? extraOdds?.get(matchKey(row)) : null
+  const options = pickOptionsFor(row, extraLines)
+
+  function handleMatchChange(value) {
+    setMatchIdx(value)
+    // 새로 고른 경기에 지금 유형(예: 2핸승)의 배당이 없으면 기본값으로 되돌린다.
+    const next = value === '' ? null : rows[Number(value)]
+    const nextOptions = pickOptionsFor(next, next ? extraOdds?.get(matchKey(next)) : null)
+    if (!nextOptions.includes(pick)) setPick(PICK_TYPES[0])
+  }
+
   function handleAdd() {
-    const row = rows[Number(matchIdx)]
     if (!row) return
-    onAdd({ row, pick, odds: oddsForPick(row, pick) })
+    onAdd({ row, pick, odds: oddsForPick(row, pick, extraLines) })
   }
 
   return (
     <div className="slip-side">
       <h4>선택 {index}</h4>
       <div className="slip-side-controls">
-        <select value={matchIdx} onChange={(e) => setMatchIdx(e.target.value)}>
+        <select value={matchIdx} onChange={(e) => handleMatchChange(e.target.value)}>
           <option value="">경기 선택</option>
           {rows.map((r, i) => (
             <option key={matchKey(r)} value={i}>{r.HT} vs {r.AT}</option>
           ))}
         </select>
         <select value={pick} onChange={(e) => setPick(e.target.value)}>
-          {PICK_TYPES.map((p) => <option key={p} value={p}>{p}</option>)}
+          {options.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
         <button className="slip-add" onClick={handleAdd}>＋ 추가</button>
       </div>
@@ -199,7 +273,7 @@ function normalizeSides(sides) {
   return Array.from({ length: SIDE_COUNT }, (_, i) => base[i] ?? [])
 }
 
-export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, onRegistered }) {
+export default function BetSlip({ id, rows, extraOdds, scope, onSave, onDelete, canDelete, onRegistered }) {
   const persisted = loadSlipState(id)
   const [sides, setSides] = useState(normalizeSides(persisted?.sides))
   // 조합별 뱃금액 — 조합 키로 들고 있어야 경기를 추가·삭제해도 입력값이 안 흐트러진다.
@@ -393,6 +467,7 @@ export default function BetSlip({ id, rows, scope, onSave, onDelete, canDelete, 
           key={i}
           index={i + 1}
           rows={rows}
+          extraOdds={extraOdds}
           legs={legs}
           onAdd={(leg) => {
             if (legs.some((l) => legKey(l) === legKey(leg))) return

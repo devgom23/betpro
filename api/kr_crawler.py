@@ -22,9 +22,9 @@
 [반드시 지켜야 하는 두 가지 — 실측으로 잡은 버그]
   · 인코딩을 UTF-8로 못박는다. 응답 Content-Type 에 charset 이 없어서 requests 가
     요청마다 다르게 추측하고, 가끔 EUC-KR 로 잘못 읽어 팀명이 통째로 깨졌다.
-  · <li class="hm"> 이 아예 없는 줄(언더오버 'un', 합계마켓 'd5')은 건너뛴다.
+  · <li class="hm"> 이 아예 없는 줄(언더오버 'un', 합계마켓 'd5')은 승무패로 읽지 않는다.
     이걸 '핸디 표기가 빈 줄 = 일반 승무패'로 오인해서 U/O 배당을 승무패 자리에
-    덮어썼던 적이 있다.
+    덮어썼던 적이 있다. 언더오버는 2026-09-15부터 따로 읽어 추가배당(_extra)에만 담는다.
   · 경기결과(스코어) 수집(_parse_round_results)에서: 킥오프하면 그 순간부터 팀명
     칸에 스코어 숫자가 채워진다 — "스코어 숫자가 있다 = 끝났다"로 오인해서 라이브
     진행 중인 경기의 도중 스코어를 최종 스코어로 잘못 가져온 적이 있다. 결과 칸이
@@ -52,6 +52,9 @@ _session = None
 
 # 배당 3칸의 순서(승/무/패) — 초기배당 복원 때 어느 칸을 되돌릴지 짚는 데 쓴다.
 _WDL_INDEX = {"승": 0, "무": 1, "패": 2}
+# 언더오버 줄은 첫 칸=언더, 가운데 '-', 셋째 칸=오버이고 변경 이력도 'U (기존)'·'O (기존)'로
+# 적힌다(2026년 105회차 실측 — 칸의 rs(...,'w','u')/(...,'l','u')와 이력 값이 일치).
+_UO_INDEX = {"U": 0, "O": 2}
 
 
 class CrawlError(RuntimeError):
@@ -218,8 +221,10 @@ def round_leagues(year, rnd):
 
 
 # ─────────────────────────── 파싱 ───────────────────────────
-def _restore_initial(cur, tips):
+def _restore_initial(cur, tips, index=None):
     """현재배당 [승,무,패]를 비고 툴팁의 '(기존)' 값으로 되돌린다.
+
+    index: 이력 글자 → 칸 번호. 기본은 승/무/패, 언더오버 줄은 _UO_INDEX(U/O).
 
     ⚠ 각 항목(승/무/패)의 '첫' 기록만 쓴다 — 배당이 여러 번 바뀐 경기는 변경 이력이
       여러 벌 쌓이는데, 툴팁은 오래된 것부터 최신 순으로 적혀 있어서 '진짜 초기값'은
@@ -231,14 +236,16 @@ def _restore_initial(cur, tips):
       1단계만 바뀐 경기는 우연히 맞아서 오래 안 드러났다(그 회차 배변 28건 중
       2단계 이상이 6건).
     """
+    index = index or _WDL_INDEX
+    letters = "".join(index)
     out = list(cur)
     seen = set()
     for tip in tips:
-        for m in re.finditer(r"([승무패])\s*\(기존\)\s*([\d.]+)\s*배\s*→\s*\(변경\)", tip):
+        for m in re.finditer(r"([" + letters + r"])\s*\(기존\)\s*([\d.]+)\s*배\s*→\s*\(변경\)", tip):
             key = m.group(1)
             if key in seen:
                 continue
-            i = _WDL_INDEX.get(key)
+            i = index.get(key)
             if i is not None and i < len(out):
                 out[i] = m.group(2)
                 seen.add(key)
@@ -270,13 +277,24 @@ def _parse_round(html, target_league):
         # 오인하면 U/O 배당이 승무패 자리에 들어간다.
         # ⚠ li.hp를 안 넣으면 핸디가 "+"로 표기되는 경기(예: 강팀이 원정일 때)는
         # 핸디 배당을 통째로 못 읽는다(2026년 100회차 풀럼/첼시 실측으로 발견).
+        # 언더오버(li.un, "U 2.5")는 2026-09-15부터 따로 읽어 추가배당(rec["X"])에만 담는다
+        # — 팀명 칸도 a6_un/a8_un으로 이름이 달라서 승무패 줄과 섞일 일이 없다.
+        # "h U 1.5"(전반전 언더오버)와 합계마켓(d5)은 계속 건너뛴다.
         hm_el = u.select_one("li.hm, li.hp")
+        ou_line = None
         if hm_el is None:
-            continue
-        hm = hm_el.get_text(" ", strip=True)
-
-        h_el = u.select_one("li.a6 span.tn, li.a6 span.tnb")
-        a_el = u.select_one("li.a8 span.tn, li.a8 span.tnb")
+            un_el = u.select_one("li.un")
+            m_un = re.match(r"U\s*(\d+(?:\.\d+)?)$", un_el.get_text(" ", strip=True)) if un_el else None
+            if not m_un:
+                continue
+            ou_line = float(m_un.group(1))
+            hm = None
+            h_el = u.select_one("li.a6_un span.tn, li.a6_un span.tnb")
+            a_el = u.select_one("li.a8_un span.tn, li.a8_un span.tnb")
+        else:
+            hm = hm_el.get_text(" ", strip=True)
+            h_el = u.select_one("li.a6 span.tn, li.a6 span.tnb")
+            a_el = u.select_one("li.a8 span.tn, li.a8 span.tnb")
         if not h_el or not a_el:
             continue
         mh = re.search(r"tr\('(\d+)','(\d+)','([^']+)'", h_el.get("onclick") or "")
@@ -292,8 +310,9 @@ def _parse_round(html, target_league):
             continue
         odds = odds[:3]
         tips = re.findall(r"msgset_list\('([^']*)'\)", str(u))
-        restored = _restore_initial(odds, tips)
-        changed = bool(tips) and restored != odds
+        restored = _restore_initial(odds, tips, _UO_INDEX if ou_line is not None else None)
+        # '초기배당으로 되돌린 경기 수'는 예전처럼 승무패·핸디 줄만 센다.
+        changed = ou_line is None and bool(tips) and restored != odds
 
         # target_league가 비어 있으면 이 회차의 모든 리그를 담는다(백필처럼 회차 하나를
         # 읽어 8개 리그를 한꺼번에 처리할 때 쓴다 — 리그마다 다시 파싱하면 8배 느리다).
@@ -303,22 +322,30 @@ def _parse_round(html, target_league):
             "HT": h_el.get_text(strip=True), "AT": a_el.get_text(strip=True),
             "date": mh.group(3), "N": None, "H": None,
             "N2": None, "H2": None, "changed": False,
+            # 추가배당 {(market, line): (초기, 최종)} — kr_extra_odds.py 참고
+            "X": {},
         })
         if changed:
             rec["changed"] = True
 
+        if ou_line is not None:
+            rec["X"][("U", ou_line)] = (restored, odds)
         # hm이 빈 문자열일 때만 '정규시간 승무패'다. 전반전 마켓은 앞에 h가 붙어
         # ("h(전반)", "h H -1.0") 비어 있지 않으므로 여기서 자연히 걸러진다 —
         # 아래 핸디 판정도 re.match라 "h H -1.0"은 H로 시작하지 않아 통과 못 한다.
-        if not hm:                       # 빈 문자열 = 일반 승무패
+        elif not hm:                     # 빈 문자열 = 일반 승무패
             rec["N"] = restored
             rec["N2"] = odds             # 화면 현재값 = 최종배당
         else:
             m = re.match(r"H\s*([+-]?\d+(?:\.\d+)?)", hm)
-            # 지금 DB는 ±1 핸디만 다룬다 — 다른 라인(-2.0 등)은 담을 칸이 없어 건너뛴다.
-            if m and abs(abs(float(m.group(1))) - 1.0) < 1e-6:
-                rec["H"] = restored
-                rec["H2"] = odds
+            # 리그 표(KHW~KHL)는 ±1 핸디만 담는다 — 다른 라인(±2.0·±3.5)은 추가배당으로.
+            if m:
+                line = float(m.group(1))
+                if abs(abs(line) - 1.0) < 1e-6:
+                    rec["H"] = restored
+                    rec["H2"] = odds
+                else:
+                    rec["X"][("H", line)] = (restored, odds)
     return out
 
 
@@ -360,6 +387,13 @@ def _to_row(rec):
         "EKH": None,
         "EKHW": _num_or_none(h2[0]), "EKHD": _num_or_none(h2[1]), "EKHL": _num_or_none(h2[2]),
         "_note": "",
+        # 추가배당(±2·±3.5 핸디, 언더오버) — 리그 표 칸이 아니라 kr_extra_odds 테이블로 간다.
+        "_extra": [
+            {"market": market, "line": line,
+             "K1": _num_or_none(init[0]), "KX": _num_or_none(init[1]), "K2": _num_or_none(init[2]),
+             "EK1": _num_or_none(last[0]), "EKX": _num_or_none(last[1]), "EK2": _num_or_none(last[2])}
+            for (market, line), (init, last) in sorted(rec.get("X", {}).items())
+        ],
     }
 
 

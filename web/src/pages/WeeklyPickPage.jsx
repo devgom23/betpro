@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import LeagueTable, { selectKey } from '../components/LeagueTable/LeagueTable'
-import BetSlip from '../components/BetSlip/BetSlip'
+import BetSlip, { matchKey } from '../components/BetSlip/BetSlip'
 import './WeeklyPickPage.css'
 
 const SLIP_IDS_KEY = 'betpro_week_bet_slip_ids'
@@ -60,6 +60,31 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // 추가배당(±2·±3.5 핸디, 언더오버) — 벳 슬립 유형 드롭박스에 쓴다. 슬립이 여러 개여도
+  // 한 번만 불러 경기 키(matchKey)로 나눠 준다. data.rows(상태 값 그대로)에 걸어야
+  // 렌더마다 새 배열이 생겨 다시 부르는 일이 없다.
+  const [extraOdds, setExtraOdds] = useState(new Map())
+  useEffect(() => {
+    const list = data.rows || []
+    if (list.length === 0) {
+      setExtraOdds(new Map())
+      return undefined
+    }
+    let alive = true
+    api.post('/api/kr_extra_odds/lookup', {
+      items: list.map((r) => ({ scope: r.scope, code: r.L, S: r.S, R: r.R, HT: r.HT, AT: r.AT })),
+    })
+      .then((res) => {
+        if (alive) setExtraOdds(new Map(list.map((r, i) => [matchKey(r), res.items?.[i] ?? []])))
+      })
+      .catch(() => {
+        if (alive) setExtraOdds(new Map())
+      })
+    return () => {
+      alive = false
+    }
+  }, [data.rows])
 
   const rows = data.rows || []
   const period = rangeLabel(rows)
@@ -153,6 +178,7 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
             key={id}
             id={id}
             rows={rows}
+            extraOdds={extraOdds}
             scope="master"
             canDelete={slipIds.length > 1}
             onSave={() => {

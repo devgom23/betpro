@@ -15,6 +15,12 @@ const PICK_BADGE = {
   역: PICK_CHIP_DOG,
   무: PICK_CHIP_DOG,
   플핸: PICK_CHIP_DOG,
+  // 추가배당 유형(2026-09-15) — 핸디는 같은 정배/플핸 축 색, 언더오버는 어느 쪽도 아니라 기본(회색).
+  '2핸승': PICK_CHIP_FAV,
+  '2핸무': PICK_CHIP_FAV,
+  '3.5핸승': PICK_CHIP_FAV,
+  '2플핸': PICK_CHIP_DOG,
+  '3.5플핸': PICK_CHIP_DOG,
 }
 const PICK_BADGE_DEFAULT = { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' }
 
