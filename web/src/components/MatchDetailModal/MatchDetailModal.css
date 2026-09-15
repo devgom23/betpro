@@ -241,15 +241,22 @@
   color: var(--text-muted);
 }
 
+/* 2줄 구성(2026-09-15 사용자 지정) — 1줄: 내픽~결과이후생각, 2줄: 경기 전 생각(꽉 채움). */
 .mypick-bar {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
   margin: 0 0 16px;
   padding: 8px 12px;
   background: var(--bg-page);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+.mypick-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .mypick-bar-field {
@@ -280,13 +287,15 @@
   width: 100%;
 }
 
-/* 경기 전 생각 / 결과 이후 생각 — 폭을 각각 고정한다(2026-09-15 사용자 지정). */
+/* 경기 전 생각 — 2줄 구성에서 혼자 아랫줄 전체를 채운다(2026-09-15 사용자 지정,
+   위 .mypick-bar-row 주석 참고). */
 .mypick-bar-memo-pre {
-  width: 450px;
+  width: 100%;
 }
 
+/* 결과 이후 생각 — 경기 전 생각이 아랫줄로 빠지면서 1줄에 남는 폭을 전부 가져간다. */
 .mypick-bar-memo-post {
-  width: 261px;
+  flex: 1;
 }
 
 .modal-columns {

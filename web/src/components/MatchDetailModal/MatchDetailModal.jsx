@@ -2319,78 +2319,80 @@ function MyPickBar({ row, onSavePick }) {
 
   return (
     <div className="mypick-bar">
-      <label className="mypick-bar-field">
-        <select value={pick} onChange={handlePickChange}>
-          <option value="">내픽</option>
-          {PICK_OPTIONS.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="mypick-bar-field">
-        <select value={p} onChange={handlePChange}>
-          <option value="">상세픽</option>
-          {P_OPTIONS.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="mypick-bar-field">
-        <select value={hit} onChange={handleHitChange}>
-          <option value="">의견</option>
-          {HIT_OPTIONS.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="mypick-bar-field">
-        <select value={oddsPick} onChange={handleOddsPickChange}>
-          <option value="">배답픽</option>
-          {ODDS_PICK_OPTIONS.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="mypick-bar-row">
+        <label className="mypick-bar-field">
+          <select value={pick} onChange={handlePickChange}>
+            <option value="">내픽</option>
+            {PICK_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mypick-bar-field">
+          <select value={p} onChange={handlePChange}>
+            <option value="">상세픽</option>
+            {P_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mypick-bar-field">
+          <select value={hit} onChange={handleHitChange}>
+            <option value="">의견</option>
+            {HIT_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mypick-bar-field">
+          <select value={oddsPick} onChange={handleOddsPickChange}>
+            <option value="">배답픽</option>
+            {ODDS_PICK_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mypick-bar-field">
+          <select value={oddsBet} onChange={handleOddsBetChange}>
+            <option value="">배답벳</option>
+            {ODDS_BET_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mypick-bar-field" title="이 픽을 왜 이렇게 봤는지 — 결과반성용, 판정에는 안 쓰인다">
+          <select value={reasonTag} onChange={handleReasonTagChange}>
+            <option value="">결과반성</option>
+            {REASON_TAG_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-post" title="결과가 나온 뒤 적는 회고 메모">
+          <RichMemoInput
+            value={memo}
+            placeholder="결과 이후 생각을 입력해주세요"
+            onCommit={saveMemoIfChanged}
+          />
+        </div>
+      </div>
       <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-pre" title="경기가 열리기 전에 적어 두는 메모">
         <RichMemoInput
           value={memoPre}
           placeholder="경기 전 생각을 입력해주세요"
           onCommit={saveMemoPreIfChanged}
-        />
-      </div>
-      <label className="mypick-bar-field">
-        <select value={oddsBet} onChange={handleOddsBetChange}>
-          <option value="">배답벳</option>
-          {ODDS_BET_OPTIONS.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="mypick-bar-field" title="이 픽을 왜 이렇게 봤는지 — 결과반성용, 판정에는 안 쓰인다">
-        <select value={reasonTag} onChange={handleReasonTagChange}>
-          <option value="">결과반성</option>
-          {REASON_TAG_OPTIONS.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-post" title="결과가 나온 뒤 적는 회고 메모">
-        <RichMemoInput
-          value={memo}
-          placeholder="결과 이후 생각을 입력해주세요"
-          onCommit={saveMemoIfChanged}
         />
       </div>
     </div>
