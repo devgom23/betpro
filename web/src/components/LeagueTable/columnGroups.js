@@ -68,6 +68,11 @@ const MYPICK_COLS = [
 const MY_ODDS_COLS = [
   ['MY_ODDS_PICK', '배답픽'],
   ['MY_ODDS_BET', '배답벳'],
+  // 기준율·12사 흐름(2026-09-15 추가) — 그 사람 콜을 우리 데이터와 비교해 보려는
+  // 참고 기록. api/main.py _attach_baseline_and_mb_flow가 채운다. "예측 신호"로
+  // 확인된 건 아니다(README 격 주석은 그 함수 쪽에 있음) — 그냥 사실 기록.
+  ['BASELINE_RATE', '기준율'],
+  ['MB_FLOW', '12사흐름'],
 ]
 
 // 똥배 — 국내배당 KW/KL이 1.49 이하로 나온 "똥[안전]배당" 경기를 그 라운드 안에서
@@ -443,6 +448,8 @@ const COL_WIDTH = {
   // RT·적중과 같은 값(63)을 그대로 쓴다 — 배지 자체가 같은 min-width(44px)라
   // 다시 잴 필요가 없다.
   MY_BET: 63,
+  // 기준율("플 63%")·12사흐름("플 15/22") — 감으로 잡았다(새 칸, 아직 실측 안 함).
+  BASELINE_RATE: 58, MB_FLOW: 64,
 }
 
 // 26개 지표 그룹(핸승/핸무/무/역 표본수 칸)은 코드가 26개×4칸=104개라 하나하나
@@ -662,6 +669,15 @@ export function myHitStyle(value) {
 // 아직 지정된 색이 없어 일반 글자로 둔다.
 export function oddsBetStyle(value) {
   if (value === '메인축') return { background: '#00897B', color: '#fff', fontWeight: 700 }
+  return null
+}
+
+// 기준율·12사 흐름 칸 — 값이 "정 63%"·"플 9/22"처럼 '정'/'플'로 시작한다. 앞 글자만 보고
+// 같은 파랑/빨강 축(정=파랑/플=빨강)으로 칠한다(2026-09-15 추가).
+export function flowSideStyle(value) {
+  if (typeof value !== 'string') return null
+  if (value.startsWith('정')) return { background: 'var(--chip-blue-bg)', color: 'var(--chip-blue-fg)' }
+  if (value.startsWith('플')) return { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' }
   return null
 }
 

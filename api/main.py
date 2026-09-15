@@ -82,6 +82,7 @@ import user_leagues as USERLG  # noqa: E402
 import crawler as CRAWL        # noqa: E402
 import kr_crawler as KRCRAWL   # noqa: E402
 import kr_extra_odds as KXODDS   # noqa: E402
+import multibook_odds as MBODDS   # noqa: E402
 import f_ou_odds as FOUODDS   # noqa: E402
 import scoreman_odds as SCOREMAN  # noqa: E402
 import final_indicators as FINALIND  # noqa: E402
@@ -1518,6 +1519,113 @@ def weekly_picks(user: dict = Depends(get_current_user)):
     return {"columns": columns, "rows": rows, "total": len(rows)}
 
 
+# ── 배답벳 기준율·12사 흐름 — 그 사람 콜을 우리 데이터와 비교해 보려고 자동으로 붙인다
+# (2026-09-15 사용자 지정, 아카이브 '배답벳' 탭 전용).
+#   기준율 — 6대리그 전체 이력에서 국내 정배배당이 비슷한 경기들이 실제로 정/플 어느
+#   쪽으로 더 많이 났는지("이 배당대에서는 원래 몇 % 짜리 콜인가").
+#   12사 흐름 — 스코어맨 12개 배당사의 초기→마감 배당이 어느 쪽으로 더 많이
+#   움직였는지(api/multibook_odds.py 백필 자료. 아직 최근 시즌만 있어 없으면 빈칸).
+# 2026-09-15 실측(32경기)으로는 둘 다 그 사람 콜과의 방향 일치율이 55~65%로 기준율
+# (정배배당<1.9→63%) 수준을 못 넘었다 — "예측 신호"가 아니라 "그 사람이 기준율을
+# 얼마나 거스르는 콜을 하는지" 눈으로 보고 따로 추적하려는 참고용 기록이다.
+def _baseline_rate_table(db: str):
+    """국내 정배배당 0.1 구간별 '정(핸승+핸무)' 비율(%) — 6대리그 전체 이력.
+    리그 테이블이 바뀔 때만 다시 계산한다(DATA.cached_derive)."""
+    def build():
+        t = DATA.load_total_df(db)
+        kw = pd.to_numeric(t.get("KW"), errors="coerce")
+        kl = pd.to_numeric(t.get("KL"), errors="coerce")
+        rt = pd.to_numeric(t.get("RT"), errors="coerce")
+        ok = (kw.notna() & kl.notna() & (kw != kl) & rt.isin([1, 2, 3, 4])).to_numpy()
+        fav = np.minimum(kw, kl)[ok]
+        bucket = np.floor(fav * 10) / 10
+        jung = (rt[ok] <= 2).astype(int)
+        return pd.DataFrame({"bucket": bucket, "jung": jung}).groupby("bucket")["jung"].agg(["sum", "count"])
+    return DATA.cached_derive(db, "baseline_rate_table", build, tables=tuple(PATHS.LEAGUES))
+
+
+def _baseline_rate(table, fav_odds):
+    """(우세 쪽('정'/'플'), 비율%) 또는 None — 표본이 20건 미만이면 양옆 구간과 합쳐서
+    본다(그래도 부족하면 포기)."""
+    if fav_odds is None or pd.isna(fav_odds) or table.empty:
+        return None
+    b = np.floor(fav_odds * 10) / 10
+    for widen in (0, 1, 2):
+        lo, hi = round(b - widen * 0.1, 2), round(b + widen * 0.1, 2)
+        sub = table[(table.index >= lo) & (table.index <= hi)]
+        n = int(sub["count"].sum())
+        if n >= 20:
+            rate = float(sub["sum"].sum()) / n * 100
+            return ("정", rate) if rate >= 50 else ("플", 100 - rate)
+    return None
+
+
+_MB_EU_KEY = {True: "1", False: "2"}
+
+
+def _mb_book_votes(book: dict, home_is_fav: bool) -> list:
+    """배당사 한 곳의 초기→마감 배당에서 '정'/'플' 쪽으로 움직인 쪽 투표(승무패 1표 +
+    아시안핸디 1표, 최대 2표) — 데이터가 없거나 안 움직였으면 그 표는 비운다."""
+    def f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    key = _MB_EU_KEY[home_is_fav]
+    votes = []
+    ef, el = f(book.get(f"EU_F{key}")), f(book.get(f"EU_L{key}"))
+    if ef is not None and el is not None and ef != el:
+        votes.append("정" if ef > el else "플")
+    afg, alg = f(book.get("AH_FG")), f(book.get("AH_LG"))
+    af, al = f(book.get(f"AH_F{key}")), f(book.get(f"AH_L{key}"))
+    if afg is not None and alg is not None:
+        dg = alg - afg
+        if abs(dg) > 1e-9:
+            val = dg if home_is_fav else -dg
+            votes.append("정" if val > 0 else "플")
+        elif af is not None and al is not None and af != al:
+            votes.append("정" if af > al else "플")
+    return votes
+
+
+def _mb_flow(books: list, home_is_fav):
+    if home_is_fav is None or not books:
+        return None
+    votes = [v for b in books for v in _mb_book_votes(b, home_is_fav)]
+    if not votes:
+        return None
+    jung, pl = votes.count("정"), votes.count("플")
+    if jung == pl:
+        return None
+    side = "정" if jung > pl else "플"
+    return f"{side} {max(jung, pl)}/{len(votes)}"
+
+
+def _attach_baseline_and_mb_flow(rows: list, user: dict) -> None:
+    """rows(archive_odds_bet_picks가 모은 배답벳 경기들)에 BASELINE_RATE·MB_FLOW를
+    붙인다. 실패해도(백필 안 된 스코프 등) 그 칸만 빈 채로 둔다."""
+    if not rows:
+        return
+    base_db = _resolve_scope_db(PATHS.SCOPE_MASTER, user)
+    base_table = _baseline_rate_table(base_db)
+    by_scope: dict = {}
+    for r in rows:
+        by_scope.setdefault(r.get("scope") or PATHS.SCOPE_MASTER, []).append(r)
+    for scope, sub in by_scope.items():
+        path = MBODDS.db_path_for(scope, user["username"] if scope == PATHS.SCOPE_USER else None)
+        # multibook_odds 키는 (code,S,R,HT,AT) — kr_extra_odds._key로 만든다(R 끝 'R'
+        # 제거 등 정규화가 그 안에서 처리된다, multibook_odds.py가 쓰는 것과 같은 함수).
+        mb_keys = [KXODDS._key(r.get("L"), r.get("S"), r.get("R"), r.get("HT"), r.get("AT")) for r in sub]
+        mb_books = MBODDS.load_for_keys(path, mb_keys)
+        for r, mb_key in zip(sub, mb_keys):
+            kw, kl = _json_num(r.get("KW")), _json_num(r.get("KL"))
+            home_fav = None if kw is None or kl is None or kw == kl else kw < kl
+            fav_odds = min(kw, kl) if kw is not None and kl is not None else None
+            base = _baseline_rate(base_table, fav_odds)
+            r["BASELINE_RATE"] = f"{base[0]} {base[1]:.0f}%" if base else None
+            r["MB_FLOW"] = _mb_flow(mb_books.get(mb_key, []), home_fav)
+
+
 # ─────────────────────────── 아카이브 "배답벳" 탭 (모아보기) ───────────────────────────
 @app.get("/api/archive/odds_bet_picks")
 def archive_odds_bet_picks(user: dict = Depends(get_current_user)):
@@ -1570,6 +1678,7 @@ def archive_odds_bet_picks(user: dict = Depends(get_current_user)):
                 rec["MY_BET"] = "P" if key in bet_keys else None
                 rows.append(rec)
 
+    _attach_baseline_and_mb_flow(rows, user)
     rows.sort(key=lambda r: _betting_day_sort_key(r.get("DT"), r.get("TM")))
     columns = ["L"] + [c for c in (list(rows[0].keys()) if rows else [])
                        if c not in ("L", "L_LABEL", "scope")]

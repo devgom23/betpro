@@ -67,6 +67,38 @@ def upsert(path: str, code: str, s, r, ht, at, mid, books: list[dict]) -> int:
     return len(rows)
 
 
+def load_for_keys(path: str, keys) -> dict:
+    """주어진 경기 키 집합만 골라 배당사별 줄을 읽는다({key: [배당사별 dict, ...]}).
+    읽기 전용 — 파일·테이블이 없으면(아직 그 스코프를 백필한 적 없음) 그냥 빈 dict를
+    돌려준다(_connect처럼 파일을 새로 만들지 않는다 — 배답벳 조회 때마다 매번 불러도
+    괜한 빈 파일이 안 생긴다)."""
+    keyset = set(keys)
+    if not keyset or not os.path.exists(path):
+        return {}
+    con = sqlite3.connect(path)
+    try:
+        exists = con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (TABLE,)).fetchone()
+        if not exists:
+            return {}
+        codes = sorted({k[0] for k in keyset})
+        seasons = sorted({k[1] for k in keyset})
+        cols = ["code", "S", "R", "HT", "AT", "book"] + VAL_COLS
+        cur = con.execute(
+            f'SELECT {", ".join(cols)} FROM "{TABLE}" '
+            f'WHERE code IN ({",".join("?" for _ in codes)}) AND S IN ({",".join("?" for _ in seasons)})',
+            (*codes, *seasons))
+        out: dict = {}
+        for row in cur.fetchall():
+            k = _key(row[0], row[1], row[2], row[3], row[4])
+            if k not in keyset:
+                continue
+            out.setdefault(k, []).append(dict(zip(cols, row)))
+        return out
+    finally:
+        con.close()
+
+
 def done_keys(path: str, code: str, s) -> set:
     """이미 저장된 경기 키 — 백필을 이어서 돌릴 때 건너뛴다."""
     if not os.path.exists(path):

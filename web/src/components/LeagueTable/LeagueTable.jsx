@@ -1,6 +1,6 @@
 import { cloneElement, Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, oddsBetStyle, formStyle, bettingDayStyle,
+  buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, oddsBetStyle, flowSideStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
   collapsedWidth, splitsOnFinal, oddsMoveDir, oddsUnmoved, riskUnmoved, riskMoveDir, toFinalRow, rtToText,
   VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemPick, verdictAnyMarketMoved,
@@ -952,6 +952,19 @@ export default function LeagueTable({
                             ) : (
                               text
                             )}
+                          </td>
+                        )
+                      }
+                      // 기준율·12사 흐름 — 값 앞 글자(정/플)로 파랑/빨강 칸 배경을 칠한다
+                      // (2026-09-15 추가).
+                      if (g.label1 === '배답' && (c.key === 'BASELINE_RATE' || c.key === 'MB_FLOW')) {
+                        return (
+                          <td
+                            key={`${gi}-${ci}`}
+                            className={classNames || undefined}
+                            style={flowSideStyle(value) || undefined}
+                          >
+                            {text || <span className="mypick-blank">－</span>}
                           </td>
                         )
                       }
