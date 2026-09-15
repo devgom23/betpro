@@ -151,6 +151,34 @@ def _num(v):
     return f if f > 1.0 else None
 
 
+def match_books(mid) -> list[dict]:
+    """경기 하나의 배당사 전부(스코어맨 12개사) 초기·마감 배당 — DB에 쌓기만 하는 용도.
+
+    한 줄 = 배당사 하나. 값은 전부 소수식(홍콩식 핸디·언더오버는 1을 더한다).
+      EU_F1/EU_FX/EU_F2 · EU_L1/EU_LX/EU_L2  승무패(1=홈승 X=무 2=원정승) 초기/마감
+      AH_FG · AH_F1 · AH_F2 / AH_LG · AH_L1 · AH_L2  아시안핸디 기준점·홈쪽·원정쪽
+          기준점(g)은 스코어맨 원본 그대로 — 음수면 홈이 핸디를 받는다(원정 정배).
+          실측: 맨유(홈 언더독) vs 맨시티 g=-0.25.
+      OU_FG · OU_FO · OU_FU / OU_LG · OU_LO · OU_LU  언더오버 기준점·오버·언더(u=오버, d=언더)
+    """
+    d = _get_json(f"{BASE_MATCH}/ajax/soccerajax?type=14&t=1&id={mid}&h=0",
+                  f"{BASE_MATCH}/match/data-{mid}")
+    out = []
+    for c in ((d or {}).get("Data") or {}).get("mixodds") or []:
+        def blk(name, stage):
+            return ((c.get(name) or {}).get(stage)) or {}
+        rec = {"book": c.get("cn"), "cid": c.get("cid")}
+        for stage, s in (("f", "F"), ("l", "L")):
+            eu, ah, ou = blk("euro", stage), blk("ah", stage), blk("ou", stage)
+            rec[f"EU_{s}1"], rec[f"EU_{s}X"], rec[f"EU_{s}2"] = _num(eu.get("u")), _num(eu.get("g")), _num(eu.get("d"))
+            rec[f"AH_{s}1"], rec[f"AH_{s}2"] = _dec(ah.get("u")), _dec(ah.get("d"))
+            rec[f"AH_{s}G"] = _line(ah.get("g")) if rec[f"AH_{s}1"] else None
+            rec[f"OU_{s}O"], rec[f"OU_{s}U"] = _dec(ou.get("u")), _dec(ou.get("d"))
+            rec[f"OU_{s}G"] = _line(ou.get("g")) if rec[f"OU_{s}O"] else None
+        out.append(rec)
+    return out
+
+
 def _line(v):
     """언더오버 기준점. '3.25'처럼 숫자로 오지만 '2.5/3' 꼴이면 둘의 평균(2.75)으로 읽는다."""
     try:

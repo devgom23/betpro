@@ -185,6 +185,60 @@ def save_top20(username: str, start: str, end: str, kind: str, keys: list[str]) 
         con.close()
 
 
+def _ensure_sample_notes(con) -> None:
+    """상세보기 표본 박스 7개(정배 표본·플핸 표본·해배 표본·국/해 승+패·국/해 승+무+패)의
+    제목 옆 메모 — 경기 하나 × 표본 박스 하나에 1개(2026-09-15 사용자 지정).
+    kind는 화면의 섹션 키 그대로(fav/pl/ffav/k_wl/f_wl/k_wdl/f_wdl)."""
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sample_notes (
+            code TEXT NOT NULL, scope TEXT NOT NULL,
+            S TEXT NOT NULL, R TEXT NOT NULL, No TEXT NOT NULL, HT TEXT NOT NULL, AT TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            memo TEXT,
+            updated_dt TEXT,
+            PRIMARY KEY (code, scope, S, R, No, HT, AT, kind)
+        )
+        """
+    )
+
+
+def list_sample_notes(username: str, code: str, scope: str,
+                      s: str, r: str, no: str, ht: str, at: str) -> dict:
+    """그 경기의 표본 박스 메모 전부 — {kind: memo}."""
+    con = _connect(username)
+    try:
+        _ensure_sample_notes(con)
+        rows = con.execute(
+            "SELECT kind, memo FROM sample_notes "
+            "WHERE code=? AND scope=? AND S=? AND R=? AND No=? AND HT=? AND AT=?",
+            (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at)),
+        ).fetchall()
+        return {row["kind"]: row["memo"] for row in rows if row["memo"]}
+    finally:
+        con.close()
+
+
+def upsert_sample_note(username: str, code: str, scope: str, s: str, r: str, no: str,
+                       ht: str, at: str, kind: str, memo: str | None) -> None:
+    con = _connect(username)
+    try:
+        _ensure_sample_notes(con)
+        con.execute(
+            """
+            INSERT INTO sample_notes (code, scope, S, R, No, HT, AT, kind, memo, updated_dt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(code, scope, S, R, No, HT, AT, kind)
+            DO UPDATE SET memo = excluded.memo, updated_dt = excluded.updated_dt
+            """,
+            (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),
+             kind, memo or None),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
 def upsert_season_note(username: str, code: str, scope: str, s: str, r: str, memo: str | None) -> None:
     con = _connect(username)
     try:

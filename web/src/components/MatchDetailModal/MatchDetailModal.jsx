@@ -1005,6 +1005,36 @@ const DIRECTION_SAMPLE_LABEL_LINES = {
   k_wdl: ['국)', '승+무', '+패'], f_wdl: ['해)', '승+무', '+패'],
 }
 
+// 표본 박스 제목 옆 메모 칸(2026-09-15 사용자 지정) — '경기 전 생각' 입력칸과 같은 모양·
+// 같은 저장 방식(칸을 벗어나거나 Enter를 누를 때, 바뀌었을 때만 저장). 경기 하나 ×
+// 표본 박스 하나에 1개라 내픽(my_picks)이 아니라 sample_notes에 따로 둔다.
+function SampleNoteInput({ value, onSave }) {
+  const [draft, setDraft] = useState(value || '')
+  const [saved, setSaved] = useState(value || '')
+  useEffect(() => {
+    setDraft(value || '')
+    setSaved(value || '')
+  }, [value])
+  function saveIfChanged() {
+    if (draft === saved) return
+    setSaved(draft)
+    onSave(draft)
+  }
+  return (
+    <input
+      type="text"
+      className="sample-note-input"
+      value={draft}
+      placeholder="경기 전 생각을 입력해주세요"
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={saveIfChanged}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+      }}
+    />
+  )
+}
+
 // 표본이 한 개도 없는 섹션인지 — 기본으로 접어 둘지 정하는 데 쓴다(2026-09-15
 // 사용자 지정). entries가 []면(방향을 가릴 배당 자체가 없음) 당연히 없는 것이고,
 // [이 경기, 반대] 두 줄이 있어도 통합·리그·시즌 전부 0건이면 역시 없는 것이다.
@@ -4151,6 +4181,33 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
     }
   }, [code, scope, matchKey])
 
+  // 표본 박스 제목 옆 메모 — {kind: memo}. undefined = 불러오는 중(그동안은 칸을 안 그려서
+  // 빈 칸에 쓰다가 늦게 온 저장값에 덮이는 일을 막는다).
+  const [sampleNotes, setSampleNotes] = useState(undefined)
+  useEffect(() => {
+    let alive = true
+    setSampleNotes(undefined)
+    const r = rowRef.current
+    const params = new URLSearchParams({
+      scope, season: String(r.S ?? ''), round: String(r.R ?? ''), no: String(r.No ?? ''),
+      ht: String(r.HT ?? ''), at: String(r.AT ?? ''),
+    })
+    api.get(`/api/leagues/${code}/sample_notes?${params.toString()}`)
+      .then((res) => alive && setSampleNotes(res.notes || {}))
+      .catch(() => alive && setSampleNotes({}))
+    return () => {
+      alive = false
+    }
+  }, [code, scope, matchKey])
+
+  function saveSampleNote(kind, memo) {
+    const r = rowRef.current
+    setSampleNotes((prev) => ({ ...(prev || {}), [kind]: memo }))
+    api.post(`/api/leagues/${code}/sample_notes`, {
+      scope, S: r.S, R: r.R, No: r.No, HT: r.HT, AT: r.AT, kind, memo: memo || null,
+    }).catch(() => {})
+  }
+
   // 정배·플핸·해배·승+패·승+무+패 일곱 섹션 중 표본이 한 개도 없는 섹션은 기본으로
   // 접어 둔다(2026-09-15 사용자 지정) — 사용자가 손댄 적 없는 섹션만 대상으로, 표본이
   // 새로 로딩될 때마다(경기를 바꿔도) 다시 판단한다.
@@ -4344,6 +4401,9 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
                 {sampleCollapsed[key] ? '▸' : '▾'}
               </button>
               {title}
+              {sampleNotes !== undefined && (
+                <SampleNoteInput value={sampleNotes[key]} onSave={(memo) => saveSampleNote(key, memo)} />
+              )}
             </h3>
             {!sampleCollapsed[key] && (
               <DirectionSampleTable

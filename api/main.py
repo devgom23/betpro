@@ -1034,6 +1034,38 @@ def save_season_note(code: str, body: SeasonNoteBody, user: dict = Depends(get_c
     return {"ok": True}
 
 
+# 상세보기 표본 박스 7개 제목 옆 메모(2026-09-15) — 경기 하나 × 표본 박스 하나에 1개.
+SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl")
+
+
+class SampleNoteBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    S: Union[str, int, float]
+    R: Union[str, int, float]
+    No: Union[str, int, float]
+    HT: str
+    AT: str
+    kind: str
+    memo: Optional[str] = None
+
+
+@app.get("/api/leagues/{code}/sample_notes")
+def get_sample_notes(code: str, scope: str = PATHS.SCOPE_MASTER, season: str = "", round: str = "",   # noqa: A002
+                     no: str = "", ht: str = "", at: str = "", user: dict = Depends(get_current_user)):
+    _check_league_for(code, scope, user)
+    return {"notes": MYPICKS.list_sample_notes(user["username"], code, scope, season, round, no, ht, at)}
+
+
+@app.post("/api/leagues/{code}/sample_notes")
+def save_sample_note(code: str, body: SampleNoteBody, user: dict = Depends(get_current_user)):
+    _check_league_for(code, body.scope, user)
+    if body.kind not in SAMPLE_NOTE_KINDS:
+        raise HTTPException(status_code=400, detail=f"알 수 없는 표본 종류: {body.kind}")
+    MYPICKS.upsert_sample_note(user["username"], code, body.scope, body.S, body.R, body.No,
+                               body.HT, body.AT, body.kind, (body.memo or "").strip() or None)
+    return {"ok": True}
+
+
 @app.get("/api/leagues/{code}/season_sample")
 def season_sample(code: str, scope: str = PATHS.SCOPE_MASTER,
                   season: str = "", round: str = "",   # noqa: A002

@@ -1790,6 +1790,22 @@
   outline-offset: 1px;
 }
 
+/* 표본 박스 제목 옆 메모 칸 — 제목과 한 줄. .detail-section h3가 flex-wrap:wrap이라
+   flex-basis 0 + min-width 0으로 줘야 칸이 다음 줄로 안 넘어가고 남는 폭 안에서 줄어든다.
+   모양은 상단 '경기 전 생각' 칸(.mypick-bar-field input)과 같다(2026-09-15). */
+.detail-section h3 .sample-note-input {
+  flex: 1 1 0;
+  min-width: 0;
+  align-self: center;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
 
 /* 시즌전적 + 폼 지표를 한 줄에 나란히(왼쪽 시즌전적 / 오른쪽 폼 지표).
    폼 지표는 6칸 고정이라 폭이 덜 필요하고, 시즌전적은 팀명 라벨이 있어 조금 더 넓게 준다. */
