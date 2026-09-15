@@ -1790,6 +1790,39 @@
   outline-offset: 1px;
 }
 
+/* 표본 박스 제목 옆 '방향성' 드롭박스 — 메모 칸 바로 앞, 같은 모양(2026-09-15).
+   블루·레드를 고르면 칸 자체를 앱의 정(파랑)/역(빨강) 칩 색으로 칠한다. */
+.detail-section h3 .sample-dir-select {
+  flex: none;
+  align-self: center;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.detail-section h3 .sample-dir-select.sample-dir-blue {
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+  font-weight: 700;
+}
+
+.detail-section h3 .sample-dir-select.sample-dir-red {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+  font-weight: 700;
+}
+
+/* 펼친 목록의 항목까지 칸 색을 따라 칠해지지 않게(크롬은 option이 select 색을 물려받는다). */
+.detail-section h3 .sample-dir-select option {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
 /* 표본 박스 제목 옆 메모 칸 — 제목과 한 줄. .detail-section h3가 flex-wrap:wrap이라
    flex-basis 0 + min-width 0으로 줘야 칸이 다음 줄로 안 넘어가고 남는 폭 안에서 줄어든다.
    모양은 상단 '경기 전 생각' 칸(.mypick-bar-field input)과 같다(2026-09-15). */

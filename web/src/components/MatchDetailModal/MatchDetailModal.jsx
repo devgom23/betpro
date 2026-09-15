@@ -5,7 +5,7 @@ import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { formatTime, formatDt, scoreClass, LEAGUE_LABELS_SHORT } from '../../utils/format'
 import { computeAutoVerdict, pickVerdictStyle } from '../LeagueTable/columnGroups'
-import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS } from '../../utils/pickOptions'
+import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS, SAMPLE_DIRECTION_OPTIONS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
 import {
@@ -1032,6 +1032,26 @@ function SampleNoteInput({ value, onSave }) {
         if (e.key === 'Enter') e.currentTarget.blur()
       }}
     />
+  )
+}
+
+// 메모 칸 앞 '방향성' 드롭박스 — 고르는 즉시 저장. 블루=파랑, 레드=빨강(앱 전체 정/역
+// 칩 색과 같은 토큰), 크로스·몰라는 기본색(2026-09-15 사용자 지정).
+const SAMPLE_DIRECTION_CLASS = { 블루: 'sample-dir-blue', 레드: 'sample-dir-red' }
+
+function SampleDirectionSelect({ value, onSave }) {
+  const current = value || ''
+  return (
+    <select
+      className={`sample-dir-select ${SAMPLE_DIRECTION_CLASS[current] || ''}`}
+      value={current}
+      onChange={(e) => onSave(e.target.value || null)}
+    >
+      <option value="">방향성</option>
+      {SAMPLE_DIRECTION_OPTIONS.map((o) => (
+        <option key={o} value={o}>{o}</option>
+      ))}
+    </select>
   )
 }
 
@@ -4181,7 +4201,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
     }
   }, [code, scope, matchKey])
 
-  // 표본 박스 제목 옆 메모 — {kind: memo}. undefined = 불러오는 중(그동안은 칸을 안 그려서
+  // 표본 박스 제목 옆 방향성·메모 — {kind: {direction, memo}}. undefined = 불러오는 중(그동안은 칸을 안 그려서
   // 빈 칸에 쓰다가 늦게 온 저장값에 덮이는 일을 막는다).
   const [sampleNotes, setSampleNotes] = useState(undefined)
   useEffect(() => {
@@ -4200,11 +4220,12 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
     }
   }, [code, scope, matchKey])
 
-  function saveSampleNote(kind, memo) {
+  // patch: {memo} 또는 {direction} — 보낸 칸만 저장된다(서버가 나머지 칸은 그대로 둔다).
+  function saveSampleNote(kind, patch) {
     const r = rowRef.current
-    setSampleNotes((prev) => ({ ...(prev || {}), [kind]: memo }))
+    setSampleNotes((prev) => ({ ...(prev || {}), [kind]: { ...(prev?.[kind] || {}), ...patch } }))
     api.post(`/api/leagues/${code}/sample_notes`, {
-      scope, S: r.S, R: r.R, No: r.No, HT: r.HT, AT: r.AT, kind, memo: memo || null,
+      scope, S: r.S, R: r.R, No: r.No, HT: r.HT, AT: r.AT, kind, ...patch,
     }).catch(() => {})
   }
 
@@ -4402,7 +4423,16 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
               </button>
               {title}
               {sampleNotes !== undefined && (
-                <SampleNoteInput value={sampleNotes[key]} onSave={(memo) => saveSampleNote(key, memo)} />
+                <>
+                  <SampleDirectionSelect
+                    value={sampleNotes[key]?.direction}
+                    onSave={(direction) => saveSampleNote(key, { direction })}
+                  />
+                  <SampleNoteInput
+                    value={sampleNotes[key]?.memo}
+                    onSave={(memo) => saveSampleNote(key, { memo: memo || null })}
+                  />
+                </>
               )}
             </h3>
             {!sampleCollapsed[key] && (

@@ -1046,7 +1046,12 @@ class SampleNoteBody(BaseModel):
     HT: str
     AT: str
     kind: str
+    # 보낸 칸만 저장한다(model_fields_set) — 메모만 보내면 방향성은 안 건드린다.
     memo: Optional[str] = None
+    direction: Optional[str] = None
+
+
+SAMPLE_DIRECTIONS = ("블루", "레드", "크로스", "몰라")
 
 
 @app.get("/api/leagues/{code}/sample_notes")
@@ -1061,8 +1066,15 @@ def save_sample_note(code: str, body: SampleNoteBody, user: dict = Depends(get_c
     _check_league_for(code, body.scope, user)
     if body.kind not in SAMPLE_NOTE_KINDS:
         raise HTTPException(status_code=400, detail=f"알 수 없는 표본 종류: {body.kind}")
+    values = {}
+    if "memo" in body.model_fields_set:
+        values["memo"] = (body.memo or "").strip() or None
+    if "direction" in body.model_fields_set:
+        if body.direction and body.direction not in SAMPLE_DIRECTIONS:
+            raise HTTPException(status_code=400, detail=f"알 수 없는 방향성: {body.direction}")
+        values["direction"] = body.direction or None
     MYPICKS.upsert_sample_note(user["username"], code, body.scope, body.S, body.R, body.No,
-                               body.HT, body.AT, body.kind, (body.memo or "").strip() or None)
+                               body.HT, body.AT, body.kind, values)
     return {"ok": True}
 
 
