@@ -274,9 +274,11 @@
 
 .mypick-bar-memo {
   flex: 1;
+  min-width: 0;
 }
 
-.mypick-bar-memo input {
+.mypick-bar-memo input,
+.mypick-bar-memo .rich-memo {
   width: 100%;
 }
 
@@ -1830,13 +1832,6 @@
   flex: 1 1 0;
   min-width: 0;
   align-self: center;
-  padding: 5px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 400;
 }
 
 

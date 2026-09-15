@@ -35,7 +35,8 @@
 }
 
 .archive-tag-row select,
-.archive-tag-row input {
+.archive-tag-row input,
+.archive-tag-row .rich-memo {
   flex: 1;
   min-width: 0;
   padding: 7px 10px;

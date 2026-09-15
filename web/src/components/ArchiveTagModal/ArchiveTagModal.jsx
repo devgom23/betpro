@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import { TEAM_TAG_OPTIONS, MATCHUP_TAG_OPTIONS, ARCHIVE_ODDS_TAG_OPTIONS } from '../../utils/pickOptions'
 import { archiveTargetText, archiveSpanText, archiveStatsText } from '../../utils/archiveTags'
+import { RichMemoInput, RichMemoText } from '../RichMemo/RichMemo'
 import './ArchiveTagModal.css'
 
 // 배당 태그 대상 3종(승/무/패) — 값이 실제로 있을 때만 목록에 넣는다. 공식 데이터
@@ -132,15 +133,12 @@ export default function ArchiveTagModal({ row, code, scope, tags, onClose, onCha
           </label>
           <label className="archive-tag-row">
             <span className="archive-tag-label">메모</span>
-            <input
+            <RichMemoInput
               id="archive-memo"
-              type="text"
               value={memo}
               placeholder="왜 이 태그를 다는지 짧게"
-              onChange={(e) => setMemo(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') save()
-              }}
+              onChange={setMemo}
+              onEnter={() => save()}
             />
           </label>
           <div className="archive-tag-actions">
@@ -161,7 +159,7 @@ export default function ArchiveTagModal({ row, code, scope, tags, onClose, onCha
                 <span className="archive-tag-chip">📌 {archiveTargetText(t)} · {t.tag}</span>
                 <span className="archive-tag-meta">
                   {archiveSpanText(t)} · 이후 {archiveStatsText(t)}
-                  {t.memo ? ` · ${t.memo}` : ''}
+                  {t.memo ? <> · <RichMemoText value={t.memo} /></> : ''}
                 </span>
                 <button className="archive-tag-release" onClick={() => release(t)}>해제</button>
               </li>

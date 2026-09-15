@@ -121,7 +121,8 @@
   color: var(--chip-purple-fg);
 }
 
-.ar-table td.ar-memo-cell input {
+.ar-table td.ar-memo-cell input,
+.ar-table td.ar-memo-cell .rich-memo {
   width: 100%;
   min-width: 160px;
 }

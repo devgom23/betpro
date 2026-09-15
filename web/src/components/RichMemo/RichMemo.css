@@ -1,0 +1,87 @@
+/* 메모 한 줄 입력칸(RichMemo.jsx) — 일반 입력칸과 같은 모양의 기본값. 놓이는 자리마다
+   폭·여백은 그 화면의 CSS가 className으로 덮어쓴다. */
+.rich-memo {
+  box-sizing: border-box;
+  min-width: 0;
+  /* 글자 길이가 칸 폭에 영향을 주지 않게 한다 — 일반 <input>은 안에 긴 글이 있어도 칸 폭이
+     그대로인데, 편집 칸(div)은 기본적으로 한 줄 글자 폭만큼 부모(flex·표 칸)를 밀어 넓힌다.
+     폭은 놓인 자리의 CSS(width·flex)로만 정해진다(2026-09-15, 상세보기 상단 메모 칸이 글자
+     길이에 따라 넓어지던 문제). */
+  contain: inline-size;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  /* 한 줄 유지 — 공백도 그대로 보이게 pre, 넘치면 칸 안에서만 가로로 밀린다. */
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  cursor: text;
+}
+
+.rich-memo::-webkit-scrollbar {
+  display: none;
+}
+
+.rich-memo:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.rich-memo[data-empty='true']::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* 형광펜 — 노란 형광을 반투명으로 깔아 라이트·다크 둘 다 글자가 읽히게 한다. */
+.memo-hl {
+  background: color-mix(in srgb, #ffe600 45%, transparent);
+  border-radius: 2px;
+}
+
+.memo-st {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+/* 글자를 고르면 그 위에 뜨는 작은 버튼 줄 — 팝업 스크롤 영역에 잘리지 않게 body에 붙는다. */
+.rich-memo-toolbar {
+  position: fixed;
+  z-index: 1000;
+  transform: translate(-50%, calc(-100% - 6px));
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.rich-memo-btn {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.rich-memo-btn:hover {
+  background: var(--bg-surface-2);
+}
+
+.rich-memo-btn-st {
+  text-decoration: line-through;
+  font-weight: 700;
+}

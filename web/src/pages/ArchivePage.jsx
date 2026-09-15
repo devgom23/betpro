@@ -7,6 +7,7 @@ import { TEAM_TAG_OPTIONS, MATCHUP_TAG_OPTIONS, ARCHIVE_ODDS_TAG_OPTIONS } from 
 import {
   archiveTargetText, archiveSourceText, archiveStatsText, archiveStatsLines, archiveDateText,
 } from '../utils/archiveTags'
+import { RichMemoInput } from '../components/RichMemo/RichMemo'
 import './WeekListPage.css'
 import './ArchivePage.css'
 
@@ -274,16 +275,10 @@ export default function ArchivePage() {
                     </select>
                   </td>
                   <td className="ar-memo-cell">
-                    <input
-                      type="text"
-                      defaultValue={t.memo || ''}
+                    <RichMemoInput
+                      value={t.memo || ''}
                       placeholder="메모"
-                      onBlur={(e) => {
-                        if ((e.target.value || '') !== (t.memo || '')) update(t, { memo: e.target.value })
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') e.currentTarget.blur()
-                      }}
+                      onCommit={(next) => update(t, { memo: next })}
                     />
                   </td>
                   <td>

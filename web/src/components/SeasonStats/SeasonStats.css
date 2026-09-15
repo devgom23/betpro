@@ -102,7 +102,10 @@
 /* ③ 과거 이력 메모 — 상세보기 결과반성 메모칸(.mypick-bar-field input)과 같은 스타일.
    타이틀 줄(ss-title) 안의 flex 아이템이라 남는 폭을 채우되(flex:1), 줄이 접혀도
    (historyOpen=false) 타이틀은 항상 그려지므로 메모도 항상 보인다. */
-.ss-history-memo {
+/* .rich-memo 기본 모양(RichMemo.css)보다 우선하게 클래스 두 개로 쓴다 — CSS 파일 로드
+   순서와 무관하게 이 칸의 폭·여백·글자 크기가 이긴다. */
+.ss-history-memo,
+.rich-memo.ss-history-memo {
   flex: none;
   width: 1000px;
   box-sizing: border-box;

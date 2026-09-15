@@ -18,6 +18,8 @@ import {
   marketSetMoved, RISK_FIELD_MARKET, DIRECTION_SCOPE_MARKET, ODDS_SCOPE_MARKET,
 } from '../../utils/verdictCalc'
 import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
+import { RichMemoInput } from '../RichMemo/RichMemo'
+import { stripMemo } from '../../utils/richMemo'
 import {
   archiveTargetText, archiveSpanText, archiveSourceText, archiveStatsText, archiveStatsLines, archiveDateText,
 } from '../../utils/archiveTags'
@@ -701,7 +703,7 @@ function archiveChips(tags) {
   return tags.map((t) => {
     const title = [
       `내가 단 태그 · ${archiveSpanText(t)}`,
-      t.memo ? `메모: ${t.memo}` : null,
+      t.memo ? `메모: ${stripMemo(t.memo)}` : null,
       `근거 경기: ${archiveSourceText(t)} (등록 ${archiveDateText(t.created_dt)})`,
       `태그 이후(이 경기 직전까지): ${archiveStatsText(t)}`,
       ...archiveStatsLines(t),
@@ -1009,28 +1011,12 @@ const DIRECTION_SAMPLE_LABEL_LINES = {
 // 같은 저장 방식(칸을 벗어나거나 Enter를 누를 때, 바뀌었을 때만 저장). 경기 하나 ×
 // 표본 박스 하나에 1개라 내픽(my_picks)이 아니라 sample_notes에 따로 둔다.
 function SampleNoteInput({ value, onSave }) {
-  const [draft, setDraft] = useState(value || '')
-  const [saved, setSaved] = useState(value || '')
-  useEffect(() => {
-    setDraft(value || '')
-    setSaved(value || '')
-  }, [value])
-  function saveIfChanged() {
-    if (draft === saved) return
-    setSaved(draft)
-    onSave(draft)
-  }
   return (
-    <input
-      type="text"
+    <RichMemoInput
       className="sample-note-input"
-      value={draft}
+      value={value || ''}
       placeholder="경기 전 생각을 입력해주세요"
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={saveIfChanged}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-      }}
+      onCommit={onSave}
     />
   )
 }
@@ -2311,16 +2297,19 @@ function MyPickBar({ row, onSavePick }) {
     onSavePick({ oddsBet: next || null })
   }
 
-  function saveMemoPreIfChanged() {
-    if (memoPre === savedMemoPre) return
-    setSavedMemoPre(memoPre)
-    onSavePick({ memoPre: memoPre || null })
+  // 메모 칸(RichMemoInput)은 칸을 벗어나거나 Enter일 때 바뀐 경우에만 onCommit을 부른다.
+  function saveMemoPreIfChanged(next) {
+    setMemoPre(next)
+    if (next === savedMemoPre) return
+    setSavedMemoPre(next)
+    onSavePick({ memoPre: next || null })
   }
 
-  function saveMemoIfChanged() {
-    if (memo === savedMemo) return
-    setSavedMemo(memo)
-    onSavePick({ memo: memo || null })
+  function saveMemoIfChanged(next) {
+    setMemo(next)
+    if (next === savedMemo) return
+    setSavedMemo(next)
+    onSavePick({ memo: next || null })
   }
 
   return (
@@ -2365,18 +2354,13 @@ function MyPickBar({ row, onSavePick }) {
           ))}
         </select>
       </label>
-      <label className="mypick-bar-field mypick-bar-memo" title="경기가 열리기 전에 적어 두는 메모">
-        <input
-          type="text"
+      <div className="mypick-bar-field mypick-bar-memo" title="경기가 열리기 전에 적어 두는 메모">
+        <RichMemoInput
           value={memoPre}
           placeholder="경기 전 생각을 입력해주세요"
-          onChange={(e) => setMemoPre(e.target.value)}
-          onBlur={saveMemoPreIfChanged}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur()
-          }}
+          onCommit={saveMemoPreIfChanged}
         />
-      </label>
+      </div>
       <label className="mypick-bar-field">
         <select value={oddsBet} onChange={handleOddsBetChange}>
           <option value="">배답벳</option>
@@ -2397,18 +2381,13 @@ function MyPickBar({ row, onSavePick }) {
           ))}
         </select>
       </label>
-      <label className="mypick-bar-field mypick-bar-memo" title="결과가 나온 뒤 적는 회고 메모">
-        <input
-          type="text"
+      <div className="mypick-bar-field mypick-bar-memo" title="결과가 나온 뒤 적는 회고 메모">
+        <RichMemoInput
           value={memo}
           placeholder="결과 이후 생각을 입력해주세요"
-          onChange={(e) => setMemo(e.target.value)}
-          onBlur={saveMemoIfChanged}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur()
-          }}
+          onCommit={saveMemoIfChanged}
         />
-      </label>
+      </div>
     </div>
   )
 }

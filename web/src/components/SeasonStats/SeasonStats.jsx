@@ -3,6 +3,7 @@ import { api } from '../../api/client'
 import { RT_COLOR } from '../RtBadge/RtBadge'
 import { summarizeVerdicts, summarizeSystemVerdicts } from '../LeagueTable/columnGroups'
 import { PickSummaryBar } from '../RtSummaryBar/RtSummaryBar'
+import { RichMemoInput } from '../RichMemo/RichMemo'
 import './SeasonStats.css'
 
 const RT_ROWS = ['핸승', '핸무', '무', '역']
@@ -138,11 +139,12 @@ export default function SeasonStats({ code, scope, season, round }) {
     }
   }, [code, scope, season, round])
 
-  function saveSeasonMemoIfChanged() {
-    if (seasonMemo === savedSeasonMemo) return
-    setSavedSeasonMemo(seasonMemo)
+  function saveSeasonMemoIfChanged(next) {
+    setSeasonMemo(next)
+    if (next === savedSeasonMemo) return
+    setSavedSeasonMemo(next)
     api
-      .post(`/api/leagues/${code}/season_note`, { scope, season, round, memo: seasonMemo || null })
+      .post(`/api/leagues/${code}/season_note`, { scope, season, round, memo: next || null })
       .catch(() => {
         // 저장 실패 시 되돌린다
         setSeasonMemo(savedSeasonMemo)
@@ -324,16 +326,11 @@ export default function SeasonStats({ code, scope, season, round }) {
               ③ {data.round} 과거 이력
               <span className="ss-hint">시즌마다 이 라운드의 결과 분포와 똥배 경기 (최근 시즌 순)</span>
               {/* 타이틀 줄 안에 둬서 ③을 접어도(historyOpen=false) 메모는 계속 보이게 한다. */}
-              <input
-                type="text"
+              <RichMemoInput
                 className="ss-history-memo"
                 value={seasonMemo}
                 placeholder="이 라운드에 대한 생각을 입력해주세요"
-                onChange={(e) => setSeasonMemo(e.target.value)}
-                onBlur={saveSeasonMemoIfChanged}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur()
-                }}
+                onCommit={saveSeasonMemoIfChanged}
               />
             </div>
             {historyOpen && (
