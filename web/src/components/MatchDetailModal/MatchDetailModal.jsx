@@ -1022,8 +1022,13 @@ function SampleNoteInput({ value, onSave }) {
 }
 
 // 메모 칸 앞 '방향성' 드롭박스 — 고르는 즉시 저장. 블루=파랑, 레드=빨강(앱 전체 정/역
-// 칩 색과 같은 토큰), 크로스·몰라는 기본색(2026-09-15 사용자 지정).
-const SAMPLE_DIRECTION_CLASS = { 블루: 'sample-dir-blue', 레드: 'sample-dir-red' }
+// 칩 색과 같은 토큰), 약블루·약레드는 그보다 한 단계 옅은 색, 크로스=회색, 몰라는 기본색
+// (2026-09-15 사용자 지정).
+const SAMPLE_DIRECTION_CLASS = {
+  블루: 'sample-dir-blue', 약블루: 'sample-dir-blue-weak',
+  레드: 'sample-dir-red', 약레드: 'sample-dir-red-weak',
+  크로스: 'sample-dir-gray',
+}
 
 function SampleDirectionSelect({ value, onSave }) {
   const current = value || ''

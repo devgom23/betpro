@@ -1818,6 +1818,28 @@
   font-weight: 700;
 }
 
+/* 약블루·약레드 — 블루·레드와 같은 글자색이되, 배경을 표본 카드 배경(--bg-surface) 쪽으로
+   절반 섞어 한 단계 옅게 낸다. 고정 색 대신 color-mix를 써서 다크/라이트 테마 어디서든
+   "그 테마의 칩 색보다 한 단계 연하게"가 자동으로 유지된다(2026-09-15 사용자 지정). */
+.detail-section h3 .sample-dir-select.sample-dir-blue-weak {
+  background: color-mix(in srgb, var(--chip-blue-bg) 50%, var(--bg-surface));
+  color: var(--chip-blue-fg);
+  font-weight: 700;
+}
+
+.detail-section h3 .sample-dir-select.sample-dir-red-weak {
+  background: color-mix(in srgb, var(--chip-red-bg) 50%, var(--bg-surface));
+  color: var(--chip-red-fg);
+  font-weight: 700;
+}
+
+/* 크로스 — 방향이 엇갈린다는 뜻이라 파랑·빨강 어느 쪽도 아닌 회색 칩 색(2026-09-15 사용자 지정). */
+.detail-section h3 .sample-dir-select.sample-dir-gray {
+  background: var(--chip-gray-bg);
+  color: var(--chip-gray-fg);
+  font-weight: 700;
+}
+
 /* 펼친 목록의 항목까지 칸 색을 따라 칠해지지 않게(크롬은 option이 select 색을 물려받는다). */
 .detail-section h3 .sample-dir-select option {
   background: var(--bg-surface);
