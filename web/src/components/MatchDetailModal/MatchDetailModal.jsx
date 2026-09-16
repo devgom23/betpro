@@ -1404,59 +1404,8 @@ function formOrDash(v) {
   return v === null || v === undefined || v === '' ? '-' : String(v)
 }
 
-// 백엔드(standings.py)가 그 경기 '직전까지'의 시즌 성적으로 계산해 붙여준 값들.
-// 홈/원정 각각 전체폼·최근5폼과, 홈팀은 홈경기만·원정팀은 원정경기만의 폼을 나란히 본다.
-function FormTable({ row }) {
-  return (
-    <table className="detail-table form-table">
-      <thead>
-        <tr>
-          <th colSpan={3}>홈</th>
-          <th colSpan={3}>원정</th>
-        </tr>
-        <tr>
-          <th>전체</th>
-          <th>최근5</th>
-          <th>홈</th>
-          <th>원정</th>
-          <th>최근5</th>
-          <th>전체</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td style={formStyle(row.HTF)}>{formOrDash(row.HTF)}</td>
-          <td style={formStyle(row.HRF)}>{formOrDash(row.HRF)}</td>
-          <td style={formStyle(row.HF)}>{formOrDash(row.HF)}</td>
-          <td style={formStyle(row.AF)}>{formOrDash(row.AF)}</td>
-          <td style={formStyle(row.ARF)}>{formOrDash(row.ARF)}</td>
-          <td style={formStyle(row.ATF)}>{formOrDash(row.ATF)}</td>
-        </tr>
-      </tbody>
-    </table>
-  )
-}
-
-// 최근 10경기 승패. 홈팀은 왼쪽이 과거→오른쪽이 최신, 원정팀은 왼쪽이 최신→오른쪽이 과거라
-// 두 팀의 '가장 최근 경기'가 가운데에서 마주보게 된다 (백엔드가 이미 그 순서로 만들어 보낸다).
-// 10경기 미만(시즌 초반 등)이면 각자 자기 쪽 바깥쪽 끝부터 채워 구분선 쪽으로 자라난다 —
-// 홈팀은 왼쪽 끝부터(그대로, offset 없음), 원정팀은 오른쪽 끝부터(alignEnd로 offset을 줘서
-// 뒤에서부터 채움) 채우므로, 경기가 쌓일수록 최신 경기가 구분선에 가까워진다.
-// HR10/AR10 문자열과 HR10H/AR10H(같은 자리수의 'H'/'A')를 나란히 훑어 칸 10개를 만들고,
-// 그 경기가 홈경기였던 칸만 배경을 칠해 눈에 띄게 한다.
-function recentCells(results, venues, alignEnd = false) {
-  const offset = alignEnd ? Math.max(0, 10 - results.length) : 0
-  return Array.from({ length: 10 }, (_, i) => {
-    const idx = i - offset
-    return {
-      ch: idx >= 0 ? results[idx] || '' : '',
-      isHome: idx >= 0 ? venues[idx] === 'H' : false,
-    }
-  })
-}
-
 // 그 팀이 이 경기 '직전까지' 그 리그에서 세운 최고 연속 기록 4종.
-// 위 최근10경기 칸이 홈=왼쪽 / 원정=오른쪽으로 갈라져 있으므로 그 방향을 그대로 잇는다.
+// 팀 흐름 표(TeamFlowTable)의 '리그 최다 기록' 칸에 팀마다 한 줄씩 들어간다.
 // 표기는 CLAUDE.md 6-2 규칙(가운뎃점 나열, 값은 밝게, 간격은 flex gap).
 const STREAK_ITEMS = [
   ['win', '연승'],
@@ -1481,9 +1430,8 @@ function StreakLine({ data, align }) {
 // 칸 하나에 마우스를 올렸을 때 보여줄 그 경기 정보.
 //   26-08-24(수) 20:30
 //   리버플 1 - 0 노팅엄 (역)
-// 서버가 준 목록(recent10)은 화면 칸과 같은 순서라 자리만 맞춰 꺼내 쓴다. 다만 칸은
-// 항상 10개인데 경기가 그보다 적을 수 있어(시즌 초반), 원정팀 쪽은 뒤에서부터 채우는
-// recentCells의 offset을 똑같이 적용해 자리를 맞춘다.
+// 서버가 준 목록(recent10)을 TeamFlowTable이 칸 순서(과거→최신, 오른쪽 끝 = 직전)에
+// 맞춰 flowCells로 자리를 잡아 넘긴다.
 // 팀명 옆에 적을 배당 — 해외배당(FW/FL)만 쓴다. HeadToHeadResult.jsx의 teamOdds와
 // 같은 이유다: 국내·해외가 갈릴 때 해외 쪽이 더 자주 맞아(6대리그 실측 +1.8%p)
 // 상대전적 표가 이미 해외로 통일했다 — 여기도 같은 기준을 따라야 두 화면이
@@ -1548,73 +1496,132 @@ function RecentTip({ game, team, rect }) {
   )
 }
 
-function RecentTable({ row, streaks, recent10 }) {
-  // 시즌 첫 라운드면 아직 치른 경기가 없어 양쪽 다 비어 있다 — 폼 지표와 같이 '-'로 둔다.
-  const homeCells = recentCells(String(row.HR10 || ''), String(row.HR10H || ''))
-  const awayCells = recentCells(String(row.AR10 || ''), String(row.AR10H || ''), true)
-  const homeGames = recent10?.home || []
-  const awayGames = recent10?.away || []
-  const awayOffset = Math.max(0, 10 - awayGames.length)
-  const hasStreak = streaks && (streaks.home?.played || streaks.away?.played)
-  // 지금 마우스가 올라가 있는 칸 하나 — 떼면 null이 되어 말풍선이 사라진다.
+// ───────── 팀 흐름(시즌전적 · 폼 지표 · 최근10경기를 팀별 한 줄로) ─────────
+// 2026-09-16 사용자 지정(시안 B안) — 한 팀 = 한 줄이라 두 팀이 위아래 같은 칸에서 비교된다.
+// 최근10경기는 두 줄 모두 '과거 → 최신'이고 10칸 고정이다. 칸 번호는 왼쪽이 1번이고,
+// 가장 오래된 경기부터 1번 칸에 채운다 — 치른 경기가 10개보다 적으면 오른쪽 칸이 빈다
+// (2026-09-17 사용자 지정, 예전의 '가운데서 마주보기' 배치를 대신한다).
+// 칸 안에 결과 글자, 그 아래 작게 날짜(MM/DD).
+
+function recentDate(dt) {
+  const m = /^\d{2}-(\d{2})-(\d{2})/.exec(String(dt || ''))
+  return m ? `${m[1]}/${m[2]}` : ''
+}
+
+// results/venues/games는 과거→최신 순서. 1번 칸부터 채우고 모자란 칸은 비운다.
+function flowCells(results, venues, games) {
+  return Array.from({ length: 10 }, (_, i) => (
+    i < results.length
+      ? { ch: results[i] || '', isHome: venues[i] === 'H', game: games[i] || null }
+      : null
+  ))
+}
+
+function fixed2(v) {
+  return v === null || v === undefined ? '-' : Number(v).toFixed(2)
+}
+
+function TeamFlowTable({ row, seasonRows, streaks, recent10, venueRank }) {
   const [tip, setTip] = useState(null)
-  const homeTeam = String(row.HT || '').trim()
-  const awayTeam = String(row.AT || '').trim()
-  const cellProps = (game, team) => (game
-    ? {
-      className: ' recent-cell-tip',
-      onMouseEnter: (e) => setTip({ game, team, rect: e.currentTarget.getBoundingClientRect() }),
-      onMouseLeave: () => setTip(null),
-    }
-    : { className: '' })
+  const ht = String(row.HT || '').trim()
+  const at = String(row.AT || '').trim()
+  const rev = (s) => [...String(s || '')].reverse().join('')
+  // 원정팀 HR10 계열(AR10/AR10H)과 recent10.away는 최신→과거로 오므로 뒤집어 맞춘다.
+  const teams = [
+    {
+      key: 'home', name: ht, venue: '홈', rank: row.HP, season: seasonRows?.[0],
+      form: [row.HTF, row.HRF, row.HF], streak: streaks?.home, venueRank: venueRank?.home,
+      cells: flowCells(String(row.HR10 || ''), String(row.HR10H || ''), recent10?.home || []),
+    },
+    {
+      key: 'away', name: at, venue: '원정', rank: row.AP, season: seasonRows?.[1],
+      form: [row.ATF, row.ARF, row.AF], streak: streaks?.away, venueRank: venueRank?.away,
+      cells: flowCells(rev(row.AR10), rev(row.AR10H), [...(recent10?.away || [])].reverse()),
+    },
+  ]
   return (
-    <>
-      <table className="detail-table recent-table">
+    <div className="team-flow-wrap">
+      <table className="detail-table team-flow-table">
         <thead>
           <tr>
-            <th colSpan={10}>홈팀최근 →</th>
-            <th colSpan={10}>← 원정팀 최근</th>
+            <th rowSpan={2}>팀</th>
+            <th colSpan={4} className="tf-gl">시즌전적 <span className="tf-th-note">(괄호=같은 장소, 합은 승점)</span></th>
+            <th colSpan={3} className="tf-gl">폼 지표</th>
+            <th colSpan={10} className="tf-gl">최근10경기 <span className="tf-th-note">(과거 → 최신)</span></th>
+            <th rowSpan={2} className="tf-gl">리그 최다 기록</th>
+          </tr>
+          <tr>
+            <th className="col-w tf-gl">승</th>
+            <th className="col-d">무</th>
+            <th className="col-l">패</th>
+            <th>합</th>
+            <th className="tf-gl">전체</th>
+            <th>최근5</th>
+            <th title="홈팀은 홈경기 폼, 원정팀은 원정경기 폼">홈/원</th>
+            {Array.from({ length: 10 }, (_, i) => (
+              <th key={i} className={i === 0 ? 'tf-gl' : undefined}>{i + 1}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          <tr>
-            {homeCells.map((c, i) => {
-              const p = cellProps(c.ch ? homeGames[i] : null, homeTeam)
-              return (
-                <td
-                  key={`h${i}`}
-                  className={`recent-cell recent-${c.ch} ${c.isHome ? 'recent-cell-home' : ''}${p.className}`}
-                  onMouseEnter={p.onMouseEnter}
-                  onMouseLeave={p.onMouseLeave}
-                >
-                  {c.ch || '-'}
+          {teams.map((t) => {
+            const xg = t.season?.xg || []
+            return (
+              <tr key={t.key}>
+                <td className="tf-team" title="(전체 순위 / 전체 기준 기대점수)">
+                  <span className="tf-team-name">{t.name}</span>
+                  <span className="tf-team-sub">({t.rank ? `${t.rank}위` : '-'}/{fixed2(xg[0])})</span>
+                  <span
+                    className="tf-team-venue"
+                    title={`${t.venue}경기만으로 매긴 순위 / ${t.venue}경기 기준 기대점수`}
+                  >
+                    {t.venue} {t.venueRank ? `${t.venueRank}위` : '-'} · 기대 {fixed2(xg[1])}
+                  </span>
                 </td>
-              )
-            })}
-            {awayCells.map((c, i) => {
-              const p = cellProps(c.ch ? awayGames[i - awayOffset] : null, awayTeam)
-              return (
-                <td
-                  key={`a${i}`}
-                  className={`recent-cell recent-${c.ch} ${c.isHome ? 'recent-cell-home' : ''}${p.className}`}
-                  onMouseEnter={p.onMouseEnter}
-                  onMouseLeave={p.onMouseLeave}
-                >
-                  {c.ch || '-'}
+                {['승', '무', '패', '합'].map((k, i) => {
+                  const pair = t.season?.counts ? t.season.counts[k] : null
+                  return (
+                    <td key={k} className={`${SEASON_COL_CLASS[k]}${i === 0 ? ' tf-gl' : ''}`}>
+                      {pair ? (
+                        <>
+                          {pair[0]}
+                          <span className="pick-season-venue">({pair[1]})</span>
+                        </>
+                      ) : '-'}
+                    </td>
+                  )
+                })}
+                {t.form.map((v, i) => (
+                  <td key={i} className={`tf-form${i === 0 ? ' tf-gl' : ''}`} style={formStyle(v)}>
+                    {formOrDash(v)}
+                  </td>
+                ))}
+                {t.cells.map((c, i) => {
+                  const gl = i === 0 ? ' tf-gl' : ''
+                  if (!c || !c.ch) return <td key={i} className={`tf-rc tf-rc-empty${gl}`}>-</td>
+                  const g = c.game
+                  return (
+                    <td
+                      key={i}
+                      className={`tf-rc recent-${c.ch}${c.isHome ? ' recent-cell-home' : ''}${g ? ' tf-rc-tip' : ''}${gl}`}
+                      onMouseEnter={g ? (e) => setTip({ game: g, team: t.name, rect: e.currentTarget.getBoundingClientRect() }) : undefined}
+                      onMouseLeave={g ? () => setTip(null) : undefined}
+                    >
+                      {c.ch}
+                      <span className="tf-rc-date">{g ? recentDate(g.DT) : ''}</span>
+                    </td>
+                  )
+                })}
+                <td className="tf-streak tf-gl">
+                  {t.streak ? <StreakLine data={t.streak} align="left" /> : '-'}
                 </td>
-              )
-            })}
-          </tr>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
-      {hasStreak && (
-        <div className="streak-row">
-          <StreakLine data={streaks.home} align="left" />
-          <StreakLine data={streaks.away} align="right" />
-        </div>
-      )}
       {tip && <RecentTip {...tip} />}
-    </>
+    </div>
   )
 }
 
@@ -2247,7 +2254,114 @@ function SampleTable({ row, scope, expanded }) {
 
 // 내픽 선택 + 한줄 메모 — 별표(중요)는 제목 옆 버튼으로 따로 처리한다.
 // onSavePick(patch)가 실제 저장을 담당하고, 여기선 즉시(낙관적) 반영만 한다.
-function MyPickBar({ row, onSavePick }) {
+// ───────── 앞뒤 일정(직전·다음 경기) ─────────
+// 서버 /api/schedule_context 한 줄: {days, comp, comp_short, venue, opponent, score, result, note, kickoff}
+
+function scheduleDaysText(days) {
+  if (days < 0) return `${-days}일 전`
+  if (days > 0) return `${days}일 뒤`
+  return '같은 날'
+}
+
+// 배지 문구 — 컵은 "3일 전 챔스(홈)", 리그는 "7일 전 EPL 3R"(사용자 예시 그대로).
+function prevBadgeText(m) {
+  const comp = m.is_league ? m.comp_short : `${m.comp_short}(${m.venue})`
+  return `${scheduleDaysText(m.days)} ${comp}`
+}
+
+function scheduleTitle(team, kind, m) {
+  const res = m.score ? ` · ${m.score}${m.result ? ` ${m.result}` : ''}${m.note ? ` (${m.note})` : ''}` : ''
+  return `${team} ${kind} 경기 — ${m.kickoff} · ${m.comp} · ${m.venue} · vs ${m.opponent}${res}`
+}
+
+// 내픽 바 맨 왼쪽 — 두 팀의 직전 경기 배지(홈 → 원정 순). 직전 경기가 없는 팀은 뺀다.
+function PrevMatchBadges({ ctx, ht, at }) {
+  if (!ctx) return null
+  const items = [[ht, ctx.home?.prev], [at, ctx.away?.prev]].filter(([, m]) => m)
+  if (items.length === 0) return null
+  return (
+    <span className="prev-match-badges">
+      {items.map(([team, m]) => (
+        <span
+          key={team}
+          className="prev-match-badge"
+          title={scheduleTitle(team, '직전', m)}
+        >
+          <b>{team}</b> {prevBadgeText(m)}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+const SCHEDULE_RESULT_CLASS = { 승: 'win', 무: 'draw', 패: 'loss' }
+
+function ScheduleContextSection({ ctx, ht, at }) {
+  if (!ctx) return null
+  const rows = []
+  for (const [team, side] of [[ht, ctx.home], [at, ctx.away]]) {
+    for (const [kind, m] of [['직전', side?.prev], ['다음', side?.next]]) {
+      if (m) rows.push({ team, kind, m })
+    }
+  }
+  if (rows.length === 0) return null
+  return (
+    <section className="detail-section">
+      <h3>
+        앞뒤 일정
+        <span className="detail-section-note">두 팀의 바로 앞뒤 경기(리그·컵 포함), 리그 상대 옆 괄호는 그 라운드 직전 순위/승점</span>
+      </h3>
+      <div className="schedule-ctx-wrap">
+        <table className="detail-table schedule-ctx-table">
+          <thead>
+            <tr>
+              <th>팀</th>
+              <th>언제</th>
+              <th>대회</th>
+              <th>장소</th>
+              <th>상대</th>
+              <th>결과</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ team, kind, m }, i) => {
+              const firstOfTeam = i === 0 || rows[i - 1].team !== team
+              return (
+                <tr key={`${team}-${kind}`} className={firstOfTeam && i > 0 ? 'schedule-ctx-split' : undefined}>
+                  <td className="schedule-ctx-team">{firstOfTeam ? team : ''}</td>
+                  <td>
+                    <span className={`schedule-ctx-when ${kind === '직전' ? 'is-prev' : 'is-next'}`}>
+                      {scheduleDaysText(m.days)}
+                    </span>
+                    <span className="schedule-ctx-dim"> {m.kickoff.slice(5)}</span>
+                  </td>
+                  <td>{m.comp}</td>
+                  <td>{m.venue}</td>
+                  <td>{m.opponent}</td>
+                  <td>
+                    {m.score ? (
+                      <span className="schedule-ctx-result">
+                        <b>{m.score}</b>
+                        {m.result && (
+                          <span className={`schedule-ctx-chip ${SCHEDULE_RESULT_CLASS[m.result] || ''}`}>{m.result}</span>
+                        )}
+                        {m.note && <span className="schedule-ctx-dim">{m.note}</span>}
+                      </span>
+                    ) : (
+                      <span className="schedule-ctx-dim">예정</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function MyPickBar({ row, onSavePick, lead, memoLead }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
   const [p, setP] = useState(row.MY_P || '')
   const [hit, setHit] = useState(row.MY_HIT || '')
@@ -2320,6 +2434,7 @@ function MyPickBar({ row, onSavePick }) {
   return (
     <div className="mypick-bar">
       <div className="mypick-bar-row">
+        {lead}
         <label className="mypick-bar-field">
           <select value={pick} onChange={handlePickChange}>
             <option value="">내픽</option>
@@ -2388,14 +2503,62 @@ function MyPickBar({ row, onSavePick }) {
           />
         </div>
       </div>
-      <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-pre" title="경기가 열리기 전에 적어 두는 메모">
-        <RichMemoInput
-          value={memoPre}
-          placeholder="경기 전 생각을 입력해주세요"
-          onCommit={saveMemoPreIfChanged}
-        />
+      <div className="mypick-bar-row">
+        {memoLead}
+        <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-pre" title="경기가 열리기 전에 적어 두는 메모">
+          <RichMemoInput
+            value={memoPre}
+            placeholder="경기 전 생각을 입력해주세요"
+            onCommit={saveMemoPreIfChanged}
+          />
+        </div>
       </div>
     </div>
+  )
+}
+
+// 마이픽바 둘째 줄 왼쪽 — 아래 표본 7개 섹션에서 고른 방향성을 블루 쪽/레드 쪽으로 묶어 센다
+// (2026-09-17 사용자 지정, 시안 B안). 고른 값만 보여준다 — 0개인 묶음은 안 뜨고, 괄호 안
+// 강·약도 0이 아닌 것만 적는다. 섹션에서 바꾸면 sampleNotes가 바로 바뀌어 여기도 따라간다.
+// 표본 섹션 7개 [키, 제목] — 섹션 목록과 위 방향성 집계가 같이 쓴다.
+const SAMPLE_SECTIONS = [
+  ['fav', '정배 표본'],
+  ['pl', '플핸 표본'],
+  ['ffav', '해배 표본'],
+  ['k_wl', '국)승+패'],
+  ['f_wl', '해)승+패'],
+  ['k_wdl', '국)승+무+패'],
+  ['f_wdl', '해)승+무+패'],
+]
+const SAMPLE_SECTION_KEYS = SAMPLE_SECTIONS.map(([k]) => k)
+
+const DIRECTION_TALLY_GROUPS = [
+  { label: '블루', cls: 'is-blue', strong: '블루', weak: '약블루' },
+  { label: '레드', cls: 'is-red', strong: '레드', weak: '약레드' },
+  { label: '크로스', cls: 'is-gray', strong: '크로스' },
+  { label: '몰라', cls: 'is-unknown', strong: '몰라' },
+]
+
+function DirectionTally({ notes, keys }) {
+  if (!notes) return null
+  const values = keys.map((k) => notes[k]?.direction).filter(Boolean)
+  const count = (v) => values.filter((x) => x === v).length
+  const chips = DIRECTION_TALLY_GROUPS.map((g) => {
+    const s = count(g.strong)
+    const w = g.weak ? count(g.weak) : 0
+    const parts = g.weak ? [s ? `강${s}` : '', w ? `약${w}` : ''].filter(Boolean) : []
+    return { ...g, total: s + w, detail: parts.join(' ') }
+  }).filter((g) => g.total > 0)
+  if (chips.length === 0) return null
+  return (
+    <span className="direction-tally" title={`아래 표본 ${keys.length}개에서 고른 방향성 (미선택 ${keys.length - values.length}개)`}>
+      {chips.map((g) => (
+        <span key={g.label} className={`direction-tally-chip ${g.cls}`}>
+          {g.label} {g.total}
+          {g.detail && <small>({g.detail})</small>}
+        </span>
+      ))}
+    </span>
   )
 }
 
@@ -2403,66 +2566,6 @@ function MyPickBar({ row, onSavePick }) {
 // (승=파랑/무=회색/패=빨강)을 이 표에도 그대로 맞춘다. '합'은 그 결과들의 합계일
 // 뿐이라 색을 넣지 않는다.
 const SEASON_COL_CLASS = { 승: 'col-w', 무: 'col-d', 패: 'col-l', 합: '' }
-
-// 시즌전적처럼 '홈/원정 × 승/무/패/합' 숫자가 나열식 문장으로 나오면 자릿수가
-// 안 맞아 읽기 힘들다 — 표로 그려서 라벨(홈/원정) 폭을 맞추고 숫자 칸에 구분선을 준다.
-// 승/무/패 칸 값은 "5(2)" 꼴 — 5는 그 팀이 이번 시즌 홈+원정 합쳐 거둔 횟수, (2)는 그중
-// 오늘과 같은 장소(이 줄이 홈이면 홈경기, 원정이면 원정경기)에서 나온 횟수(pick_ai.py
-// _season_row 참고). '합' 칸만 괄호 뜻이 다르다 — "2(4)"는 2경기를 치렀고 그 경기들의
-// 승점 합이 4점(장소 구분 없음)이라는 뜻. 자세한 정의는 SeasonRecordLegend 팝업으로.
-function SeasonRowsTable({ rows }) {
-  return (
-    <table className="detail-table pick-season-table">
-      <thead>
-        <tr>
-          <th className="row-label" />
-          <th className="col-w">승</th>
-          <th className="col-d">무</th>
-          <th className="col-l">패</th>
-          <th>합</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.side}>
-            {/* 줄 이름 옆 괄호 = 기대점수(전체 기준 / 오늘 장소 기준).
-                이 경기에서 몇 골 넣을 것 같은가 — api/pick_ai.py _expected_goals.
-                칸을 따로 두지 않고 라벨에 붙인다(사용자 지정). */}
-            <td
-              className="row-label"
-              title="괄호는 기대점수 — 공격력 × 수비력으로 낸 기대 득점(전체 기준 / 오늘 장소 기준)"
-            >
-              {/* 줄 이름은 '홈'/'원' 한 글자로 — 두 줄의 라벨 길이가 같아야
-                  괄호 안 기대점수가 세로로 맞는다(사용자 지정). */}
-              {r.side}
-              {r.xg && (r.xg[0] !== null && r.xg[0] !== undefined) && (
-                <span className="pick-season-xg">
-                  {/* 앞쪽(전체 기준)을 밝게·굵게 — 실측에서 판정에 쓸 값은 이쪽이다
-                      (장소 기준은 표본이 절반이라 오히려 신호가 약했다). */}
-                  (<b className="pick-season-xg-main">{r.xg[0].toFixed(2)}</b>/
-                  {r.xg[1] !== null && r.xg[1] !== undefined ? r.xg[1].toFixed(2) : '-'})
-                </span>
-              )}
-            </td>
-            {['승', '무', '패', '합'].map((k) => {
-              const pair = r.counts ? r.counts[k] : null
-              return (
-                <td key={k} className={SEASON_COL_CLASS[k]}>
-                  {pair ? (
-                    <>
-                      {pair[0]}
-                      <span className="pick-season-venue">({pair[1]})</span>
-                    </>
-                  ) : '-'}
-                </td>
-              )
-            })}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
 
 // ── 기대점수 차이 × 배당대 격자 실측 (2026-09-07, 6대리그 29,938경기) ──
 // 시즌전적 정의 팝업이 그대로 그린다. 뱃지 규칙(XG_RULES)과 같은 측정에서 나온 값이라,
@@ -4206,6 +4309,31 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
     }
   }, [code, scope, matchKey])
 
+  // 앞뒤 일정 — 두 팀 각각의 바로 앞·뒤 경기(리그·컵 포함, 1경기씩). {home:{prev,next}, away:{...}}
+  // undefined = 불러오는 중, null = 실패. 내 데이터(user scope)는 서버가 빈 값을 돌려준다.
+  const [scheduleCtx, setScheduleCtx] = useState(undefined)
+  const rowDt = row.DT
+  const rowTm = row.TM
+  useEffect(() => {
+    let alive = true
+    setScheduleCtx(undefined)
+    const r = rowRef.current
+    if (!r.DT) {
+      setScheduleCtx(null)
+      return undefined
+    }
+    const params = new URLSearchParams({
+      code, scope, HT: String(r.HT ?? ''), AT: String(r.AT ?? ''), DT: String(r.DT),
+    })
+    if (r.TM !== null && r.TM !== undefined && r.TM !== '') params.set('TM', String(r.TM))
+    api.get(`/api/schedule_context?${params.toString()}`)
+      .then((res) => alive && setScheduleCtx(res))
+      .catch(() => alive && setScheduleCtx(null))
+    return () => {
+      alive = false
+    }
+  }, [code, scope, matchKey, rowDt, rowTm])
+
   // patch: {memo} 또는 {direction} — 보낸 칸만 저장된다(서버가 나머지 칸은 그대로 둔다).
   function saveSampleNote(kind, patch) {
     const r = rowRef.current
@@ -4368,7 +4496,12 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
         </h2>
         {/* 내픽 바(MyPickBar)도 제목처럼 고정한다(2026-09-15 사용자 지정) — 스크롤 영역
             바깥에 둬서 아래 내용을 스크롤해도 계속 보이게 한다. */}
-        <MyPickBar row={row} onSavePick={onSavePick} />
+        <MyPickBar
+          row={row}
+          onSavePick={onSavePick}
+          lead={<PrevMatchBadges ctx={scheduleCtx} ht={ht} at={at} />}
+          memoLead={<DirectionTally notes={sampleNotes} keys={SAMPLE_SECTION_KEYS} />}
+        />
         {/* 그 아래 전부를 스크롤 영역으로 묶는다(2026-09-14 사용자 지정 — 헤더는
             고정, 아래만 스크롤). .detail-modal-card 주석 참고. */}
         <div className="detail-modal-scroll">
@@ -4383,21 +4516,44 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
           archiveTags={archiveTags}
         />
 
+        {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,
+            배당 바로 아래). 시즌전적·연속기록·최근10 날짜는 pick_ai 응답이 오면 채워진다. */}
+        <section className="detail-section">
+          <h3>
+            팀 흐름
+            <button
+              type="button"
+              className="help-btn"
+              onClick={() => setShowSeasonLegend(true)}
+              title="시즌전적이 정확히 무엇을 세는 표인지 보기"
+            >
+              시즌전적 <span className="help-mark">?</span>
+            </button>
+            <span className="detail-section-note">
+              <span className="recent-home-swatch" /> 홈경기, 팀 옆 괄호는 전체 순위/기대점수, 최다 기록은 경기 직전까지 그 리그 기준
+            </span>
+            {pickError && <span className="detail-section-note">{pickError}</span>}
+          </h3>
+          <TeamFlowTable
+            row={row}
+            seasonRows={seasonSig?.rows}
+            streaks={pickData?.streaks}
+            recent10={pickData?.recent10}
+            venueRank={pickData?.venue_rank}
+          />
+        </section>
+
+        {/* 앞뒤 일정 — 두 팀의 직전·다음 경기(리그·컵 포함) 표(2026-09-16 사용자 지정:
+            그래프 없이 표만, 배당과 표본 섹션 사이). 일정이 하나도 없으면 섹션째 숨긴다. */}
+        <ScheduleContextSection ctx={scheduleCtx} ht={ht} at={at} />
+
         {/* 정배 표본 · 플핸 표본 · 해배 표본 · 국)승+패 · 해)승+패 · 국)승+무+패 · 해)승+무+패
             — 배당(PickBand)과 지표별 표본 사이에 배당과 같은 폭의 독립 섹션으로 둔다
             (2026-09-13 사용자 지정). modal-columns 2단 그리드 바깥(PickBand와 같은 레벨)에
             둬야 폭이 팝업 전체를 채운다. 일곱 섹션 모두 같은 /season_sample 응답의
             samples[key]를 그대로 DirectionSampleTable에 넘긴다 — 전부 '이 경기 방향(또는
             그대로) / 반대'의 두 줄 구조다(2026-09-14, DirectionSampleTable 주석 참고). */}
-        {[
-          ['fav', '정배 표본'],
-          ['pl', '플핸 표본'],
-          ['ffav', '해배 표본'],
-          ['k_wl', '국)승+패'],
-          ['f_wl', '해)승+패'],
-          ['k_wdl', '국)승+무+패'],
-          ['f_wdl', '해)승+무+패'],
-        ].map(([key, title]) => (
+        {SAMPLE_SECTIONS.map(([key, title]) => (
           <section className="detail-section" key={key}>
             <h3>
               <button
@@ -4457,53 +4613,8 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
             </section>
           </div>
           <div className="modal-col">
-            {/* 시즌전적 + 폼 지표를 한 줄에 나란히 — 둘 다 '이 팀이 요즘 어떤가'를
-                보는 값이라 붙여 두면 눈이 한 번에 읽는다(시즌전적이 왼쪽). */}
-            <div className="detail-pair">
-              <section className="detail-section">
-                {/* note 원문은 한 문장이 길어(‘오늘과 같은 정배/역배 구도였던 …’) 제목 줄이
-                    두 줄로 흘러 옆 폼 지표를 밀어낸다 — 짧게 줄이고 원문은 title로 남긴다. */}
-                <h3>
-                  <button
-                    type="button"
-                    className="help-btn"
-                    onClick={() => setShowSeasonLegend(true)}
-                    title="시즌전적이 정확히 무엇을 세는 표인지 보기"
-                  >
-                    시즌전적 <span className="help-mark">?</span>
-                  </button>
-                  {seasonSig && seasonSig.note && (
-                    <span className="detail-section-note" title={seasonSig.note}>
-                      숫자(괄호=같은 장소)
-                    </span>
-                  )}
-                </h3>
-                {seasonSig && seasonSig.rows ? (
-                  <SeasonRowsTable rows={seasonSig.rows} />
-                ) : (
-                  <p className="pick-loading">
-                    {pickError || (!pickData ? '계산 중...' : (seasonSig ? seasonSig.value_text : '—'))}
-                  </p>
-                )}
-              </section>
-              <section className="detail-section">
-                <h3>폼 지표</h3>
-                <FormTable row={row} />
-              </section>
-            </div>
-            <section className="detail-section">
-              <h3>
-                최근10경기 전적
-                <span className="detail-section-note">
-                  <span className="recent-home-swatch" /> 홈경기 · 경기 직전까지 그 리그에서 세운 최다 기록
-                </span>
-              </h3>
-              <RecentTable
-                row={row}
-                streaks={pickData ? pickData.streaks : null}
-                recent10={pickData ? pickData.recent10 : null}
-              />
-            </section>
+            {/* 시즌전적·폼 지표·최근10경기는 2026-09-16부터 위쪽 '팀 흐름' 섹션
+                (TeamFlowTable, 배당 바로 아래)으로 합쳤다 — 여기엔 상대전적만 남는다. */}
             <section
               className="detail-section detail-section-grow"
               ref={h2hSectionRef}

@@ -423,6 +423,50 @@ def chrono_key(s, r, no):
     return (str(s), _round_num(r), n)
 
 
+def venue_rank_before(df, team, season, round_, home: bool):
+    """그 팀의 '홈경기만'(home=True) 또는 '원정경기만' 따진 순위 — 상세보기 팀 흐름의
+    팀 이름 아래 작은 줄용(2026-09-16 사용자 지정). 없으면 None.
+
+    기준은 전체 순위(HP/AP, _attach_one_season)와 맞춘다 —
+      · 같은 시즌, 이 경기 라운드보다 앞 라운드의 끝난 경기만
+      · 승점 → 골득실 → 다득점 → 팀 이름 (그 장소 경기만으로 센 값).
+        장소별 맞대결 기록은 너무 적어 승자승 단계는 두지 않는다.
+      · 그 시즌의 모든 팀을 줄 세운다(아직 그 장소 경기가 없는 팀은 0점).
+    """
+    t = str(team or "").strip()
+    if not t or df is None or df.empty or not all(c in df.columns for c in _REQUIRED):
+        return None
+    sdf = df[df["S"].astype(str).str.strip() == str(season or "").strip()]
+    if sdf.empty:
+        return None
+    cut = _round_num(round_)
+    hts = sdf["HT"].astype(str).str.strip().tolist()
+    ats = sdf["AT"].astype(str).str.strip().tolist()
+    teams = set(hts) | set(ats)
+    if t not in teams:
+        return None
+    table = {}
+    counted = 0
+    for h, a, r, hs, as_ in zip(hts, ats, sdf["R"].tolist(), sdf["HS"].tolist(), sdf["AS"].tolist()):
+        if pd.isna(r) or _round_num(r) >= cut:
+            continue
+        x, y = _score(hs), _score(as_)
+        if x is None or y is None:
+            continue
+        me, mine, theirs = (h, x, y) if home else (a, y, x)
+        pts, gf, ga = table.get(me, (0, 0, 0))
+        table[me] = (pts + (3 if mine > theirs else 1 if mine == theirs else 0), gf + mine, ga + theirs)
+        counted += 1
+    if counted == 0:
+        return None
+
+    def key(k):
+        pts, gf, ga = table.get(k, (0, 0, 0))
+        return (-pts, -(gf - ga), -gf, k)
+
+    return sorted(teams, key=key).index(t) + 1
+
+
 def recent10_before(df, team, season, round_, no, newest_first=False):
     """'최근10경기 전적' 칸 하나하나가 어느 경기였는지 — 마우스를 올렸을 때 보여줄 정보.
 

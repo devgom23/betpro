@@ -16,6 +16,9 @@ data/master/master.db
 data/master/master.tmp.db
 # 스코어맨 12개사 배당 누적(api/multibook_odds.py) — 수십 MB로 커진다
 data/master/multibook.db
+# 리그 외 경기 일정·배당(api/cup_matches.py)
+data/master/cup_matches.db
+data/master/cup_odds.db
 data/users/
 
 # 데이터를 크게 손대기 전에 그때그때 뜨는 수동 백업(master_before_*.db).

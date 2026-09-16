@@ -91,6 +91,7 @@ import bet_slips as BETSLIPS   # noqa: E402
 import archive as ARCHIVE      # noqa: E402
 import pick_ai as PICKAI       # noqa: E402
 import standings               # noqa: E402
+import cup_matches as CUPS     # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -715,6 +716,29 @@ def match_detail(code: str,
     row = records[0]
     same_odds = _same_odds_for(row) if scope == PATHS.SCOPE_MASTER and code in PATHS.VALID_LEAGUES else None
     return {"code": code, "scope": scope, "row": row, "same_odds": same_odds}
+
+
+@app.get("/api/schedule_context")
+def schedule_context(code: str, HT: str, AT: str, DT: str, TM: Optional[float] = None,
+                     scope: str = PATHS.SCOPE_MASTER,
+                     user: dict = Depends(get_current_user)):
+    """상세보기 '앞뒤 일정' — 두 팀 각각의 바로 앞·뒤 경기(리그·컵 구분 없이 1경기씩).
+    일정은 api/collect_cups.py가 따로 모아 둔 cup_matches.db에서 읽는다(6대리그 공식 데이터만)."""
+    _check_league_for(code, scope, user)
+    empty = {"home": None, "away": None}
+    if scope != PATHS.SCOPE_MASTER or code not in PATHS.VALID_LEAGUES:
+        return empty
+    m = re.match(r"^(\d{2})-(\d{2})-(\d{2})", str(DT or "").strip())
+    if not m:
+        return empty
+    hhmm = int(TM or 0)
+    try:
+        center = datetime(2000 + int(m.group(1)), int(m.group(2)), int(m.group(3)),
+                          min(hhmm // 100, 23), min(hhmm % 100, 59))
+    except ValueError:
+        return empty
+    return {"home": CUPS.team_prev_next(code, HT, center),
+            "away": CUPS.team_prev_next(code, AT, center)}
 
 
 # ───────────────── 시즌 지표 (똥배 격자 / 결과 격자 / 라운드 이력) ─────────────────
@@ -2675,7 +2699,23 @@ def pick_ai(body: PickAiBody, user: dict = Depends(get_current_user)):
     # 슬림 표를 쓰므로 읽기 비용이 더 붙지 않는다.
     result["recent10"] = _team_recent10(db if ht and at else None, body.scope, body.code,
                                         ht, at, body.row)
+    # 팀 흐름 표의 팀 이름 아래 작은 줄 — 홈팀은 홈경기만, 원정팀은 원정경기만 따진 순위.
+    result["venue_rank"] = _team_venue_rank(db if ht and at else None, body.code, ht, at, body.row)
     return result
+
+
+def _team_venue_rank(db, code, ht, at, row) -> dict:
+    """{home: 홈팀의 홈경기 순위, away: 원정팀의 원정경기 순위} — 그 리그 데이터로만."""
+    if not ht or not at:
+        return None
+    league_df = _league_slim_df(db, code)
+    if league_df is None:
+        return None
+    s, r = row.get("S"), row.get("R")
+    return {
+        "home": standings.venue_rank_before(league_df, ht, s, r, home=True),
+        "away": standings.venue_rank_before(league_df, at, s, r, home=False),
+    }
 
 
 def _league_slim_df(db, code):

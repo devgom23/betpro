@@ -290,7 +290,53 @@
 /* 경기 전 생각 — 2줄 구성에서 혼자 아랫줄 전체를 채운다(2026-09-15 사용자 지정,
    위 .mypick-bar-row 주석 참고). */
 .mypick-bar-memo-pre {
-  width: 100%;
+  flex: 1;
+}
+
+/* 표본 방향성 집계 — 경기 전 생각 왼쪽(2026-09-17). 색은 표본 섹션 드롭박스와 같은 짝. */
+.direction-tally {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+}
+
+.direction-tally-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.direction-tally-chip small {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.direction-tally-chip.is-blue {
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+}
+
+.direction-tally-chip.is-red {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+}
+
+.direction-tally-chip.is-gray {
+  background: var(--chip-gray-bg);
+  color: var(--chip-gray-fg);
+}
+
+.direction-tally-chip.is-unknown {
+  border: 1px dashed var(--border-strong);
+  color: var(--text-muted);
 }
 
 /* 결과 이후 생각 — 경기 전 생각이 아랫줄로 빠지면서 1줄에 남는 폭을 전부 가져간다. */
@@ -298,10 +344,193 @@
   flex: 1;
 }
 
+/* 직전 경기 배지 — 내픽 바 맨 왼쪽(2026-09-16 사용자 지정). 색은 시안대로
+   직전 = 노랑, 다음 = 보라(아래 표의 '언제' 글자색도 같은 짝). */
+.prev-match-badges {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.prev-match-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  cursor: default;
+}
+
+.prev-match-badge b {
+  font-weight: 700;
+}
+
+/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄로(TeamFlowTable, 2026-09-16).
+   창이 좁으면 섹션 안에서만 옆으로 스크롤한다. */
+.team-flow-wrap {
+  overflow-x: auto;
+}
+
+.team-flow-table th,
+.team-flow-table td {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 묶음(시즌전적 / 폼 / 최근10 / 최다 기록) 사이 구분선 */
+.team-flow-table .tf-gl {
+  border-left: 2px solid var(--border-strong);
+}
+
+.tf-th-note {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.team-flow-table .tf-team {
+  text-align: left;
+}
+
+.tf-team-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tf-team-sub {
+  margin-left: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 팀 이름 아래 작은 줄 — 홈팀은 홈경기만, 원정팀은 원정경기만 따진 순위·기대점수 */
+.tf-team-venue {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* 승/무/패 칸 색 — 상대전적(HeadToHeadResult.jsx)의 col-w/col-d/col-l과 같은 톤 */
+.team-flow-table .col-w {
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+}
+
+.team-flow-table .col-d {
+  background: var(--chip-gray-bg);
+  color: var(--chip-gray-fg);
+}
+
+.team-flow-table .col-l {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+}
+
+.team-flow-table .tf-form {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* 최근10경기 칸 — 결과 글자, 그 아래 작게 날짜(MM/DD) */
+.team-flow-table .tf-rc {
+  min-width: 36px;
+  padding: 2px 3px;
+  line-height: 1.15;
+  font-weight: 700;
+}
+
+.tf-rc-date {
+  display: block;
+  min-height: 12px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.team-flow-table .tf-rc-empty {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* 마우스를 올리면 그 경기 정보가 뜨는 칸 — 커서로 알린다 */
+.tf-rc-tip {
+  cursor: help;
+}
+
+.team-flow-table .tf-streak {
+  text-align: left;
+}
+
+/* 앞뒤 일정 표 */
+.schedule-ctx-wrap {
+  overflow-x: auto;
+}
+
+.schedule-ctx-table td {
+  white-space: nowrap;
+}
+
+.schedule-ctx-table tr.schedule-ctx-split td {
+  border-top: 2px solid var(--border-strong);
+}
+
+.schedule-ctx-team {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.schedule-ctx-when.is-prev {
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}
+
+.schedule-ctx-when.is-next {
+  color: var(--chip-purple-fg);
+  font-weight: 700;
+}
+
+.schedule-ctx-dim {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.schedule-ctx-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.schedule-ctx-chip {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.schedule-ctx-chip.win {
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+}
+
+.schedule-ctx-chip.draw {
+  background: var(--chip-gray-bg);
+  color: var(--chip-gray-fg);
+}
+
+.schedule-ctx-chip.loss {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+}
+
+/* 간격 28px → 12px(2026-09-17): 지표별 표본 543 + 간격 + 상대전적 최소 760이 스크롤
+   영역 안쪽 폭 1,319px(팝업 최대 1390 − 좌우 패딩 56 − 테두리 2 − 세로 스크롤바 13)을
+   넘어 팝업 전체에 가로 스크롤이 생겼다(28px일 때 1,331px). 12px면 1,315px로 들어간다. */
 .modal-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 28px;
+  gap: 12px;
 }
 
 @media (max-width: 720px) {
@@ -912,12 +1141,6 @@
 .pick-band-sub {
   font-size: 11px;
   color: var(--text-muted);
-}
-
-.pick-loading {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin: 0;
 }
 
 /* 해외지표·국내지표 카드는 둘 다 승/승+패/승+무+패/통합승+분석 표를 담다 보니 폭이
@@ -1696,65 +1919,10 @@
   color: var(--text-secondary);
 }
 
-/* 시즌전적 — 홈/원정 두 줄을 문장 대신 표로 그려서 라벨(홈/원정) 폭을 맞추고
-   숫자 칸 사이에 구분선이 서게 한다. .detail-table을 그대로 재사용해 다른
-   표들과 톤을 맞추고, 카드 안에 들어가는 크기라 여백/글자만 줄인다. flex:1을 주면
-   옆 카드(해외·국내지표, 5줄 표) 높이에 맞춰 억지로 늘어나 셀이 붕 뜬다 — 늘어나지
-   않고 국내지표 표와 같은 자연스러운 높이만큼만 차지하게 둔다. */
-.pick-season-table {
-  flex: 0 0 auto;
-  font-size: 10px;
-}
-
-.pick-season-table th,
-.pick-season-table td {
-  padding: 2px 6px;
-}
-
-.pick-season-table .row-label {
-  width: 1%;
-  white-space: nowrap;
-  text-align: left;          /* 두 줄('홈(…)'·'원(…)')의 시작 위치를 맞춘다 */
-}
-
 /* "5(2)"의 괄호 부분 — 총계(5)보다 흐리게, 오늘과 같은 장소에서 나온 값이라는 표시 */
 .pick-season-venue {
   margin-left: 1px;
   color: var(--text-muted);
-}
-
-/* 승/무/패 칸 색 — 상대전적(HeadToHeadResult.jsx)의 col-w/col-d/col-l과 같은 톤
-   (옅은 배경 틴트 + 진한 글씨, --chip-* 토큰). 이 표 안에서만 적용되게 이름을 좁힌다. */
-.pick-season-table .col-w {
-  background: var(--chip-blue-bg);
-  color: var(--chip-blue-fg);
-}
-
-.pick-season-table .col-d {
-  background: var(--chip-gray-bg);
-  color: var(--chip-gray-fg);
-}
-
-.pick-season-table .col-l {
-  background: var(--chip-red-bg);
-  color: var(--chip-red-fg);
-}
-
-/* 줄 이름 옆 기대점수 — '홈(1.40/1.52)'처럼 라벨에 붙는다(칸을 따로 두지 않는다).
-   승/무/패 숫자와 성격이 다른 값이라 흐리게 두되, 소수 둘째자리가 흔들리지 않게
-   자릿수 폭은 고정한다. */
-.pick-season-xg {
-  margin-left: 2px;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* 괄호 안 앞쪽 값(전체 기준) — 실측에서 판정에 실제로 쓸 값은 이쪽이라 밝게 굵게 둔다
-   (장소 기준은 표본이 절반이라 신호가 더 약했다: 중간 배당대 z=4.76 vs 3.08).
-   CLAUDE.md 6-2의 '값은 밝게(--text-primary), 나머지는 흐리게' 규칙과 같다. */
-.pick-season-xg-main {
-  color: var(--text-primary);
-  font-weight: 700;
 }
 
 /* 해외지표·국내지표 계단식 보정 근거 표 — 시즌전적 표와 같은 톤(작은 글씨·좁은 여백)으로
@@ -1873,19 +2041,6 @@
 }
 
 
-/* 시즌전적 + 폼 지표를 한 줄에 나란히(왼쪽 시즌전적 / 오른쪽 폼 지표).
-   폼 지표는 6칸 고정이라 폭이 덜 필요하고, 시즌전적은 팀명 라벨이 있어 조금 더 넓게 준다. */
-.detail-pair {
-  display: grid;
-  grid-template-columns: 1fr 1.15fr;
-  gap: 10px;
-  align-items: start;
-}
-
-@media (max-width: 860px) {
-  .detail-pair { grid-template-columns: minmax(0, 1fr); }
-}
-
 /* 각 결과 칸(핸승/핸무/무/역)의 % 아래에 원래 경기 수를 작게.
    칸을 따로 늘려 표본 열을 만들면 옆의 %가 잘려서(10px 폰트에 '25.8' 4글자) 안 늘린다. */
 .pick-ind-table .ind-n {
@@ -1988,43 +2143,9 @@
   opacity: 0.75;
 }
 
-/* 폼 지표: 홈 3칸 / 원정 3칸 사이 구분선.
-   1행은 홈/원정 두 칸(각 colspan 3)이고 2행·본문은 6칸이라 대상 칸 번호가 다르다. */
-.form-table thead tr:first-child th:nth-child(1),
-.form-table thead tr:nth-child(2) th:nth-child(3),
-.form-table tbody td:nth-child(3) {
-  border-right: 2px solid var(--border-strong);
-}
-
-.form-table tbody td {
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-/* 최근10경기 전적: 경기 10개씩 칸을 각각 만든다. 홈팀칸(10개) / 원정팀칸(10개) 사이만 구분선. */
-.recent-table th:nth-child(10),
-.recent-table td:nth-child(10) {
-  border-right: 2px solid var(--border-strong);
-}
-
-.recent-cell {
-  width: 26px;
-  font-weight: 700;
-}
-
 /* 홈경기였던 칸만 배경을 칠해 원정경기와 구분한다 */
 .recent-cell-home {
   background: rgba(66, 165, 245, 0.28);
-}
-
-/* 마우스를 올리면 그 경기 정보가 뜨는 칸 — 올릴 수 있다는 걸 커서와 밑줄로 알린다.
-   (빈 칸에는 안 붙는다) 점선이 아니라 실선 — 상대전적 승/무/패 클릭 밑줄과 같은
-   스타일로 통일한다(2026-09-03). */
-.recent-cell-tip {
-  cursor: help;
-  text-decoration: underline;
-  text-decoration-color: var(--text-muted-2);
-  text-underline-offset: 2px;
 }
 
 /* 최근10경기 칸 말풍선. 브라우저 기본 툴팁(title)은 밑줄·색을 못 넣어서 직접 그린다.
@@ -2149,26 +2270,12 @@
   font-size: 13px;
 }
 
-/* 최고 연속 기록 — 위 최근10경기 칸과 같은 좌/우 방향으로 붙인다.
-   홈팀은 왼쪽 끝, 원정팀은 오른쪽 끝에 붙어 각자 자기 셀 아래에 오게 한다. */
-.streak-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  margin: 6px 0 0;
-}
-
 .streak-line {
   display: inline-flex;
   gap: 8px;
   font-size: 11px;
   color: var(--text-muted);
   white-space: nowrap;
-}
-
-.streak-right {
-  margin-left: auto;
 }
 
 /* 라벨과 숫자는 붙이고(2px), 항목 사이는 벌린다(위 gap 8px) */
