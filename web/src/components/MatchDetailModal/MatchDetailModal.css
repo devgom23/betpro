@@ -344,8 +344,8 @@
   flex: 1;
 }
 
-/* 직전 경기 배지 — 내픽 바 맨 왼쪽(2026-09-16 사용자 지정). 색은 시안대로
-   직전 = 노랑, 다음 = 보라(아래 표의 '언제' 글자색도 같은 짝). */
+/* 직전 경기 배지 — 내픽 바 맨 왼쪽(2026-09-16 사용자 지정). 홈팀 = 노랑, 원정팀 = 청록
+   (2026-09-17 — 두 팀을 색으로 가른다. 파랑·빨강은 방향성, 보라는 '다음 경기'에 이미 쓴다). */
 .prev-match-badges {
   display: inline-flex;
   flex: none;
@@ -364,8 +364,9 @@
   cursor: default;
 }
 
-.prev-match-badge b {
-  font-weight: 700;
+.prev-match-badge.is-away {
+  background: var(--chip-teal-bg);
+  color: var(--chip-teal-fg);
 }
 
 /* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄로(TeamFlowTable, 2026-09-16).

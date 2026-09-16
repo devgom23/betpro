@@ -2263,31 +2263,30 @@ function scheduleDaysText(days) {
   return '같은 날'
 }
 
-// 배지 문구 — 컵은 "3일 전 챔스(홈)", 리그는 "7일 전 EPL 3R"(사용자 예시 그대로).
-function prevBadgeText(m) {
-  const comp = m.is_league ? m.comp_short : `${m.comp_short}(${m.venue})`
-  return `${scheduleDaysText(m.days)} ${comp}`
-}
-
 function scheduleTitle(team, kind, m) {
   const res = m.score ? ` · ${m.score}${m.result ? ` ${m.result}` : ''}${m.note ? ` (${m.note})` : ''}` : ''
   return `${team} ${kind} 경기 — ${m.kickoff} · ${m.comp} · ${m.venue} · vs ${m.opponent}${res}`
 }
 
 // 내픽 바 맨 왼쪽 — 두 팀의 직전 경기 배지(홈 → 원정 순). 직전 경기가 없는 팀은 뺀다.
+// 문구는 "홈 5일 전"/"원정 3일 전"만(2026-09-17 사용자 지정 — 대회·상대는 아래 앞뒤 일정
+// 표와 마우스 설명에 있다). 홈팀·원정팀 배지 색을 다르게 둔다.
 function PrevMatchBadges({ ctx, ht, at }) {
   if (!ctx) return null
-  const items = [[ht, ctx.home?.prev], [at, ctx.away?.prev]].filter(([, m]) => m)
+  const items = [
+    ['home', '홈', ht, ctx.home?.prev],
+    ['away', '원정', at, ctx.away?.prev],
+  ].filter(([, , , m]) => m)
   if (items.length === 0) return null
   return (
     <span className="prev-match-badges">
-      {items.map(([team, m]) => (
+      {items.map(([side, label, team, m]) => (
         <span
-          key={team}
-          className="prev-match-badge"
+          key={side}
+          className={`prev-match-badge is-${side}`}
           title={scheduleTitle(team, '직전', m)}
         >
-          <b>{team}</b> {prevBadgeText(m)}
+          {label} {scheduleDaysText(m.days)}
         </span>
       ))}
     </span>
