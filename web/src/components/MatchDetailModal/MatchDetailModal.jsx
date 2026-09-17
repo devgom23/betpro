@@ -1174,12 +1174,19 @@ function SeasonSampleCard({ m, kind, favCode, season, curRow }) {
   const hlFw = kind === 'f_wl' || kind === 'f_wdl' || (kind === 'ffav' && favCode === 'F-W')
   const hlFl = kind === 'f_wl' || kind === 'f_wdl' || (kind === 'ffav' && favCode === 'F-L')
   const hlFd = kind === 'f_wdl'
-  // 정배 카드는 표본 조건이 KW 또는 KL '한쪽'만 요구한다(_season_sample_match_cards
-  // 주석 참고) — 무(KD)·반대쪽·핸디 3칸은 조건과 무관해서 원래 그냥 숫자다. 그런데
-  // 우연히 이 값들까지 지금 보는 경기와 똑같이 겹치는 카드가 실제로 나왔다(헤타페-
-  // 데포르 vs 시즌표의 헤타페-셀타비고, 배당 6칸이 전부 같았고 결과도 같게 나옴 —
-  // 2026-09-14 사용자 제보). "우연히 겹친 칸"은 hl(파랑, 표본 조건)과 구분해서
-  // hl2(다른 색)로 짚어 주고, 6칸이 전부 겹치면 카드 테두리도 따로 표시한다.
+  // 정배·플핸 카드는 둘째 줄에 핸디(khw/khd/khl)를, 승+패·해배 카드는 그 자리에 해외
+  // 배당(fw/fd/fl)을 보여준다 — 해외 배당이 조건인 카드(해)승+패·해배 표본)일 때만
+  // 그 칸을 강조한다.
+  const isWl = kind === 'k_wl' || kind === 'f_wl' || kind === 'ffav' || kind === 'k_wdl' || kind === 'f_wdl'
+  // 표본 카드는 종류(kind)마다 표본 조건으로 요구하는 칸이 다르다(_season_sample_match_cards
+  // 주석 참고) — 예를 들어 정배 카드는 KW 또는 KL 한쪽만, 국)승+패는 KW·KL 둘 다, 국)승+무+패는
+  // KW·KD·KL 셋 다. 조건과 무관한 나머지 칸은 원래 그냥 숫자인데, 우연히 이 값들까지 지금
+  // 보는 경기와 똑같이 겹치는 카드가 실제로 나왔다(헤타페-데포르 vs 시즌표의 헤타페-셀타비고,
+  // 배당 6칸이 전부 같았고 결과도 같게 나옴 — 2026-09-14 사용자 제보). "우연히 겹친 칸"은
+  // hl(파랑, 표본 조건)과 구분해서 hl2(다른 색)로 짚어 주고, 6칸이 전부 겹치면 카드 테두리도
+  // 따로 표시한다 — 2026-09-18 사용자 지정: 정배 표본뿐 아니라 표본 7종 전부에 같은 방식.
+  // required(hl)로 이미 파란 칸도 그냥 같이 검사한다 — cellClass가 hl을 hl2보다 우선하므로
+  // 겹쳐도 화면은 그대로고, 대신 6칸 완전일치 판정이 한 조건식으로 깔끔해진다.
   const eq2 = (a, b) => a !== null && b !== null && Math.abs(a - b) < 0.005
   const curKw = numOrNull(curRow?.KW)
   const curKd = numOrNull(curRow?.KD)
@@ -1187,21 +1194,22 @@ function SeasonSampleCard({ m, kind, favCode, season, curRow }) {
   const curKhw = numOrNull(curRow?.KHW)
   const curKhd = numOrNull(curRow?.KHD)
   const curKhl = numOrNull(curRow?.KHL)
-  const isFav = kind === 'fav'
-  const extraKw = isFav && favCode !== 'K-W' && eq2(rowKw, curKw)
-  const extraKl = isFav && favCode !== 'K-L' && eq2(rowKl, curKl)
-  const extraKd = isFav && eq2(numOrNull(m.kd), curKd)
-  const extraKhw = isFav && eq2(numOrNull(m.khw), curKhw)
-  const extraKhd = isFav && eq2(numOrNull(m.khd), curKhd)
-  const extraKhl = isFav && eq2(numOrNull(m.khl), curKhl)
-  const isFullMatch = isFav && extraKd && extraKhw && extraKhd && extraKhl
-    && (favCode === 'K-W' ? extraKl : extraKw)
+  const curFw = numOrNull(curRow?.FW)
+  const curFd = numOrNull(curRow?.FD)
+  const curFl = numOrNull(curRow?.FL)
+  const extraKw = eq2(rowKw, curKw)
+  const extraKl = eq2(rowKl, curKl)
+  const extraKd = eq2(numOrNull(m.kd), curKd)
+  const extraKhw = !isWl && eq2(numOrNull(m.khw), curKhw)
+  const extraKhd = !isWl && eq2(numOrNull(m.khd), curKhd)
+  const extraKhl = !isWl && eq2(numOrNull(m.khl), curKhl)
+  const extraFw = isWl && eq2(numOrNull(m.fw), curFw)
+  const extraFd = isWl && eq2(numOrNull(m.fd), curFd)
+  const extraFl = isWl && eq2(numOrNull(m.fl), curFl)
+  const isFullMatch = extraKw && extraKd && extraKl
+    && (isWl ? (extraFw && extraFd && extraFl) : (extraKhw && extraKhd && extraKhl))
   const hl2 = (on) => (on ? 'season-sample-card-hl2' : undefined)
   const cellClass = (required, extra) => hl(required) || hl2(extra)
-  // 정배·플핸 카드는 둘째 줄에 핸디(khw/khd/khl)를, 승+패·해배 카드는 그 자리에 해외
-  // 배당(fw/fd/fl)을 보여준다 — 해외 배당이 조건인 카드(해)승+패·해배 표본)일 때만
-  // 그 칸을 강조한다.
-  const isWl = kind === 'k_wl' || kind === 'f_wl' || kind === 'ffav' || kind === 'k_wdl' || kind === 'f_wdl'
   // 어느 시장인지 숫자 앞에 바로 붙인다(2026-09-13 사용자 지정 — "그냥 숫자 바로
   // 앞에 넣어줘"). 승+패 카드는 국내/해외 배당 두 줄이라 국)/해), 정배·플핸 카드는
   // 국내 일반/핸디 배당 두 줄이라 일)/핸).
@@ -1244,12 +1252,12 @@ function SeasonSampleCard({ m, kind, favCode, season, curRow }) {
       </div>
       {isWl ? (
         <div className="season-sample-card-row">
-          <span className={hl(hlFw)}>
+          <span className={cellClass(hlFw, extraFw)}>
             <span className="season-sample-card-prefix">{row2Prefix}</span>
             {fmt(m.fw)}
           </span>
-          <span className={hl(hlFd)}>{fmt(m.fd)}</span>
-          <span className={hl(hlFl)}>{fmt(m.fl)}</span>
+          <span className={cellClass(hlFd, extraFd)}>{fmt(m.fd)}</span>
+          <span className={cellClass(hlFl, extraFl)}>{fmt(m.fl)}</span>
         </div>
       ) : (
         <div className="season-sample-card-row">
