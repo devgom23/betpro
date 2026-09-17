@@ -92,6 +92,7 @@ import archive as ARCHIVE      # noqa: E402
 import pick_ai as PICKAI       # noqa: E402
 import standings               # noqa: E402
 import cup_matches as CUPS     # noqa: E402
+import collect_jobs as JOBS    # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -716,6 +717,46 @@ def match_detail(code: str,
     row = records[0]
     same_odds = _same_odds_for(row) if scope == PATHS.SCOPE_MASTER and code in PATHS.VALID_LEAGUES else None
     return {"code": code, "scope": scope, "row": row, "same_odds": same_odds}
+
+
+@app.post("/api/cup_collect/start")
+def cup_collect_start(user: dict = Depends(get_admin_user)):
+    """[리그 외 배당 및 결과 수집] 버튼 — 유럽대항전·컵 일정·결과, 12개사 배당, 국내배당을
+    뒤에서 받는다(api/collect_jobs.py). 이미 돌고 있으면 새로 시작하지 않는다."""
+    return JOBS.start_cup()
+
+
+@app.get("/api/cup_collect/status")
+def cup_collect_status(user: dict = Depends(get_admin_user)):
+    return JOBS.cup_status()
+
+
+def _queue_league_books(scope: str, user: dict, code: str, keys: list[tuple]) -> int:
+    """리그 경기들의 12개사 배당을 뒤에서 받게 넘긴다. keys: [(S, R, HT, AT), ...] DB 팀명.
+    스코어맨 경기번호는 그 시즌 일정에서 (홈, 원정)으로 찾는다 — refresh_final_odds와 같은 방식.
+    배당 수집은 덤이라, 여기서 무엇이 실패해도 원래 작업(저장·최신배당)은 그대로 성공시킨다."""
+    try:
+        udb = _user_db_of(user)
+        league_id = _scoreman_league_id(udb, scope, code)
+        if not league_id or not keys:
+            return 0
+        aliases = CRAWL.list_aliases(udb, scope, code)
+        items = []
+        for season in sorted({str(k[0]).strip() for k in keys}):
+            sched = CRAWL.apply_aliases(
+                SCOREMAN.season_schedule(league_id, _scoreman_season(season)), aliases)
+            mid_of = {(str(g.get("HT", "")).strip(), str(g.get("AT", "")).strip()): g.get("mid")
+                      for g in sched}
+            for s, r, ht, at in keys:
+                if str(s).strip() != season:
+                    continue
+                mid = mid_of.get((str(ht).strip(), str(at).strip()))
+                if mid:
+                    items.append((s, r, ht, at, mid))
+        path = MBODDS.db_path_for(scope, user["username"] if scope == PATHS.SCOPE_USER else None)
+        return JOBS.queue_league_books(path, code, items)
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 @app.get("/api/schedule_context")
@@ -3374,6 +3415,11 @@ def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
     if result.get("saved") and any(x[4] for x in f_ous):
         with DATA.table_write(db, FOUODDS.TABLE):
             result["f_ou_saved"] = FOUODDS.upsert(db, body.code, f_ous)
+    # 해배 가져오기로 저장한 경기들의 12개사 배당도 같이 — 뒤에서 받는다(2026-09-18).
+    if result.get("saved"):
+        keys = [(r.get("S"), r.get("R"), r.get("HT"), r.get("AT")) for r in body.rows
+                if r.get("S") and r.get("HT") and r.get("AT")]
+        result["books_queued"] = _queue_league_books(body.scope, user, body.code, keys)
     return result
 
 
@@ -3992,6 +4038,7 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
     # ── 해외(스코어맨 Bet365) ──
     ef_updated = 0
     ef_error = None
+    book_items = []     # 12개사 배당도 최신으로 — 아래에서 찾은 경기번호로 뒤에서 받는다
     source_url = CRAWL.get_source(udb, body.scope, code)
     m = re.search(r"/league/(\d+)", source_url or "")
     league_id = int(m.group(1)) if m else None
@@ -4014,6 +4061,7 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
                 g = sidx.get((str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip()))
                 if not g:
                     continue
+                book_items.append((df.at[i, "S"], df.at[i, "R"], df.at[i, "HT"], df.at[i, "AT"], g["mid"]))
                 try:
                     o = SCOREMAN.match_odds(g["mid"])
                 except SCOREMAN.OddsError:
@@ -4059,11 +4107,16 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
                 con.close()
             PATHS.stamp_updated(db)
 
+    # 12개사 배당(초기·마감) — 리그 표와 별개 파일(multibook.db)에 뒤에서 받는다(2026-09-18).
+    mb_path = MBODDS.db_path_for(body.scope, user["username"] if body.scope == PATHS.SCOPE_USER else None)
+    books_queued = JOBS.queue_league_books(mb_path, code, book_items)
+
     return {
         "domestic_updated": kr_updated, "domestic_error": kr_error,
         "overseas_updated": ef_updated, "overseas_error": ef_error,
         "indicators_updated": ind_updated,
         "target_count": len(idxs),
+        "books_queued": books_queued,
     }
 
 

@@ -14,6 +14,7 @@ import WeekListPage from './WeekListPage'
 import WeekTopPage from './WeekTopPage'
 import ArchivePage from './ArchivePage'
 import UserLeagueModal from '../components/UserLeagueModal/UserLeagueModal'
+import CupCollectButton from '../components/CupCollectButton/CupCollectButton'
 import './MainPage.css'
 
 // 공식 데이터에만 있는 탭들. 내 데이터는 "내가 만든 리그"만 쓰므로 여기 탭은 띄우지 않는다.
@@ -174,6 +175,7 @@ export default function MainPage() {
         </div>
         {!isUser && (
           <div className="tab-bar-admin">
+            {user.role === 'admin' && <CupCollectButton />}
             <button
               className={activeTab === 'total' ? 'active' : ''}
               onClick={() => setActiveTab('total')}

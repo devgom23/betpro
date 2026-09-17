@@ -1,0 +1,41 @@
+/* 탭 줄 안에 있지만 탭이 아니라 '실행' 버튼이다 — .tab-bar button(투명·밑줄)을 덮어쓴다. */
+.cup-collect {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  margin-right: 8px;
+}
+
+.tab-bar button.cup-collect-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tab-bar button.cup-collect-btn:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.tab-bar button.cup-collect-btn:disabled {
+  color: var(--text-muted);
+  cursor: progress;
+}
+
+.cup-collect-note {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.cup-collect-note.is-error {
+  color: var(--chip-red-fg);
+}

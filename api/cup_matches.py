@@ -188,12 +188,15 @@ def _score(s):
     return (int(m.group(1)), int(m.group(2))) if m else (None, None)
 
 
-def fetch_comp_season(lid: int, key: str, name: str, season: str) -> list:
-    """대회 하나 × 시즌 하나의 경기 목록(저장용 dict). 파일이 없으면 빈 목록."""
+def fetch_comp_season(lid: int, key: str, name: str, season: str, errors: list | None = None) -> list:
+    """대회 하나 × 시즌 하나의 경기 목록(저장용 dict). 못 받으면 빈 목록 — errors를 주면
+    거기에 대회 이름을 적어 둔다(수집 결과에 '받기 실패'로 알리려고)."""
     try:
         d = SM._get_json(f"{SM.BASE_LEAGUE}/jsData/matchResult/json/{season}/c{lid}_kr.json",
                          f"{SM.BASE_LEAGUE}/league/{lid}")
     except SM.OddsError:
+        if errors is not None:
+            errors.append(name)
         return []
     teams = {t[0]: t[1] for t in (d.get("TeamList") or []) if isinstance(t, list) and t}
     kinds = {str(k[0]): k[2] for k in (d.get("CupKindList") or []) if isinstance(k, list) and len(k) > 2}
@@ -218,13 +221,15 @@ def fetch_comp_season(lid: int, key: str, name: str, season: str) -> list:
     return out
 
 
-def fetch_league_season(code: str, season: str) -> list:
+def fetch_league_season(code: str, season: str, errors: list | None = None) -> list:
     """6대리그 한 시즌 일정(스코어맨 s{번호}) — cup_matches와 같은 모양, comp=리그코드, stage='5R'."""
     lid = LEAGUE_IDS[code]
     try:
         d = SM._get_json(f"{SM.BASE_LEAGUE}/jsData/matchResult/json/{season}/s{lid}_kr.json",
                          f"{SM.BASE_LEAGUE}/league/{lid}")
     except SM.OddsError:
+        if errors is not None:
+            errors.append(LEAGUE_LABEL[code])
         return []
     teams = {t[0]: t[1] for t in (d.get("TeamInfo") or []) if isinstance(t, list) and len(t) > 1}
     # 세리에A·에레디비지는 한 겹 더 싸여 있다 — {"sub_2948": {"R_1": [...], ...}}
@@ -253,8 +258,9 @@ def fetch_league_season(code: str, season: str) -> list:
     return out
 
 
-def build_team_map(season_db: str = "2026-2027") -> dict:
-    """{스코어맨 팀번호: (리그코드, DB 팀명, 스코어맨 팀명)} — 6대리그 그 시즌 일정 파일 기준."""
+def build_team_map(season_db: str = "2026-2027", errors: list | None = None) -> dict:
+    """{스코어맨 팀번호: (리그코드, DB 팀명, 스코어맨 팀명)} — 6대리그 그 시즌 일정 파일 기준.
+    못 받은 리그는 errors에 적는다."""
     udb = PATHS.get_user_db(ADMIN)
     out = {}
     for code, lid in LEAGUE_IDS.items():
@@ -262,6 +268,8 @@ def build_team_map(season_db: str = "2026-2027") -> dict:
             d = SM._get_json(f"{SM.BASE_LEAGUE}/jsData/matchResult/json/{season_db}/s{lid}_kr.json",
                              f"{SM.BASE_LEAGUE}/league/{lid}")
         except SM.OddsError:
+            if errors is not None:
+                errors.append(LEAGUE_LABEL[code])
             continue
         aliases = CRAWL.list_aliases(udb, PATHS.SCOPE_MASTER, code)
         for t in d.get("TeamInfo") or []:
@@ -554,15 +562,21 @@ def collect_season(season: str, with_odds: bool = True, log=print) -> dict:
     start, end, league_season, cand = _season_window(season)
     now = datetime.now()
 
-    # ① 팀 연결표
-    team_map = build_team_map(league_season)
+    # ① 팀 연결표 — 6대리그 중 하나라도 못 받으면 그 리그 팀 경기가 통째로 빠지므로 멈춘다.
+    #    (스코어맨이 잠깐 연결을 끊는 때가 있다 — 2026-09-17 실측, 몇 분 뒤 다시 된다.)
+    map_errors = []
+    team_map = build_team_map(league_season, map_errors)
+    if map_errors:
+        raise RuntimeError(f"스코어맨이 {', '.join(map_errors)} 일정 연결을 거부했습니다. "
+                           "잠시 뒤 다시 눌러 주세요.")
     save_team_map(team_map, league_season)
     log(f"팀 연결표: 6대리그 {len(team_map)}팀")
 
+    failed = []
     # ①-2 6대리그 일정(직전·다음 경기 찾기용)
     n_league = 0
     for code in LEAGUE_IDS:
-        rows = fetch_league_season(code, league_season)
+        rows = fetch_league_season(code, league_season, failed)
         save_matches(rows)
         n_league += len(rows)
         time.sleep(0.5)
@@ -576,7 +590,7 @@ def collect_season(season: str, with_odds: bool = True, log=print) -> dict:
         for s in seasons_of.get(lid, []):
             if s not in cand:
                 continue
-            rows = [r for r in fetch_comp_season(lid, key, name, s)
+            rows = [r for r in fetch_comp_season(lid, key, name, s, failed)
                     if r["kickoff"] and start.strftime("%Y-%m-%d") <= r["kickoff"][:10] <= end.strftime("%Y-%m-%d")]
             got += len(rows)
             all_rows += rows
@@ -588,7 +602,9 @@ def collect_season(season: str, with_odds: bool = True, log=print) -> dict:
     ours = [r for r in uniq.values() if r["home_id"] in team_map or r["away_id"] in team_map]
     log(f"일정 저장 {len(uniq)}경기 (그중 6대리그 팀 경기 {len(ours)})")
 
-    result = {"matches": len(uniq), "ours": len(ours), "mb_odds": 0, "kr_odds": 0}
+    if failed:
+        log(f"받기 실패: {', '.join(failed)} — 다음 수집 때 다시 받는다")
+    result = {"matches": len(uniq), "ours": len(ours), "mb_odds": 0, "kr_odds": 0, "failed": failed}
     if not with_odds:
         return result
 
