@@ -51,7 +51,7 @@ export default function LoginPage() {
       <div className="login-content">
         <div className="brand-block">
           <div className="brand-title">
-            <span className="brand-logo">⚽</span> BET PRO W
+            <img className="brand-logo" src="/logo.png" alt="BET PRO W" /> BET PRO W
           </div>
           <p className="brand-version">VERSION 1.0 UPDATE 2026-06-01</p>
           <p className="brand-promo">유럽 6대리그를 Data로 분석해보세요</p>

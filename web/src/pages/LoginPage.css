@@ -31,7 +31,9 @@
 }
 
 .brand-logo {
-  font-size: 26px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
 }
 
 .brand-version {

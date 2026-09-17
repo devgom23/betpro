@@ -83,7 +83,8 @@ export default function MainPage() {
     <div className="main-page">
       <header className="top-bar">
         <div className="top-bar-brand">
-          <span className="app-name">⚽ BET PRO W</span>
+          <img className="app-logo" src="/logo.png" alt="BET PRO W" />
+          <span className="app-name">BET PRO W</span>
           <span className="app-version-chip">v2.0</span>
         </div>
 
