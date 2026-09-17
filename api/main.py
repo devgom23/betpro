@@ -2061,18 +2061,33 @@ def _attach_leg_hits(slips: list[dict], user: dict) -> None:
             return BETSLIPS.judge_extra_leg(leg["pick_type"], leg["actual"], hs, as_, handi)
         return "대기"
 
+    new_voids: list[tuple[int, str]] = []
     for slip in slips:
         for leg in slip["legs"]:
             leg["actual"], leg["dt"] = rt_for(leg)
-            if KXODDS.parse_pick(leg["pick_type"]):
+            if leg.get("void_status"):
+                # 한 번 적중특례로 정산된 다리는 경기가 나중에 다시 열려도 그대로 둔다.
+                leg["hit"] = leg["void_status"]
+            elif KXODDS.parse_pick(leg["pick_type"]):
                 leg["hit"] = judge_extra(leg)
             else:
                 leg["hit"] = BETSLIPS.judge_leg(leg["pick_type"], leg["actual"])
+            if leg["hit"] in BETSLIPS.VOID_RESULTS and not leg.get("void_status"):
+                leg["void_status"] = leg["hit"]
+                if leg.get("leg_id"):
+                    new_voids.append((leg["leg_id"], leg["hit"]))
         slip["result"] = BETSLIPS.slip_result([l["hit"] for l in slip["legs"]])
+        # 적중특례(연기·취소) 다리가 있으면 그 다리를 1.0으로 바꿔 조합 배당을 다시 곱한다
+        # (예: 플핸 1.48 × 연기 2.02 → 1.48). 등록 때 배당은 odds_registered로 남겨 화면에 같이 보인다.
+        eff = BETSLIPS.effective_odds(slip["odds"], slip["legs"])
+        if eff != slip["odds"]:
+            slip["odds_registered"] = slip["odds"]
+            slip["odds"] = eff
         # 당첨금 = 뱃금액 × 배당(예상), 적중금 = 실제로 맞았을 때만 받는 금액
         slip["payout"] = (round(slip["stake"] * slip["odds"])
                           if slip["stake"] and slip["odds"] else None)
         slip["hit_amount"] = slip["payout"] if slip["result"] == "적중" else None
+    BETSLIPS.save_void_status(user["username"], new_voids)
 
 
 @app.get("/api/bet_slips")
@@ -2151,8 +2166,10 @@ def team_bet_record(name: str, user: dict = Depends(get_current_user)):
             if cur is None or leg["leg_id"] < cur["leg_id"]:
                 first_leg[key] = leg
 
-    total = len(first_leg)
-    hit = sum(1 for leg in first_leg.values() if leg["hit"] == "적중")
+    # 적중특례(연기·취소) 경기는 맞고 틀림이 없어서 분모에서도 뺀다.
+    judged = [leg for leg in first_leg.values() if leg["hit"] not in BETSLIPS.VOID_RESULTS]
+    total = len(judged)
+    hit = sum(1 for leg in judged if leg["hit"] == "적중")
     return {"name": name, "hit": hit, "total": total}
 
 

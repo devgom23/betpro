@@ -19,18 +19,19 @@ HANDI_PICKS = {"핸승", "플핸", "핸무", "무", "역", "정"}
 
 _DT_RE = re.compile(r"(\d{2})-(\d{2})-(\d{2})")
 
+# 적중특례 — 그 다리는 맞고 틀림을 따지지 않고 배당 1.0으로 정산한다(국내 토토 규칙).
+# 2026-09-18 사용자 지정: 연기 경기도 '다시 열릴 때까지 대기'가 아니라 바로 특례 처리한다
+# (라리가 26-27 6R 레반테/빌바오 — 플핸 1.48 × 정 2.02 조합이 1.48로 정산).
+VOID_RESULTS = ("연기", "취소")
+
 
 def judge_leg(pick_type: str, rt_label: str | None) -> str:
     """다리 하나의 픽(pick_type)과 실제 결과(rt_label, RT_LABELS 값)를 비교해
-    '적중'/'미적중'/'대기'/'취소' 중 하나를 돌려준다."""
+    '적중'/'미적중'/'대기'/'연기'/'취소' 중 하나를 돌려준다."""
     if not rt_label:
         return "대기"
-    if rt_label == "취소":
-        return "취소"
-    if rt_label == "연기":
-        # 취소와 달리 나중에 다시 열리는 경기다 — 결과가 아직 안 나온 것이므로 '대기'.
-        # 이 줄이 없으면 아래 픽 비교로 흘러가서 무조건 '미적중'이 되어 버린다.
-        return "대기"
+    if rt_label in VOID_RESULTS:
+        return rt_label
     if pick_type not in HANDI_PICKS:
         return "대기"
     if pick_type == "정":
@@ -49,20 +50,54 @@ def judge_leg(pick_type: str, rt_label: str | None) -> str:
 def judge_extra_leg(pick_type: str, rt_label: str | None, hs, as_, handi_line) -> str:
     """추가배당 유형(2핸승·3.5플핸·2.5언더 등) 다리 판정 — 취소·연기·결과 전 처리는
     judge_leg와 같고, 결과가 나온 경기는 스코어로 판정한다(kr_extra_odds.judge)."""
-    if not rt_label or rt_label == "연기":
+    if not rt_label:
         return "대기"
-    if rt_label == "취소":
-        return "취소"
+    if rt_label in VOID_RESULTS:
+        return rt_label
     return KXODDS.judge(pick_type, hs, as_, handi_line) or "대기"
 
 
 def slip_result(leg_results: list[str]) -> str:
-    """다리별 판정을 모아 슬립(조합) 전체 결과를 낸다 — 하나라도 미적중이면 전체 미적중."""
-    if any(r == "미적중" for r in leg_results):
+    """다리별 판정을 모아 슬립(조합) 전체 결과를 낸다 — 하나라도 미적중이면 전체 미적중.
+    적중특례(연기·취소) 다리는 결과에서 빼고 본다 — 나머지가 다 맞으면 적중이다.
+    다리가 전부 특례면 배당 1.0짜리 적중(=뱃금액 그대로 돌려받음)이다."""
+    live = [r for r in leg_results if r not in VOID_RESULTS]
+    if any(r == "미적중" for r in live):
         return "미적중"
-    if any(r == "대기" for r in leg_results):
+    if any(r == "대기" for r in live):
         return "대기"
     return "적중"
+
+
+def effective_odds(slip_odds: float | None, legs: list[dict]) -> float | None:
+    """적중특례 다리를 1.0으로 바꿔 다시 곱한 조합 배당. 특례 다리가 없으면 등록 배당 그대로.
+    다리별 배당이 비어 있는 옛날 벳은 다시 곱할 수 없어 등록 배당을 그대로 둔다."""
+    if not any(l.get("hit") in VOID_RESULTS for l in legs):
+        return slip_odds
+    vals = []
+    for l in legs:
+        if l.get("hit") in VOID_RESULTS:
+            continue
+        if not l.get("odds"):
+            return slip_odds
+        vals.append(l["odds"])
+    return combo_odds(vals) if vals else 1.0
+
+
+def save_void_status(username: str, leg_status: list[tuple[int, str]]) -> None:
+    """처음 적중특례를 본 다리에 그 사실을 굳혀 둔다(bet_slip_legs.void_status).
+    연기 경기가 나중에 다시 열려 RT가 1~4로 바뀌어도 이 다리는 특례 그대로 남는다."""
+    if not leg_status:
+        return
+    con = _connect(username)
+    try:
+        con.executemany(
+            "UPDATE bet_slip_legs SET void_status=? WHERE id=? AND void_status IS NULL",
+            [(status, leg_id) for leg_id, status in leg_status],
+        )
+        con.commit()
+    finally:
+        con.close()
 
 
 def _round_range(dt_str: str) -> tuple[date, date]:
@@ -161,7 +196,7 @@ def list_slips(username: str, scope: str) -> list[dict]:
         for s in slips:
             legs = con.execute(
                 """
-                SELECT id AS leg_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope
+                SELECT id AS leg_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope, void_status
                 FROM bet_slip_legs WHERE slip_id=? ORDER BY leg_order
                 """,
                 (s["id"],),
@@ -191,7 +226,7 @@ def list_slips_all(username: str) -> list[dict]:
         for s in slips:
             legs = con.execute(
                 """
-                SELECT id AS leg_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope
+                SELECT id AS leg_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope, void_status
                 FROM bet_slip_legs WHERE slip_id=? ORDER BY leg_order
                 """,
                 (s["id"],),

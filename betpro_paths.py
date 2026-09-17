@@ -466,6 +466,11 @@ def ensure_predlog_db(username: str) -> str:
             con.execute("ALTER TABLE bet_slip_legs ADD COLUMN odds REAL")
         if "scope" not in leg_cols:
             con.execute("ALTER TABLE bet_slip_legs ADD COLUMN scope TEXT")
+        if "void_status" not in leg_cols:
+            # 적중특례('연기'/'취소') — 그 다리를 배당 1.0으로 정산했다는 표시(2026-09-18 추가).
+            # 연기 경기는 나중에 다시 열리면 리그 표의 RT가 1~4로 바뀌는데, 그때 정산이
+            # 뒤집히지 않도록 처음 연기를 본 순간 여기에 굳혀 둔다(bet_slips.py VOID_RESULTS).
+            con.execute("ALTER TABLE bet_slip_legs ADD COLUMN void_status TEXT")
         con.execute(_SCHEMA_ARCHIVE_TAGS)
         # 아카이브 '배당' 태그(2026-09-14 추가) — 승/무/패 배당 자체에 정배방향/플핸방향
         # 태그를 달아 두면, 나중에 같은 배당 값이 나오는 경기에 뱃지로 뜬다. 팀·맞대결

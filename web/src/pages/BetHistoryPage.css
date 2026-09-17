@@ -163,6 +163,20 @@
   color: var(--chip-red-fg);
 }
 
+/* 적중특례(연기·취소) — 맞고 틀림이 없는 다리라 적중(노랑)·미적(빨강)과 겹치지 않는 청록 */
+.bh-leg-hit-void {
+  color: var(--chip-teal-fg);
+  cursor: help;
+}
+
+/* 적중특례로 배당이 바뀐 줄 — 등록 때 배당을 옆에 취소선으로 남긴다 */
+.bh-odds-registered {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
 /* 등록 묶음(한 번의 벳등록)끼리는 굵은 선으로 갈라 준다. */
 .bh-batch + .bh-batch td {
   border-top: 2px solid var(--border-strong);

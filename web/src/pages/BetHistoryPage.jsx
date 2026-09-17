@@ -31,6 +31,7 @@ const HIT_BADGE = {
   미적중: { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' },
   대기: { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' },
   취소: { background: 'var(--chip-teal-bg)', color: 'var(--chip-teal-fg)' },
+  연기: { background: 'var(--chip-teal-bg)', color: 'var(--chip-teal-fg)' },
 }
 const num = (v) => (v == null ? '-' : v.toLocaleString())
 const odds = (v) => (v == null ? '-' : v.toFixed(2))
@@ -388,12 +389,30 @@ export default function BetHistoryPage({ scope }) {
                                     <Badge value={leg.pick_type} map={PICK_BADGE} fallback={PICK_BADGE_DEFAULT} />
                                     {leg.hit === '적중' && <span className="bh-leg-hit bh-leg-hit-ok"> 적중</span>}
                                     {leg.hit === '미적중' && <span className="bh-leg-hit bh-leg-hit-no"> 미적</span>}
+                                    {(leg.hit === '연기' || leg.hit === '취소') && (
+                                      <span
+                                        className="bh-leg-hit bh-leg-hit-void"
+                                        title={`적중특례 — 경기 ${leg.hit}로 이 경기는 배당 1.00으로 정산`}
+                                      >
+                                        {' '}{leg.hit}
+                                      </span>
+                                    )}
                                   </>
                                 )}
                               </td>
                             )
                           })}
-                          <td className="bh-nowrap">{odds(slip.odds)}</td>
+                          <td
+                            className="bh-nowrap"
+                            title={slip.odds_registered != null
+                              ? `적중특례 경기를 1.00으로 바꿔 다시 곱한 배당 (등록 배당 ${odds(slip.odds_registered)})`
+                              : undefined}
+                          >
+                            {odds(slip.odds)}
+                            {slip.odds_registered != null && (
+                              <span className="bh-odds-registered">{odds(slip.odds_registered)}</span>
+                            )}
+                          </td>
                           <td className="bh-nowrap">{num(slip.stake)}</td>
                           <td className="bh-nowrap">{num(slip.payout)}</td>
                           <td>
