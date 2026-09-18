@@ -443,6 +443,10 @@ def ensure_predlog_db(username: str) -> str:
             # (배답픽)과 마찬가지로 완전히 별개 값이고 어떤 집계·판정에도 안 쓰인다
             # (2026-09-13 추가).
             con.execute("ALTER TABLE my_picks ADD COLUMN odds_bet TEXT")
+        if "memo_ok" not in cols:
+            # 분석맞음 — 경기 전 생각(memo_pre)이 결과로 맞았다는 표시(2026-09-19 사용자 지정).
+            # 값은 '분석맞음' 또는 NULL. 집계·판정에는 안 쓰는 참고용 뱃지다.
+            con.execute("ALTER TABLE my_picks ADD COLUMN memo_ok TEXT")
         # 2026-08-30 별표 3단계 도입(0=없음/1=반개·보류/2=온별·중요). 그 전엔 boolean이라
         # 1이 곧 '중요'였다 — 그 값을 새 체계에서 반개로 잘못 읽지 않도록 딱 한 번만
         # 1→2로 옮긴다. 컬럼 추가가 아니라 값 자체를 바꾸는 마이그레이션이라 컬럼

@@ -700,11 +700,17 @@ def compute(row: dict, h2h: dict | None = None, scope: str = "master",
     # 기대점수 — 양 팀의 이번 시즌 득실로 '이 경기에서 몇 골 넣을 것 같은가'를 낸다
     # (_expected_goals 참고). 승/무/패와 마찬가지로 확률 계산에는 넣지 않는다.
     xg = _expected_goals(home_rec, away_rec, code)
+    lh = _LEAGUE_HOME_GOALS.get(code, _HOME_GOALS_DEFAULT)
+    la = _LEAGUE_AWAY_GOALS.get(code, _AWAY_GOALS_DEFAULT)
     signals.append({
         "key": "season", "label": "시즌전적", "state": "info",
         "value_text": season_text,
         "rows": [_season_row("홈", home_rec, True, xg["home"]),
                  _season_row("원", away_rec, False, xg["away"])],
+        # 팀 흐름 표 '팀' 칸 아래 참고선(2026-09-18 사용자 지정) — 이 리그의 한 팀이
+        # '평균'이라면 넣을 것으로 보는 골(_expected_goals의 리그 기준선 그대로).
+        # 전체는 홈·원정을 안 가른 한 팀 평균이라 (홈+원정)/2 — _expected_goals의 lt와 같다.
+        "league_avg_xg": {"total": round((lh + la) / 2, 2), "home": lh, "away": la},
         "note": "이번 시즌 전체 경기의 승/무/패와 기대점수 — 괄호는 그중 오늘과 같은 "
                 "장소(홈/원정)에서 나온 값(합 칸만 예외로 괄호가 승점). "
                 "확률 계산에는 반영하지 않습니다",

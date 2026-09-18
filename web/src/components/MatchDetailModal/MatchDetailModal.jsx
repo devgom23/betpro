@@ -1529,7 +1529,7 @@ function fixed2(v) {
   return v === null || v === undefined ? '-' : Number(v).toFixed(2)
 }
 
-function TeamFlowTable({ row, seasonRows, streaks, recent10, venueRank }) {
+function TeamFlowTable({ row, seasonRows, streaks, recent10, venueRank, leagueAvgXg }) {
   const [tip, setTip] = useState(null)
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
@@ -1552,8 +1552,21 @@ function TeamFlowTable({ row, seasonRows, streaks, recent10, venueRank }) {
       <table className="detail-table team-flow-table">
         <thead>
           <tr>
-            <th rowSpan={2}>팀</th>
-            <th colSpan={4} className="tf-gl">시즌전적 <span className="tf-th-note">(괄호=같은 장소, 합은 승점)</span></th>
+            <th rowSpan={2}>
+              팀
+              {/* 이 리그의 '평균 팀'이라면 넣을 것으로 보는 골 — 팀 칸의 기대점수(전체/홈/원정)가
+                  리그 평균과 비교해 높은지 낮은지 가늠하는 기준선(2026-09-18 사용자 지정).
+                  _expected_goals가 실제 계산에 쓰는 리그 기준선(LH/LA)과 같은 숫자다. */}
+              {leagueAvgXg && (
+                <span
+                  className="tf-league-avg"
+                  title="평균 기대득점(전체/홈/원정) — 이 리그의 한 팀이 평균이라면 넣을 것으로 보는 득점, 기대점수 계산의 기준선"
+                >
+                  {fixed2(leagueAvgXg.total)} / 홈{fixed2(leagueAvgXg.home)} / 원{fixed2(leagueAvgXg.away)}
+                </span>
+              )}
+            </th>
+            <th colSpan={4} className="tf-gl">시즌전적 <span className="tf-th-note">(괄호=같은 장소 · 승점 괄호=그 장소에서 딴 승점)</span></th>
             <th colSpan={3} className="tf-gl">폼 지표</th>
             <th colSpan={10} className="tf-gl">최근10경기 <span className="tf-th-note">(과거 → 최신)</span></th>
             <th rowSpan={2} className="tf-gl">리그 최다 기록</th>
@@ -1562,7 +1575,7 @@ function TeamFlowTable({ row, seasonRows, streaks, recent10, venueRank }) {
             <th className="col-w tf-gl">승</th>
             <th className="col-d">무</th>
             <th className="col-l">패</th>
-            <th>합</th>
+            <th>승점</th>
             <th className="tf-gl">전체</th>
             <th>최근5</th>
             <th title="홈팀은 홈경기 폼, 원정팀은 원정경기 폼">홈/원</th>
@@ -1578,22 +1591,41 @@ function TeamFlowTable({ row, seasonRows, streaks, recent10, venueRank }) {
               <tr key={t.key}>
                 <td className="tf-team" title="(전체 순위 / 전체 기준 기대점수)">
                   <span className="tf-team-name">{t.name}</span>
-                  <span className="tf-team-sub">({t.rank ? `${t.rank}위` : '-'}/{fixed2(xg[0])})</span>
+                  <span className="tf-team-sub">
+                    ({t.rank ? `${t.rank}위` : '-'} / <span className="tf-team-xg">{fixed2(xg[0])}</span>)
+                  </span>
                   <span
                     className="tf-team-venue"
                     title={`${t.venue}경기만으로 매긴 순위 / ${t.venue}경기 기준 기대점수`}
                   >
-                    {t.venue} {t.venueRank ? `${t.venueRank}위` : '-'} · 기대 {fixed2(xg[1])}
+                    {t.venue === '원정' ? '원' : t.venue} {t.venueRank ? `${t.venueRank}위` : '-'} · 기대 {fixed2(xg[1])}
                   </span>
                 </td>
                 {['승', '무', '패', '합'].map((k, i) => {
                   const pair = t.season?.counts ? t.season.counts[k] : null
+                  const isTotal = k === '합'
+                  // '승점' 칸(구 '합')은 승/무/패 칸과 같은 "전체(그 장소만)" 짝 구조를 그대로
+                  // 따른다 — 다만 숫자가 횟수가 아니라 승점이다. 주 숫자는 이번 시즌 전체
+                  // 승점(pair[1], 그대로), 괄호는 '치른 경기 수'가 아니라 오늘과 같은
+                  // 장소(홈이면 홈경기만·원정이면 원정경기만)에서 딴 승점이다 — 승/무/패 칸의
+                  // 괄호(그 장소 횟수, pair[1])를 그대로 승점 공식에 넣어서 구한다
+                  // (2026-09-18 사용자 지정 — 예: 에스파뇰(홈) 승2(1)·무1(1)·패3(1)이면
+                  // 홈 전적은 1승1무1패이니 홈 승점 = 1*3+1*1 = 4, 전체 승점 7과 함께 '7(4)').
+                  const venuePoints = isTotal
+                    ? (t.season?.counts?.['승']?.[1] || 0) * 3 + (t.season?.counts?.['무']?.[1] || 0)
+                    : null
+                  const main = isTotal ? pair?.[1] : pair?.[0]
+                  const paren = isTotal ? venuePoints : pair?.[1]
                   return (
-                    <td key={k} className={`${SEASON_COL_CLASS[k]}${i === 0 ? ' tf-gl' : ''}`}>
+                    <td
+                      key={k}
+                      className={`${SEASON_COL_CLASS[k]}${i === 0 ? ' tf-gl' : ''}`}
+                      title={isTotal ? `승점 — 괄호는 ${t.venue}경기에서만 딴 승점` : undefined}
+                    >
                       {pair ? (
                         <>
-                          {pair[0]}
-                          <span className="pick-season-venue">({pair[1]})</span>
+                          {main}
+                          <span className="pick-season-venue">({paren})</span>
                         </>
                       ) : '-'}
                     </td>
@@ -2383,6 +2415,8 @@ function MyPickBar({ row, onSavePick, lead, memoLead }) {
   // memoPre = 경기 전에 적는 메모, memo = 결과가 나온 뒤 적는 회고 메모 — 시점이
   // 다른 별개의 글이라 따로 관리한다(결과반성 칸 앞/뒤에 하나씩 둔다).
   const [memoPre, setMemoPre] = useState(row.MEMO_PRE || '')
+  // 분석맞음 — 경기 전 생각이 결과로 맞았다는 표시(2026-09-19). 값은 '분석맞음' 또는 ''.
+  const [memoOk, setMemoOk] = useState(row.MEMO_OK || '')
   const [savedMemoPre, setSavedMemoPre] = useState(row.MEMO_PRE || '')
   const [memo, setMemo] = useState(row.MEMO || '')
   const [savedMemo, setSavedMemo] = useState(row.MEMO || '')
@@ -2429,6 +2463,12 @@ function MyPickBar({ row, onSavePick, lead, memoLead }) {
     if (next === savedMemoPre) return
     setSavedMemoPre(next)
     onSavePick({ memoPre: next || null })
+  }
+
+  function toggleMemoOk() {
+    const next = memoOk ? '' : '분석맞음'
+    setMemoOk(next)
+    onSavePick({ memoOk: next || null })
   }
 
   function saveMemoIfChanged(next) {
@@ -2519,6 +2559,15 @@ function MyPickBar({ row, onSavePick, lead, memoLead }) {
             onCommit={saveMemoPreIfChanged}
           />
         </div>
+        <button
+          type="button"
+          className={`memo-ok-btn${memoOk ? ' is-on' : ''}`}
+          onClick={toggleMemoOk}
+          aria-pressed={!!memoOk}
+          title={memoOk ? '분석맞음 표시 끄기' : '경기 전 생각이 결과로 맞았으면 눌러 표시'}
+        >
+          {memoOk ? '✓ 분석맞음' : '분석맞음'}
+        </button>
       </div>
     </div>
   )
@@ -2661,10 +2710,12 @@ function SeasonRecordLegend({ onClose }) {
           했고, 그중 2승이 홈경기에서 나온 승리라는 뜻입니다.
         </p>
         <p className="help-legend-note">
-          &apos;합&apos; 칸만 괄호의 뜻이 다릅니다 — 괄호 안이 &apos;같은 장소 횟수&apos;가 아니라{' '}
-          <b>승점</b>(승3·무1·패0, 장소 구분 없이 이번 시즌 전체)입니다. 예를 들어 &apos;합&apos;
-          칸이 <b>2(4)</b>라면: 이번 시즌 홈+원정 합쳐 2경기를 치렀고, 그 2경기에서 딴 승점이
-          4점(1승1무)이라는 뜻입니다.
+          &apos;승점&apos; 칸은 숫자만 승점(승3·무1·패0)으로 바뀔 뿐 짝 구조는 승/무/패 칸과
+          같습니다 — <b>주 숫자</b> = 홈+원정 합쳐 이번 시즌 전체 승점, <b>괄호</b> = 그중{' '}
+          <b>오늘과 같은 장소</b>에서 딴 승점(왼쪽 승/무/패 칸의 괄호 횟수로 계산). 예 —
+          에스파뇰(홈)의 승·무·패 칸이 <b>2(1)·1(1)·3(1)</b>이면 홈 전적은 1승1무1패이니
+          홈 승점은 1×3+1×1=<b>4</b>점이고, 전체 승점(6승무패 전부)이 7점이면 &apos;승점&apos;
+          칸은 <b>7(4)</b>로 나옵니다.
         </p>
 
         <p className="help-legend-title">④ 줄 이름 옆 괄호 — 기대점수</p>
@@ -4547,6 +4598,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
             streaks={pickData?.streaks}
             recent10={pickData?.recent10}
             venueRank={pickData?.venue_rank}
+            leagueAvgXg={seasonSig?.league_avg_xg}
           />
         </section>
 
@@ -4719,7 +4771,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
 // 같은 회차·같은 배당 경기(sameOdds)와 이번주 순위(weekRank)도 여기서 메뉴와 무관하게 구한다.
 const PICK_FIELD_OF = {
   important: 'IMPORTANT', pick: 'MY_PICK', p: 'MY_P', hit: 'MY_HIT', memo: 'MEMO',
-  memoPre: 'MEMO_PRE', reasonTag: 'REASON_TAG', oddsPick: 'MY_ODDS_PICK', oddsBet: 'MY_ODDS_BET',
+  memoPre: 'MEMO_PRE', memoOk: 'MEMO_OK', reasonTag: 'REASON_TAG', oddsPick: 'MY_ODDS_PICK', oddsBet: 'MY_ODDS_BET',
 }
 
 function pickStateOf(row) {

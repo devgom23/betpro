@@ -5,7 +5,7 @@ import {
 } from '../../utils/richMemo'
 import './RichMemo.css'
 
-// 메모 한 줄 입력칸 — 글자를 드래그해 고르면 위에 🖍(형광펜)·S(취소줄) 버튼이 뜬다
+// 메모 한 줄 입력칸 — 글자를 드래그해 고르면 위에 🖍(형광펜)·S(취소줄)·U(물결 밑줄) 버튼이 뜬다
 // (2026-09-15 사용자 지정). 저장값은 utils/richMemo.js의 표시 기호 글자.
 //
 // 일반 <input> 대신 contentEditable 칸이다. 한글 조합 중에 칸 내용을 다시 그리면 커서가
@@ -35,15 +35,18 @@ function readRuns(el) {
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     let hl = false
     let st = false
+    let ul = false
     for (let p = node.parentElement; p && p !== el; p = p.parentElement) {
+      if (p.classList.contains('memo-ul') || p.tagName === 'U') ul = true
       if (p.classList.contains('memo-hl') || p.tagName === 'MARK') hl = true
       if (p.classList.contains('memo-st') || ['S', 'STRIKE', 'DEL'].includes(p.tagName)) st = true
       const bg = p.style?.backgroundColor
       if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') hl = true
       if ((p.style?.textDecoration || p.style?.textDecorationLine || '').includes('line-through')) st = true
+      if ((p.style?.textDecoration || p.style?.textDecorationLine || '').includes('underline')) ul = true
     }
     const text = node.data.replace(/ /g, ' ').replace(/[\r\n]+/g, ' ')
-    for (const c of text.split('')) chars.push({ c, hl, st })
+    for (const c of text.split('')) chars.push({ c, hl, st, ul })
   }
   return charsToRuns(chars)
 }
@@ -186,6 +189,7 @@ export function RichMemoInput({ value, placeholder, onChange, onCommit, onEnter,
         >
           <button type="button" className="rich-memo-btn rich-memo-btn-hl" title="형광펜" onClick={() => toggle('hl')}>🖍</button>
           <button type="button" className="rich-memo-btn rich-memo-btn-st" title="취소줄" onClick={() => toggle('st')}>S</button>
+          <button type="button" className="rich-memo-btn rich-memo-btn-ul" title="물결 밑줄" onClick={() => toggle('ul')}>U</button>
         </div>,
         document.body,
       )}

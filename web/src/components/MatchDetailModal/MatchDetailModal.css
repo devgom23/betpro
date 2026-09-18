@@ -293,6 +293,31 @@
   flex: 1;
 }
 
+/* 분석맞음 — 경기 전 생각 오른쪽 토글(2026-09-19). 꺼져 있으면 흐린 테두리 버튼,
+   켜면 초록 칩(맞았다는 뜻 — 적중 노랑·형광펜 노랑과 겹치지 않게 초록). */
+.memo-ok-btn {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.memo-ok-btn:hover {
+  color: var(--text-secondary);
+}
+
+.memo-ok-btn.is-on {
+  border: 1px solid transparent;
+  background: var(--chip-green-bg);
+  color: var(--chip-green-fg);
+  font-weight: 700;
+}
+
 /* 표본 방향성 집계 — 경기 전 생각 왼쪽(2026-09-17). 색은 표본 섹션 드롭박스와 같은 짝. */
 .direction-tally {
   display: inline-flex;
@@ -391,6 +416,19 @@
   color: var(--text-muted);
 }
 
+/* '팀' 헤더 아래 리그 평균 기대득점(전체/홈/원정, 한 줄) — 이 리그 기대점수 계산의
+   기준선을 눈에 바로 보이게 둔다. 헤더 글자(굵게·13px)보다 확실히 낮춰서 부가정보로
+   읽히게 한다. */
+.tf-league-avg {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 400;
+  white-space: nowrap;
+  color: var(--text-muted);
+  cursor: help;
+}
+
 .team-flow-table .tf-team {
   text-align: left;
 }
@@ -404,6 +442,12 @@
   margin-left: 2px;
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* 전체 기준 기대점수 숫자만 밝게(2026-09-18 사용자 지정) — 순위·괄호는 흐린 채로 두고
+   숫자만 눈에 띄게 한다(CLAUDE.md 6-2 "값은 밝게" 규칙과 같은 이유). */
+.tf-team-xg {
+  color: var(--text-primary);
 }
 
 /* 팀 이름 아래 작은 줄 — 홈팀은 홈경기만, 원정팀은 원정경기만 따진 순위·기대점수 */

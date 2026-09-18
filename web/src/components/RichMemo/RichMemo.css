@@ -51,6 +51,18 @@
   text-decoration-thickness: 1.5px;
 }
 
+/* 물결 밑줄(2026-09-19) — 형광펜(노랑)·취소줄과 겹쳐도 구분되게 파란 물결로 긋는다 */
+.memo-ul {
+  text-decoration: underline wavy var(--accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+/* 취소줄과 밑줄이 한 글자에 같이 걸리면 두 줄 다 긋는다(나중 규칙이 앞을 덮지 않게) */
+.memo-st.memo-ul {
+  text-decoration-line: underline line-through;
+}
+
 /* 글자를 고르면 그 위에 뜨는 작은 버튼 줄 — 팝업 스크롤 영역에 잘리지 않게 body에 붙는다. */
 .rich-memo-toolbar {
   position: fixed;
@@ -79,6 +91,12 @@
 
 .rich-memo-btn:hover {
   background: var(--bg-surface-2);
+}
+
+.rich-memo-btn-ul {
+  text-decoration: underline wavy var(--accent);
+  text-underline-offset: 3px;
+  font-weight: 700;
 }
 
 .rich-memo-btn-st {

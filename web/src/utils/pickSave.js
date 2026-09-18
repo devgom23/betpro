@@ -3,7 +3,7 @@
 // 있던 옛 값으로 덮어쓰지 않게 한다(api/my_picks.py upsert_my_pick 참고, 2026-09-13).
 const SERVER_FIELD = {
   important: 'starred', pick: 'pick', p: 'p', hit: 'hit', memo: 'memo',
-  memoPre: 'memo_pre', reasonTag: 'reason_tag', oddsPick: 'odds_pick', oddsBet: 'odds_bet',
+  memoPre: 'memo_pre', memoOk: 'memo_ok', reasonTag: 'reason_tag', oddsPick: 'odds_pick', oddsBet: 'odds_bet',
 }
 
 export function pickPatchBody(scope, row, patch) {
