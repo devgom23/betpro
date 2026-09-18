@@ -1028,6 +1028,7 @@ const SAMPLE_DIRECTION_CLASS = {
   블루: 'sample-dir-blue', 약블루: 'sample-dir-blue-weak',
   레드: 'sample-dir-red', 약레드: 'sample-dir-red-weak',
   크로스: 'sample-dir-gray',
+  표본없음: 'sample-dir-nosample',
 }
 
 function SampleDirectionSelect({ value, onSave }) {
@@ -2593,6 +2594,7 @@ const DIRECTION_TALLY_GROUPS = [
   { label: '레드', cls: 'is-red', strong: '레드', weak: '약레드' },
   { label: '크로스', cls: 'is-gray', strong: '크로스' },
   { label: '몰라', cls: 'is-unknown', strong: '몰라' },
+  { label: '표본X', cls: 'is-nosample', strong: '표본없음' },
 ]
 
 function DirectionTally({ notes, keys }) {

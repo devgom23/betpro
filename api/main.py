@@ -1119,7 +1119,9 @@ class SampleNoteBody(BaseModel):
     direction: Optional[str] = None
 
 
-SAMPLE_DIRECTIONS = ("블루", "레드", "크로스", "몰라")
+# web/src/utils/pickOptions.js SAMPLE_DIRECTION_OPTIONS와 같아야 한다 — 약블루·약레드가 여기 빠져 있어
+# 저장이 거절되던 것을 2026-09-19에 바로잡았다(표본없음도 같은 날 추가).
+SAMPLE_DIRECTIONS = ("블루", "약블루", "레드", "약레드", "크로스", "몰라", "표본없음")
 
 
 @app.get("/api/leagues/{code}/sample_notes")

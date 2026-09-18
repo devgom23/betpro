@@ -359,6 +359,13 @@
   color: var(--chip-gray-fg);
 }
 
+/* 표본X — 볼 표본이 없어 방향을 못 정한 섹션 수. 방향 색(파랑·빨강·회색)과 안 섞이게
+   글자만 흐린 채 가운데 줄 없는 실선 테두리로 둔다(몰라=점선과 구분). */
+.direction-tally-chip.is-nosample {
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
 .direction-tally-chip.is-unknown {
   border: 1px dashed var(--border-strong);
   color: var(--text-muted);
@@ -2066,6 +2073,12 @@
 .detail-section h3 .sample-dir-select.sample-dir-gray {
   background: var(--chip-gray-bg);
   color: var(--chip-gray-fg);
+  font-weight: 700;
+}
+
+/* 표본없음 — 방향이 아니라 '볼 게 없음' 표시라 색 없이 흐린 글자만 */
+.detail-section h3 .sample-dir-select.sample-dir-nosample {
+  color: var(--text-muted);
   font-weight: 700;
 }
 
