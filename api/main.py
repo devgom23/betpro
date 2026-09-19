@@ -956,6 +956,7 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
         row["MEMO_PRE"] = p["memo_pre"] if p else None
         row["MEMO_OK"] = p["memo_ok"] if p else None
         row["MY_HIT_NOTE"] = p["hit_note"] if p else None
+        row["MY_P_NOTE"] = p["p_note"] if p else None
         row["REASON_TAG"] = p["reason_tag"] if p else None
         row["MY_ODDS_PICK"] = p["odds_pick"] if p else None
         row["MY_ODDS_BET"] = p["odds_bet"] if p else None
@@ -1056,6 +1057,7 @@ class MyPickBody(BaseModel):
     memo_pre: Optional[str] = None
     memo_ok: Optional[str] = None     # '분석맞음' 또는 None
     hit_note: Optional[str] = None    # 의견 옆 자유 텍스트
+    p_note: Optional[str] = None      # 상세픽 옆 자유 텍스트
     reason_tag: Optional[str] = None
     odds_pick: Optional[str] = None
     odds_bet: Optional[str] = None
@@ -1076,6 +1078,7 @@ def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_u
         body.S, body.R, body.No, body.HT, body.AT,
         body.starred, body.pick, body.hit, body.memo, body.p, body.reason_tag,
         body.memo_pre, body.odds_pick, body.odds_bet, body.fields, body.memo_ok, body.hit_note,
+        body.p_note,
     )
     return {"ok": True}
 
@@ -1119,6 +1122,7 @@ class SampleNoteBody(BaseModel):
     # 보낸 칸만 저장한다(model_fields_set) — 메모만 보내면 방향성은 안 건드린다.
     memo: Optional[str] = None
     direction: Optional[str] = None
+    ok: Optional[str] = None   # '분석맞음' 또는 None
 
 
 # web/src/utils/pickOptions.js SAMPLE_DIRECTION_OPTIONS와 같아야 한다 — 약블루·약레드가 여기 빠져 있어
@@ -1145,6 +1149,8 @@ def save_sample_note(code: str, body: SampleNoteBody, user: dict = Depends(get_c
         if body.direction and body.direction not in SAMPLE_DIRECTIONS:
             raise HTTPException(status_code=400, detail=f"알 수 없는 방향성: {body.direction}")
         values["direction"] = body.direction or None
+    if "ok" in body.model_fields_set:
+        values["ok"] = body.ok or None
     MYPICKS.upsert_sample_note(user["username"], code, body.scope, body.S, body.R, body.No,
                                body.HT, body.AT, body.kind, values)
     return {"ok": True}
@@ -1584,6 +1590,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
                 rec["MEMO_PRE"] = p["memo_pre"]
                 rec["MEMO_OK"] = p["memo_ok"]
                 rec["MY_HIT_NOTE"] = p["hit_note"]
+                rec["MY_P_NOTE"] = p["p_note"]
                 rows.append(rec)
 
     rows.sort(key=lambda r: _betting_day_sort_key(r.get("DT"), r.get("TM")))
@@ -1747,6 +1754,7 @@ def archive_odds_bet_picks(user: dict = Depends(get_current_user)):
                 rec["MEMO_PRE"] = p["memo_pre"]
                 rec["MEMO_OK"] = p["memo_ok"]
                 rec["MY_HIT_NOTE"] = p["hit_note"]
+                rec["MY_P_NOTE"] = p["p_note"]
                 rec["REASON_TAG"] = p["reason_tag"]
                 rec["MY_ODDS_PICK"] = p["odds_pick"]
                 rec["MY_ODDS_BET"] = p["odds_bet"]

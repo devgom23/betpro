@@ -12,7 +12,7 @@ import {
   drawTendency, drawRelation, VERDICT_TONE,
 } from '../../utils/systemVerdict'
 import {
-  DIR_SIDE, SCOPE_CODES, scopeCell, oddsScopeCodes, directionName, weightedAnalysis,
+  DIR_SIDE, SCOPE_CODES, scopeCell, oddsScopeCodes, weightedAnalysis,
   ODDS_PHASE_WEIGHTED_GRADE, PHASE_CELL_RATE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE,
   CLOSE_ODDS_CUT_K, CLOSE_ODDS_CUT_F, favFlip,
   marketSetMoved, RISK_FIELD_MARKET, DIRECTION_SCOPE_MARKET, ODDS_SCOPE_MARKET,
@@ -1015,7 +1015,7 @@ function SampleNoteInput({ value, onSave }) {
     <RichMemoInput
       className="sample-note-input"
       value={value || ''}
-      placeholder="경기 전 생각을 입력해주세요"
+      placeholder="표본에 대한 의견"
       onCommit={onSave}
     />
   )
@@ -1775,22 +1775,6 @@ function SampleFinalRow({ vals, total = 0, kind = 'count', top1Only = false }) {
   )
 }
 
-// ── 방향성 요약 (확률 지표 제목 옆 한 줄) ──
-// 지표별 표본의 '국) 분석 / 해) 분석' 줄과 정확히 같은 4칸(핸승/핸무/무/역 %)에서,
-// 사용자가 실제로 거는 "3개 중 1개 배제" 형태의 이름 하나를 뽑는다(CLAUDE.md 5-1).
-//
-// 6종 = 두 3way 시장에서 각각 하나를 배제한 나머지
-//   승무패 {정승(핸승+핸무), 무, 역} : 역배제=정무 / 무배제=정역 / 정승배제=플
-//   핸디   {핸승, 핸무, 플핸(무+역)} : 핸승배제=플핸무 / 핸무배제=플핸승 / 플핸배제=정
-//
-// 규칙이 두 단계인 이유 — '가장 작은 하나를 배제'만 쓰면 정·플은 배제 대상이 둘이라
-// 단일보다 작아지기가 거의 불가능해 사실상 안 나온다(실측 1,136경기: 플 0.4% / 정 0.0%).
-// 그래서 한쪽 쌍이 압도적일 때만 정·플을 먼저 집는 단계를 앞에 뒀다.
-// 기준선 80%는 실측으로 골랐다 — 70%면 정이 26.3%로 정무보다 흔해지고, 90%면 플이
-// 1.9%로 거의 안 나온다. 80%에서 정 14.1% / 플 5.4%로 "가끔 나오는 신호"가 된다.
-// (directionName·weightedAnalysis는 utils/verdictCalc.js로 옮겨 리그표 '판정' 칸과
-// 같이 쓴다 — 이 파일 맨 위 import 참고.)
-
 // 방향성 이름은 실제로 두 조각의 합성어다 — '정'(핸승+핸무를 묶어 부르는 이름)
 // '플'(무+역을 묶어 부르는 이름) + 나머지 하나(무/역/핸무/핸승 그대로).
 //   정무 = 정(핸승,핸무) + 무   |   정역 = 정(핸승,핸무) + 역
@@ -1808,330 +1792,6 @@ const DIR_PARTS = {
   플핸승: [['플', PL], ['핸승', ['핸승']]],
   정: [['정', JEONG]],
   플: [['플', PL]],
-}
-
-// ── 이 방향성이 과거에 얼마나 맞았나 (2026-08-29 실측) ──
-// 6대리그 32,466경기(결과가 있고 배변 지표까지 있는 경기 전부) 기준.
-// 적중 = 그 이름이 '빼라'고 한 결과가 실제로 안 나옴(정무면 역만 안 나오면 적중) —
-// CLAUDE.md 5-1의 "3개 중 1개 배제" 관점 그대로다.
-//
-// ⚠ 같음/다름은 '이름'이 아니라 '방향'으로 가른다(DIR_SIDE).
-//   정무·정역·정 = 정 방향(핸승+핸무 쪽이 유력), 플핸무·플핸승·플 = 플 방향(무+역 쪽).
-//   정무와 정역은 둘 다 정배 쪽을 보되 보험을 무로 가냐 역으로 가냐만 다르므로
-//   "같은 방향"이 맞다. 이름 문자열로 가르면 이걸 '다름'으로 잘못 세게 된다.
-//
-// ⚠ 정배배당대까지 나눠서 잰다. 전체 평균과 견주면 값이 부풀려지기 때문이다 —
-//   예를 들어 '플핸무'는 정배가 약한 경기에서 잘 뜨는데(1.8~2.2 구간에 50.2%가 몰림,
-//   전체는 32.6%) 그런 경기는 원래 핸승이 덜 나온다(정배 1.5 미만이면 핸승 46.4%,
-//   2.2 이상이면 16.1%). 그래서 전체 평균 대비로는 +7.3%p처럼 보이지만 같은 배당대끼리
-//   견주면 +1.5%p뿐이다. 나머지는 지표가 아니라 배당이 이미 말해 주던 몫이다.
-//
-// ⚠ 국)과 해)는 각각 자기 값으로 따로 잰다(2026-08-30). 두 가지를 고쳤다.
-//   ① 방향이 같아도 방향성 이름은 다를 수 있다(국)정역 · 해)정무처럼 — 방향이 같은
-//      경기의 52%가 그렇다). 배제 대상이 서로 다른 별개의 베팅인데 예전엔 국내 것
-//      하나만 보여주고 해외 쪽을 감췄다.
-//   ② 해) 쪽 배당대를 해외배당(FW/FL, 배변은 EFW/EFL)으로 바꿨다. 예전엔 국내
-//      배당대를 갖다 썼는데, 국내와 해외는 40%의 경기에서 서로 다른 구간에 들어간다.
-//      그래서 방향성이 같아도 배당대가 다르면 두 값이 갈린다.
-//
-// 키: DIR_HIT[기준][방향일치][국해][방향성][배당대]
-// 값: [적중률%, 표본수, 같은 배당대의 나머지 경기 적중률%, z, 리그일치]
-//     한 칸당 표본 150건 미만이면 아예 넣지 않는다(못 믿을 값을 띄우지 않는다).
-//
-// ⚠ 리그일치(마지막 값 1/0) — 6리그를 합쳐서 재기 때문에 붙인 안전장치다.
-//   통합은 표본이 6배지만(리그별로 하면 144칸 중 25~46칸밖에 안 남는다) 리그 특성을
-//   뭉갤 위험이 있다. 그래서 칸마다 리그별로 부호를 다시 세어, 어긋나는 리그가 1개
-//   이하일 때만 1로 둔다. 0인 칸은 z가 아무리 커도 색을 주지 않는다 —
-//   "통합했기 때문에 생긴 신호"를 걸러내는 장치다(실측: 54칸 중 4칸이 여기서 빠졌다).
-//   효과의 방향 자체는 리그를 거의 안 가린다(색 50칸 중 35칸이 6리그 만장일치).
-//
-// ⚠ 실측에서 드러난 것 — 초기와 배변이 정반대로 움직인다.
-//   초기는 대부분 이득이 0 근처다(= 배당이 이미 말한 것을 되풀이할 뿐).
-//   배변은 색이 붙는 54칸 중 38칸이 빨강이고, 특히 해외 쪽(diffFor)은 -10 ~ -30%p다.
-//   원인은 api/final_indicators.py가 표본 풀은 과거 경기의 '초기배당' 기준으로 두고
-//   이 경기만 '최종배당'으로 찾아 들어가기 때문이다(배당이 안 움직인 경기는 초기와
-//   값이 완전히 같고, 움직인 경기에서만 뒤집힌다 — 국 20.7%→36.3%, 해 19.9%→36.9%).
-const DIR_HIT = {
-  init: {
-    same: {
-      dom: {
-        정무: { '~1.5': [89, 3481, 89, -0.6, 0], '1.5~1.8': [80, 1635, 80, 0.0, 0], '1.8~2.2': [74, 650, 73, 0.6, 0] },
-        정역: { '~1.5': [83, 1249, 82, 0.8, 0], '1.5~1.8': [74, 882, 74, 0.1, 0], '1.8~2.2': [70, 498, 71, -0.8, 0] },
-        플핸무: { '1.5~1.8': [71, 516, 71, -0.0, 0], '1.8~2.2': [81, 2233, 78, 3.0, 1], '2.2+': [84, 1446, 84, 0.1, 0] },
-        플핸승: { '~1.5': [79, 206, 75, 1.0, 1], '1.5~1.8': [76, 845, 75, 0.7, 0], '1.8~2.2': [79, 1878, 77, 2.0, 0], '2.2+': [78, 744, 79, -0.7, 0] },
-        정: { '~1.5': [76, 2645, 69, 6.9, 1], '1.5~1.8': [56, 297, 54, 0.8, 0] },
-        플: { '1.8~2.2': [59, 602, 56, 1.5, 0], '2.2+': [64, 533, 62, 0.8, 0] },
-      },
-      for: {
-        정무: { '~1.5': [90, 2746, 91, -1.3, 1], '1.5~1.8': [83, 2305, 83, 0.2, 0], '1.8~2.2': [78, 1366, 76, 1.9, 1], '2.2+': [71, 290, 70, 0.3, 1] },
-        정역: { '~1.5': [83, 601, 84, -0.7, 0], '1.5~1.8': [77, 910, 76, 0.5, 0], '1.8~2.2': [73, 656, 72, 0.2, 0], '2.2+': [70, 294, 70, -0.2, 0] },
-        플핸무: { '1.5~1.8': [71, 173, 66, 1.4, 0], '1.8~2.2': [78, 1482, 75, 2.4, 0], '2.2+': [83, 3268, 81, 2.4, 1] },
-        플핸승: { '1.5~1.8': [76, 435, 74, 0.9, 0], '1.8~2.2': [77, 1582, 76, 1.0, 0], '2.2+': [79, 1788, 78, 0.9, 0] },
-        정: { '~1.5': [80, 2219, 72, 6.8, 1], '1.5~1.8': [62, 224, 59, 0.7, 0] },
-        플: { '2.2+': [60, 329, 60, 0.1, 0] },
-      },
-    },
-    diff: {
-      dom: {
-        정무: { '~1.5': [85, 534, 89, -3.0, 1], '1.5~1.8': [79, 1033, 80, -0.2, 0], '1.8~2.2': [76, 1219, 73, 2.3, 1], '2.2+': [63, 324, 69, -2.2, 1] },
-        정역: { '~1.5': [78, 232, 82, -1.5, 0], '1.5~1.8': [71, 592, 75, -1.8, 0], '1.8~2.2': [73, 1000, 71, 1.1, 1], '2.2+': [62, 306, 70, -2.7, 0] },
-        플핸무: { '~1.5': [62, 154, 53, 2.2, 1], '1.5~1.8': [73, 623, 71, 1.0, 0], '1.8~2.2': [78, 1077, 78, -0.2, 0], '2.2+': [82, 311, 84, -1.0, 0] },
-        플핸승: { '~1.5': [74, 924, 76, -0.9, 1], '1.5~1.8': [75, 1047, 75, -0.0, 0], '1.8~2.2': [78, 944, 77, 0.6, 0], '2.2+': [73, 204, 79, -2.0, 1] },
-        정: { '~1.5': [70, 288, 71, -0.4, 0], '1.5~1.8': [59, 179, 54, 1.4, 0], '1.8~2.2': [42, 153, 44, -0.6, 0] },
-        플: { '1.8~2.2': [59, 237, 56, 0.9, 0] },
-      },
-      for: {
-        정무: { '~1.5': [87, 357, 91, -2.4, 1], '1.5~1.8': [82, 901, 83, -0.5, 0], '1.8~2.2': [77, 1441, 76, 1.3, 0], '2.2+': [71, 703, 70, 0.9, 0] },
-        정역: { '1.5~1.8': [76, 394, 76, -0.2, 0], '1.8~2.2': [73, 777, 72, 0.2, 0], '2.2+': [73, 755, 70, 1.9, 0] },
-        플핸무: { '1.5~1.8': [70, 328, 66, 1.6, 0], '1.8~2.2': [75, 1123, 75, -0.1, 0], '2.2+': [82, 1160, 82, -0.2, 0] },
-        플핸승: { '~1.5': [78, 409, 76, 0.8, 0], '1.5~1.8': [75, 907, 74, 0.6, 0], '1.8~2.2': [75, 1177, 77, -0.9, 0], '2.2+': [81, 619, 78, 1.6, 0] },
-        정: { '~1.5': [79, 193, 75, 1.3, 1] },
-      },
-    },
-  },
-  final: {
-    same: {
-      dom: {
-        정무: { '~1.5': [88, 3425, 90, -2.8, 1], '1.5~1.8': [80, 1573, 79, 0.4, 0], '1.8~2.2': [74, 601, 73, 0.6, 0] },
-        정역: { '~1.5': [79, 1274, 82, -3.0, 1], '1.5~1.8': [72, 944, 75, -1.8, 0], '1.8~2.2': [70, 493, 71, -0.9, 0] },
-        플핸무: { '1.5~1.8': [70, 517, 71, -0.4, 0], '1.8~2.2': [79, 2221, 78, 0.8, 0], '2.2+': [83, 1392, 84, -0.7, 1] },
-        플핸승: { '~1.5': [69, 243, 76, -2.3, 1], '1.5~1.8': [76, 846, 75, 0.4, 0], '1.8~2.2': [79, 1938, 77, 2.2, 1], '2.2+': [81, 736, 78, 1.9, 0] },
-        정: { '~1.5': [76, 2639, 69, 6.4, 1], '1.5~1.8': [54, 302, 54, 0.2, 0] },
-        플: { '1.8~2.2': [55, 632, 56, -0.5, 0], '2.2+': [63, 603, 63, 0.1, 0] },
-      },
-      for: {
-        정무: { '~1.5': [89, 2451, 92, -4.0, 1], '1.5~1.8': [82, 2364, 84, -2.7, 1], '1.8~2.2': [78, 1217, 76, 1.1, 0], '2.2+': [67, 226, 68, -0.4, 0] },
-        정역: { '~1.5': [79, 576, 84, -3.2, 1], '1.5~1.8': [73, 892, 77, -2.0, 0], '1.8~2.2': [76, 674, 72, 2.4, 1], '2.2+': [68, 265, 70, -0.7, 0] },
-        플핸무: { '1.5~1.8': [61, 220, 67, -1.7, 1], '1.8~2.2': [75, 1309, 75, 0.1, 0], '2.2+': [82, 3196, 83, -1.2, 1] },
-        플핸승: { '1.5~1.8': [70, 483, 74, -1.9, 0], '1.8~2.2': [76, 1533, 76, -0.4, 1], '2.2+': [79, 1812, 79, -0.2, 0] },
-        정: { '~1.5': [79, 2514, 73, 5.9, 1], '1.5~1.8': [59, 304, 59, -0.2, 0] },
-        플: { '2.2+': [60, 575, 62, -0.8, 0] },
-      },
-    },
-    diff: {
-      dom: {
-        정무: { '~1.5': [87, 543, 89, -1.5, 0], '1.5~1.8': [79, 910, 79, -0.3, 0], '1.8~2.2': [71, 1084, 73, -1.2, 0], '2.2+': [65, 311, 69, -1.2, 1] },
-        정역: { '~1.5': [86, 221, 82, 1.7, 1], '1.5~1.8': [70, 634, 75, -2.9, 1], '1.8~2.2': [69, 929, 72, -1.5, 1], '2.2+': [68, 375, 69, -0.6, 0] },
-        플핸무: { '~1.5': [56, 188, 54, 0.6, 0], '1.5~1.8': [68, 699, 72, -1.8, 1], '1.8~2.2': [76, 1070, 79, -1.9, 0], '2.2+': [88, 298, 84, 2.1, 1] },
-        플핸승: { '~1.5': [73, 1038, 76, -2.1, 0], '1.5~1.8': [75, 1055, 75, -0.2, 0], '1.8~2.2': [76, 861, 77, -0.6, 0], '2.2+': [75, 151, 79, -0.9, 1] },
-        정: { '~1.5': [71, 292, 71, -0.1, 0], '1.5~1.8': [54, 177, 54, 0.2, 1], '1.8~2.2': [46, 153, 44, 0.4, 0] },
-        플: { '1.8~2.2': [59, 297, 56, 1.0, 0] },
-      },
-      for: {
-        정무: { '~1.5': [89, 410, 91, -1.5, 0], '1.5~1.8': [84, 1024, 83, 0.9, 0], '1.8~2.2': [76, 1497, 77, -1.0, 0], '2.2+': [69, 601, 68, 0.1, 0] },
-        정역: { '1.5~1.8': [77, 404, 76, 0.6, 0], '1.8~2.2': [72, 823, 72, 0.2, 0], '2.2+': [69, 693, 70, -0.7, 0] },
-        플핸무: { '1.5~1.8': [64, 358, 67, -1.1, 1], '1.8~2.2': [73, 930, 75, -1.6, 1], '2.2+': [83, 1143, 83, 0.6, 0] },
-        플핸승: { '~1.5': [77, 448, 76, 0.8, 0], '1.5~1.8': [72, 821, 74, -1.1, 1], '1.8~2.2': [75, 1008, 76, -1.2, 0], '2.2+': [79, 688, 79, -0.0, 0] },
-        정: { '~1.5': [79, 275, 75, 1.3, 0] },
-        플: { '2.2+': [61, 173, 61, -0.0, 0] },
-      },
-    },
-  },
-}
-
-// DIR_SIDE(이름 -> 방향, 첫 조각이 곧 방향)는 utils/verdictCalc.js에서 가져온다
-// (파일 맨 위 import) — 리그표 '판정' 칸과 같은 값을 써야 한다.
-
-// ⚠ 2026-08-29에 '초기 -> 배변으로 방향이 뒤집히면 경고(⚠)'를 넣었다가 하루 만에
-//   뺐다(2026-08-30). 그때는 뒤집힌 경기에서 배변 쪽을 따르면 51%, 초기 쪽을 따르면
-//   83.5%로 30%p 넘게 갈렸는데, 그건 신호가 아니라 배변 지표가 망가져 있어서 생긴
-//   현상이었다. final_indicators.py의 표본 풀을 배변배당 기준으로 고치자 그 차이가
-//   6대리그 국 2.6%p / 해 1.6%p로 줄어 표식을 붙일 근거가 사라졌다
-//   (K1 국만 13.4%p로 남았지만 리그마다 1.3~13.4%p로 들쭉날쭉해 못 믿는다).
-//   같은 걸 다시 넣으려면 먼저 재측정할 것.
-
-// 정배배당 구간 — oddsMove.js·CLAUDE.md가 쓰는 1.8 경계를 포함해 넷으로 나눈다.
-const DIR_BANDS = [[1.5, '~1.5'], [1.8, '1.5~1.8'], [2.2, '1.8~2.2'], [Infinity, '2.2+']]
-
-/** 정배배당(=승·패 중 싼 쪽)이 어느 구간인가. 배당이 없으면 null. */
-function dirBand(w, l) {
-  const a = numOrNull(w)
-  const b = numOrNull(l)
-  if (a === null || b === null || a <= 0 || b <= 0) return null
-  const fav = Math.min(a, b)
-  return (DIR_BANDS.find(([hi]) => fav < hi) || [])[1] || null
-}
-
-/** 색을 줄 만큼 확실한가 — 고정 %p가 아니라 두 비율 검정(z)으로 정한다.
- *  표본 200짜리에서 +3%p는 우연이지만 3,000짜리에서 +3%p는 우연이 아니다. */
-const DIR_Z_CUT = 2
-
-const DIR_SIDE_LABEL = { dom: '국내', for: '해외' }
-
-/** agree: 'same'(국·해 방향 일치) | 'diff'(갈림) — side: 'dom'(국내) | 'for'(해외) */
-function DirRate({ phase, agree, side, name, band }) {
-  const e = name && band ? DIR_HIT[phase]?.[agree]?.[side]?.[name]?.[band] : null
-  if (!e) {
-    return (
-      <span
-        className="dir-rate dir-rate-none"
-        title={band
-          ? '이 조합은 표본이 적어(150건 미만) 믿을 값을 내지 못합니다'
-          : '배당이 없어 어느 배당대인지 알 수 없습니다'}
-      >
-        —
-      </span>
-    )
-  }
-  const [pct, n, rest, z, leagueOk] = e
-  const gap = pct - rest
-  const strong = Math.abs(z) >= DIR_Z_CUT && leagueOk
-  const cls = !strong ? '' : z > 0 ? ' dir-rate-good' : ' dir-rate-bad'
-  const verdict = Math.abs(z) < DIR_Z_CUT
-    ? `이 정도 차이는 우연 범위입니다 (z=${z}) — 색을 주지 않습니다`
-    : leagueOk
-      ? `우연으로 보기 어렵습니다 (z=${z})`
-      : `리그마다 방향이 갈려 통합값만으로는 못 믿습니다 (z=${z}) — 색을 주지 않습니다`
-  const tip = `${DIR_SIDE_LABEL[side]} 지표가 '${name}'이고 국·해 방향이 `
-    + `${agree === 'same' ? '같을' : '갈렸을'} 때 — ${DIR_SIDE_LABEL[side]} 정배배당 ${band}`
-    + `\n과거 ${n.toLocaleString()}경기 중 ${pct}%에서 배제가 맞았습니다.`
-    + `\n같은 배당대의 나머지 경기는 ${rest}% (${gap >= 0 ? '+' : ''}${gap}%p)`
-    + `\n${verdict}`
-  return <span className={`dir-rate${cls}`} title={tip}>{pct}%</span>
-}
-
-// 괄호 안 — 핸승/핸무/무/역 중 값이 가장 큰 것 하나. 방향성과는 별개 정보다
-// (방향성은 '무엇을 뺄까', 이건 '무엇이 제일 유력한가').
-const DIR_TOP_LABELS = ['핸승', '핸무', '무', '역']
-function topOutcome(v) {
-  if (!v) return null
-  let bi = 0
-  for (let i = 1; i < 4; i += 1) if (v[i] > v[bi]) bi = i
-  return DIR_TOP_LABELS[bi]
-}
-
-// row에서 '국) 분석 / 해) 분석'과 같은 4칸을 만든다. SampleTable이 화면에 그리는 값과
-// 어긋나지 않도록, 거기서 쓰는 것과 완전히 같은 재료(판단 7줄 · 같은 순서 · 같은 가중치)를 쓴다.
-//   final=false → 초기배당 기준(vals),  final=true → 배변(최종배당) 기준(E_ 컬럼)
-function analysisPair(row, scope, final) {
-  const favCodes = favSampleCodes(row)
-  const indicators = scope === 'user'
-    ? SAMPLE_INDICATORS.filter(([code]) => !code.startsWith('TK-') && !code.startsWith('TF-'))
-    : SAMPLE_INDICATORS
-  const cnt = (v) => {
-    const n = Number(v)
-    return Number.isNaN(n) ? 0 : Math.trunc(n)
-  }
-  const lines = []
-  for (const [code, label] of indicators) {
-    if (!favCodes.has(code)) continue        // 화면 기본값과 같은 '판단에 쓰는 7줄'만
-    let vals
-    if (final) {
-      const raw = [1, 2, 3, 4].map((i) => row[`E_${code} ${i}`])
-      if (!raw.some((v) => v !== null && v !== undefined && v !== '')) continue
-      vals = raw.map(cnt)
-    } else {
-      vals = [1, 2, 3, 4].map((i) => cnt(row[`${code} ${i}`]))
-    }
-    lines.push({ code, label, vals, total: vals.reduce((a, b) => a + b, 0) })
-  }
-  const isForeign = (c) => /^(F|TF)-/.test(c)
-  return {
-    dom: weightedAnalysis(lines.filter((l) => !isForeign(l.code))),
-    forr: weightedAnalysis(lines.filter((l) => isForeign(l.code))),
-  }
-}
-
-// "국) 정무(무) / 해) 플핸무(역)" 한 덩어리. 값이 없으면 null.
-// actual: 이미 결과가 나온 경기면 rtLabel(row.RT)('핸승'/'핸무'/'무'/'역'), 아니면 null.
-// 괄호 안(최다 1개)이 실제 결과와 같으면 그 글자만 노란색으로 — "적중" 표시와
-// 같은 색(--chip-yellow-fg, PICK_VERDICT '적중' 배지와 동일 계열)이다.
-// 국·해 사이 구분자가 곧 "두 지표가 같은 방향을 가리켰는가"를 말해 준다.
-// 이름이 아니라 방향(정/플)으로 가른다 — 정무와 정역은 둘 다 정배 쪽을 보고
-// 보험만 다른 것이라 '같음'이다(DIR_SIDE 주석 참고).
-//   같으면  국)정무(역) = 해)정역(무) → 84%      ← 한 덩어리라 끝에 하나만
-//   다르면  국)정무(역) 77% ≠ 해)플핸무(무) 77%   ← 서로 다른 베팅이라 각각 붙인다
-// 갈렸을 때 한쪽만 보여주면(예전 방식) 나머지 절반이 숨고, '국내 우선'이라는 규칙도
-// 화면만 봐선 알 수 없어 오해를 낳는다.
-function DirectionPart({ pair, actual, phase, band }) {
-  if (!pair || (!pair.dom && !pair.forr)) return <span className="dir-none">—</span>
-  const domName = pair.dom ? directionName(pair.dom) : null
-  const forName = pair.forr ? directionName(pair.forr) : null
-  // 한쪽 값이 아예 없으면 '같다/다르다'를 말할 수 없다 — 그때만 중립 구분자(/)를 쓴다.
-  const bothKnown = domName !== null && forName !== null
-  const same = bothKnown && DIR_SIDE[domName] === DIR_SIDE[forName]
-  const agree = same ? 'same' : 'diff'
-  const one = (label, v, name, side) => (
-    <span className="dir-one" key={label}>
-      <span className="dir-market">{label})</span>
-      {v ? (
-        <>
-          <b className="dir-name">
-            {(DIR_PARTS[name] || [[name, []]]).map(([piece, covers]) => (
-              <span
-                key={piece}
-                className={actual && covers.includes(actual) ? 'dir-name-hit' : undefined}
-              >
-                {piece}
-              </span>
-            ))}
-          </b>
-          <span className={`dir-top${actual && topOutcome(v) === actual ? ' dir-top-hit' : ''}`}>
-            ({topOutcome(v)})
-          </span>
-          {bothKnown && band && (
-            <DirRate phase={phase} agree={agree} side={side} name={name} band={band[side]} />
-          )}
-        </>
-      ) : (
-        <span className="dir-none">—</span>
-      )}
-    </span>
-  )
-  // 국·해는 서로 다른 베팅이라(방향이 같아도 방향성 이름이 다를 수 있고, 배당대도
-  // 40%가 갈린다) 퍼센트를 양쪽에 각각 붙인다. =/≠는 방향이 같은지만 말해 준다.
-  return (
-    <>
-      {one('국', pair.dom, domName, 'dom')}
-      <span className={`dir-sep${bothKnown && !same ? ' dir-sep-diff' : ''}`}>
-        {bothKnown ? (same ? '=' : '≠') : '/'}
-      </span>
-      {one('해', pair.forr, forName, 'for')}
-    </>
-  )
-}
-
-// 확률 지표 제목 옆 방향성 요약 줄 — 초기 | 배변.
-//
-// ⚠ 적중률(DIR_HIT)은 공식 데이터(6대리그)로만 쟀다. 내 데이터(K리그 등)는 표본에
-//   들어 있지 않고, 통합지표(TK-/TF-)를 빼고 계산해서 지표 구성 자체가 다르다.
-//   그래서 내 데이터에서는 숫자를 아예 안 띄운다(band=null) — 못 믿을 값을 띄우느니
-//   비워 두는 게 낫다. K리그로 따로 재면 그때 켠다.
-function DirectionSummary({ row, scope }) {
-  const init = analysisPair(row, scope, false)
-  const fin = analysisPair(row, scope, true)
-  const hasFinal = fin && (fin.dom || fin.forr)
-  // 취소·연기는 '결과'가 아니라 핸승/핸무/무/역 중 하나일 때만 적중 비교 대상이다.
-  const rtText = rtLabel(row.RT)
-  const actual = ['핸승', '핸무', '무', '역'].includes(rtText) ? rtText : null
-  // 배당대는 '그 줄이 실제로 쓴 배당'으로 잡는다 — 초기 줄은 초기배당, 배변 줄은
-  // 최종배당. 국)은 국내배당, 해)는 해외배당으로 각각 따로 본다(40%가 서로 다른
-  // 구간에 들어간다).
-  const isMaster = scope !== 'user'
-  const bandInit = isMaster
-    ? { dom: dirBand(row.KW, row.KL), for: dirBand(row.FW, row.FL) }
-    : null
-  const bandFinal = isMaster
-    ? {
-      dom: dirBand(row.EKW, row.EKL) ?? dirBand(row.KW, row.KL),
-      for: dirBand(row.EFW, row.EFL) ?? dirBand(row.FW, row.FL),
-    }
-    : null
-  return (
-    <span className="detail-section-note dir-summary">
-      <span className="dir-block">
-        <span className="dir-when">초기</span>
-        <DirectionPart pair={init} actual={actual} phase="init" band={bandInit} />
-      </span>
-      <span className="dir-bar">|</span>
-      <span className="dir-block">
-        <span className="dir-when dir-when-final">배변</span>
-        {hasFinal
-          ? <DirectionPart pair={fin} actual={actual} phase="final" band={bandFinal} />
-          : <span className="dir-none">—</span>}
-      </span>
-    </span>
-  )
 }
 
 // expanded=false(기본)면 판단에 쓰는 7줄만 보여준다.
@@ -2169,8 +1829,9 @@ function SampleTable({ row, scope, expanded }) {
   })
   // 화면에 그릴 줄 — 접었을 때는 판단 7줄 + 국통)·해통) 승+패/승+무+패 4줄(2026-09-05
   // 추가, SAMPLE_DEFAULT_EXTRA)까지 보여준다. '국)분석/해)분석' 줄은 이 4줄과 무관하게
-  // calcLines(판단 7줄만)로 따로 계산한다 — 안 그러면 이 표의 %가 analysisPair()가
-  // 만드는 실제 방향성 4칸·판정과 어긋나 보인다(같은 경기인데 표는 A%, 판정은 B%).
+  // calcLines(판단 7줄만)로 따로 계산한다 — 안 그러면 이 표의 %가 실제 판정(리그표
+  // '판정' 칸, columnGroups.js)이 쓰는 7줄 가중평균과 어긋나 보인다(같은 경기인데
+  // 표는 A%, 판정은 B%).
   const lines = expanded
     ? allLines
     : allLines.filter((l) => favCodes.has(l.code) || SAMPLE_DEFAULT_EXTRA.has(l.code))
@@ -2304,36 +1965,6 @@ function scheduleDaysText(days) {
   return '같은 날'
 }
 
-function scheduleTitle(team, kind, m) {
-  const res = m.score ? ` · ${m.score}${m.result ? ` ${m.result}` : ''}${m.note ? ` (${m.note})` : ''}` : ''
-  return `${team} ${kind} 경기 — ${m.kickoff} · ${m.comp} · ${m.venue} · vs ${m.opponent}${res}`
-}
-
-// 내픽 바 맨 왼쪽 — 두 팀의 직전 경기 배지(홈 → 원정 순). 직전 경기가 없는 팀은 뺀다.
-// 문구는 "홈 5일 전"/"원정 3일 전"만(2026-09-17 사용자 지정 — 대회·상대는 아래 앞뒤 일정
-// 표와 마우스 설명에 있다). 홈팀·원정팀 배지 색을 다르게 둔다.
-function PrevMatchBadges({ ctx, ht, at }) {
-  if (!ctx) return null
-  const items = [
-    ['home', '홈', ht, ctx.home?.prev],
-    ['away', '원정', at, ctx.away?.prev],
-  ].filter(([, , , m]) => m)
-  if (items.length === 0) return null
-  return (
-    <span className="prev-match-badges">
-      {items.map(([side, label, team, m]) => (
-        <span
-          key={side}
-          className={`prev-match-badge is-${side}`}
-          title={scheduleTitle(team, '직전', m)}
-        >
-          {label} {scheduleDaysText(m.days)}
-        </span>
-      ))}
-    </span>
-  )
-}
-
 const SCHEDULE_RESULT_CLASS = { 승: 'win', 무: 'draw', 패: 'loss' }
 
 function ScheduleContextSection({ ctx, ht, at }) {
@@ -2401,13 +2032,16 @@ function ScheduleContextSection({ ctx, ht, at }) {
   )
 }
 
-function MyPickBar({ row, onSavePick, lead, memoLead }) {
+function MyPickBar({ row, onSavePick, memoLead }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
   const [p, setP] = useState(row.MY_P || '')
   const [hit, setHit] = useState(row.MY_HIT || '')
   // 의견 드롭박스 왼쪽 자유 텍스트 — 의견 태그와 별개의 참고용 메모(2026-09-19).
   const [hitNote, setHitNote] = useState(row.MY_HIT_NOTE || '')
   const [savedHitNote, setSavedHitNote] = useState(row.MY_HIT_NOTE || '')
+  // 상세픽(p) 옆 자유 텍스트 — 상세픽 태그와 별개의 참고용 메모(2026-09-20, hitNote와 같은 개념).
+  const [pNote, setPNote] = useState(row.MY_P_NOTE || '')
+  const [savedPNote, setSavedPNote] = useState(row.MY_P_NOTE || '')
   const [reasonTag, setReasonTag] = useState(row.REASON_TAG || '')
   // 배답픽 — 내픽과 선택지가 완전히 다른 별개의 참고용 태그(ODDS_PICK_OPTIONS).
   // 상세픽(p)처럼 어떤 집계·판정에도 안 쓰인다(2026-09-12 추가, 사용자 지정 —
@@ -2443,14 +2077,20 @@ function MyPickBar({ row, onSavePick, lead, memoLead }) {
     onSavePick({ hit: next || null })
   }
 
-  function handleHitNoteChange(e) {
-    setHitNote(e.target.value)
+  // RichMemoInput(형광펜·취소줄·물결 밑줄 꾸밈칸)의 onCommit 패턴 — 칸을 벗어나거나
+  // Enter일 때, 바뀐 경우에만 저장한다(memoPre/memo와 같은 방식, 2026-09-20).
+  function saveHitNoteIfChanged(next) {
+    setHitNote(next)
+    if (next === savedHitNote) return
+    setSavedHitNote(next)
+    onSavePick({ hitNote: next || null })
   }
 
-  function commitHitNote() {
-    if (hitNote === savedHitNote) return
-    setSavedHitNote(hitNote)
-    onSavePick({ hitNote: hitNote || null })
+  function savePNoteIfChanged(next) {
+    setPNote(next)
+    if (next === savedPNote) return
+    setSavedPNote(next)
+    onSavePick({ pNote: next || null })
   }
 
   function handleReasonTagChange(e) {
@@ -2495,7 +2135,6 @@ function MyPickBar({ row, onSavePick, lead, memoLead }) {
   return (
     <div className="mypick-bar">
       <div className="mypick-bar-row">
-        {lead}
         <label className="mypick-bar-field">
           <select value={pick} onChange={handlePickChange}>
             <option value="">내픽</option>
@@ -2526,14 +2165,11 @@ function MyPickBar({ row, onSavePick, lead, memoLead }) {
             ))}
           </select>
         </label>
-        <div className="mypick-bar-field mypick-bar-hitnote" title="의견 태그와 별개로 자유롭게 적는 메모">
-          <input
-            type="text"
-            placeholder="의견 메모"
-            value={hitNote}
-            onChange={handleHitNoteChange}
-            onBlur={commitHitNote}
-            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+        <div className="mypick-bar-field mypick-bar-pnote" title="상세픽 태그와 별개로 자유롭게 적는 메모">
+          <RichMemoInput
+            value={pNote}
+            placeholder="상세픽 메모"
+            onCommit={savePNoteIfChanged}
           />
         </div>
         <label className="mypick-bar-field">
@@ -2546,6 +2182,13 @@ function MyPickBar({ row, onSavePick, lead, memoLead }) {
             ))}
           </select>
         </label>
+        <div className="mypick-bar-field mypick-bar-hitnote" title="의견 태그와 별개로 자유롭게 적는 메모">
+          <RichMemoInput
+            value={hitNote}
+            placeholder="배답 예측 의견"
+            onCommit={saveHitNoteIfChanged}
+          />
+        </div>
         <label className="mypick-bar-field">
           <select value={oddsBet} onChange={handleOddsBetChange}>
             <option value="">배답벳</option>
@@ -2880,7 +2523,7 @@ function findSignal(data, key) {
 // /api/pick_ai), 시즌전적과 상대전적 문장만 아래 표 쪽으로 옮겨 붙였다.
 // ── 방향성 검토표 (2026-09-05) ───────────────────────────────────────────
 // 승+패·승+무+패 **두 줄만**으로 리그/통합 × 국/해 × 초기/배변 8칸을 만든다.
-// 지금 화면이 쓰는 방향성 4칸(analysisPair — 정배 방향에 따라 고른 7줄 가중평균)과
+// 실제 판정(리그표 '판정' 칸, columnGroups.js — 정배 방향에 따라 고른 7줄 가중평균)과
 // 재료가 다르다. 어느 쪽이 나은지 눈으로 대조하는 표라, 판정에는 아무 영향도
 // 주지 않는다(읽기만 한다).
 //
@@ -4096,7 +3739,7 @@ function NewSystemVerdictLegend({ onClose }) {
 
 function NewSystemVerdict({ row, init, fin }) {
   const [showLegend, setShowLegend] = useState(false)
-  // 확률 지표(DirectionPart)와 같은 규칙 — 픽 이름을 조각으로 쪼개서, 실제 결과를
+  // 픽 이름을 조각으로 쪼개서, 실제 결과를
   // '덮는' 조각 하나만 노란 글씨(.dir-name-hit)로 켠다. 정무 → [정, 무]로 쪼개지고
   // 실제 결과가 핸승·핸무면 '정'만, 무면 '무'만 켜진다(DIR_PARTS 주석 참고) — 배경을
   // 칠하는 게 아니라 글자색만 바꾸고, 픽 전체가 아니라 그 한 글자만 바뀐다.
@@ -4182,7 +3825,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank, archiveTags }) {
+function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank, archiveTags }) {
   // '경기지표'의 무·전적 뱃지와 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -4202,7 +3845,6 @@ function PickBand({ row, scope, h2hVerdict: verdict, h2hLoading, sameOdds, xg, w
           <div className="pick-band-risk-col">
             <h3 className="pick-band-risk-col-title">
               확률 지표
-              <DirectionSummary row={row} scope={scope} />
             </h3>
             <RiskCard row={row} />
             {/* 경기지표·방향성·시스템 판정은 왼쪽('배당') 칸과는 무관하게
@@ -4582,7 +4224,6 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
         <MyPickBar
           row={row}
           onSavePick={onSavePick}
-          lead={<PrevMatchBadges ctx={scheduleCtx} ht={ht} at={at} />}
           memoLead={<DirectionTally notes={sampleNotes} keys={SAMPLE_SECTION_KEYS} />}
         />
         {/* 그 아래 전부를 스크롤 영역으로 묶는다(2026-09-14 사용자 지정 — 헤더는
@@ -4590,7 +4231,6 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
         <div className="detail-modal-scroll">
         <PickBand
           row={row}
-          scope={scope}
           sameOdds={sameOdds}
           h2hVerdict={h2hMark}
           h2hLoading={!pickData && !pickError}
@@ -4659,6 +4299,15 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
                     value={sampleNotes[key]?.memo}
                     onSave={(memo) => saveSampleNote(key, { memo: memo || null })}
                   />
+                  <button
+                    type="button"
+                    className={`memo-ok-btn${sampleNotes[key]?.ok ? ' is-on' : ''}`}
+                    onClick={() => saveSampleNote(key, { ok: sampleNotes[key]?.ok ? null : '분석맞음' })}
+                    aria-pressed={!!sampleNotes[key]?.ok}
+                    title={sampleNotes[key]?.ok ? '분석맞음 표시 끄기' : '이 표본의 의견이 결과로 맞았으면 눌러 표시'}
+                  >
+                    {sampleNotes[key]?.ok ? '✓ 분석맞음' : '분석맞음'}
+                  </button>
                 </>
               )}
             </h3>
@@ -4796,7 +4445,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
 // 같은 회차·같은 배당 경기(sameOdds)와 이번주 순위(weekRank)도 여기서 메뉴와 무관하게 구한다.
 const PICK_FIELD_OF = {
   important: 'IMPORTANT', pick: 'MY_PICK', p: 'MY_P', hit: 'MY_HIT', memo: 'MEMO',
-  memoPre: 'MEMO_PRE', memoOk: 'MEMO_OK', hitNote: 'MY_HIT_NOTE', reasonTag: 'REASON_TAG',
+  memoPre: 'MEMO_PRE', memoOk: 'MEMO_OK', hitNote: 'MY_HIT_NOTE', pNote: 'MY_P_NOTE', reasonTag: 'REASON_TAG',
   oddsPick: 'MY_ODDS_PICK', oddsBet: 'MY_ODDS_BET',
 }
 

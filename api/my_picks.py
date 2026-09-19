@@ -45,7 +45,7 @@ def list_my_picks(username: str, code: str, scope: str) -> list[dict]:
     con = _connect(username)
     try:
         rows = con.execute(
-            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, memo_ok, hit_note, reason_tag, odds_pick, odds_bet, wp_hidden "
+            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, memo_ok, hit_note, p_note, reason_tag, odds_pick, odds_bet, wp_hidden "
             "FROM my_picks WHERE code=? AND scope=?",
             (code, scope),
         ).fetchall()
@@ -78,7 +78,7 @@ def hide_from_weekly_picks(username: str, items: list[dict]) -> int:
         con.close()
 
 
-PICK_COLUMNS = ("starred", "pick", "p", "hit", "memo", "memo_pre", "memo_ok", "hit_note", "reason_tag", "odds_pick", "odds_bet")
+PICK_COLUMNS = ("starred", "pick", "p", "hit", "memo", "memo_pre", "memo_ok", "hit_note", "p_note", "reason_tag", "odds_pick", "odds_bet")
 
 
 def upsert_my_pick(username: str, code: str, scope: str,
@@ -87,7 +87,8 @@ def upsert_my_pick(username: str, code: str, scope: str,
                    p: str | None = None, reason_tag: str | None = None,
                    memo_pre: str | None = None, odds_pick: str | None = None,
                    odds_bet: str | None = None, fields: list[str] | None = None,
-                   memo_ok: str | None = None, hit_note: str | None = None) -> None:
+                   memo_ok: str | None = None, hit_note: str | None = None,
+                   p_note: str | None = None) -> None:
     """fields를 주면 이미 있는 기록에서는 그 칸만 바꾸고 나머지는 DB 값을 그대로 둔다.
     화면이 들고 있던 옛 값으로 다른 칸(다른 메뉴에서 쓴 메모 등)을 덮어쓰지 않게 하려는 것
     (2026-09-13). 처음 생기는 기록은 안 준 칸이 빈 값으로 들어간다."""
@@ -100,15 +101,15 @@ def upsert_my_pick(username: str, code: str, scope: str,
         con.execute(
             f"""
             INSERT INTO my_picks
-                (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, memo_ok, hit_note, reason_tag, odds_pick, odds_bet, wp_hidden, updated_dt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
+                (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, memo_ok, hit_note, p_note, reason_tag, odds_pick, odds_bet, wp_hidden, updated_dt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
             ON CONFLICT(code, scope, S, R, No, HT, AT)
             DO UPDATE SET {update_set},
                           wp_hidden = 0, updated_dt = excluded.updated_dt
             """,
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),
              max(0, min(2, int(starred or 0))), pick or None, p or None, hit or None, memo or None,
-             memo_pre or None, memo_ok or None, hit_note or None, reason_tag or None, odds_pick or None, odds_bet or None),
+             memo_pre or None, memo_ok or None, hit_note or None, p_note or None, reason_tag or None, odds_pick or None, odds_bet or None),
         )
         con.commit()
     finally:
@@ -191,7 +192,9 @@ def _ensure_sample_notes(con) -> None:
     제목 옆 메모 — 경기 하나 × 표본 박스 하나에 1개(2026-09-15 사용자 지정).
     kind는 화면의 섹션 키 그대로(fav/pl/ffav/k_wl/f_wl/k_wdl/f_wdl).
     direction: 메모 앞 '방향성' 드롭박스(블루/레드/크로스/몰라) — 2026-09-15 추가라
-    먼저 만든 테이블에는 없어 ALTER로 보강한다."""
+    먼저 만든 테이블에는 없어 ALTER로 보강한다.
+    ok: 그 표본 섹션의 의견(메모)이 결과로 맞았다는 '분석맞음' 표시(2026-09-19 추가,
+    마이픽바의 memo_ok와 같은 개념 — 값은 '분석맞음' 또는 NULL)."""
     con.execute(
         """
         CREATE TABLE IF NOT EXISTS sample_notes (
@@ -204,28 +207,29 @@ def _ensure_sample_notes(con) -> None:
         )
         """
     )
-    try:
-        con.execute("ALTER TABLE sample_notes ADD COLUMN direction TEXT")
-    except sqlite3.OperationalError:
-        pass
+    for col in ("direction", "ok"):
+        try:
+            con.execute(f"ALTER TABLE sample_notes ADD COLUMN {col} TEXT")
+        except sqlite3.OperationalError:
+            pass
 
 
-SAMPLE_NOTE_FIELDS = ("memo", "direction")
+SAMPLE_NOTE_FIELDS = ("memo", "direction", "ok")
 
 
 def list_sample_notes(username: str, code: str, scope: str,
                       s: str, r: str, no: str, ht: str, at: str) -> dict:
-    """그 경기의 표본 박스 메모·방향성 전부 — {kind: {memo, direction}}."""
+    """그 경기의 표본 박스 메모·방향성·분석맞음 전부 — {kind: {memo, direction, ok}}."""
     con = _connect(username)
     try:
         _ensure_sample_notes(con)
         rows = con.execute(
-            "SELECT kind, memo, direction FROM sample_notes "
+            "SELECT kind, memo, direction, ok FROM sample_notes "
             "WHERE code=? AND scope=? AND S=? AND R=? AND No=? AND HT=? AND AT=?",
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at)),
         ).fetchall()
-        return {row["kind"]: {"memo": row["memo"], "direction": row["direction"]}
-                for row in rows if row["memo"] or row["direction"]}
+        return {row["kind"]: {"memo": row["memo"], "direction": row["direction"], "ok": row["ok"]}
+                for row in rows if row["memo"] or row["direction"] or row["ok"]}
     finally:
         con.close()
 
