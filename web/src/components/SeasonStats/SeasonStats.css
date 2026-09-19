@@ -106,8 +106,8 @@
    순서와 무관하게 이 칸의 폭·여백·글자 크기가 이긴다. */
 .ss-history-memo,
 .rich-memo.ss-history-memo {
-  flex: none;
-  width: 1000px;
+  flex: 1 1 0;
+  min-width: 0;
   box-sizing: border-box;
   padding: 4px 8px;
   border-radius: 6px;

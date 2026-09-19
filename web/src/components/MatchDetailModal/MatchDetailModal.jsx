@@ -27,6 +27,7 @@ import ArchiveTagModal from '../ArchiveTagModal/ArchiveTagModal'
 import { rankByKind, rankInfoOf, top20Score } from '../../utils/weekTop20'
 import { buildRankBadge } from '../../utils/weekRankBadge'
 import { pickPatchBody } from '../../utils/pickSave'
+import { resolveExtraPick } from '../../utils/extraOdds'
 import './MatchDetailModal.css'
 
 
@@ -604,28 +605,76 @@ function drawChips(row, pick) {
   ]
 }
 
-// 동배당 뱃지 — 같은 회차(금~월)에 다른 경기가 똑같은 국내 정배배당으로 떴다는 알림.
-// 짝을 찾는 일은 LeagueTable이 한다(그쪽만 그 회차의 경기 목록을 들고 있다).
+// 동배당 뱃지 — 같은 회차(금~월)에 다른 경기가 똑같은 국내배당으로 떴다는 알림.
+// 정배(KW/KL 중 낮은 쪽)와 플핸(언더독 핸디배당, K-PL과 같은 규칙)을 한 뱃지에
+// "(정)1.92ㆍ(플)1.75"로 같이 보여준다(2026-09-20 — 정배만 보던 것에 플핸을 추가,
+// 사용자 지정). 짝을 찾는 일은 백엔드가 한다(api/main.py _same_odds_for).
 // ⚠ 판단 재료가 아니라 그냥 알림이다. "같은 배당이 두 번 뜨면 하나는 깨진다"는
-// 속설은 6대리그 36,212경기 전수조사에서 사실이 아니었다(2026-09-04). 그래서 색을
-// 입히지 않는다. 호버에는 경기 정보만 보여준다 — 실측 설명은 memory에 남겨 뒀다.
-function sameOddsChips(sameOdds) {
-  if (!sameOdds) return []
-  const { odds, others } = sameOdds
-  const list = others
+// 속설은 6대리그 36,212경기 전수조사에서 사실이 아니었다(2026-09-04) — 그래서 좋다/
+// 나쁘다를 뜻하는 색(초록/빨강/노랑 등)은 안 쓴다. 다만 눈에 잘 안 띈다는 지적으로
+// (2026-09-20) 의미 없는 파란색만 입혀 구분되게 한다. 호버에는 경기 정보만 보여준다
+// — 실측 설명은 memory에 남겨 뒀다.
+function sameOddsList(group, sideKey, sideLabel) {
+  return group.others
     .map((o) => `· ${[formatDt(o.dt), formatTime(o.tm)].filter(Boolean).join(' ')} `
       + `${o.league}${o.round ? ` ${o.round}` : ''} `
-      + `${o.home}${o.homeFav ? '(정)' : ''} vs ${o.away}${o.homeFav ? '' : '(정)'}`)
+      + `${o.home}${o[sideKey] ? `(${sideLabel})` : ''} vs ${o.away}${o[sideKey] ? '' : `(${sideLabel})`}`)
     .join('\n')
+}
+
+function sameOddsChips(sameOdds) {
+  if (!sameOdds) return []
+  const { fav, pl } = sameOdds
+  if (!fav && !pl) return []
+  const parts = []
+  const titleParts = []
+  if (fav) {
+    parts.push(`(정)${fav.odds}`)
+    titleParts.push(`[정] 같은 회차에 국내 정배배당이 ${fav.odds}로 똑같은 경기가 `
+      + `${fav.others.length}개 더 있습니다.\n${sameOddsList(fav, 'homeFav', '정')}`)
+  }
+  if (pl) {
+    parts.push(`(플)${pl.odds}`)
+    titleParts.push(`[플] 같은 회차에 국내 플핸(언더독 핸디)배당이 ${pl.odds}로 똑같은 경기가 `
+      + `${pl.others.length}개 더 있습니다.\n${sameOddsList(pl, 'homeDog', '플')}`)
+  }
   return [
-    <MatchChip
-      key="same-odds"
-      label="동배당"
-      title={`같은 회차에 국내 정배배당이 ${odds}로 똑같은 경기가 ${others.length}개 더 있습니다.\n${list}`}
-    >
-      {odds}
+    <MatchChip key="same-odds" label="동" tone="blue" title={titleParts.join('\n\n')}>
+      {parts.join('ㆍ')}
     </MatchChip>,
   ]
+}
+
+// 추가배당 뱃지 — '배당' 제목 옆에 국내 ±2·±3.5 핸디·언더오버(api/kr_extra_odds.py) 중
+// 4종(2플핸·3.5플핸·2.5언더·3.5언더)만 보여준다(2026-09-20 사용자 지정 — "그냥 타이틀
+// 옆에 뱃지만"). 국배(와이즈토토) 기준이고, 그 경기에 실제로 그 배당이 있을 때만 뜬다.
+// 값 계산은 '이번주 벳'(BetSlip.jsx)과 완전히 같은 로직(utils/extraOdds.js 공용).
+// tone="teal" — 눈에 잘 안 띈다는 지적으로(2026-09-20) 동배당 뱃지(파랑)와 다른
+// 색을 입혀 구분되게 한다. 좋다/나쁘다를 뜻하는 색이 아니라 그냥 구분용이다.
+const EXTRA_BADGE_TYPES = ['2플핸', '3.5플핸', '2.5언더', '3.5언더']
+
+function extraOddsBadgeTitle(resolved) {
+  const { odds, line, size } = resolved
+  if (line.market === 'U') {
+    return `국내(와이즈토토) 총득점 ${size} 언더오버 배당 — 두 팀 합계 득점이 ${size}보다`
+      + ` 적으면 적중입니다. 지금 배당 ${odds.toFixed(2)}.`
+  }
+  const handiText = `${Number(line.line) > 0 ? '+' : ''}${line.line}`
+  return `국내(와이즈토토) ${size}골차 핸디 배당 — 정배가 ${size}골차 이상 앞서지 못하면`
+    + `(무 포함) 적중입니다. 지금 배당 ${odds.toFixed(2)}(핸디 ${handiText} 기준).`
+}
+
+function extraOddsChips(row, extraOdds) {
+  if (!extraOdds?.length) return []
+  return EXTRA_BADGE_TYPES.map((pick) => {
+    const resolved = resolveExtraPick(row, pick, extraOdds)
+    if (!resolved) return null
+    return (
+      <MatchChip key={`extra-${pick}`} label={pick} tone="teal" title={extraOddsBadgeTitle(resolved)}>
+        {resolved.odds.toFixed(2)}
+      </MatchChip>
+    )
+  }).filter(Boolean)
 }
 
 // ── 플핸85 뱃지 (2026-09-09 실측) ────────────────────────────────────────────
@@ -2212,7 +2261,7 @@ function MyPickBar({ row, onSavePick, memoLead }) {
         <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-post" title="결과가 나온 뒤 적는 회고 메모">
           <RichMemoInput
             value={memo}
-            placeholder="결과 이후 생각을 입력해주세요"
+            placeholder="결과 반성 의견"
             onCommit={saveMemoIfChanged}
           />
         </div>
@@ -3825,7 +3874,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank, archiveTags }) {
+function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank, archiveTags, extraOdds }) {
   // '경기지표'의 무·전적 뱃지와 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -3839,7 +3888,10 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank
       <div className="pick-band-risk">
         <div className="pick-band-risk-cols">
           <div className="pick-band-risk-col">
-            <h3 className="pick-band-risk-col-title">배당</h3>
+            <h3 className="pick-band-risk-col-title">
+              배당
+              {extraOddsChips(row, extraOdds)}
+            </h3>
             <OddsTable row={row} weekRank={weekRank} />
           </div>
           <div className="pick-band-risk-col">
@@ -3891,7 +3943,7 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank
   )
 }
 
-function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSavePick }) {
+function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onClose, onSavePick }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
   const rt = rtLabel(row.RT)
@@ -4237,6 +4289,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
           xg={seasonXg}
           weekRank={weekRank}
           archiveTags={archiveTags}
+          extraOdds={extraOdds}
         />
 
         {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,
@@ -4567,6 +4620,7 @@ export default function MatchDetailModal({ code, scope, row: ident, onClose, onP
         scope={scope}
         sameOdds={loaded.data.same_odds}
         weekRank={weekRank}
+        extraOdds={loaded.data.extra_odds}
         onClose={onClose}
         onSavePick={handleSavePick}
       />

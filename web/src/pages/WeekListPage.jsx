@@ -380,6 +380,10 @@ export default function WeekListPage() {
             onCollapsedChange={setCollapsed}
             showRiskLegend={showRiskLegend}
             onShowRiskLegendChange={setShowRiskLegend}
+            // 요일별로 표를 쪼개 하루치씩만 rows로 넘기므로, 동배당 2중밑줄 비교는
+            // 이 회차 전체(모든 요일)를 담은 rows를 그대로 넘긴다(2026-09-20 —
+            // 표 하나만 보면 다른 요일에 뜬 동배당을 놓친다는 지적으로 추가).
+            oddsPool={rows}
           />
         </section>
       ))}

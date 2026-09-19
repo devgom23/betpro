@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
+import { EXTRA_PICK_TYPES, extraOddsForPick } from '../../utils/extraOdds'
 import './BetSlip.css'
+
+export { EXTRA_PICK_TYPES }
 
 export const PICK_TYPES = ['정', '역', '무', '핸승', '핸무', '플핸']
 
@@ -63,62 +66,6 @@ export function oddsForPick(row, pick, extraLines) {
   if (pick === '핸승') return homeIsFav ? khw : khl
   if (pick === '플핸') return homeIsFav ? khl : khw
   return null
-}
-
-// ── 추가배당 유형(±2·±3.5 핸디, 언더오버) ────────────────────────────────
-// 리그 표에는 없고 와이즈토토 국배를 채집할 때 따로 쌓아 둔 줄(api/kr_extra_odds.py)에서
-// 배당을 찾는다(2026-09-15 사용자 지정). 그 경기에 배당이 있는 유형만 드롭박스에 뜬다.
-// 핸디는 기존 핸승/핸무/플핸(±1)과 같은 정배 기준 — 2핸승 = 정배가 3골차 이상 승,
-// 2핸무 = 정확히 2골차 승, 2플핸 = 그 외. 3.5는 무 칸이 없다.
-export const EXTRA_PICK_TYPES = [
-  '2핸승', '2핸무', '2플핸', '3.5핸승', '3.5플핸', '2.5언더', '2.5오버', '3.5언더', '3.5오버',
-]
-const EXTRA_HANDI_RE = /^(2|3\.5)(핸승|핸무|플핸)$/
-const EXTRA_OU_RE = /^(2\.5|3\.5)(언더|오버)$/
-
-// 배당 전용 숫자 변환 — 빈 배당(null)을 0으로 읽지 않는다. Number(null)이 0이라 toNum만
-// 쓰면 "배당 없음"이 0이 되어, 최신배당(EK*)이 비었을 때 초기배당(K*)으로 넘어가지 못한다.
-const oddsNum = (v) => (v == null || v === '' ? null : toNum(v))
-
-// 줄 하나의 칸(1/X/2)마다 최신배당(EK*)이 있으면 그것, 없으면 초기배당(K*).
-const extraLatest = (x, ek, k) => {
-  const v = oddsNum(x?.[ek])
-  return v != null ? v : oddsNum(x?.[k])
-}
-
-// 지금 정배가 홈인지 — 최신배당 우선, 없으면 초기배당으로 승·패 배당 비교. 모르면 null.
-// 서버 판정(main.py _build_score_index)과 같은 기준이다.
-function homeIsFavNow(row) {
-  const kw = extraLatest(row, 'EKW', 'KW')
-  const kl = extraLatest(row, 'EKL', 'KL')
-  return kw == null || kl == null ? null : kw <= kl
-}
-
-// lines: 그 경기의 추가배당 줄 [{market:'H'|'U', line, K1,KX,K2, EK1,EKX,EK2}].
-// H의 line은 와이즈토토 표기 그대로 홈 기준(-2.0 = 홈 정배 -2), 칸은 1=홈 승/X=무/2=홈 패.
-// U의 칸은 1=언더/2=오버.
-function extraOddsForPick(row, pick, lines) {
-  if (!lines?.length) return null
-  const ou = EXTRA_OU_RE.exec(pick)
-  if (ou) {
-    const size = Number(ou[1])
-    const x = lines.find((l) => l.market === 'U' && Math.abs(Number(l.line) - size) < 1e-6)
-    if (!x) return null
-    return ou[2] === '언더' ? extraLatest(x, 'EK1', 'K1') : extraLatest(x, 'EK2', 'K2')
-  }
-  const h = EXTRA_HANDI_RE.exec(pick)
-  if (!h) return null
-  const size = Number(h[1])
-  const cands = lines.filter((l) => l.market === 'H' && Math.abs(Math.abs(Number(l.line)) - size) < 1e-6)
-  if (!cands.length) return null
-  // 같은 크기의 -·+ 줄이 둘 다 남아 있으면(배당이 뒤집힌 경기) 지금 정배와 부호가 맞는 줄.
-  // 서버 판정(kr_extra_odds.pick_handi_line)과 같은 규칙이다.
-  const fav = homeIsFavNow(row)
-  const x = (cands.length > 1 && fav != null && cands.find((l) => (Number(l.line) < 0) === fav)) || cands[0]
-  const favHome = Number(x.line) < 0
-  if (h[2] === '핸무') return extraLatest(x, 'EKX', 'KX')
-  const winFav = h[2] === '핸승'
-  return winFav === favHome ? extraLatest(x, 'EK1', 'K1') : extraLatest(x, 'EK2', 'K2')
 }
 
 // 그 경기에 고를 수 있는 유형 — 기본 6종 + 배당이 실제로 있는 추가배당 유형.
