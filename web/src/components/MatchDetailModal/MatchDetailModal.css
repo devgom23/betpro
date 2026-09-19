@@ -277,6 +277,11 @@
   font-size: 13px;
 }
 
+/* 의견 오른쪽 자유 텍스트(2026-09-19 사용자 지정 250px). */
+.mypick-bar-hitnote input {
+  width: 250px;
+}
+
 .mypick-bar-memo {
   flex: none;
   min-width: 0;

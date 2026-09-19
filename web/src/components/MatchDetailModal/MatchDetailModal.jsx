@@ -2405,6 +2405,9 @@ function MyPickBar({ row, onSavePick, lead, memoLead }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
   const [p, setP] = useState(row.MY_P || '')
   const [hit, setHit] = useState(row.MY_HIT || '')
+  // 의견 드롭박스 왼쪽 자유 텍스트 — 의견 태그와 별개의 참고용 메모(2026-09-19).
+  const [hitNote, setHitNote] = useState(row.MY_HIT_NOTE || '')
+  const [savedHitNote, setSavedHitNote] = useState(row.MY_HIT_NOTE || '')
   const [reasonTag, setReasonTag] = useState(row.REASON_TAG || '')
   // 배답픽 — 내픽과 선택지가 완전히 다른 별개의 참고용 태그(ODDS_PICK_OPTIONS).
   // 상세픽(p)처럼 어떤 집계·판정에도 안 쓰인다(2026-09-12 추가, 사용자 지정 —
@@ -2438,6 +2441,16 @@ function MyPickBar({ row, onSavePick, lead, memoLead }) {
     const next = e.target.value
     setHit(next)
     onSavePick({ hit: next || null })
+  }
+
+  function handleHitNoteChange(e) {
+    setHitNote(e.target.value)
+  }
+
+  function commitHitNote() {
+    if (hitNote === savedHitNote) return
+    setSavedHitNote(hitNote)
+    onSavePick({ hitNote: hitNote || null })
   }
 
   function handleReasonTagChange(e) {
@@ -2513,6 +2526,16 @@ function MyPickBar({ row, onSavePick, lead, memoLead }) {
             ))}
           </select>
         </label>
+        <div className="mypick-bar-field mypick-bar-hitnote" title="의견 태그와 별개로 자유롭게 적는 메모">
+          <input
+            type="text"
+            placeholder="의견 메모"
+            value={hitNote}
+            onChange={handleHitNoteChange}
+            onBlur={commitHitNote}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+          />
+        </div>
         <label className="mypick-bar-field">
           <select value={oddsPick} onChange={handleOddsPickChange}>
             <option value="">배답픽</option>
@@ -4773,7 +4796,8 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, onClose, onSave
 // 같은 회차·같은 배당 경기(sameOdds)와 이번주 순위(weekRank)도 여기서 메뉴와 무관하게 구한다.
 const PICK_FIELD_OF = {
   important: 'IMPORTANT', pick: 'MY_PICK', p: 'MY_P', hit: 'MY_HIT', memo: 'MEMO',
-  memoPre: 'MEMO_PRE', memoOk: 'MEMO_OK', reasonTag: 'REASON_TAG', oddsPick: 'MY_ODDS_PICK', oddsBet: 'MY_ODDS_BET',
+  memoPre: 'MEMO_PRE', memoOk: 'MEMO_OK', hitNote: 'MY_HIT_NOTE', reasonTag: 'REASON_TAG',
+  oddsPick: 'MY_ODDS_PICK', oddsBet: 'MY_ODDS_BET',
 }
 
 function pickStateOf(row) {

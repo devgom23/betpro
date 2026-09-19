@@ -955,6 +955,7 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
         row["MEMO"] = p["memo"] if p else None
         row["MEMO_PRE"] = p["memo_pre"] if p else None
         row["MEMO_OK"] = p["memo_ok"] if p else None
+        row["MY_HIT_NOTE"] = p["hit_note"] if p else None
         row["REASON_TAG"] = p["reason_tag"] if p else None
         row["MY_ODDS_PICK"] = p["odds_pick"] if p else None
         row["MY_ODDS_BET"] = p["odds_bet"] if p else None
@@ -1054,6 +1055,7 @@ class MyPickBody(BaseModel):
     memo: Optional[str] = None
     memo_pre: Optional[str] = None
     memo_ok: Optional[str] = None     # '분석맞음' 또는 None
+    hit_note: Optional[str] = None    # 의견 옆 자유 텍스트
     reason_tag: Optional[str] = None
     odds_pick: Optional[str] = None
     odds_bet: Optional[str] = None
@@ -1073,7 +1075,7 @@ def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_u
         user["username"], code, body.scope,
         body.S, body.R, body.No, body.HT, body.AT,
         body.starred, body.pick, body.hit, body.memo, body.p, body.reason_tag,
-        body.memo_pre, body.odds_pick, body.odds_bet, body.fields, body.memo_ok,
+        body.memo_pre, body.odds_pick, body.odds_bet, body.fields, body.memo_ok, body.hit_note,
     )
     return {"ok": True}
 
@@ -1581,6 +1583,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
                 rec["MEMO"] = p["memo"]
                 rec["MEMO_PRE"] = p["memo_pre"]
                 rec["MEMO_OK"] = p["memo_ok"]
+                rec["MY_HIT_NOTE"] = p["hit_note"]
                 rows.append(rec)
 
     rows.sort(key=lambda r: _betting_day_sort_key(r.get("DT"), r.get("TM")))
@@ -1743,6 +1746,7 @@ def archive_odds_bet_picks(user: dict = Depends(get_current_user)):
                 rec["MEMO"] = p["memo"]
                 rec["MEMO_PRE"] = p["memo_pre"]
                 rec["MEMO_OK"] = p["memo_ok"]
+                rec["MY_HIT_NOTE"] = p["hit_note"]
                 rec["REASON_TAG"] = p["reason_tag"]
                 rec["MY_ODDS_PICK"] = p["odds_pick"]
                 rec["MY_ODDS_BET"] = p["odds_bet"]

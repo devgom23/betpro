@@ -45,7 +45,7 @@ def list_my_picks(username: str, code: str, scope: str) -> list[dict]:
     con = _connect(username)
     try:
         rows = con.execute(
-            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, memo_ok, reason_tag, odds_pick, odds_bet, wp_hidden "
+            "SELECT S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, memo_ok, hit_note, reason_tag, odds_pick, odds_bet, wp_hidden "
             "FROM my_picks WHERE code=? AND scope=?",
             (code, scope),
         ).fetchall()
@@ -78,7 +78,7 @@ def hide_from_weekly_picks(username: str, items: list[dict]) -> int:
         con.close()
 
 
-PICK_COLUMNS = ("starred", "pick", "p", "hit", "memo", "memo_pre", "memo_ok", "reason_tag", "odds_pick", "odds_bet")
+PICK_COLUMNS = ("starred", "pick", "p", "hit", "memo", "memo_pre", "memo_ok", "hit_note", "reason_tag", "odds_pick", "odds_bet")
 
 
 def upsert_my_pick(username: str, code: str, scope: str,
@@ -87,7 +87,7 @@ def upsert_my_pick(username: str, code: str, scope: str,
                    p: str | None = None, reason_tag: str | None = None,
                    memo_pre: str | None = None, odds_pick: str | None = None,
                    odds_bet: str | None = None, fields: list[str] | None = None,
-                   memo_ok: str | None = None) -> None:
+                   memo_ok: str | None = None, hit_note: str | None = None) -> None:
     """fields를 주면 이미 있는 기록에서는 그 칸만 바꾸고 나머지는 DB 값을 그대로 둔다.
     화면이 들고 있던 옛 값으로 다른 칸(다른 메뉴에서 쓴 메모 등)을 덮어쓰지 않게 하려는 것
     (2026-09-13). 처음 생기는 기록은 안 준 칸이 빈 값으로 들어간다."""
@@ -100,15 +100,15 @@ def upsert_my_pick(username: str, code: str, scope: str,
         con.execute(
             f"""
             INSERT INTO my_picks
-                (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, memo_ok, reason_tag, odds_pick, odds_bet, wp_hidden, updated_dt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
+                (code, scope, S, R, No, HT, AT, starred, pick, p, hit, memo, memo_pre, memo_ok, hit_note, reason_tag, odds_pick, odds_bet, wp_hidden, updated_dt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
             ON CONFLICT(code, scope, S, R, No, HT, AT)
             DO UPDATE SET {update_set},
                           wp_hidden = 0, updated_dt = excluded.updated_dt
             """,
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at),
              max(0, min(2, int(starred or 0))), pick or None, p or None, hit or None, memo or None,
-             memo_pre or None, memo_ok or None, reason_tag or None, odds_pick or None, odds_bet or None),
+             memo_pre or None, memo_ok or None, hit_note or None, reason_tag or None, odds_pick or None, odds_bet or None),
         )
         con.commit()
     finally:
