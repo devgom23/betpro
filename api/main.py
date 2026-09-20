@@ -82,6 +82,7 @@ import user_leagues as USERLG  # noqa: E402
 import crawler as CRAWL        # noqa: E402
 import kr_crawler as KRCRAWL   # noqa: E402
 import kr_extra_odds as KXODDS   # noqa: E402
+import kr_game_no as KGNO        # noqa: E402
 import multibook_odds as MBODDS   # noqa: E402
 import f_ou_odds as FOUODDS   # noqa: E402
 import scoreman_odds as SCOREMAN  # noqa: E402
@@ -464,10 +465,63 @@ def _reorder_postponed_last(df: pd.DataFrame, rt_col: str = "RT", rt_is_label: b
     return df.loc[order]
 
 
-def _apply_league_filters(df, season, round, odds_query, team=None, team_side=None, team_fav=None):
+def _kno_series(db: str, code: str) -> pd.Series:
+    """그 리그 표의 행마다 국배 순번(kno)을 붙인 Series — 리그 표나 kr_game_no가 바뀔 때만
+    다시 만든다.
+
+    리그 표 조회마다 행 전체(최대 6천여 줄)를 훑어 키를 만들면 실측 35ms가 매 요청 붙는다
+    — CLAUDE.md 캐시 규칙대로 cached_derive에 얹어 그 비용을 한 번만 낸다.
+    """
+    def build():
+        df = DATA.load_league_df_ev(db, code)
+        if df.empty or not {"S", "R", "HT", "AT"}.issubset(df.columns):
+            return pd.Series(dtype="float64")
+        index = KGNO.load_index(db)
+        if not index:
+            return pd.Series(np.nan, index=df.index, dtype="float64")
+        kno = [(KGNO.lookup(index, code, s, r, ht, at) or {}).get("kno")
+               for s, r, ht, at in zip(df["S"], df["R"], df["HT"], df["AT"])]
+        return pd.Series(kno, index=df.index, dtype="float64")
+    return DATA.cached_derive(db, f"kno_series_{code}", build, tables=(code, KGNO.TABLE))
+
+
+def _reorder_by_kno(df: pd.DataFrame, kno_series: pd.Series) -> pd.DataFrame:
+    """같은 시즌+라운드 안에서 국배(와이즈토토) 순번(kno) 순으로 세운다(2026-09-20 사용자 지정
+    — "화면상에서는 와이즈토토에 보여지는 순서대로").
+
+    ⚠ No 값 자체는 절대 안 건드린다 — my_picks/bet_slips가 (S,R,No,HT,AT)로 경기를 찾기
+    때문에 No를 바꾸면 이미 저장된 별표·메모·베팅내역이 조용히 끊어진다. 화면에 보여주는
+    '순서'만 바꾸는 것이라 _reorder_postponed_last와 같은 방식이다.
+
+    국배를 아직 안 불러온 경기(kno 없음)는 그 라운드 안에서 kno가 있는 경기들 뒤에
+    원래 순서 그대로 붙는다 — 번호가 없는 경기를 중간에 끼워 넣으면 "국배 3번" 자리가
+    실제 와이즈토토 3번과 달라진다.
+    """
+    if df.empty or kno_series is None or kno_series.empty:
+        return df
+    if not {"S", "R"}.issubset(df.columns):
+        return df
+    kno = kno_series.reindex(df.index)
+    if not kno.notna().any():
+        return df
+    grp = df["S"].astype(str) + "\x00" + df["R"].astype(str)
+    grp_order = grp.map({g: i for i, g in enumerate(dict.fromkeys(grp))})
+    order = pd.DataFrame({
+        "grp_order": grp_order,
+        # kno가 없는 경기는 그 라운드 맨 뒤로
+        "no_kno": kno.isna().astype(int),
+        "kno": kno.fillna(0),
+        "orig": np.arange(len(df)),
+    }, index=df.index).sort_values(["grp_order", "no_kno", "kno", "orig"], kind="mergesort").index
+    return df.loc[order]
+
+
+def _apply_league_filters(df, season, round, odds_query, team=None, team_side=None, team_fav=None,
+                          kno_series=None):
     """
     분석표 조회 필터(시즌·라운드·배당 9종·팀)를 적용한다.
     화면 표시와 엑셀 다운로드가 반드시 같은 결과를 내도록 두 곳이 공유한다.
+    kno_series(_kno_series)를 주면 국배 순번 순으로 줄을 세운다(_reorder_by_kno).
     team은 그 팀이 나온 경기를 남긴다(상대전적 조회를 대체 — 2026-09-02, 팀
     하나만 골라 시즌·라운드·배당 조건과 함께 쓴다). team_side로 홈/원정만
     좁힐 수 있다: None(또는 'all')=홈이든 원정이든 / 'home'=홈일 때만 /
@@ -535,6 +589,10 @@ def _apply_league_filters(df, season, round, odds_query, team=None, team_side=No
             ["S", "_r", "_day", "_order", "_no"],
             ascending=[False, False, False, True, True], kind="mergesort").index]
 
+    # 국배 순번 → 연기 맨 아래 순서로 적용한다. 연기 처리를 나중에 해야 "연기는
+    # 무조건 맨 아래"가 국배 순번에 밀리지 않는다.
+    if kno_series is not None:
+        sub = _reorder_by_kno(sub, kno_series)
     sub = _reorder_postponed_last(sub)
     return sub, season, round
 
@@ -602,7 +660,8 @@ def league_rows(code: str,
          "KHL": khl, "FW": fw, "FD": fd, "FL": fl,
          "EKW": ekw, "EKD": ekd, "EKL": ekl, "EKHW": ekhw, "EKHD": ekhd,
          "EKHL": ekhl, "EFW": efw, "EFD": efd, "EFL": efl},
-        team=team, team_side=team_side, team_fav=team_fav)
+        team=team, team_side=team_side, team_fav=team_fav,
+        kno_series=_kno_series(db, code))
 
     total = len(sub)
     page = sub.iloc[offset: offset + limit]
@@ -3022,7 +3081,8 @@ def table_excel_download(code: str,
          "KHL": khl, "FW": fw, "FD": fd, "FL": fl,
          "EKW": ekw, "EKD": ekd, "EKL": ekl, "EKHW": ekhw, "EKHD": ekhd,
          "EKHL": ekhl, "EFW": efw, "EFD": efd, "EFL": efl},
-        team=team, team_side=team_side, team_fav=team_fav)
+        team=team, team_side=team_side, team_fav=team_fav,
+        kno_series=_kno_series(db, code))
 
     records = DATA.df_to_records(sub)
     _attach_my_picks(records, user["username"], code, scope)
@@ -3427,6 +3487,11 @@ def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
     # 해외 언더오버(스코어맨)도 같은 방식 — DB에 쌓기만 한다(api/f_ou_odds.py).
     f_ous = [(r.get("S"), r.get("R"), r.get("HT"), r.get("AT"), r.pop("_fou", None))
              for r in body.rows]
+    # 국배 기준 경기 순번도 같은 방식 — 리그 표가 아니라 kr_game_no에 쌓는다
+    # (2026-09-20. 화면 정렬과 "국배 몇 번째 경기냐" 구간대 분석이 이걸 쓴다).
+    gnos = [(r.get("S"), r.get("R"), r.get("HT"), r.get("AT"),
+             r.pop("_gno", None), r.pop("_gyear", None), r.pop("_kno", None))
+            for r in body.rows]
 
     # 업로드 양식과 같은 컬럼만 남긴다(_핸디기준 같은 참고용 필드는 저장하지 않는다)
     raw = pd.DataFrame(body.rows)
@@ -3472,6 +3537,9 @@ def crawl_save(body: CrawlSaveBody, user: dict = Depends(get_current_user)):
     if result.get("saved") and any(x[4] for x in f_ous):
         with DATA.table_write(db, FOUODDS.TABLE):
             result["f_ou_saved"] = FOUODDS.upsert(db, body.code, f_ous)
+    if result.get("saved") and any(x[4] is not None for x in gnos):
+        with DATA.table_write(db, KGNO.TABLE):
+            result["game_no_saved"] = KGNO.upsert(db, body.code, gnos)
     # 해배 가져오기로 저장한 경기들의 12개사 배당도 같이 — 뒤에서 받는다(2026-09-18).
     if result.get("saved"):
         keys = [(r.get("S"), r.get("R"), r.get("HT"), r.get("AT")) for r in body.rows
@@ -3498,6 +3566,37 @@ KR_LEAGUE_NAME_GUESS = {
     "K1": "K리그1", "K2": "K리그2", "EP": "EPL",
     "La": "라리가", "BD": "분데스리", "SA": "세리에A", "Er": "에레디비", "L1": "프리그1",
 }
+
+
+def _assign_kno(rows: list[dict]) -> None:
+    """국배 기준 경기 순번(_kno)을 그 자리에서 매긴다 — 시즌·라운드별로 와이즈토토에
+    뜬 순서(프로토 경기번호 gno) 그대로 1, 2, 3… 이다(kr_game_no.py 참고).
+
+    연말·연초에 걸친 라운드는 프로토 연도가 갈려 gno만으로는 앞뒤를 못 가리므로
+    (gyear, gno)를 묶어 정렬한다. 프로토에 안 올라온 경기(gno 없음)는 번호를 안 매긴다
+    — 억지로 채우면 "국배 기준 3번 경기"가 실제 와이즈토토 3번이 아니게 된다.
+    """
+    # 같은 경기가 두 번 걸려 오는 일이 있다 — 연기돼 다른 날로 옮겨진 경기는 와이즈토토가
+    # 원래 회차와 옮겨간 회차에 각각 올려서, 날짜 범위로 긁으면 둘 다 잡힌다(라리가 26-27
+    # 1R 실측: 10경기인데 11줄). 그대로 번호를 매기면 한 자리를 잡아먹어 1..N이 끊긴다.
+    # 실제로 열린 쪽(나중에 걸린 = 큰 번호)만 남긴다 — 저장되는 배당도 그쪽이다.
+    latest: dict[tuple, dict] = {}
+    for r in rows:
+        if r.get("_gno") is None:
+            continue
+        key = (str(r.get("S")), str(r.get("R")), str(r.get("HT")).strip(), str(r.get("AT")).strip())
+        prev = latest.get(key)
+        if prev is None or (r.get("_gyear") or 0, r["_gno"]) > (prev.get("_gyear") or 0, prev["_gno"]):
+            if prev is not None:
+                prev.pop("_kno", None)
+            latest[key] = r
+    by_round: dict[tuple, list[dict]] = {}
+    for (s_val, r_val, _, _), r in latest.items():
+        by_round.setdefault((s_val, r_val), []).append(r)
+    for group in by_round.values():
+        group.sort(key=lambda r: (r.get("_gyear") or 0, r["_gno"]))
+        for i, r in enumerate(group, start=1):
+            r["_kno"] = i
 
 
 def _season_round_date_range(db: str, code: str, season: str, round_: str):
@@ -3655,7 +3754,10 @@ def crawl_kr_fetch(body: CrawlKrFetchBody, user: dict = Depends(get_current_user
                 "_note": r.get("_note", ""),
                 # ±2·±3.5 핸디·언더오버 — 저장(/api/crawl/save) 때 kr_extra_odds로 따로 쓴다.
                 "_extra": r.get("_extra") or [],
+                # 국배 기준 순번 재료 — 저장 때 kr_game_no로 따로 쓴다(아래에서 _kno를 매긴다).
+                "_gno": r.get("_gno"), "_gyear": r.get("_gyear"),
             })
+        _assign_kno(matched_rows)
 
     return {
         "count": raw["count"], "fail_cnt": raw["fail_cnt"],

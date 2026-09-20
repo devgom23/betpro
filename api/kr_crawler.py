@@ -324,9 +324,18 @@ def _parse_round(html, target_league):
             "N2": None, "H2": None, "changed": False,
             # 추가배당 {(market, line): (초기, 최종)} — kr_extra_odds.py 참고
             "X": {},
+            # 프로토 경기번호(li.a1) — 화면에 뜬 순서 그대로다(kr_game_no.py 참고).
+            # 한 경기가 승무패·핸디·언더오버로 줄이 여러 개고 번호도 각각이라, 그중
+            # 가장 작은 번호(맨 위 = 승무패 줄)를 그 경기의 번호로 삼는다.
+            "gno": None,
         })
         if changed:
             rec["changed"] = True
+
+        a1 = u.select_one("li.a1")
+        gno = _int_or_none(a1.get_text(strip=True)) if a1 else None
+        if gno is not None and (rec["gno"] is None or gno < rec["gno"]):
+            rec["gno"] = gno
 
         if ou_line is not None:
             rec["X"][("U", ou_line)] = (restored, odds)
@@ -347,6 +356,14 @@ def _parse_round(html, target_league):
                 else:
                     rec["X"][("H", line)] = (restored, odds)
     return out
+
+
+def _int_or_none(v):
+    """정수로 읽히면 그 값, 아니면 None. 프로토 경기번호(li.a1)를 읽는 데 쓴다."""
+    try:
+        return int(str(v).strip())
+    except (TypeError, ValueError):
+        return None
 
 
 def _num_or_none(v):
@@ -378,6 +395,9 @@ def _to_row(rec):
     h2 = rec["H2"] or ["", "", ""]
     return {
         "HT": rec["HT"], "AT": rec["AT"],
+        # 국배 기준 경기 순번용 원본값 — 리그 표가 아니라 kr_game_no 테이블로 간다.
+        # gyear는 이 경기를 읽어 온 프로토 회차의 연도(아래 fetch_* 가 채운다).
+        "_gno": rec.get("gno"), "_gyear": rec.get("gyear"),
         # 초기배당(배변 이력을 되짚어 복원한 값)
         "KW": _num_or_none(n[0]), "KD": _num_or_none(n[1]), "KL": _num_or_none(n[2]),
         "KH": None,
@@ -416,6 +436,7 @@ def fetch_domestic(target_league: str, year, rnd) -> dict:
     for rec in matches.values():
         if rec["changed"]:
             changed_cnt += 1
+        rec["gyear"] = _int_or_none(year)
         rows.append(_to_row(rec))
 
     return {
@@ -458,6 +479,7 @@ def fetch_by_dates(target_league: str, d0: datetime, d1: datetime) -> dict:
             continue
         used.append(f"{y}년 {rnd}회차")
         for key, rec in got.items():
+            rec["gyear"] = _int_or_none(y)
             merged[key] = rec
 
     if not merged:
