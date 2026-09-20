@@ -481,8 +481,8 @@ function PickVerdictBadge({ row }) {
   )
 }
 
-// ── 상대전적 판정 뱃지 (2026-09-02 실측) ──
-// 홈우세 / 홈만우세 / 전적보합 / 원정만우세 / 원정우세 — 판정 규칙과 실측 근거는
+// ── 상대전적 판정 뱃지 (2026-09-02 실측, 2026-09-20 홈기준 단일화) ──
+// 홈우세 / 전적보합 / 원정우세 — 판정 규칙과 실측 근거는
 // utils/h2hVerdict.js 주석에 전부 적어 뒀다. 여기선 그 결과를 칩으로 그리기만 한다.
 // verdict는 /api/pick_ai가 이미 내려주는 h2h(wdl_summary·wdl_summary_home)로
 // 만든다 — 상대전적 카드가 쓰는 것과 같은 값이라 API를 더 부르지 않는다.
@@ -498,11 +498,13 @@ function PickVerdictBadge({ row }) {
 // 2026-09-02(4) — 처음엔 homeIsFav(국내배당 우선, 팝업 제목의 (정)/(역)과 같은
 // 기준)를 썼는데, 그러면 국내·해외가 갈리는 경기(약 4%)에서 판정 자체의 기준(해외)과
 // 관계 판정 기준(국내)이 서로 달라져 모순이 생긴다 — 실측 예시(26-27 2R 선덜랜드
-// vs 풀럼): 국내는 선덜랜드=정, 해외는 풀럼=정, 전적은 원정만우세(풀럼이 강함).
+// vs 풀럼): 국내는 선덜랜드=정, 해외는 풀럼=정, 전적은 원정우세(풀럼이 강함).
 // 종합 판정(정역)은 해외 기준이라 이 '정'도 풀럼이어야 맞다 — 그러면 전적(풀럼 지지)과
 // 판정(풀럼 지지)이 '같은방향'이 되는 게 맞다(homeIsFav 기준일 땐 '다른방향'으로
 // 잘못 나왔었다). 국내≠해외로 갈리는 경기는 '정배 국≠해' 뱃지가 따로 알려준다.
-const H2H_HOME_SIDE = { 홈우세: 'home', 홈만우세: 'home', 원정우세: 'away', 원정만우세: 'away' }
+// h2hVerdict가 이제 홈우세/전적보합/원정우세 3단계만 낸다(2026-09-20 — h2hVerdict.js
+// 주석 참고. '~만우세'가 없어지며 이 매핑도 2줄로 줄었다).
+const H2H_HOME_SIDE = { 홈우세: 'home', 원정우세: 'away' }
 
 function h2hRelation(verdictLabel, row, pick) {
   const side = H2H_HOME_SIDE[verdictLabel]
@@ -1068,12 +1070,12 @@ function SampleNoteInput({ value, onSave }) {
 }
 
 // 메모 칸 앞 '방향성' 드롭박스 — 고르는 즉시 저장. 블루=파랑, 레드=빨강(앱 전체 정/역
-// 칩 색과 같은 토큰), 약블루·약레드는 그보다 한 단계 옅은 색, 크로스=회색, 몰라는 기본색
-// (2026-09-15 사용자 지정).
+// 칩 색과 같은 토큰), 약블루·약레드는 그보다 한 단계 옅은 색, 엇갈림=회색, 몰라는 기본색
+// (2026-09-15 사용자 지정). '크로스'는 2026-09-20에 '엇갈림'으로 이름만 바꿨다(같은 회색).
 const SAMPLE_DIRECTION_CLASS = {
   블루: 'sample-dir-blue', 약블루: 'sample-dir-blue-weak',
   레드: 'sample-dir-red', 약레드: 'sample-dir-red-weak',
-  크로스: 'sample-dir-gray',
+  엇갈림: 'sample-dir-gray',
   표본없음: 'sample-dir-nosample',
 }
 
@@ -1576,6 +1578,37 @@ function fixed2(v) {
   return v === null || v === undefined ? '-' : Number(v).toFixed(2)
 }
 
+// 최근10경기 '공통 상대' 표시 — 홈팀과 원정팀이 최근 10경기 안에서 같은 팀과 붙은 적이
+// 있으면, 양쪽 그 칸 날짜 아래에 이중밑줄을 긋는다(2026-09-20 사용자 지정 — 예: 빌렘은
+// 9/16 원정으로 아약스에 1:5, 시타르트는 9/13 홈에서 아약스에 1:5 — 두 칸 다 표시).
+// 두 팀이 서로 직접 맞붙은 기록(공통 상대가 상대팀 자신인 경우)은 빼는데, 그건 '공통
+// 상대'가 아니라 둘의 직접 맞대결이라 상대전적 카드가 따로 보여주는 것과 겹친다.
+function opponentOf(teamName, cell) {
+  if (!cell?.game) return null
+  const ht = String(cell.game.HT || '').trim()
+  const at = String(cell.game.AT || '').trim()
+  if (ht === teamName) return at
+  if (at === teamName) return ht
+  return null
+}
+
+function commonOpponentMark(teams) {
+  const [home, away] = teams
+  const homeOpp = home.cells.map((c) => opponentOf(home.name, c))
+  const awayOpp = away.cells.map((c) => opponentOf(away.name, c))
+  const mark = { home: new Array(home.cells.length).fill(false), away: new Array(away.cells.length).fill(false) }
+  homeOpp.forEach((oh, i) => {
+    if (!oh || oh === away.name) return
+    awayOpp.forEach((oa, j) => {
+      if (oa === oh) {
+        mark.home[i] = true
+        mark.away[j] = true
+      }
+    })
+  })
+  return mark
+}
+
 function TeamFlowTable({ row, seasonRows, streaks, recent10, venueRank, leagueAvgXg }) {
   const [tip, setTip] = useState(null)
   const ht = String(row.HT || '').trim()
@@ -1594,6 +1627,7 @@ function TeamFlowTable({ row, seasonRows, streaks, recent10, venueRank, leagueAv
       cells: flowCells(rev(row.AR10), rev(row.AR10H), [...(recent10?.away || [])].reverse()),
     },
   ]
+  const commonMark = commonOpponentMark(teams)
   return (
     <div className="team-flow-wrap">
       <table className="detail-table team-flow-table">
@@ -1687,6 +1721,7 @@ function TeamFlowTable({ row, seasonRows, streaks, recent10, venueRank, leagueAv
                   const gl = i === 0 ? ' tf-gl' : ''
                   if (!c || !c.ch) return <td key={i} className={`tf-rc tf-rc-empty${gl}`}>-</td>
                   const g = c.game
+                  const isCommon = commonMark[t.key]?.[i]
                   return (
                     <td
                       key={i}
@@ -1695,7 +1730,12 @@ function TeamFlowTable({ row, seasonRows, streaks, recent10, venueRank, leagueAv
                       onMouseLeave={g ? () => setTip(null) : undefined}
                     >
                       {c.ch}
-                      <span className="tf-rc-date">{g ? recentDate(g.DT) : ''}</span>
+                      <span
+                        className={`tf-rc-date${isCommon ? ' tf-rc-common' : ''}`}
+                        title={isCommon ? `공통 상대 — ${t.name}과 상대팀 둘 다 최근 10경기 안에서 같은 팀과 붙었습니다.` : undefined}
+                      >
+                        {g ? recentDate(g.DT) : ''}
+                      </span>
                     </td>
                   )
                 })}
@@ -2304,7 +2344,7 @@ const SAMPLE_SECTION_KEYS = SAMPLE_SECTIONS.map(([k]) => k)
 const DIRECTION_TALLY_GROUPS = [
   { label: '블루', cls: 'is-blue', strong: '블루', weak: '약블루' },
   { label: '레드', cls: 'is-red', strong: '레드', weak: '약레드' },
-  { label: '크로스', cls: 'is-gray', strong: '크로스' },
+  { label: '엇갈림', cls: 'is-gray', strong: '엇갈림' },
   { label: '몰라', cls: 'is-unknown', strong: '몰라' },
   { label: '표본X', cls: 'is-nosample', strong: '표본없음' },
 ]
@@ -2620,10 +2660,13 @@ const TONE_FREQ = [
   ['통)해', '90.9%', '89.4%', '112건'],
 ]
 // 네 칸이 각각 어디서 표본을 세는지 — SCOPE_CODES와 짝이 맞아야 한다.
+// 표에 뜨는 순서(리)국·통)국·리)해·통)해 — 국 쌍이 먼저, 해 쌍이 나중)와 맞춘다.
+// 2026-09-20 사용자 지정으로 표 열 순서를 리/통 먼저에서 국/해 먼저로 바꿨다 —
+// 판정의 '엇갈림'이 국 쌍(리)국+통)국) vs 해 쌍(리)해+통)해)을 견주는 계산이라서다.
 const SCOPE_WHAT = [
   ['리)국', '이 리그 안에서만', '국내배당', 'K-WL · K-WDL'],
-  ['리)해', '이 리그 안에서만', '해외배당', 'F-WL · F-WDL'],
   ['통)국', '6대리그 전체', '국내배당', 'TK-WL · TK-WDL'],
+  ['리)해', '이 리그 안에서만', '해외배당', 'F-WL · F-WDL'],
   ['통)해', '6대리그 전체', '해외배당', 'TF-WL · TF-WDL'],
 ]
 // ── 8칸이 얼마나 같은 곳을 보느냐에 따른 당첨률 (2026-09-05 실측) ──
@@ -2848,21 +2891,21 @@ function DirectionScopeTable({ row }) {
             </button>
           </th>
           <th>리)국</th>
-          <th className="dscope-edge">리)해</th>
-          <th>통)국</th>
+          <th className="dscope-edge">통)국</th>
+          <th>리)해</th>
           <th>통)해</th>
         </tr>
       </thead>
       <tbody>
         <tr>
           <td className="row-label">초기</td>
-          {cell('리그', '국', false)}{cell('리그', '해', false, true)}
-          {cell('통합', '국', false)}{cell('통합', '해', false)}
+          {cell('리그', '국', false)}{cell('통합', '국', false, true)}
+          {cell('리그', '해', false)}{cell('통합', '해', false)}
         </tr>
         <tr>
           <td className="row-label">배변</td>
-          {cell('리그', '국', true)}{cell('리그', '해', true, true)}
-          {cell('통합', '국', true)}{cell('통합', '해', true)}
+          {cell('리그', '국', true)}{cell('통합', '국', true, true)}
+          {cell('리그', '해', true)}{cell('통합', '해', true)}
         </tr>
       </tbody>
     </table>
@@ -2898,10 +2941,11 @@ function DirectionScopeTable({ row }) {
 // ── 배당 표 참고표 (2026-09-06 실측, 6대리그 35,985경기) ──
 // 방향성 참고표(DirectionScopeLegend)와 같은 구성 — 재료 → 4칸 일치도별 당첨률 →
 // 만장일치 이름별 당첨률 → 색 기준(15건) → 왜 15건인가 → 칸별 색 빈도.
+// 표 열 순서(리)국·통)국·리)해·통)해)와 맞춘다 — SCOPE_WHAT 주석 참고.
 const ODDS_WHAT = [
   ['리)국', '이 리그 안에서만', '국내배당', '국)승 또는 패 + 국)플핸'],
-  ['리)해', '이 리그 안에서만', '해외배당', '해)승 또는 패만'],
   ['통)국', '6대리그 전체', '국내배당', '국통)승 또는 패 + 국통)플핸'],
+  ['리)해', '이 리그 안에서만', '해외배당', '해)승 또는 패만'],
   ['통)해', '6대리그 전체', '해외배당', '해통)승 또는 패만'],
 ]
 // 아래 네 표는 2026-09-06 다시 잰 값이다 — 재료에서 홈/원정 줄을 빼고, 이름 규칙을
@@ -3128,21 +3172,21 @@ function OddsScopeTable({ row }) {
             </button>
           </th>
           <th>리)국</th>
-          <th className="dscope-edge">리)해</th>
-          <th>통)국</th>
+          <th className="dscope-edge">통)국</th>
+          <th>리)해</th>
           <th>통)해</th>
         </tr>
       </thead>
       <tbody>
         <tr>
           <td className="row-label">초기</td>
-          {cell('리국', false)}{cell('리해', false, true)}
-          {cell('통국', false)}{cell('통해', false)}
+          {cell('리국', false)}{cell('통국', false, true)}
+          {cell('리해', false)}{cell('통해', false)}
         </tr>
         <tr>
           <td className="row-label">배변</td>
-          {cell('리국', true)}{cell('리해', true, true)}
-          {cell('통국', true)}{cell('통해', true)}
+          {cell('리국', true)}{cell('통국', true, true)}
+          {cell('리해', true)}{cell('통해', true)}
         </tr>
       </tbody>
     </table>
@@ -3301,8 +3345,9 @@ function NewSystemVerdictLegend({ onClose }) {
           <thead><tr><th>재료</th><th>어디에 쓰나</th><th>왜</th></tr></thead>
           <tbody>
             <tr>
-              <td><b>배당</b>(4칸)</td><td>픽 자체(정무·플핸무 같은 이름)</td>
-              <td>초기 4칸·배변 4칸을 그 시점 것만 따로 종합해 판단</td>
+              <td><b>배당</b>(4칸)</td><td>픽 자체(정무·플핸무·엇갈림 중 하나)</td>
+              <td>초기 4칸·배변 4칸을 그 시점 것만 따로 종합해 판단 — 국·해가 갈리면 먼저
+                엇갈림, 일치하면 아래 순서로 이름을 정함</td>
             </tr>
             <tr>
               <td><b>방향성</b>(8칸, 표본 가중)</td><td>신뢰도(별점) — 픽 이름에는 영향 없음</td>
@@ -3315,7 +3360,48 @@ function NewSystemVerdictLegend({ onClose }) {
           </tbody>
         </table>
 
-        <p className="help-legend-title">픽 — 배당 표 4칸 중에서, 그 시점 것만 씁니다</p>
+        <p className="help-legend-title">
+          픽을 정하는 순서 — ① 먼저 국·해가 갈리는지 본다, 갈리면 <b>엇갈림</b>
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>국 쌍(리)국+통)국)</th><th>해 쌍(리)해+통)해)</th><th>결과</th></tr></thead>
+          <tbody>
+            <tr>
+              <td colSpan={2}>같은 편(둘 다 정 또는 둘 다 플)</td>
+              <td>아래 ②표로 넘어가 이름을 정함</td>
+            </tr>
+            <tr>
+              <td colSpan={2}>다른 편</td>
+              <td><b className="newv-split">엇갈림</b>(배변은 괄호로 해 쪽 의견 — <b>엇(정)</b>/<b>엇(플)</b>)</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          쌍 안에서도 갈릴 수 있다(예: 리)국=플핸무인데 통)국=정무) — 그럴 땐 <b>통)쪽을
+          그 쌍의 의견</b>으로 본다. 쌍 안 불일치까지 엇갈림으로 치면(전체의 25%) 대상이
+          너무 줄어서, 쌍 사이 불일치(13.5%)만 엇갈림으로 다룬다(2026-09-20 사용자 지정,
+          6대리그 36,136경기 실측).
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead><tr><th>시점</th><th>일치 당첨률</th><th>엇갈림 당첨률</th><th>차이</th></tr></thead>
+          <tbody>
+            <tr><td>초기</td><td>83.62%(n=30,931)</td><td>76.63%(n=4,887)</td><td><b>−6.98%p</b>(z=−11.98)</td></tr>
+            <tr><td>배변</td><td>84.06%(n=30,819)</td><td>78.05%(n=4,897)</td><td><b>−6.01%p</b>(z=−10.47)</td></tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          <b>배변에서 갈리면 해(해외)를 따르는 쪽이 확실히 낫다</b> — 해 따름 78.68% vs
+          국 따름 72.68%, <b>+6.00%p, z=6.92, 6대리그 전부 같은 방향</b>이라 괄호에 해 쪽
+          의견을 적는다. 초기는 어느 쪽도 못 가린다(해 75.69% vs 국 75.49%, z=0.24,
+          리그 3/6뿐) — 그래서 초기는 괄호 없이 &apos;엇갈림&apos;만 쓴다.
+        </p>
+        <p className="help-legend-note">
+          적중/보험/미적은 엇갈림에도 <b>그대로 매긴다</b>(괄호의 해 쪽 방향 기준) —
+          다만 갈리지 않은 경기의 판정과 헷갈리지 않게, 적중 뱃지 색만 톤 다운한
+          노랑 하나로 칠하고 별점은 안 준다.
+        </p>
+
+        <p className="help-legend-title">② 국·해가 일치할 때 — 배당 표 4칸 중에서, 그 시점 것만 씁니다</p>
         <table className="detail-table help-legend-table">
           <thead><tr><th>상황</th><th>픽으로 쓰는 칸</th><th>근거</th></tr></thead>
           <tbody>
@@ -3467,7 +3553,9 @@ function NewSystemVerdictLegend({ onClose }) {
         </table>
         <p className="help-legend-note">
           방향성 8칸에 표본 있는 칸이 하나도 없으면(극히 드묾, 0.1%) 별점 없이 픽만
-          보여줍니다 — 못 잰 조합에 실측값을 억지로 붙이지 않습니다.
+          보여줍니다 — 못 잰 조합에 실측값을 억지로 붙이지 않습니다. <b>엇갈림도 별점을
+          안 줍니다</b> — 일치 경기보다 한 단계 아래라는 뜻은 %로만 전달하고(위 엇갈림
+          당첨률 표 참고), 몇 성이라는 확신 표시는 안 붙입니다.
         </p>
 
         <p className="help-legend-title">
@@ -3783,6 +3871,19 @@ function NewSystemVerdictLegend({ onClose }) {
   )
 }
 
+// 엇갈림 호버 문구 — 리그 표 판정 칸(LeagueTable.jsx VERDICT_SPLIT_TITLE)과 같은 내용이다.
+// 근거는 verdictCalc.js oddsPhaseSplit 주석(2026-09-20 6대리그 36,136경기 실측).
+const SYS_SPLIT_TITLE = {
+  초기: '엇갈림 — 국내 지표와 해외 지표가 서로 다른 픽을 냈습니다.'
+    + ' 이 자리의 당첨률은 76.63%로, 둘이 같을 때(83.62%)보다 6.98%p 낮습니다(z=-11.98).'
+    + '\n초기에는 어느 쪽을 따라도 차이가 없어(해 75.69% vs 국 75.49%, z=0.24, 리그 3/6)'
+    + ' 방향을 붙이지 않습니다.',
+  배변: '엇갈림 — 국내 지표와 해외 지표가 서로 다른 픽을 냈습니다.'
+    + ' 이 자리의 당첨률은 78.68%로, 둘이 같을 때(84.06%)보다 6.01%p 낮습니다(z=-10.47).'
+    + '\n괄호 안은 해외 지표 쪽 의견입니다 — 배변에서 갈리면 해외를 따르는 쪽이 확실히'
+    + ' 낫습니다(78.68% vs 국내 72.68%, +6.00%p, z=6.92, 리그 6/6 만장일치).',
+}
+
 function NewSystemVerdict({ row, init, fin }) {
   const [showLegend, setShowLegend] = useState(false)
   // 픽 이름을 조각으로 쪼개서, 실제 결과를
@@ -3802,6 +3903,17 @@ function NewSystemVerdict({ row, init, fin }) {
         <span className="newv-part">
           <span className="newv-label">{v.label}</span>
           <span className="dir-none">—</span>
+        </span>
+      )
+    }
+    // 엇갈림 — 국·해가 갈린 자리. 픽 이름 대신 '엇갈림'(배변은 '엇(정)·엇(플)')을
+    // 회색으로 그리고, 별점 대신 그 구간의 실측 당첨률만 보여준다(verdictCalc SPLIT_RATE).
+    if (v.split) {
+      return (
+        <span className="newv-part" title={SYS_SPLIT_TITLE[v.label]}>
+          <span className="newv-label">{v.label}</span>
+          <b className="sys-pick newv-split">{v.display}</b>
+          <span className="sys-rate">{v.rate.toFixed(2)}%</span>
         </span>
       )
     }
@@ -3855,13 +3967,17 @@ function NewSystemVerdict({ row, init, fin }) {
       <span className="newv-arrow">→</span>
       {part(fin, strong)}
       {fin.verdict && (
+        // 엇갈림에서 나온 판정이면 적중/보험/미적을 색으로 구분하지 않고 톤 다운한 노랑
+        // 하나로 칠한다 — 리그 표 적중 칸(.verdict-hit-split)과 같은 규칙(2026-09-20).
         <span
           className="match-chip match-chip-tone sys-verdict"
           style={{
-            background: `var(--chip-${VERDICT_TONE[fin.verdict]}-bg)`,
-            color: `var(--chip-${VERDICT_TONE[fin.verdict]}-fg)`,
+            background: `var(--chip-${fin.split ? 'yellow-soft' : VERDICT_TONE[fin.verdict]}-bg)`,
+            color: `var(--chip-${fin.split ? 'yellow-soft' : VERDICT_TONE[fin.verdict]}-fg)`,
             fontWeight: 700,
           }}
+          title={fin.split ? '엇갈림에서 나온 판정 — 값은 그대로지만 갈리지 않은 경기보다'
+            + ' 한 단계 아래라 색을 구분하지 않습니다.' : undefined}
         >
           {fin.verdict}
         </span>
@@ -4006,7 +4122,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
     ? { home: seasonSig.rows[0]?.xg?.[0], away: seasonSig.rows[1]?.xg?.[0] }
     : null
   const h2hSig = findSignal(pickData, 'h2h')
-  // 경기지표의 '전적' 뱃지(홈우세/홈만우세/전적보합/원정만우세/원정우세).
+  // 경기지표의 '전적' 뱃지(홈우세/전적보합/원정우세).
   // 상대전적 카드가 쓰는 것과 같은 h2h를 그대로 재사용한다 — API를 더 부르지 않는다.
   const h2hMark = pickData && pickData.h2h
     ? h2hVerdict(pickData.h2h.wdl_summary, pickData.h2h.wdl_summary_home)

@@ -191,7 +191,7 @@ def _ensure_sample_notes(con) -> None:
     """상세보기 표본 박스 7개(정배 표본·플핸 표본·해배 표본·국/해 승+패·국/해 승+무+패)의
     제목 옆 메모 — 경기 하나 × 표본 박스 하나에 1개(2026-09-15 사용자 지정).
     kind는 화면의 섹션 키 그대로(fav/pl/ffav/k_wl/f_wl/k_wdl/f_wdl).
-    direction: 메모 앞 '방향성' 드롭박스(블루/레드/크로스/몰라) — 2026-09-15 추가라
+    direction: 메모 앞 '방향성' 드롭박스(블루/레드/엇갈림/몰라) — 2026-09-15 추가라
     먼저 만든 테이블에는 없어 ALTER로 보강한다.
     ok: 그 표본 섹션의 의견(메모)이 결과로 맞았다는 '분석맞음' 표시(2026-09-19 추가,
     마이픽바의 memo_ok와 같은 개념 — 값은 '분석맞음' 또는 NULL)."""
@@ -254,6 +254,23 @@ def upsert_sample_note(username: str, code: str, scope: str, s: str, r: str, no:
              kind, *[values[c] or None for c in cols]),
         )
         con.commit()
+    finally:
+        con.close()
+
+
+def migrate_sample_note_direction(username: str, old: str, new: str) -> int:
+    """방향성 선택지 이름이 바뀌었을 때(예: '크로스'→'엇갈림', 2026-09-20) 그 계정에
+    이미 저장된 값을 전부 갈아 끼운다. 일회성 마이그레이션 스크립트에서만 부른다 —
+    화면 코드 경로에는 없다. 바뀐 행 수를 돌려준다."""
+    con = _connect(username)
+    try:
+        _ensure_sample_notes(con)
+        cur = con.execute(
+            "UPDATE sample_notes SET direction = ?, updated_dt = datetime('now') WHERE direction = ?",
+            (new, old),
+        )
+        con.commit()
+        return cur.rowcount
     finally:
         con.close()
 

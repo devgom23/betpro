@@ -327,6 +327,51 @@ export function resolveOddsPhasePick(row, final) {
   return { pick: base, flipped: false }
 }
 
+// ── 엇갈림 — 국(리)국+통)국)과 해(리)해+통)해)가 서로 다른 픽을 낼 때 ─────────────
+//
+// 쌍 안에서 갈리면(리)국≠통)국) 통)쪽을 그 쌍의 의견으로 본다(사용자 지정 'A안').
+// 쌍 안 불일치는 전체의 25%나 돼서, 그것까지 엇갈림으로 빼면(B안) 판정이 쓸 수 있는
+// 경기가 86.5%→67.4%로 줄어든다. 엇갈림 −6%p만으로도 충분히 크다고 보고 A안을 골랐다.
+//
+// 2026-09-20 실측(6대리그 36,136경기, 판정 계산을 파이썬으로 이식해 화면 JS와 36,336건
+// 전수 대조 검증 후 측정):
+//
+//   ① 갈리면 확실히 나쁘다 — 일치 대비
+//        초기 83.62%(n=30,931) → 76.63%(n=4,887)  −6.98%p, z=−11.98
+//        배변 84.06%(n=30,819) → 78.05%(n=4,897)  −6.01%p, z=−10.47
+//   ② ★ 배변에서는 방향이 있다 — 해(해외)를 따라야 한다
+//        해 따름 78.68% vs 국 따름 72.68% = +6.00%p, z=6.92, 리그 6/6 만장일치
+//   ③ 초기에서는 방향이 없다 — 동전던지기
+//        해 75.69% vs 국 75.49% = +0.20%p, z=0.24, 리그 3/6
+//
+// 그래서 배변만 괄호에 방향(해 쪽 의견)을 적고, 초기는 괄호 없이 '엇갈림'만 쓴다
+// — 근거가 없는데 방향이 있는 것처럼 보이면 안 된다.
+//
+// 표기는 표 칸이 좁아 배변을 '엇(정)'·'엇(플)'로 줄인다(사용자 지정). 상세보기도 같은
+// 이름을 쓴다 — 한 값에 이름이 둘이면 화면마다 달라 보인다.
+// 적중/보험/미적 판정은 엇갈림에도 그대로 매긴다(괄호 방향 기준, 사용자 지정) — 대신
+// 뱃지 색을 적중·보험·미적 구분 없이 하나로 칠해 "엇갈림에서 나온 판정"임을 표시한다.
+export const SPLIT_RATE = { 초기: 76.63, 배변: 78.68 }
+
+function splitDisplay(label, forrPick) {
+  return label === '배변' ? `엇(${DIR_SIDE[forrPick]})` : '엇갈림'
+}
+
+// 쌍(리·통) 하나의 의견 — 갈리면 통)쪽을 따른다.
+function pairSide(lig, tong) {
+  return tong ?? lig ?? null
+}
+
+// 국·해가 갈렸는지와 각 쪽 의견. 한쪽이라도 의견이 없으면 갈림으로 보지 않는다.
+export function oddsPhaseSplit(row, final) {
+  const codes = oddsScopeCodes(row)
+  const pickOf = (key) => scopeCell(row, codes[key], final).pick
+  const dom = pairSide(pickOf('리국'), pickOf('통국'))
+  const forr = pairSide(pickOf('리해'), pickOf('통해'))
+  if (!dom || !forr) return { split: false, dom, forr }
+  return { split: DIR_SIDE[dom] !== DIR_SIDE[forr], dom, forr }
+}
+
 // 신뢰도 — 방향성 8칸(시점 안 가림) 중 이 픽과 같은 편인 '표본 가중 비율'(0~1).
 // 칸마다 1표가 아니라 표본 수(40에서 상한)만큼 가중한다 — 실측(cap 5~100 스윕)으로
 // 40이 최적이었다. 표본 있는 칸이 하나도 없으면(극히 드묾, 0.1%) null.
@@ -429,6 +474,22 @@ export const PHASE_CELL_RATE = {
 export function phaseVerdict(row, final, label) {
   const { pick, flipped } = resolveOddsPhasePick(row, final)
   if (!pick) return { label, pick: null }
+  // 국·해가 갈리면 픽 대신 '엇갈림'을 낸다 — 걸 자리가 아니라는 표시라 적중/보험/미적
+  // 판정도 매기지 않는다(관망). 배변만 괄호에 방향(해 쪽)을 적는다(oddsPhaseSplit 주석).
+  const sp = oddsPhaseSplit(row, final)
+  if (sp.split) {
+    return {
+      label,
+      pick: sp.forr,                       // 걸어야 한다면 해 쪽 — 배변 6/6 근거
+      split: true,
+      display: splitDisplay(label, sp.forr),
+      rate: SPLIT_RATE[label] ?? null,     // 실측 상수(구간 평균) — 별점은 주지 않는다
+      stars: null,
+      verdict: sysPickVerdict(sp.forr, row.RT),   // 적중/보험/미적은 그대로 매긴다
+      flipped: false,
+      strong: null,
+    }
+  }
   const ratio = oddsPhaseWeightedRatio(row, pick)
   const band = ratio !== null ? weightedGradeOf(label, ratio) : null
   const bandRate = band ? band.rate : null
@@ -441,7 +502,8 @@ export function phaseVerdict(row, final, label) {
   const n = cell ? cell[1] : (band ? band.n : null)
   const stars = rate !== null ? starsOfNew(rate) : null
   const verdict = sysPickVerdict(pick, row.RT)
-  return { label, pick, flipped, ratio, rate, n, stars, bandRate, bandStars, strong, verdict }
+  return { label, pick, split: false, display: pick, flipped, ratio, rate, n, stars,
+           bandRate, bandStars, strong, verdict }
 }
 
 // '접전' 기준선 — 정배배당(배변 기준, 낮은 쪽)이 이 값 이상이면 접전으로 본다.

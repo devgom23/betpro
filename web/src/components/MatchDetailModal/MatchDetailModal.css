@@ -488,6 +488,14 @@
   color: var(--text-muted);
 }
 
+/* 공통 상대 — 홈팀·원정팀이 최근10경기 안에서 같은 팀과 붙은 적이 있으면 그 두 칸
+   날짜에 이중밑줄(리그 표 동배당 이중밑줄과 같은 스타일, 2026-09-20 사용자 지정). */
+.tf-rc-date.tf-rc-common {
+  text-decoration: underline double;
+  text-underline-offset: 2px;
+  color: var(--text-secondary);
+}
+
 .team-flow-table .tf-rc-empty {
   color: var(--text-muted);
   font-weight: 400;
@@ -1165,6 +1173,12 @@
   color: var(--text-muted);
 }
 
+/* 엇갈림 픽 — 정(파랑)·플(빨강) 어느 편도 아니라 회색으로 둔다
+   (리그 표의 .verdict-split과 같은 규칙). */
+.newv-split {
+  color: var(--text-muted);
+}
+
 .newv-arrow {
   color: var(--text-muted);
 }
@@ -1607,7 +1621,10 @@
   white-space: nowrap;
 }
 
-/* 리그 묶음과 통합 묶음 사이 — 확률 지표 표(risk-edge)와 같은 두께로. */
+/* 국 쌍(리)국+통)국)과 해 쌍(리)해+통)해) 사이 — 확률 지표 표(risk-edge)와 같은
+   두께로. 열 순서를 리/통 먼저가 아니라 국/해로 먼저 묶은 이유는 판정의 '엇갈림'이
+   국 쌍 vs 해 쌍을 견주는 계산이라, 표에서도 그 짝이 붙어 보여야 한눈에 읽힌다
+   (2026-09-20 사용자 지정 — verdictCalc.js oddsPhaseSplit 참고). */
 .detail-table.dscope-table th.dscope-edge,
 .detail-table.dscope-table td.dscope-edge {
   border-right: 2px solid var(--border-strong);

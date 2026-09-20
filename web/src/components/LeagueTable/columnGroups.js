@@ -725,9 +725,18 @@ export function computeAutoVerdict(pick, rt, row) {
 // 두 줄로 갈려도, 적중 판단은 최종 하나로만 한다). 배변 판정이 아직 없으면(픽이 없으면)
 // 초기 판정으로 대신한다 — CLAUDE.md 4-1과 같은 원칙. LeagueTable.jsx의 VERDICT_HIT_KEY
 // 칸(적중)도, 아래 summarizeSystemVerdicts도 이 함수 하나를 같이 쓴다.
-export function finalSystemPick(row) {
+// 엇갈림(국·해가 갈린 경기)도 적중/보험/미적은 그대로 매긴다 — 걸 방향이 괄호에
+// 있기 때문이다(2026-09-20 사용자 지정, verdictCalc.js oddsPhaseSplit 주석 참고).
+// 다만 "엇갈림에서 나온 판정"인 걸 화면에서 구분해야 해서 split도 같이 돌려준다.
+export function finalSystemInfo(row) {
   const fin = phaseVerdict(row, true, '배변')
-  return fin.pick ?? phaseVerdict(row, false, '초기').pick
+  if (fin.pick) return { pick: fin.pick, split: !!fin.split }
+  const init = phaseVerdict(row, false, '초기')
+  return { pick: init.pick ?? null, split: !!init.split }
+}
+
+export function finalSystemPick(row) {
+  return finalSystemInfo(row).pick
 }
 
 // 여러 행을 한꺼번에 적중/보험/미적 건수로 묶는다 — RtSummaryBar의 PickSummaryBar가

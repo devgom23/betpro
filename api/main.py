@@ -1225,7 +1225,9 @@ class SampleNoteBody(BaseModel):
 
 # web/src/utils/pickOptions.js SAMPLE_DIRECTION_OPTIONS와 같아야 한다 — 약블루·약레드가 여기 빠져 있어
 # 저장이 거절되던 것을 2026-09-19에 바로잡았다(표본없음도 같은 날 추가).
-SAMPLE_DIRECTIONS = ("블루", "약블루", "레드", "약레드", "크로스", "몰라", "표본없음")
+# '크로스'는 2026-09-20에 '엇갈림'으로 이름을 바꿨다(사용자 지정) — 기존 저장값은
+# my_picks.migrate_sample_note_direction으로 전부 일괄 변경했다.
+SAMPLE_DIRECTIONS = ("블루", "약블루", "레드", "약레드", "엇갈림", "몰라", "표본없음")
 
 
 @app.get("/api/leagues/{code}/sample_notes")

@@ -3,7 +3,7 @@ import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, oddsBetStyle, flowSideStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
   collapsedWidth, splitsOnFinal, oddsMoveDir, oddsUnmoved, riskUnmoved, riskMoveDir, toFinalRow, rtToText,
-  VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemPick, verdictAnyMarketMoved,
+  VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemInfo, verdictAnyMarketMoved,
 } from './columnGroups'
 import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
 import { seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
@@ -52,6 +52,25 @@ const VERDICT_NONE_TITLE = '판정 없음 — 통)해(해외 정배배당) 기�
 // 보여주지 않는다(2026-09-12 사용자 지정 — verdictAnyMarketMoved 참고).
 const VERDICT_UNMOVED_TITLE = '배변 없음 — 국내·해외 배당이 초기와 그대로입니다.'
   + ' 아직 최신배당이 안 들어왔거나, 들어왔어도 배당이 안 움직인 경기입니다.'
+
+// 엇갈림 — 국(리)국+통)국)과 해(리)해+통)해)가 서로 다른 픽을 낸 경기(2026-09-20 실측,
+// verdictCalc.js oddsPhaseSplit 주석에 근거 전부). 초기·배변의 성격이 달라 문구도 다르다.
+const VERDICT_SPLIT_TITLE = {
+  초기: '엇갈림 — 국내 지표와 해외 지표가 서로 다른 픽을 냈습니다. 이럴 때 당첨률은'
+    + ' 76.63%로, 둘이 같을 때(83.62%)보다 6.98%p 낮습니다(6대리그 36,136경기, z=-11.98).'
+    + '\n초기에는 어느 쪽을 따라도 차이가 없습니다(해 75.69% vs 국 75.49%, z=0.24,'
+    + ' 리그 3/6) — 방향을 못 정하는 자리라 픽을 내지 않습니다.',
+  배변: '엇갈림 — 국내 지표와 해외 지표가 서로 다른 픽을 냈습니다. 이럴 때 당첨률은'
+    + ' 78.68%로, 둘이 같을 때(84.06%)보다 6.01%p 낮습니다(6대리그 36,136경기, z=-10.47).'
+    + '\n괄호 안은 해외 지표 쪽 의견입니다 — 배변에서 갈리면 해외를 따르는 쪽이 확실히'
+    + ' 낫습니다(78.68% vs 국내 72.68%, +6.00%p, z=6.92, 리그 6/6 만장일치).'
+    + '\n※ 적중/보험/미적은 괄호 방향 기준으로 그대로 매기되, 갈리지 않은 경기와 구분되게'
+    + ' 적중 뱃지 색은 하나로 칠합니다. 별점은 주지 않습니다.',
+}
+
+const VERDICT_HIT_SPLIT_TITLE = '엇갈림(국·해가 갈린 경기)에서 나온 판정입니다 —'
+  + ' 적중/보험/미적 값 자체는 그대로지만, 갈리지 않은 경기보다 한 단계 아래라'
+  + ' 색을 구분하지 않고 하나로 칠합니다.'
 
 // 동배당 측정은 6대리그로만 한다(2026-09-05, 사용자 지정) — K1/K2(내 데이터)는
 // 배당 형성 방식이 달라 섞으면 안 되고, 필요하면 K1/K2끼리 따로 재야 한다.
@@ -137,8 +156,11 @@ const FORM_COLS = new Set(['HTF', 'HF', 'AF', 'ATF'])
 // 안 갈리고 한 줄로 합친 칸이라, 어느 줄이 그리는 호출이든 같은 값을 내야 한다 —
 // VERDICT_HIT_KEY 주석의 fit() 병합 설명 참고). 픽 자체(배변 없으면 초기로 대신)는
 // columnGroups.js의 finalSystemPick — 리그 조회 화면 위쪽 '판정' 요약 뱃지도 같은 걸 쓴다.
+// 엇갈림에서 나온 판정이면 split=true — 적중/보험/미적 값은 그대로 매기되 뱃지 색만
+// 하나로 칠한다(2026-09-20 사용자 지정). 갈리지 않은 경기의 판정과 눈으로 구분되게.
 function finalHitVerdict(baseRow) {
-  return computeAutoVerdict(finalSystemPick(baseRow), baseRow.RT)
+  const { pick, split } = finalSystemInfo(baseRow)
+  return { verdict: computeAutoVerdict(pick, baseRow.RT), split }
 }
 
 function dividerClass(g, isLastGroup) {
@@ -812,10 +834,13 @@ export default function LeagueTable({
                         // 않는다(2026-09-12, 본머스 vs 브렌트포드 제보 — verdictAnyMarketMoved 참고).
                         const showBlank = isFinal && !verdictAnyMarketMoved(baseRow)
                         const pick = showBlank ? null : v.pick
+                        // 엇갈림이면 픽 이름 대신 '엇갈림'(배변은 괄호에 해 쪽 방향)을 그린다.
+                        const split = !showBlank && v.split
+                        const shown = showBlank ? null : (v.display ?? v.pick)
                         // 초강추(국≠해)·강추(접전)는 배변 줄에만 붙는다 — strongPickTier
                         // 주석 참고. 초기 줄은 isFinal이 false라 항상 걸러진다.
                         // 이중밑줄(verdict-strong)은 두 단계가 똑같이 쓴다(사용자 지정).
-                        const strong = isFinal && !showBlank ? strongPickTier(baseRow, v) : null
+                        const strong = isFinal && !showBlank && !split ? strongPickTier(baseRow, v) : null
                         // 적중 — 최종(배변) 판정 기준, 위/아래 두 줄로 안 갈리고 합친 칸
                         // (finalHitVerdict 주석 참고).
                         const hitVerdict = finalHitVerdict(baseRow)
@@ -823,19 +848,28 @@ export default function LeagueTable({
                           <td
                             key={`${gi}-c`}
                             className={`collapsed-cell${strong ? ' verdict-strong' : ''}`}
-                            style={verdictCellStyle(pick) || undefined}
+                            style={verdictCellStyle(split ? null : pick) || undefined}
                             title={
                               strong ? STRONG_TIER_TITLE[strong]
                                 : showBlank ? VERDICT_UNMOVED_TITLE
-                                  : !pick ? VERDICT_NONE_TITLE : undefined
+                                  : split ? VERDICT_SPLIT_TITLE[v.label]
+                                    : !pick ? VERDICT_NONE_TITLE : undefined
                             }
                           >
-                            {pick || <span className="mypick-blank">－</span>}
-                            <SeasonEndMark row={baseRow} pick={pick} />
+                            {shown
+                              ? (split ? <span className="verdict-split">{shown}</span> : shown)
+                              : <span className="mypick-blank">－</span>}
+                            <SeasonEndMark row={baseRow} pick={split ? null : pick} />
                           </td>,
                           <td key={`${gi}-hit`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
-                            {hitVerdict ? (
-                              <span className="cell-badge" style={pickVerdictStyle(hitVerdict)}>{hitVerdict}</span>
+                            {hitVerdict.verdict ? (
+                              <span
+                                className={`cell-badge${hitVerdict.split ? ' verdict-hit-split' : ''}`}
+                                style={hitVerdict.split ? undefined : pickVerdictStyle(hitVerdict.verdict)}
+                                title={hitVerdict.split ? VERDICT_HIT_SPLIT_TITLE : undefined}
+                              >
+                                {hitVerdict.verdict}
+                              </span>
                             ) : (
                               <span className="mypick-blank">－</span>
                             )}
@@ -961,27 +995,40 @@ export default function LeagueTable({
                       // (2026-09-12, 본머스 vs 브렌트포드 제보 — verdictAnyMarketMoved 참고).
                       const showBlank = isFinal && !verdictAnyMarketMoved(baseRow)
                       const pick = showBlank ? null : v.pick
+                      // 엇갈림이면 픽 이름 대신 '엇갈림'(배변은 '엇갈림(플)/(정)')을 그린다.
+                      const split = !showBlank && v.split
+                      const shown = showBlank ? null : (v.display ?? v.pick)
                       // 초강추(국≠해)·강추(접전) — strongPickTier 주석 참고.
                       // 이중밑줄은 두 단계가 똑같이 쓴다(사용자 지정).
-                      const strong = isFinal && !showBlank ? strongPickTier(baseRow, v) : null
+                      // 엇갈림에는 안 붙인다 — "걸 자리가 아니다"와 "강력 추천"은 같이 못 선다.
+                      const strong = isFinal && !showBlank && !split ? strongPickTier(baseRow, v) : null
                       const hitVerdict = finalHitVerdict(baseRow)
                       cells = [
                         <td
                           key={`${gi}-c`}
                           className={strong ? 'verdict-strong' : undefined}
-                          style={verdictCellStyle(pick) || undefined}
+                          style={verdictCellStyle(split ? null : pick) || undefined}
                           title={
                             strong ? STRONG_TIER_TITLE[strong]
                               : showBlank ? VERDICT_UNMOVED_TITLE
-                                : !pick ? VERDICT_NONE_TITLE : undefined
+                                : split ? VERDICT_SPLIT_TITLE[v.label]
+                                  : !pick ? VERDICT_NONE_TITLE : undefined
                           }
                         >
-                          {pick || <span className="mypick-blank">－</span>}
-                          <SeasonEndMark row={baseRow} pick={pick} />
+                          {shown
+                            ? (split ? <span className="verdict-split">{shown}</span> : shown)
+                            : <span className="mypick-blank">－</span>}
+                          <SeasonEndMark row={baseRow} pick={split ? null : pick} />
                         </td>,
                         <td key={`${gi}-hit`} className={dividerClass(g, isLastGroup).trim() || undefined}>
-                          {hitVerdict ? (
-                            <span className="cell-badge" style={pickVerdictStyle(hitVerdict)}>{hitVerdict}</span>
+                          {hitVerdict.verdict ? (
+                            <span
+                              className={`cell-badge${hitVerdict.split ? ' verdict-hit-split' : ''}`}
+                              style={hitVerdict.split ? undefined : pickVerdictStyle(hitVerdict.verdict)}
+                              title={hitVerdict.split ? VERDICT_HIT_SPLIT_TITLE : undefined}
+                            >
+                              {hitVerdict.verdict}
+                            </span>
                           ) : (
                             <span className="mypick-blank">－</span>
                           )}
