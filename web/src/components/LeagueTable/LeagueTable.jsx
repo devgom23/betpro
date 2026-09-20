@@ -7,12 +7,13 @@ import {
 } from './columnGroups'
 import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
 import { seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
-import { LEAGUE_LABELS, formatDt, formatTime } from '../../utils/format'
+import { LEAGUE_LABELS } from '../../utils/format'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { api } from '../../api/client'
 import { pickPatchBody } from '../../utils/pickSave'
+import { sameOddsGroupTitle } from '../../utils/sameOdds'
 import { useFontSize } from '../../context/FontSizeContext'
 import './LeagueTable.css'
 
@@ -78,17 +79,6 @@ function fetchOddsPool() {
       .finally(() => { _oddsPoolPromise = null })
   }
   return _oddsPoolPromise
-}
-
-// 표 2중밑줄 호버 상세 — 상세보기 '동' 뱃지 호버 문구와 같은 형식으로 맞춘다
-// (sameOddsList, MatchDetailModal.jsx 참고).
-function dupOddsTitle(label, odds, entries, mark) {
-  const list = entries
-    .map((o) => `· ${[formatDt(o.dt), formatTime(o.tm)].filter(Boolean).join(' ')} `
-      + `${o.league}${o.round ? ` ${o.round}` : ''} `
-      + `${o.home}${o.markHome ? `(${mark})` : ''} vs ${o.away}${o.markHome ? '' : `(${mark})`}`)
-    .join('\n')
-  return `같은 회차에 국내 ${label}배당이 ${odds}로 똑같은 경기가 ${entries.length}개 더 있습니다.\n${list}`
 }
 
 // 동배(승=패)는 어느 쪽이 정배인지 못 가리므로 뺀다.
@@ -307,8 +297,9 @@ export default function LeagueTable({
           dt: o.DT, tm: o.TM, round: o.R, home: o.HT, away: o.AT,
           league: LEAGUE_LABELS[rowCode(o)] || rowCode(o) || '',
           markHome: Number(o[SAME_ODDS_W]) < Number(o[SAME_ODDS_L]),
+          hs: o.HS ?? null, as_: o.AS ?? null, rt: o.RT ?? null,
         }))
-        out.set(key, { col, title: dupOddsTitle('정배', odds, entries, '정') })
+        out.set(key, { col, title: sameOddsGroupTitle('정배', odds, entries, '정') })
       }
     }
     return out
@@ -328,8 +319,9 @@ export default function LeagueTable({
           dt: o.DT, tm: o.TM, round: o.R, home: o.HT, away: o.AT,
           league: LEAGUE_LABELS[rowCode(o)] || rowCode(o) || '',
           markHome: Number(o.KW) > Number(o.KL),
+          hs: o.HS ?? null, as_: o.AS ?? null, rt: o.RT ?? null,
         }))
-        out.set(key, { col, title: dupOddsTitle('플핸(언더독 핸디)', odds, entries, '플') })
+        out.set(key, { col, title: sameOddsGroupTitle('플핸(언더독 핸디)', odds, entries, '플') })
       }
     }
     return out
@@ -831,7 +823,7 @@ export default function LeagueTable({
                           <td
                             key={`${gi}-c`}
                             className={`collapsed-cell${strong ? ' verdict-strong' : ''}`}
-                            style={verdictCellStyle(pick, v.stars) || undefined}
+                            style={verdictCellStyle(pick) || undefined}
                             title={
                               strong ? STRONG_TIER_TITLE[strong]
                                 : showBlank ? VERDICT_UNMOVED_TITLE
@@ -977,7 +969,7 @@ export default function LeagueTable({
                         <td
                           key={`${gi}-c`}
                           className={strong ? 'verdict-strong' : undefined}
-                          style={verdictCellStyle(pick, v.stars) || undefined}
+                          style={verdictCellStyle(pick) || undefined}
                           title={
                             strong ? STRONG_TIER_TITLE[strong]
                               : showBlank ? VERDICT_UNMOVED_TITLE

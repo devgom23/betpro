@@ -796,13 +796,16 @@ export function formStyle(value) {
   return { background: '#8D6E63', color: '#fff', fontWeight: 700 }
 }
 
-// 판정 칸 글자색 — 별 3개(83%+)일 때만 색을 준다. 좁은 칸에 별 아이콘을 다 넣는
-// 대신, "이 픽은 믿을 만하다"는 신호를 색 하나로 압축한다(2026-09-07). 3개가 안
-// 되면 강조하지 않는다 — 색이 있고 없고 자체가 "3성이냐 아니냐"를 말해 준다.
-// 색은 방향성·배당 표·상세보기 '시스템 판정' 줄과 같은 축(정=파랑/플=초록).
-export function verdictCellStyle(pick, stars) {
-  if (!pick || stars !== 3) return undefined
-  const tone = DIR_SIDE[pick] === '정' ? 'blue' : 'green'
+// 판정 칸 글자색 — 정/플 어느 쪽 픽이든 항상 색을 준다(2026-09-20 — 예전엔 별
+// 3개(83%+)일 때만 색을 줘서 "색이 있고 없고 자체가 3성이냐 아니냐"를 말했는데,
+// 이중밑줄 없는 칸도 색을 달라는 사용자 지정으로 별 개수와 무관하게 항상 칠한다.
+// 이중밑줄(강추 표시, .verdict-strong)은 이 색과 완전히 별개 조건이다 — strongPickTier가
+// 정하고, 배변 줄의 플핸무 별3개 중 일부(국≠해·접전·반전)에만 붙는다. 색은 정=파랑/
+// 플=빨강 — SeasonStats.css(.ss-ratio-jung/.ss-ratio-pl)·flowSideStyle과 같은 축.
+export function verdictCellStyle(pick) {
+  const side = DIR_SIDE[pick]
+  if (!side) return undefined
+  const tone = side === '정' ? 'blue' : 'red'
   return { color: `var(--chip-${tone}-fg)`, fontWeight: 700 }
 }
 

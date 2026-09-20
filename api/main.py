@@ -706,6 +706,11 @@ def _same_odds_for(row: dict) -> Optional[dict]:
                 "tm": None if pd.isna(r.get("TM")) else r.get("TM"),
                 "home": str(r.get("HT") or "").strip(),
                 "away": str(r.get("AT") or "").strip(),
+                # 지난 경기면 상세보기 뱃지 호버에 결과(스코어·핸승/핸무/무/역)까지 보여준다
+                # (2026-09-20 사용자 지정). 아직 안 끝난 경기는 셋 다 null.
+                "hs": None if pd.isna(r.get("HS")) else int(r.get("HS")),
+                "as_": None if pd.isna(r.get("AS")) else int(r.get("AS")),
+                "rt": None if pd.isna(r.get("RT")) else int(r.get("RT")),
             }
             if bool(fav_hit.loc[idx]):
                 fav_others.append({**entry_base, "homeFav": float(r["KW"]) < float(r["KL"])})

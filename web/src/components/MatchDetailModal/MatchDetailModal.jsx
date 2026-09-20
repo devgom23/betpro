@@ -28,6 +28,7 @@ import { rankByKind, rankInfoOf, top20Score } from '../../utils/weekTop20'
 import { buildRankBadge } from '../../utils/weekRankBadge'
 import { pickPatchBody } from '../../utils/pickSave'
 import { resolveExtraPick } from '../../utils/extraOdds'
+import { sameOddsGroupTitle } from '../../utils/sameOdds'
 import './MatchDetailModal.css'
 
 
@@ -614,14 +615,10 @@ function drawChips(row, pick) {
 // 나쁘다를 뜻하는 색(초록/빨강/노랑 등)은 안 쓴다. 다만 눈에 잘 안 띈다는 지적으로
 // (2026-09-20) 의미 없는 파란색만 입혀 구분되게 한다. 호버에는 경기 정보만 보여준다
 // — 실측 설명은 memory에 남겨 뒀다.
-function sameOddsList(group, sideKey, sideLabel) {
-  return group.others
-    .map((o) => `· ${[formatDt(o.dt), formatTime(o.tm)].filter(Boolean).join(' ')} `
-      + `${o.league}${o.round ? ` ${o.round}` : ''} `
-      + `${o.home}${o[sideKey] ? `(${sideLabel})` : ''} vs ${o.away}${o[sideKey] ? '' : `(${sideLabel})`}`)
-    .join('\n')
-}
-
+// 호버 문구 자체는 sameOddsGroupTitle(utils/sameOdds.js)에서 만든다 — 리그 표
+// 이중밑줄 호버(LeagueTable.jsx dupFavCol/dupPlCol)와 완전히 같은 함수를 쓴다
+// (2026-09-20 사용자 지적 — 같은 내용이 두 곳에서 따로 구현돼 있어 한쪽만 고치면
+// 다른 쪽이 안 맞았다). 지난 경기(hs/as_/rt가 있음)면 스코어·판정까지 같이 나온다.
 function sameOddsChips(sameOdds) {
   if (!sameOdds) return []
   const { fav, pl } = sameOdds
@@ -630,13 +627,13 @@ function sameOddsChips(sameOdds) {
   const titleParts = []
   if (fav) {
     parts.push(`(정)${fav.odds}`)
-    titleParts.push(`[정] 같은 회차에 국내 정배배당이 ${fav.odds}로 똑같은 경기가 `
-      + `${fav.others.length}개 더 있습니다.\n${sameOddsList(fav, 'homeFav', '정')}`)
+    const entries = fav.others.map((o) => ({ ...o, markHome: o.homeFav }))
+    titleParts.push(`[정] ${sameOddsGroupTitle('정배', fav.odds, entries, '정')}`)
   }
   if (pl) {
     parts.push(`(플)${pl.odds}`)
-    titleParts.push(`[플] 같은 회차에 국내 플핸(언더독 핸디)배당이 ${pl.odds}로 똑같은 경기가 `
-      + `${pl.others.length}개 더 있습니다.\n${sameOddsList(pl, 'homeDog', '플')}`)
+    const entries = pl.others.map((o) => ({ ...o, markHome: o.homeDog }))
+    titleParts.push(`[플] ${sameOddsGroupTitle('플핸(언더독 핸디)', pl.odds, entries, '플')}`)
   }
   return [
     <MatchChip key="same-odds" label="동" tone="blue" title={titleParts.join('\n\n')}>
