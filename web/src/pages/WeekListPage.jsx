@@ -220,16 +220,13 @@ export default function WeekListPage() {
       const idx = leagueOrder.get(row.L)
       return idx === undefined ? Number.MAX_SAFE_INTEGER : idx
     }
-    // 같은 리그 안에서의 순서는 킥오프 시각으로 가른다. 단 새벽 경기(6시 이전)는
-    // 그 베팅일의 '가장 늦은' 경기이므로 2400을 더해 맨 뒤로 보낸다
-    // — 백엔드 _betting_day_sort_key와 같은 규칙(안 그러면 0130 경기가 2300 앞에 온다).
-    const tmOf = (row) => {
-      const n = Number(row.TM)
-      if (!Number.isFinite(n)) return 0
-      return Math.floor(n / 100) < 6 ? n + 2400 : n
-    }
+    // 리그 탭 순서로만 묶는다 — 같은 리그 안의 순서는 서버가 준 그대로 쓴다.
+    // 서버가 국배(와이즈토토) 순번 → 킥오프 시각 순으로 이미 세워서 보내기 때문이다
+    // (api/main.py week_list의 _week_sort_key. 리그 표 정렬과 같은 규칙이라 한 곳만
+    // 고치면 두 화면이 같이 바뀐다 — 2026-09-20 사용자 지정). Array.sort는 안정
+    // 정렬이라 rank가 같은 행들끼리는 받은 순서가 그대로 유지된다.
     for (const sec of buckets.values()) {
-      sec.rows.sort((a, b) => rank(a) - rank(b) || tmOf(a) - tmOf(b))
+      sec.rows.sort((a, b) => rank(a) - rank(b))
       sec.verdict = summarizeVerdicts(sec.rows)
       // 시스템 판정(위 '판정' 칸) 기준 적중/보험/미적 — 2026-09-12 추가, LeaguePage.jsx와
       // 같은 계산(columnGroups.js summarizeSystemVerdicts).

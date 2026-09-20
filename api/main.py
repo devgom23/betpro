@@ -1917,6 +1917,10 @@ def week_list(start: Optional[str] = None, end: Optional[str] = None,
         except HTTPException:
             continue
         labels = _scope_league_labels(scope, user)
+        # 국배(와이즈토토) 순번 — 화면(WeekListPage)이 요일 안에서 이 순서로 세운다.
+        # 리그 표 정렬과 같은 값이다(kr_game_no.py 참고).
+        kno_idx = DATA.cached_derive(db, "kr_game_no_index", lambda: KGNO.load_index(db),
+                                     tables=(KGNO.TABLE,))
         for code in _scope_league_codes(scope, user):
             # EV/위험도는 리그 전체 이력이 있어야 계산되므로 전체에 붙은 표를 받아
             # 해당 날짜 행만 골라 쓴다(계산 자체는 DB가 바뀔 때만 다시 한다).
@@ -1937,11 +1941,26 @@ def week_list(start: Optional[str] = None, end: Optional[str] = None,
                 rec["L"] = code
                 rec["L_LABEL"] = labels.get(code, code)
                 rec["scope"] = scope
+                # 아직 국배를 안 불러온 경기는 null — 그 리그 경기들 뒤로 간다.
+                info = KGNO.lookup(kno_idx, code, rec.get("S"), rec.get("R"),
+                                   rec.get("HT"), rec.get("AT")) if kno_idx else None
+                rec["KNO"] = (info or {}).get("kno")
                 rows.append(rec)
 
-    rows.sort(key=lambda r: _betting_day_sort_key(r.get("DT"), r.get("TM")))
+    # 줄 세우는 규칙은 여기 한 곳에서만 정한다 — 화면(WeekListPage)은 요일·리그로 묶기만
+    # 하고 그 안의 순서는 이 결과를 그대로 쓴다(2026-09-20 사용자 지정 — "같은 내용은
+    # 한 곳만 고치면 다른 데서도 같이 바뀌게"). 리그 표 정렬(_reorder_by_kno)과 같은
+    # 규칙이다: 같은 라운드 안에서 국배 순번(KNO) 오름차순, 순번 없는 경기는 뒤로,
+    # 그래도 같으면 킥오프 시각 순.
+    def _week_sort_key(r):
+        day, tm_order = _betting_day_sort_key(r.get("DT"), r.get("TM"))
+        kno = r.get("KNO")
+        return (day, _round_sort_key(r.get("R")), 1 if kno is None else 0, kno or 0, tm_order)
+
+    rows.sort(key=_week_sort_key)
+    # KNO는 줄 세우는 데만 쓰고 칸으로는 안 보여준다(L_LABEL·scope와 같은 취급).
     columns = ["L"] + [c for c in (list(rows[0].keys()) if rows else [])
-                       if c not in ("L", "L_LABEL", "scope")]
+                       if c not in ("L", "L_LABEL", "scope", "KNO")]
     return {"columns": columns, "rows": rows, "total": len(rows),
             "start": lo, "end": hi, "label": label}
 
