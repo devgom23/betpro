@@ -29,6 +29,7 @@ import { buildRankBadge } from '../../utils/weekRankBadge'
 import { pickPatchBody } from '../../utils/pickSave'
 import { resolveExtraPick } from '../../utils/extraOdds'
 import { sameOddsGroupTitle } from '../../utils/sameOdds'
+import { autoSampleDirection, sectionSelfTotal, axisVerdict, axisMatchPct, AXIS_FALLBACK } from '../../utils/sampleDirection'
 import './MatchDetailModal.css'
 
 
@@ -743,6 +744,100 @@ function plhan85Chips(row, verdict) {
   ]
 }
 
+// ── 플축 · 정축 뱃지 (2026-09-21 실측, 사용자 지정) ───────────────────────────
+// 축 = 보험 없는 단통. 플축 = 무+역(RT3+4), 정축 = 핸승+핸무(RT1+2).
+// 조건·실측은 utils/sampleDirection.js의 axisVerdict 주석. 방향성은 자동 판정 기준이라
+// 드롭박스에서 직접 고른 값과는 무관하다. 전적(최근 5시즌)이 필요해 pick_ai 응답 전엔 안 뜬다.
+function axisContextText(c) {
+  const side = (s) => (s === '보합' ? '보합' : `${s}편`)
+  const h2hTxt = c.h2hN ? `${side(c.h2h)}(${c.h2hN}경기, ${c.h2hEdge >= 0 ? '+' : ''}${c.h2hEdge.toFixed(2)})` : '맞대결 없음'
+  return `자동 방향성: 레드 ${c.nred} · 블루 ${c.nblue} (7개 중)\n`
+    + `국내 정배배당 ${c.jungOdds.toFixed(2)} · 배당신호 ${c.cues.length ? c.cues.join('·') : '없음'}\n`
+    + `전적(최근 5시즌) ${h2hTxt} · 시즌폼 ${side(c.form)} · 순위 ${side(c.rank)}`
+}
+
+const pct1 = (v) => (v === null || v === undefined ? '—' : `${Number(v).toFixed(1)}%`)
+const signed1 = (v) => `${v >= 0 ? '+' : ''}${Number(v).toFixed(1)}%p`
+
+// 등급 한 줄 — 18시즌 실측(서버가 결과 쌓일 때마다 다시 잰 값).
+function tierLine(key, t, seasons) {
+  return `${key} ${t.text}\n`
+    + `   → 지난 ${t.n}경기 ${pct1(t.rate)} (같은 배당 기대 ${pct1(t.exp)}, ${signed1(t.uplift)})\n`
+    + `   → ${seasons?.early || '앞 시즌'} ${pct1(t.early)} / ${seasons?.late || '최근 6시즌'} ${pct1(t.late)}`
+    + ` · 회수율 ${t.roi?.toFixed(3) ?? '—'} · 한 시즌 약 ${t.per_season ?? '—'}경기`
+}
+
+// 이 경기 %가 어떻게 나왔는지 — 배당 기대 + 등급 몫(A안).
+function matchPctLine(m, sideText) {
+  if (m.exp === null) return `이 경기 ${sideText}: ${pct1(m.pct)} (배당 모델을 못 내서 등급 평균으로 표시)`
+  return `이 경기 ${sideText}: 배당만 보면 ${pct1(m.exp)} ${signed1(m.tier.uplift)}(등급 몫) = ${pct1(m.pct)}`
+}
+
+function axisStatsNote(stats) {
+  return stats?.computed_at
+    ? `※ 수치는 ${stats.computed_at} 기준 ${stats.games?.toLocaleString()}경기로 다시 잰 값 — 결과가 쌓이면 서버가 스스로 다시 잽니다.`
+    : '※ 서버 재측정 값을 아직 못 받아 2026-09-21 측정값으로 표시합니다.'
+}
+
+function axisChips(row, seasonSample, h2hMatches, axisStats) {
+  const v = axisVerdict(seasonSample?.samples, row, h2hMatches)
+  if (!v) return []
+  const seasons = axisStats?.seasons || AXIS_FALLBACK.seasons
+  const chips = []
+  if (v.pl) {
+    // 여러 등급이 겹치면 이 경기 %가 가장 높게 나오는 등급을 뱃지에 쓴다.
+    const ms = v.plAll.map((k) => ({ k, ...axisMatchPct(row, axisStats, k) }))
+    const best = ms.reduce((a, b) => ((b.pct ?? 0) > (a.pct ?? 0) ? b : a))
+    chips.push(
+      <MatchChip
+        key="pl-axis"
+        label="플축"
+        tone="red"
+        title={'플축 — 단통 플핸(무+역): "정배는 못 이긴다"\n'
+          + `${matchPctLine(best, `단통 플핸 (${best.k})`)}\n\n`
+          + ms.map((m) => tierLine(m.k, m.tier, seasons)).join('\n')
+          + `\n\n${axisContextText(v.ctx)}\n\n${axisStatsNote(axisStats)}`}
+      >
+        {best.pct?.toFixed(0)}%
+      </MatchChip>,
+    )
+  } else if (v.ctx.nred === 7) {
+    const m = axisMatchPct(row, axisStats, 'RED7')
+    chips.push(
+      <MatchChip
+        key="pl-red7"
+        label="7레드"
+        title={'자동 방향성 7개가 전부 레드·약레드지만 플축 조건(배당신호, 또는 정배배당 2.1 초과 +'
+          + ' 전적 정배편 아님)이 없습니다.\n'
+          + `이런 경기는 지난 ${m.tier.n}경기 단통 플핸 ${pct1(m.tier.rate)} — 같은 배당 기대 ${pct1(m.tier.exp)}와`
+          + ' 차이가 없어 색을 입히지 않았습니다.\n\n' + axisContextText(v.ctx)}
+      >
+        약함
+      </MatchChip>,
+    )
+  }
+  if (v.jung) {
+    const m = axisMatchPct(row, axisStats, v.jung)
+    chips.push(
+      <MatchChip
+        key="jung-axis"
+        label="정축"
+        tone="blue"
+        title={'정축 — 단통 정(핸승+핸무): "정배가 이긴다"\n'
+          + `${matchPctLine(m, `단통 정 (${v.jung})`)}\n\n`
+          + tierLine(v.jung, m.tier, seasons)
+          + `\n\n${axisContextText(v.ctx)}\n\n`
+          + '⚠ 같은 배당의 원래 적중률만큼만 맞습니다(등급 몫이 거의 0) — 적중률은 높지만 배당이 낮아'
+          + ' 단통으로 계속 걸면 회수율 약 0.91(100만 원당 약 9만 원 손실). 조합에 넣으면 손실이 곱해집니다.\n'
+          + axisStatsNote(axisStats)}
+      >
+        {m.pct?.toFixed(0)}%
+      </MatchChip>,
+    )
+  }
+  return chips
+}
+
 // 아카이브 뱃지 — 내가 이 팀·맞대결에 달아 둔 태그(📌). 다른 뱃지는 데이터가 만든 신호지만
 // 이건 내가 직접 남긴 경고라 경기지표 맨 앞에 둔다(2026-09-13). 판정·별점에는 반영 안 한다.
 // '이후 성적'은 서버가 이 경기 직전까지만 센 값이다(/api/archive/for_match).
@@ -770,7 +865,7 @@ function archiveChips(tags) {
   })
 }
 
-function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds, xg, archiveTags }) {
+function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds, xg, archiveTags, seasonSample, h2hMatches, axisStats }) {
   // 똥배 → 국/해 엇갈림 → 전적 → 무 → 동배당을 세로로 쌓는다.
   // (배당차 뱃지는 2026-09-02에 옆 칸 표로 뺐다가 2026-09-05에 아예 삭제했다 —
   //  정배배당을 다시 적은 값이라 확률 지표와 중복이었다. DirectionScopeTable 주석 참고.)
@@ -778,7 +873,8 @@ function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds,
   // 이것만 "그래서 어떻게 하라"에 가장 가까운 결론이라 눈에 먼저 들어와야 한다.
   // 시즌막판(정무 주의)도 '어떻게 하라'에 가까워 플핸85 바로 뒤에 둔다.
   // 아카이브(📌 내가 단 태그)는 그보다도 앞 — archiveChips 주석 참고.
-  const chips = [...archiveChips(archiveTags), ...plhan85Chips(row, verdict), ...seasonStakeChips(row),
+  const chips = [...archiveChips(archiveTags), ...axisChips(row, seasonSample, h2hMatches, axisStats),
+    ...plhan85Chips(row, verdict), ...seasonStakeChips(row),
     ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
     ...favFlipChips(row),
     ...xgChips(row, xg),
@@ -1079,15 +1175,45 @@ const SAMPLE_DIRECTION_CLASS = {
   표본없음: 'sample-dir-nosample',
 }
 
-function SampleDirectionSelect({ value, onSave }) {
+// 방향성 자동 판정(2026-09-21 사용자 지정 — "7개 지표의 방향성 선택값을 자동으로").
+// 직접 고른 값이 없으면 드롭박스가 자동값을 그대로 보여준다(색까지). 자동값은 저장하지
+// 않는다 — 그때그때 표본으로 다시 내고, 사용자가 직접 고른 값(435개)과 섞이지 않게.
+// 직접 고르면 그 값이 우선이고, 첫 줄 '자동 …'을 고르면 저장값을 지워 자동으로 돌아간다.
+// 기준·실측은 utils/sampleDirection.js 주석 참고.
+function sampleAutoTitle(a) {
+  const detail = a.t === null
+    ? '이 경기 방향 · 통합 줄에 표본이 없습니다.'
+    : `t = ${a.t.toFixed(2)} (경기당 흐름 ${a.flow.toFixed(2)} × √표본 ${a.n} ÷ 1.585)`
+  return `자동 판정 — ${a.label}\n${detail}\n`
+    + '기준(이 경기 방향 · 통합 줄): t≥2 블루 · 1~2 약블루 · ±1 안쪽은 엇갈림(표본 10건↑)/몰라'
+    + ' · −1~−2 약레드 · −2 이하 레드. 표본이 많을수록 같은 흐름이라도 t가 커집니다.\n'
+    + '※ 자동값은 저장되지 않습니다 — 직접 고르면 그 값이 우선합니다.'
+}
+
+// 직접 고른 값이 자동값과 다를 때만 옆에 자동값을 작게 보여준다.
+function SampleDirectionAuto({ auto, value }) {
+  if (!auto || !value || value === auto.label) return null
+  return (
+    <span
+      className={`sample-dir-auto ${SAMPLE_DIRECTION_CLASS[auto.label] || ''}`}
+      title={sampleAutoTitle(auto)}
+    >
+      자동 {auto.label}
+    </span>
+  )
+}
+
+function SampleDirectionSelect({ value, auto, onSave }) {
   const current = value || ''
+  const shown = value || auto?.label || ''
   return (
     <select
-      className={`sample-dir-select ${SAMPLE_DIRECTION_CLASS[current] || ''}`}
+      className={`sample-dir-select ${SAMPLE_DIRECTION_CLASS[shown] || ''}${!value && auto ? ' is-auto' : ''}`}
       value={current}
       onChange={(e) => onSave(e.target.value || null)}
+      title={!value && auto ? sampleAutoTitle(auto) : undefined}
     >
-      <option value="">방향성</option>
+      <option value="">{auto ? `자동 ${auto.label}` : '방향성'}</option>
       {SAMPLE_DIRECTION_OPTIONS.map((o) => (
         <option key={o} value={o}>{o}</option>
       ))}
@@ -3397,8 +3523,8 @@ function NewSystemVerdictLegend({ onClose }) {
         </p>
         <p className="help-legend-note">
           적중/보험/미적은 엇갈림에도 <b>그대로 매긴다</b>(괄호의 해 쪽 방향 기준) —
-          다만 갈리지 않은 경기의 판정과 헷갈리지 않게, 적중 뱃지 색만 톤 다운한
-          노랑 하나로 칠하고 별점은 안 준다.
+          다만 갈리지 않은 경기의 판정과 헷갈리지 않게, 적중 뱃지를 원래 색(적중 노랑·
+          보험 청록·미적 빨강)의 <b>톤을 낮춘 색</b>으로 칠하고 별점은 안 준다.
         </p>
 
         <p className="help-legend-title">② 국·해가 일치할 때 — 배당 표 4칸 중에서, 그 시점 것만 씁니다</p>
@@ -3967,17 +4093,17 @@ function NewSystemVerdict({ row, init, fin }) {
       <span className="newv-arrow">→</span>
       {part(fin, strong)}
       {fin.verdict && (
-        // 엇갈림에서 나온 판정이면 적중/보험/미적을 색으로 구분하지 않고 톤 다운한 노랑
-        // 하나로 칠한다 — 리그 표 적중 칸(.verdict-hit-split)과 같은 규칙(2026-09-20).
+        // 엇갈림에서 나온 판정이면 원래 색(적중 노랑·보험 청록·미적 빨강)의 톤 다운
+        // 버전으로 칠한다 — 리그 표 적중 칸과 같은 규칙(pickVerdictSoftStyle, 2026-09-20).
         <span
           className="match-chip match-chip-tone sys-verdict"
           style={{
-            background: `var(--chip-${fin.split ? 'yellow-soft' : VERDICT_TONE[fin.verdict]}-bg)`,
-            color: `var(--chip-${fin.split ? 'yellow-soft' : VERDICT_TONE[fin.verdict]}-fg)`,
+            background: `var(--chip-${VERDICT_TONE[fin.verdict]}${fin.split ? '-soft' : ''}-bg)`,
+            color: `var(--chip-${VERDICT_TONE[fin.verdict]}${fin.split ? '-soft' : ''}-fg)`,
             fontWeight: 700,
           }}
           title={fin.split ? '엇갈림에서 나온 판정 — 값은 그대로지만 갈리지 않은 경기보다'
-            + ' 한 단계 아래라 색을 구분하지 않습니다.' : undefined}
+            + ' 한 단계 아래라 원래 색의 톤을 낮춰 칠했습니다.' : undefined}
         >
           {fin.verdict}
         </span>
@@ -3987,7 +4113,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank, archiveTags, extraOdds }) {
+function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank, archiveTags, extraOdds, seasonSample, h2hMatches, axisStats }) {
   // '경기지표'의 무·전적 뱃지와 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -4027,6 +4153,9 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank
                   sameOdds={sameOdds}
                   xg={xg}
                   archiveTags={archiveTags}
+                  seasonSample={seasonSample}
+                  h2hMatches={h2hMatches}
+                  axisStats={axisStats}
                 />
               </div>
               {/* 방향성·배당 두 표를 한 덩어리로 묶고, 그 아래에 구분선 + 시스템
@@ -4179,6 +4308,19 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
       alive = false
     }
   }, [code, scope, matchKey])
+
+  // 플축·정축 등급별 실측 + 배당 모델(서버가 결과가 쌓이면 스스로 다시 잰다 — api/axis_stats.py).
+  // 못 받으면 null — 뱃지는 sampleDirection.js의 고정 수치로 대신 뜬다.
+  const [axisStats, setAxisStats] = useState(null)
+  useEffect(() => {
+    let alive = true
+    api.get('/api/axis_stats')
+      .then((res) => alive && setAxisStats(res?.stats || null))
+      .catch(() => alive && setAxisStats(null))
+    return () => {
+      alive = false
+    }
+  }, [matchKey])
 
   // 표본 박스 제목 옆 방향성·메모 — {kind: {direction, memo}}. undefined = 불러오는 중(그동안은 칸을 안 그려서
   // 빈 칸에 쓰다가 늦게 온 저장값에 덮이는 일을 막는다).
@@ -4403,6 +4545,9 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
           weekRank={weekRank}
           archiveTags={archiveTags}
           extraOdds={extraOdds}
+          seasonSample={seasonSample}
+          h2hMatches={pickData ? (pickData.h2h?.matches || []) : null}
+          axisStats={axisStats}
         />
 
         {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,
@@ -4459,7 +4604,12 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
                 <>
                   <SampleDirectionSelect
                     value={sampleNotes[key]?.direction}
+                    auto={seasonSample ? autoSampleDirection(sectionSelfTotal(seasonSample.samples, key)) : null}
                     onSave={(direction) => saveSampleNote(key, { direction })}
+                  />
+                  <SampleDirectionAuto
+                    value={sampleNotes[key]?.direction}
+                    auto={seasonSample ? autoSampleDirection(sectionSelfTotal(seasonSample.samples, key)) : null}
                   />
                   <SampleNoteInput
                     value={sampleNotes[key]?.memo}

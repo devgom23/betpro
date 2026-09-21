@@ -350,7 +350,8 @@ export function resolveOddsPhasePick(row, final) {
 // 표기는 표 칸이 좁아 배변을 '엇(정)'·'엇(플)'로 줄인다(사용자 지정). 상세보기도 같은
 // 이름을 쓴다 — 한 값에 이름이 둘이면 화면마다 달라 보인다.
 // 적중/보험/미적 판정은 엇갈림에도 그대로 매긴다(괄호 방향 기준, 사용자 지정) — 대신
-// 뱃지 색을 적중·보험·미적 구분 없이 하나로 칠해 "엇갈림에서 나온 판정"임을 표시한다.
+// 뱃지를 각자 원래 색(적중 노랑·보험 청록·미적 빨강)의 톤 다운 버전으로 칠해
+// "엇갈림에서 나온 판정"임을 표시한다(columnGroups.js pickVerdictSoftStyle).
 export const SPLIT_RATE = { 초기: 76.63, 배변: 78.68 }
 
 function splitDisplay(label, forrPick) {

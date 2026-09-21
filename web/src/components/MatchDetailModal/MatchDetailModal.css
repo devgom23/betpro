@@ -1993,6 +1993,41 @@
   font-weight: 700;
 }
 
+/* 드롭박스 옆 자동 제안(2026-09-21) — 사용자가 고른 값(칠해진 드롭박스)과 헷갈리지 않게
+   배경 없이 점선 테두리 + 글자색만 방향 색으로 둔다. 저장되지 않는 참고 표시다. */
+/* 직접 고르지 않아 자동값이 보이는 상태 — 색은 같고 테두리만 점선(2026-09-21). */
+.detail-section h3 .sample-dir-select.is-auto {
+  border-style: dashed;
+}
+
+.detail-section h3 .sample-dir-auto {
+  flex: none;
+  align-self: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px dashed var(--border-strong);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: help;
+}
+
+.detail-section h3 .sample-dir-auto.sample-dir-blue,
+.detail-section h3 .sample-dir-auto.sample-dir-blue-weak {
+  color: var(--chip-blue-fg);
+}
+
+.detail-section h3 .sample-dir-auto.sample-dir-red,
+.detail-section h3 .sample-dir-auto.sample-dir-red-weak {
+  color: var(--chip-red-fg);
+}
+
+.detail-section h3 .sample-dir-auto.sample-dir-blue,
+.detail-section h3 .sample-dir-auto.sample-dir-red {
+  font-weight: 700;
+}
+
 /* 펼친 목록의 항목까지 칸 색을 따라 칠해지지 않게(크롬은 option이 select 색을 물려받는다). */
 .detail-section h3 .sample-dir-select option {
   background: var(--bg-surface);

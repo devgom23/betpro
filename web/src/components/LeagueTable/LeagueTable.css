@@ -280,14 +280,6 @@ td.sticky-col {
   white-space: nowrap;
 }
 
-/* 엇갈림에서 나온 적중/보험/미적 뱃지 — 값은 그대로 보여주되 색은 셋 다 하나로 칠해
-   "갈린 경기에서 나온 판정"임을 표시한다(2026-09-20 사용자 지정). 적중과 같은 노랑
-   계열이되 채도를 낮춰(--chip-yellow-soft-*) 한 단계 아래임이 색으로 읽히게 한다. */
-.league-table .cell-badge.verdict-hit-split {
-  background: var(--chip-yellow-soft-bg);
-  color: var(--chip-yellow-soft-fg);
-  font-weight: 700;
-}
 
 /* 판정 칸 '⚠' — 시즌 마지막 2라운드의 정무 픽(seasonEndWarn). 이중밑줄(verdict-strong)이
    ⚠까지 이어지지 않게 끊는다. */

@@ -779,6 +779,15 @@ export function pickVerdictStyle(value) {
   return null
 }
 
+// 판정 '엇갈림'에서 나온 적중/보험/미적 — 위와 같은 색 계열을 톤만 낮춘 것(2026-09-20
+// 사용자 지정). 리그 표 적중 칸과 상세보기 시스템 판정 뱃지가 같이 쓴다.
+const VERDICT_SOFT_TONE = { 적중: 'yellow', 보험: 'teal', 미적: 'red' }
+export function pickVerdictSoftStyle(value) {
+  const tone = VERDICT_SOFT_TONE[value]
+  if (!tone) return null
+  return { background: `var(--chip-${tone}-soft-bg)`, color: `var(--chip-${tone}-soft-fg)`, fontWeight: 700 }
+}
+
 // 정배 쪽(정무/정/핸승/핸무)과 플핸 쪽(플핸/플핸무/무/역/무핸무)을 셀 색만으로 바로
 // 구분하기 위한 그룹 — RtBadge와 같은 파랑/빨강 축을 그대로 쓴다.
 const MY_PICK_FAV_GROUP = new Set(['정무', '정역', '정', '핸승', '핸무', '핸승핸무'])

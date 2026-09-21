@@ -1,7 +1,7 @@
 import { cloneElement, Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, oddsBetStyle, flowSideStyle, formStyle, bettingDayStyle,
-  computeAutoVerdict, pickVerdictStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
+  computeAutoVerdict, pickVerdictStyle, pickVerdictSoftStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
   collapsedWidth, splitsOnFinal, oddsMoveDir, oddsUnmoved, riskUnmoved, riskMoveDir, toFinalRow, rtToText,
   VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemInfo, verdictAnyMarketMoved,
 } from './columnGroups'
@@ -65,12 +65,12 @@ const VERDICT_SPLIT_TITLE = {
     + '\n괄호 안은 해외 지표 쪽 의견입니다 — 배변에서 갈리면 해외를 따르는 쪽이 확실히'
     + ' 낫습니다(78.68% vs 국내 72.68%, +6.00%p, z=6.92, 리그 6/6 만장일치).'
     + '\n※ 적중/보험/미적은 괄호 방향 기준으로 그대로 매기되, 갈리지 않은 경기와 구분되게'
-    + ' 적중 뱃지 색은 하나로 칠합니다. 별점은 주지 않습니다.',
+    + ' 적중 뱃지는 원래 색(적중 노랑·보험 청록·미적 빨강)을 톤만 낮춰 칠합니다. 별점은 주지 않습니다.',
 }
 
 const VERDICT_HIT_SPLIT_TITLE = '엇갈림(국·해가 갈린 경기)에서 나온 판정입니다 —'
   + ' 적중/보험/미적 값 자체는 그대로지만, 갈리지 않은 경기보다 한 단계 아래라'
-  + ' 색을 구분하지 않고 하나로 칠합니다.'
+  + ' 원래 색의 톤을 낮춰 칠합니다.'
 
 // 동배당 측정은 6대리그로만 한다(2026-09-05, 사용자 지정) — K1/K2(내 데이터)는
 // 배당 형성 방식이 달라 섞으면 안 되고, 필요하면 K1/K2끼리 따로 재야 한다.
@@ -157,7 +157,8 @@ const FORM_COLS = new Set(['HTF', 'HF', 'AF', 'ATF'])
 // VERDICT_HIT_KEY 주석의 fit() 병합 설명 참고). 픽 자체(배변 없으면 초기로 대신)는
 // columnGroups.js의 finalSystemPick — 리그 조회 화면 위쪽 '판정' 요약 뱃지도 같은 걸 쓴다.
 // 엇갈림에서 나온 판정이면 split=true — 적중/보험/미적 값은 그대로 매기되 뱃지 색만
-// 하나로 칠한다(2026-09-20 사용자 지정). 갈리지 않은 경기의 판정과 눈으로 구분되게.
+// 원래 색의 톤 다운 버전으로 칠한다(2026-09-20 사용자 지정, pickVerdictSoftStyle).
+// 갈리지 않은 경기의 판정과 눈으로 구분되게.
 function finalHitVerdict(baseRow) {
   const { pick, split } = finalSystemInfo(baseRow)
   return { verdict: computeAutoVerdict(pick, baseRow.RT), split }
@@ -864,8 +865,8 @@ export default function LeagueTable({
                           <td key={`${gi}-hit`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
                             {hitVerdict.verdict ? (
                               <span
-                                className={`cell-badge${hitVerdict.split ? ' verdict-hit-split' : ''}`}
-                                style={hitVerdict.split ? undefined : pickVerdictStyle(hitVerdict.verdict)}
+                                className="cell-badge"
+                                style={(hitVerdict.split ? pickVerdictSoftStyle : pickVerdictStyle)(hitVerdict.verdict)}
                                 title={hitVerdict.split ? VERDICT_HIT_SPLIT_TITLE : undefined}
                               >
                                 {hitVerdict.verdict}
@@ -1023,8 +1024,8 @@ export default function LeagueTable({
                         <td key={`${gi}-hit`} className={dividerClass(g, isLastGroup).trim() || undefined}>
                           {hitVerdict.verdict ? (
                             <span
-                              className={`cell-badge${hitVerdict.split ? ' verdict-hit-split' : ''}`}
-                              style={hitVerdict.split ? undefined : pickVerdictStyle(hitVerdict.verdict)}
+                              className="cell-badge"
+                              style={(hitVerdict.split ? pickVerdictSoftStyle : pickVerdictStyle)(hitVerdict.verdict)}
                               title={hitVerdict.split ? VERDICT_HIT_SPLIT_TITLE : undefined}
                             >
                               {hitVerdict.verdict}

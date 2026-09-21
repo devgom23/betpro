@@ -94,6 +94,7 @@ import pick_ai as PICKAI       # noqa: E402
 import standings               # noqa: E402
 import cup_matches as CUPS     # noqa: E402
 import collect_jobs as JOBS    # noqa: E402
+import axis_stats as AXIS      # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -1254,6 +1255,18 @@ def save_sample_note(code: str, body: SampleNoteBody, user: dict = Depends(get_c
     MYPICKS.upsert_sample_note(user["username"], code, body.scope, body.S, body.R, body.No,
                                body.HT, body.AT, body.kind, values)
     return {"ok": True}
+
+
+@app.get("/api/axis_stats")
+def axis_stats_get(user: dict = Depends(get_current_user)):
+    """플축·정축 등급별 실측 + 배당 모델 계수(상세보기 뱃지용, 공식 데이터 기준).
+    결과가 바뀌었으면 뒤에서 다시 잰다 — 이번 응답은 직전 값(axis_stats.py 주석)."""
+    return AXIS.get()
+
+
+@app.post("/api/admin/axis_stats/recompute")
+def axis_stats_recompute(admin: dict = Depends(get_admin_user)):
+    return {"started": AXIS.start(), **AXIS.get()}
 
 
 @app.get("/api/leagues/{code}/season_sample")

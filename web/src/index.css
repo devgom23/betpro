@@ -73,11 +73,16 @@ body {
   --chip-red-fg: #ffabab;
   --chip-yellow-bg: #4a3a12;
   --chip-yellow-fg: #fde68a;
-  /* 톤 다운한 노랑 — 판정 '엇갈림'에서 나온 적중/보험/미적 뱃지가 쓴다. 같은 노랑
-     계열이라 적중과 한눈에 이어지되, 채도를 낮춰 "갈리지 않은 경기의 적중보다
-     한 단계 아래"가 색으로 읽히게 한다(2026-09-20 사용자 지정). */
+  /* 톤 다운한 적중/보험/미적 — 판정 '엇갈림'에서 나온 뱃지가 쓴다. 각자 원래 색
+     (노랑/청록/빨강) 계열을 그대로 두고 채도만 낮춰, 무슨 결과인지는 색으로 바로
+     읽히면서 "갈리지 않은 경기의 판정보다 한 단계 아래"도 같이 보이게 한다
+     (2026-09-20 사용자 지정 — 처음엔 셋 다 노랑 하나였다가 각자 색으로 바꿈). */
   --chip-yellow-soft-bg: #3b2f16;
   --chip-yellow-soft-fg: #c7b077;
+  --chip-teal-soft-bg: #16302d;
+  --chip-teal-soft-fg: #7fb3ab;
+  --chip-red-soft-bg: #372122;
+  --chip-red-soft-fg: #c99494;
   --chip-teal-bg: #123f3a;
   --chip-teal-fg: #7fe0d2;
   --chip-purple-bg: #3a2260;
@@ -131,9 +136,13 @@ body {
   --chip-red-fg: #991b1b;
   --chip-yellow-bg: #fef3c7;
   --chip-yellow-fg: #78350f;
-  /* 톤 다운한 노랑(라이트) — 위 다크 모드 주석 참고 */
+  /* 톤 다운한 적중/보험/미적(라이트) — 위 다크 모드 주석 참고 */
   --chip-yellow-soft-bg: #faf3de;
   --chip-yellow-soft-fg: #9a7b3a;
+  --chip-teal-soft-bg: #e6f5f2;
+  --chip-teal-soft-fg: #417a75;
+  --chip-red-soft-bg: #fbefef;
+  --chip-red-soft-fg: #a45a5a;
   --chip-teal-bg: #ccfbf1;
   --chip-teal-fg: #115e59;
   --chip-purple-bg: #f3e8ff;
