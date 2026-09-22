@@ -4,8 +4,8 @@ import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { formatTime, formatDt, scoreClass, LEAGUE_LABELS_SHORT } from '../../utils/format'
-import { computeAutoVerdict, pickVerdictStyle } from '../LeagueTable/columnGroups'
-import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS, SAMPLE_DIRECTION_OPTIONS } from '../../utils/pickOptions'
+import { computeAutoVerdict, pickVerdictStyle, opinionStyle, marketVerdictPick } from '../LeagueTable/columnGroups'
+import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS, SAMPLE_DIRECTION_OPTIONS, sampleDirectionText } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict } from '../../utils/h2hVerdict'
 import {
@@ -15,7 +15,7 @@ import {
   DIR_SIDE, SCOPE_CODES, scopeCell, oddsScopeCodes, weightedAnalysis,
   ODDS_PHASE_WEIGHTED_GRADE, PHASE_CELL_RATE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE,
   CLOSE_ODDS_CUT_K, CLOSE_ODDS_CUT_F, favFlip,
-  marketSetMoved, RISK_FIELD_MARKET, DIRECTION_SCOPE_MARKET, ODDS_SCOPE_MARKET,
+  marketSetMoved, RISK_FIELD_MARKET, DIRECTION_SCOPE_MARKET, ODDS_SCOPE_MARKET, opinionLabel, SAMPLE_RELIABLE_N,
 } from '../../utils/verdictCalc'
 import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
 import { RichMemoInput } from '../RichMemo/RichMemo'
@@ -168,6 +168,52 @@ function sampleOddsMoved(row, code) {
   const b = numOrNull(row[finKey])
   if (a === null || b === null) return true   // 값 자체가 없는 경우는 hasE 쪽에서 이미 걸러진다
   return a !== b
+}
+
+// 정배·플핸·해배 세 표본은 각각 '배당 한 칸'의 결과를 보는 표라서(승+패·승+무+패
+// 넷은 여러 칸을 같이 본다), 그 한 칸의 초기→배변 값을 타이틀 옆에 보여준다
+// (2026-09-22 사용자 지정 — "정배표본 정배배당->배변배당 방향성 이렇게 타이틀과
+// 방향성 선택박스 사이에 배당정보를 보여줘"). kind별로 표본이 실제로 쓰는 칸만 본다:
+//   fav  — 국내 정배 쪽 한 칸(KW 또는 KL) → EKW/EKL
+//   pl   — 국내 핸디의 언더독 쪽 한 칸(KW>KL이면 홈이 언더독 → KHW) → EKHW/EKHL
+//   ffav — 해외 정배 쪽 한 칸(FW 또는 FL) → EFW/EFL
+// 정배를 못 가리면(배당 없음·동률) null — 그 표본 자체가 "표본을 낼 수 없습니다"인 것과 같은 경우다.
+function sectionOddsInfo(row, kind) {
+  if (kind === 'fav' || kind === 'pl') {
+    const kw = numOrNull(row.KW)
+    const kl = numOrNull(row.KL)
+    if (kw === null || kl === null || kw === kl) return null
+    if (kind === 'fav') {
+      return kw < kl
+        ? { label: '정배배당', init: kw, fin: numOrNull(row.EKW) }
+        : { label: '정배배당', init: kl, fin: numOrNull(row.EKL) }
+    }
+    const homeDog = kw > kl
+    return homeDog
+      ? { label: '플핸배당', init: numOrNull(row.KHW), fin: numOrNull(row.EKHW) }
+      : { label: '플핸배당', init: numOrNull(row.KHL), fin: numOrNull(row.EKHL) }
+  }
+  if (kind === 'ffav') {
+    const fw = numOrNull(row.FW)
+    const fl = numOrNull(row.FL)
+    if (fw === null || fl === null || fw === fl) return null
+    return fw < fl
+      ? { label: '해배배당', init: fw, fin: numOrNull(row.EFW) }
+      : { label: '해배배당', init: fl, fin: numOrNull(row.EFL) }
+  }
+  return null   // 승+패·승+무+패 네 표본은 여러 칸을 같이 보므로 여기선 표시하지 않는다.
+}
+
+function SampleOddsInfo({ row, kind }) {
+  const info = sectionOddsInfo(row, kind)
+  if (!info || info.init === null) return null
+  const moved = info.fin !== null && Math.abs(info.fin - info.init) >= 0.005
+  return (
+    <span className="sample-odds-info" title={`${info.label} — 이 표본이 실제로 조건으로 쓰는 배당 한 칸입니다.`}>
+      {info.label} {info.init.toFixed(2)}
+      {moved && <> → <strong>{info.fin.toFixed(2)}</strong></>}
+    </span>
+  )
 }
 
 // 정배(시장이 강하다고 본 쪽)가 홈인지 — 국내배당(KW/KL) 우선, 없으면 해외배당(FW/FL).
@@ -744,6 +790,20 @@ function plhan85Chips(row, verdict) {
   ]
 }
 
+// ── 강추 등급 뱃지 (2026-09-22 사용자 지정 — 판정 줄에서 경기지표로 이동) ─────────
+// 배변 플핸무 별3개 경기 중 접전·반전 조건까지 맞은 네 등급(strongPickTier 주석 참고).
+// 예전엔 판정 줄에 이중밑줄로 붙었는데, 판정 줄을 초기·배변 두 줄로만 단순하게 두고
+// 이 뱃지는 다른 신호 뱃지(국≠해·정역반전)와 같이 경기지표에서 보도록 옮겼다.
+function strongPickChips(row, fin) {
+  const strong = strongPickTier(row, fin)
+  if (!strong) return []
+  return [
+    <MatchChip key="strong" label="강추" tone="purple" title={STRONG_TIER_TITLE[strong]}>
+      {strong}
+    </MatchChip>,
+  ]
+}
+
 // ── 플축 · 정축 뱃지 (2026-09-21 실측, 사용자 지정) ───────────────────────────
 // 축 = 보험 없는 단통. 플축 = 무+역(RT3+4), 정축 = 핸승+핸무(RT1+2).
 // 조건·실측은 utils/sampleDirection.js의 axisVerdict 주석. 방향성은 자동 판정 기준이라
@@ -807,7 +867,7 @@ function axisChips(row, seasonSample, h2hMatches, axisStats) {
       <MatchChip
         key="pl-red7"
         label="7레드"
-        title={'자동 방향성 7개가 전부 레드·약레드지만 플축 조건(배당신호, 또는 정배배당 2.1 초과 +'
+        title={'자동 방향성 7개가 전부 레드·레드(약)지만 플축 조건(배당신호, 또는 정배배당 2.1 초과 +'
           + ' 전적 정배편 아님)이 없습니다.\n'
           + `이런 경기는 지난 ${m.tier.n}경기 단통 플핸 ${pct1(m.tier.rate)} — 같은 배당 기대 ${pct1(m.tier.exp)}와`
           + ' 차이가 없어 색을 입히지 않았습니다.\n\n' + axisContextText(v.ctx)}
@@ -865,7 +925,7 @@ function archiveChips(tags) {
   })
 }
 
-function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds, xg, archiveTags, seasonSample, h2hMatches, axisStats }) {
+function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, sameOdds, xg, archiveTags, seasonSample, h2hMatches, axisStats }) {
   // 똥배 → 국/해 엇갈림 → 전적 → 무 → 동배당을 세로로 쌓는다.
   // (배당차 뱃지는 2026-09-02에 옆 칸 표로 뺐다가 2026-09-05에 아예 삭제했다 —
   //  정배배당을 다시 적은 값이라 확률 지표와 중복이었다. DirectionScopeTable 주석 참고.)
@@ -876,7 +936,7 @@ function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, sameOdds,
   const chips = [...archiveChips(archiveTags), ...axisChips(row, seasonSample, h2hMatches, axisStats),
     ...plhan85Chips(row, verdict), ...seasonStakeChips(row),
     ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
-    ...favFlipChips(row),
+    ...favFlipChips(row), ...strongPickChips(row, fin),
     ...xgChips(row, xg),
     ...h2hChips(verdict, h2hLoading, row, pick), ...drawChips(row, pick),
     ...sameOddsChips(sameOdds)]
@@ -1184,9 +1244,9 @@ function sampleAutoTitle(a) {
   const detail = a.t === null
     ? '이 경기 방향 · 통합 줄에 표본이 없습니다.'
     : `t = ${a.t.toFixed(2)} (경기당 흐름 ${a.flow.toFixed(2)} × √표본 ${a.n} ÷ 1.585)`
-  return `자동 판정 — ${a.label}\n${detail}\n`
-    + '기준(이 경기 방향 · 통합 줄): t≥2 블루 · 1~2 약블루 · ±1 안쪽은 엇갈림(표본 10건↑)/몰라'
-    + ' · −1~−2 약레드 · −2 이하 레드. 표본이 많을수록 같은 흐름이라도 t가 커집니다.\n'
+  return `자동 판정 — ${sampleDirectionText(a.label)}\n${detail}\n`
+    + '기준(이 경기 방향 · 통합 줄): t≥2 블루 · 1~2 블루(약) · ±1 안쪽은 엇갈림(표본 10건↑)/몰라'
+    + ' · −1~−2 레드(약) · −2 이하 레드. 표본이 많을수록 같은 흐름이라도 t가 커집니다.\n'
     + '※ 자동값은 저장되지 않습니다 — 직접 고르면 그 값이 우선합니다.'
 }
 
@@ -1198,7 +1258,7 @@ function SampleDirectionAuto({ auto, value }) {
       className={`sample-dir-auto ${SAMPLE_DIRECTION_CLASS[auto.label] || ''}`}
       title={sampleAutoTitle(auto)}
     >
-      자동 {auto.label}
+      자동 {sampleDirectionText(auto.label)}
     </span>
   )
 }
@@ -1213,9 +1273,10 @@ function SampleDirectionSelect({ value, auto, onSave }) {
       onChange={(e) => onSave(e.target.value || null)}
       title={!value && auto ? sampleAutoTitle(auto) : undefined}
     >
-      <option value="">{auto ? `자동 ${auto.label}` : '방향성'}</option>
+      <option value="">{auto ? `자동 ${sampleDirectionText(auto.label)}` : '방향성'}</option>
+      {/* 값(value)은 저장값 그대로('약블루'·'약레드'), 글자만 '블루(약)'·'레드(약)'. */}
       {SAMPLE_DIRECTION_OPTIONS.map((o) => (
-        <option key={o} value={o}>{o}</option>
+        <option key={o} value={o}>{sampleDirectionText(o)}</option>
       ))}
     </select>
   )
@@ -2765,7 +2826,7 @@ const SCOPE_SIDE = { 정무: 'j', 정역: 'j', 정: 'j', 플핸무: 'p', 플핸�
 //
 // 아래 숫자는 전부 실측이다(6대리그 35,977경기, 2026-09-05).
 const TONE_RULE = [
-  ['15건 이상', '색칠 (초록/파랑)', '믿을 만하다', 'ok'],
+  ['15건 이상', '색칠 (빨강/파랑)', '믿을 만하다', 'ok'],
   ['5 ~ 14건', '색 없음 (기본색)', '참고만 한다', 'mid'],
   ['1 ~ 4건', '흐린 회색', '못 믿는다', 'thin'],
   ['0건', '—', '표본이 없다', 'none'],
@@ -2919,7 +2980,7 @@ function DirectionScopeLegend({ onClose }) {
           </thead>
           <tbody>
             <tr>
-              <td><b className="dscope-side-p-ink">초록</b></td>
+              <td><b className="dscope-side-p-ink">빨강</b></td>
               <td><b className="dscope-side-p-ink">플핸무</b></td>
               <td><b>핸승은 안 나온다</b> (적중 무·역 / 보험 핸무)</td>
             </tr>
@@ -2976,7 +3037,7 @@ function DirectionScopeTable({ row }) {
     // 나오더라도(marketMoved 폴백) 화면에는 '움직인 배변'인 것처럼 보여주지 않는다
     // (2026-09-12, 본머스 vs 브렌트포드 사용자 제보 — OddsTable·SampleTable과 같은 원칙).
     const moved = !final || marketSetMoved(row, DIRECTION_SCOPE_MARKET[sc][mkt])
-    const { name, total } = moved ? rawScope : { name: null, total: 0 }
+    const { name, total, pct } = moved ? rawScope : { name: null, total: 0, pct: null }
     const [, tone, toneLabel] = SCOPE_TONES.find(([cut]) => total >= cut) || [0, 'none', '표본 없음']
     // 표본 수는 화면에서 빼고(2026-09-05) 색 하나로 두 가지를 말한다 —
     // 색이 붙어 있으면 '표본이 넉넉하다(15건+)', 색 종류가 방향(플핸/정배)이다.
@@ -2991,9 +3052,16 @@ function DirectionScopeTable({ row }) {
             ? `과거 표본 ${total.toLocaleString()}건 — ${toneLabel}`
               + `${side ? ' (그래서 색을 넣었습니다)' : ' (표본이 얇아 색을 넣지 않았습니다)'}.\n`
             : '이 시장(국내/해외 승무패)이 초기와 배변 사이에 안 움직였습니다.\n')
+          + (name ? `이름: ${name} · 블루=정 쪽 · 레드=플핸 쪽 · (약)=핸승·역 차이 10%p 미만(또는 표본 15건 미만).\n` : '')
           + '※ 검토용 표입니다. 판정에는 쓰이지 않습니다.'}
       >
-        {name ? <b className="sys-name">{name}</b> : <span className="dir-none">—</span>}
+        {/* 이름(정무·플핸무…) 대신 블루/레드로 — 배당 표·국배·해배와 같은 표기(2026-09-22).
+            (약)=핸승·역 차이 10%p 미만(또는 표본 15건 미만). 방향이 없는 이름(드묾)은 그대로 둔다. */}
+        {name
+          ? (DIR_SIDE[name]
+            ? <b className="sys-name" style={opinionStyle(opinionLabel(name, total, pct))}>{opinionLabel(name, total, pct)}</b>
+            : <b className="sys-name">{name}</b>)
+          : <span className="dir-none">—</span>}
       </td>
     )
   }
@@ -3011,7 +3079,7 @@ function DirectionScopeTable({ row }) {
               type="button"
               className="help-btn"
               onClick={() => setShowLegend(true)}
-              title="색 기준 보기 — 색이 붙는 조건(표본 15건+)과 초록/파랑의 뜻"
+              title="색 기준 보기 — 색이 붙는 조건(표본 15건+)과 빨강/파랑의 뜻"
             >
               방향성 <span className="help-mark">?</span>
             </button>
@@ -3200,7 +3268,7 @@ function OddsScopeLegend({ onClose }) {
           </thead>
           <tbody>
             <tr>
-              <td><b className="dscope-side-p-ink">초록</b></td>
+              <td><b className="dscope-side-p-ink">빨강</b></td>
               <td><b className="dscope-side-p-ink">플핸무</b></td>
               <td><b>핸승은 안 나온다</b> (적중 무·역 / 보험 핸무)</td>
             </tr>
@@ -3265,7 +3333,7 @@ function OddsScopeTable({ row }) {
     // 시장은 scopeCell 내부에서 초기 표본을 그대로 쓰고 있어(marketMoved 폴백),
     // 그 값을 배변인 것처럼 보여주면 안 된다(2026-09-12, 본머스 vs 브렌트포드 제보).
     const moved = !final || marketSetMoved(row, ODDS_SCOPE_MARKET[key])
-    const { pick, total } = moved ? rawScope : { pick: null, total: 0 }
+    const { pick, total, pct } = moved ? rawScope : { pick: null, total: 0, pct: null }
     const [, tone, toneLabel] = SCOPE_TONES.find(([cut]) => total >= cut) || [0, 'none', '표본 없음']
     const side = tone === 'ok' ? SCOPE_SIDE[pick] : null
     return (
@@ -3277,9 +3345,15 @@ function OddsScopeTable({ row }) {
             ? `과거 표본 ${total.toLocaleString()}건 — ${toneLabel}`
               + `${side ? ' (그래서 색을 넣었습니다)' : ' (표본이 얇아 색을 넣지 않았습니다)'}.\n`
             : '이 시장이 초기와 배변 사이에 안 움직였습니다.\n')
-          + '※ 핸승과 역 중 작은 쪽을 배제한 이름입니다(판정과 같은 기준).'}
+          + (pick ? `판정 계산에 쓰는 이름: ${pick} (핸승과 역 중 작은 쪽을 배제한 이름).
+` : '')
+          + '블루=정 쪽 · 레드=플핸 쪽 · (약)=핸승·역 차이 10%p 미만(또는 표본 15건 미만) — 리그 표 국배·해배 칸과 같은 표기.'}
       >
-        {pick ? <b className="sys-name">{pick}</b> : <span className="dir-none">—</span>}
+        {/* 픽 이름(정무·플핸무) 대신 레드/블루로(2026-09-22 사용자 지정 — 표본 방향성과
+            같은 말). '(약)' 기준은 verdictCalc opinionLabel(핸승·역 차이 10%p 미만 또는 표본 15건 미만). */}
+        {pick
+          ? <b className="sys-name" style={opinionStyle(opinionLabel(pick, total, pct))}>{opinionLabel(pick, total, pct)}</b>
+          : <span className="dir-none">—</span>}
       </td>
     )
   }
@@ -3292,7 +3366,7 @@ function OddsScopeTable({ row }) {
               type="button"
               className="help-btn"
               onClick={() => setShowLegend(true)}
-              title="색 기준 보기 — 색이 붙는 조건(표본 15건+)과 초록/파랑의 뜻"
+              title="색 기준 보기 — 색이 붙는 조건(표본 15건+)과 빨강/파랑의 뜻"
             >
               배당 <span className="help-mark">?</span>
             </button>
@@ -4010,6 +4084,44 @@ const SYS_SPLIT_TITLE = {
     + ' 낫습니다(78.68% vs 국내 72.68%, +6.00%p, z=6.92, 리그 6/6 만장일치).',
 }
 
+// 시스템 판정 줄의 '국배 · 해배' — 판정이 합친 두 시장 혼자의 의견을 레드/블루('(약)'은
+// verdictCalc opinionLabel 기준)로(2026-09-22 사용자 지정: "판정은 플핸무 그대로, 판정에서 국배/해배가
+// 레드(약)·블루(약)로"). 리그 표 국배·해배 칸과 같은 값(columnGroups marketVerdictPick).
+function MarketOpinionPair({ row, isFinal }) {
+  const one = (market) => {
+    const op = marketVerdictPick(row, isFinal, market)
+    return (
+      <span
+        className="newv-market"
+        title={op ? `${market === '국' ? '국내' : '해외'}배당만의 의견: ${op.pick} · ${op.key.slice(0, 1)})${op.key.slice(1)} 칸 · 과거 표본 ${op.total.toLocaleString()}건\n블루=정 쪽 · 레드=플핸 쪽 · (약)=핸승·역 차이 10%p 미만(또는 표본 15건 미만)` : undefined}
+      >
+        {market}배 <b style={opinionStyle(op?.label)}>{op?.label || '－'}</b>
+      </span>
+    )
+  }
+  return <span className="newv-markets">{one('국')}{one('해')}</span>
+}
+
+const sampleKeyText = (k) => (k ? `${k.slice(0, 1)})${k.slice(1)}` : '')
+
+// 판정 옆 % — 픽을 낸 칸의 표본 실측 당첨률 + 표본 수(verdictCalc sampleWinRate).
+function SampleRateText({ v }) {
+  if (v.rate === null || v.rate === undefined) return <span className="sys-rate">－</span>
+  return (
+    <>
+      <span className="sys-rate">{v.rate.toFixed(2)}%</span>
+      <span
+        className={`newv-sample-n${v.n < SAMPLE_RELIABLE_N ? ' is-thin' : ''}`}
+        title={v.n < SAMPLE_RELIABLE_N
+          ? `표본 ${SAMPLE_RELIABLE_N}건 미만 — 이 정도 표본의 %는 실제보다 높게 나오는 편입니다(표본 100%였던 경기의 실제 당첨 87%).`
+          : undefined}
+      >
+        ({v.n.toLocaleString()}건{v.n < SAMPLE_RELIABLE_N ? ' · 표본 적음' : ''})
+      </span>
+    </>
+  )
+}
+
 function NewSystemVerdict({ row, init, fin }) {
   const [showLegend, setShowLegend] = useState(false)
   // 픽 이름을 조각으로 쪼개서, 실제 결과를
@@ -4019,11 +4131,7 @@ function NewSystemVerdict({ row, init, fin }) {
   const rtText = rtLabel(row.RT)
   const actual = ['핸승', '핸무', '무', '역'].includes(rtText) ? rtText : null
 
-  // 초강추(국≠해)·강추(접전) — 배변 판정에만 붙는다(strongPickTier 주석 참고).
-  // init(초기)에는 안 켠다. 배지 색(보라)은 두 단계가 똑같다(사용자 지정).
-  const strong = strongPickTier(row, fin)
-
-  const part = (v, isStrong) => {
+  const part = (v) => {
     if (!v.pick) {
       return (
         <span className="newv-part">
@@ -4033,13 +4141,20 @@ function NewSystemVerdict({ row, init, fin }) {
       )
     }
     // 엇갈림 — 국·해가 갈린 자리. 픽 이름 대신 '엇갈림'(배변은 '엇(정)·엇(플)')을
-    // 회색으로 그리고, 별점 대신 그 구간의 실측 당첨률만 보여준다(verdictCalc SPLIT_RATE).
+    // 회색으로 그리고, %는 해 쪽 칸 표본의 실측 당첨률(2026-09-22 — 예전엔 엇갈림 전체
+    // 구간 평균 SPLIT_RATE 고정값이었다. 그 값은 툴팁에 남긴다).
     if (v.split) {
       return (
-        <span className="newv-part" title={SYS_SPLIT_TITLE[v.label]}>
+        <span
+          className="newv-part"
+          title={`${SYS_SPLIT_TITLE[v.label]}\n\n`
+            + (v.rate !== null ? `표시 % = ${sampleKeyText(v.sampleKey)} 칸 과거 표본 ${v.n.toLocaleString()}건 중 ${v.pick} 당첨 비율.\n` : '')
+            + `참고: 엇갈림 경기 전체 평균 ${v.groupRate?.toFixed(2)}%.`}
+        >
           <span className="newv-label">{v.label}</span>
           <b className="sys-pick newv-split">{v.display}</b>
-          <span className="sys-rate">{v.rate.toFixed(2)}%</span>
+          <SampleRateText v={v} />
+          <MarketOpinionPair row={row} isFinal={v.label === '배변'} />
         </span>
       )
     }
@@ -4048,14 +4163,17 @@ function NewSystemVerdict({ row, init, fin }) {
         className="newv-part"
         title={`${v.label} 판정: ${v.pick}`
           + `${v.flipped ? ' (통)해가 나머지 3칸과 전부 반대라 그쪽으로 뒤집음)' : ''}\n`
-          + (v.ratio !== null
-            ? `방향성 8칸 표본 가중 일치율 ${Math.round(v.ratio * 100)}%(이 구간 평균 ${v.bandRate.toFixed(2)}%)`
-              + ` — 그중 ${v.pick}${v.strong ? '·강추' : ''} 경기만 보면 과거 ${v.n?.toLocaleString()}경기 중 ${v.rate.toFixed(2)}%.`
-            : '방향성 8칸에 표본 있는 칸이 하나도 없어 신뢰도를 못 매겼습니다.')}
+          + (v.rate !== null
+            ? `표시 % = ${sampleKeyText(v.sampleKey)} 칸 과거 표본 ${v.n.toLocaleString()}건 중 ${v.pick} 당첨 비율(표본 실측).\n`
+            : '픽을 낸 칸에 표본이 없어 %를 못 냅니다.\n')
+          + (v.groupRate !== null
+            ? `참고: 같은 묶음(방향성 일치율 ${Math.round(v.ratio * 100)}% 구간·${v.pick}${v.strong ? '·강추' : ''}) 과거 `
+              + `${v.groupN?.toLocaleString()}경기 평균 ${v.groupRate.toFixed(2)}% — 예전에 보여주던 값.`
+            : '')}
       >
         <span className="newv-label">{v.label}</span>
         {/* 색은 sys-pick-j/p(빨강/파랑, 옛 판정 축)이 아니라 방향성·배당 표와 같은
-            dscope-side-*-ink(초록/파랑)를 쓴다 — 이 줄이 그 두 표와 한 묶음이라서다. */}
+            dscope-side-*-ink(빨강/파랑)를 쓴다 — 이 줄이 그 두 표와 한 묶음이라서다. */}
         <b className={`sys-pick dscope-side-${DIR_SIDE[v.pick] === '정' ? 'j' : 'p'}-ink`}>
           {(DIR_PARTS[v.pick] || [[v.pick, []]]).map(([piece, covers]) => (
             <span key={piece} className={actual && covers.includes(actual) ? 'dir-name-hit' : undefined}>
@@ -4063,51 +4181,50 @@ function NewSystemVerdict({ row, init, fin }) {
             </span>
           ))}
         </b>
-        {v.stars !== null && (
-          <>
-            <span className="sys-stars">{'★'.repeat(v.stars)}{'☆'.repeat(3 - v.stars)}</span>
-            <span className="sys-rate">{v.rate.toFixed(2)}%</span>
-            {isStrong && (
-              <span className="newv-strong" title={STRONG_TIER_TITLE[isStrong]}>
-                {isStrong}
-              </span>
-            )}
-          </>
-        )}
+        {/* 별은 뺐다(2026-09-22 사용자 지정) — 묶음 평균 %를 잘라 매기던 것이라, 표본 실측 %를
+            보여주게 되면서 의미가 없어졌다. */}
+        <SampleRateText v={v} />
+        <MarketOpinionPair row={row} isFinal={v.label === '배변'} />
       </span>
     )
   }
 
   if (!init.pick && !fin.pick) return null
+  // 초기·배변을 한 줄에 화살표로 붙이던 것을 두 줄로 쌓는다 — 배변 줄만 줄바꿈해서
+  // 초기 줄과 같은 모양(같은 정렬)으로 둔다(2026-09-22 사용자 지정). 적중/보험/미적
+  // 뱃지는 그대로 배변 줄 쪽에 붙인다. 강추 등급 뱃지는 경기지표로 옮겼다(strongPickChips).
   return (
     <div className="pick-band-newverdict">
       <button
         type="button"
         className="help-btn"
         onClick={() => setShowLegend(true)}
-        title="시스템 판정(새) 기준 보기 — 픽은 배당, 신뢰도는 방향성에서 옵니다"
+        title="판정 기준 보기 — 픽은 배당, 신뢰도는 방향성에서 옵니다"
       >
-        시스템 판정 <span className="help-mark">?</span>
+        판정 <span className="help-mark">?</span>
       </button>
-      {part(init, false)}
-      <span className="newv-arrow">→</span>
-      {part(fin, strong)}
-      {fin.verdict && (
-        // 엇갈림에서 나온 판정이면 원래 색(적중 노랑·보험 청록·미적 빨강)의 톤 다운
-        // 버전으로 칠한다 — 리그 표 적중 칸과 같은 규칙(pickVerdictSoftStyle, 2026-09-20).
-        <span
-          className="match-chip match-chip-tone sys-verdict"
-          style={{
-            background: `var(--chip-${VERDICT_TONE[fin.verdict]}${fin.split ? '-soft' : ''}-bg)`,
-            color: `var(--chip-${VERDICT_TONE[fin.verdict]}${fin.split ? '-soft' : ''}-fg)`,
-            fontWeight: 700,
-          }}
-          title={fin.split ? '엇갈림에서 나온 판정 — 값은 그대로지만 갈리지 않은 경기보다'
-            + ' 한 단계 아래라 원래 색의 톤을 낮춰 칠했습니다.' : undefined}
-        >
-          {fin.verdict}
-        </span>
-      )}
+      <div className="newv-rows">
+        <div className="newv-row">{part(init)}</div>
+        <div className="newv-row">
+          {part(fin)}
+          {fin.verdict && (
+            // 엇갈림에서 나온 판정이면 원래 색(적중 노랑·보험 청록·미적 빨강)의 톤 다운
+            // 버전으로 칠한다 — 리그 표 적중 칸과 같은 규칙(pickVerdictSoftStyle, 2026-09-20).
+            <span
+              className="match-chip match-chip-tone sys-verdict"
+              style={{
+                background: `var(--chip-${VERDICT_TONE[fin.verdict]}${fin.split ? '-soft' : ''}-bg)`,
+                color: `var(--chip-${VERDICT_TONE[fin.verdict]}${fin.split ? '-soft' : ''}-fg)`,
+                fontWeight: 700,
+              }}
+              title={fin.split ? '엇갈림에서 나온 판정 — 값은 그대로지만 갈리지 않은 경기보다'
+                + ' 한 단계 아래라 원래 색의 톤을 낮춰 칠했습니다.' : undefined}
+            >
+              {fin.verdict}
+            </span>
+          )}
+        </div>
+      </div>
       {showLegend && <NewSystemVerdictLegend onClose={() => setShowLegend(false)} />}
     </div>
   )
@@ -4150,6 +4267,7 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank
                   h2hVerdict={verdict}
                   h2hLoading={h2hLoading}
                   pick={pick}
+                  fin={fin}
                   sameOdds={sameOdds}
                   xg={xg}
                   archiveTags={archiveTags}
@@ -4600,6 +4718,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
                 {sampleCollapsed[key] ? '▸' : '▾'}
               </button>
               {title}
+              <SampleOddsInfo row={row} kind={key} />
               {sampleNotes !== undefined && (
                 <>
                   <SampleDirectionSelect

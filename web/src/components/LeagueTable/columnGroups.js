@@ -5,7 +5,7 @@
 import { formatDt } from '../../utils/format'
 import {
   DIR_SIDE, phaseVerdict, marketSetMoved, RISK_FIELD_MARKET,
-  DOM_ALL_PAIRS, FOR_WL_PAIRS,
+  DOM_ALL_PAIRS, FOR_WL_PAIRS, marketOpinion,
 } from '../../utils/verdictCalc'
 
 // '판정' 칸 — 저장된 컬럼이 아니라 그때그때 계산하는 값이라 가짜 컬럼 키로 둔다.
@@ -25,6 +25,13 @@ export const VERDICT_KEY = 'VERDICT'
 // "적중은 최종 판정에만"). 그래서 FINAL_FIELD에는 안 올린다 — 올리면 splitsOnFinal이
 // true가 되어 위/아래 줄이 따로 그려진다(LeagueTable.jsx의 fit() 참고).
 export const VERDICT_HIT_KEY = 'VERDICT_HIT'
+// '판정' 옆 '국배'·'해배' 칸 — 판정이 합쳐 쓰는 두 의견을 따로 보여준다(2026-09-22 사용자
+// 지정: "판정 / 국배 / 해배로 나누고 적중여부는 판정으로"). 국배 = 국내배당만의 판정
+// (리)국·통)국 쌍, 갈리면 통)국), 해배 = 해외배당만의 판정(리)해·통)해). 정 쪽이면 파랑,
+// 플핸 쪽이면 빨강. 둘이 서로 다르면 판정 칸이 엇갈림(엇(정)/엇(플))이 된다 —
+// verdictCalc.js oddsPhaseSplit의 dom/forr 그대로다. 판정처럼 위(초기)/아래(배변)로 갈린다.
+export const VERDICT_DOM_KEY = 'VERDICT_DOM'
+export const VERDICT_FOR_KEY = 'VERDICT_FOR'
 
 const GEN_COLS = ['L', 'S', 'R', 'No', 'DT', 'TM']
 // 그 경기 '직전까지'의 시즌 성적. 백엔드가 조회 시 계산해 붙여준다.
@@ -113,6 +120,8 @@ export const FINAL_FIELD = {
   // null을 채워도 무해하다.
   // (바로 옆 '적중'은 위/아래로 안 갈려서(VERDICT_HIT_KEY 주석 참고) 여기 없다.)
   [VERDICT_KEY]: null,
+  [VERDICT_DOM_KEY]: null,
+  [VERDICT_FOR_KEY]: null,
 }
 
 /** 이 칸이 위/아래 두 줄로 갈리는가. (값이 null인 항목도 갈라지므로 in으로 본다) */
@@ -171,6 +180,27 @@ export function riskUnmoved(row, colKey) {
 export function verdictAnyMarketMoved(row) {
   if (!row) return true
   return marketSetMoved(row, DOM_ALL_PAIRS) || marketSetMoved(row, FOR_WL_PAIRS)
+}
+
+/** 국배·해배 칸의 값 — 판정이 합쳐 쓰는 그 시장 혼자의 의견(verdictCalc marketOpinion:
+ *  {pick, total, label}). market = '국' | '해'. 화면에는 label(블루·블루(약)·레드·레드(약))을
+ *  쓴다. 의견이 없으면(배당 없음 등) null → 화면은 '－'.
+ *  배변 줄을 비우는 조건은 판정 칸과 똑같이 '두 시장 다 안 움직였을 때'만이다 — 한쪽만
+ *  움직였을 때 안 움직인 쪽을 비우면, 판정 칸(예: 엇(플))이 국배·해배 중 무엇으로
+ *  만들어졌는지 화면에서 대조할 수 없게 된다(안 움직인 시장은 초기 의견이 그대로 쓰인다). */
+export function marketVerdictPick(row, isFinal, market) {
+  if (!row) return null
+  if (isFinal && !verdictAnyMarketMoved(row)) return null
+  return marketOpinion(row, isFinal, market)
+}
+
+/** 레드/블루 의견 글자색 — 정 쪽 파랑 · 플 쪽 빨강(판정 칸과 같은 축). '(약)'은 같은 색을
+ *  보통 굵기 + 흐리게(상세보기 방향성의 약블루·약레드가 한 단계 옅은 것과 같은 뜻). */
+export function opinionStyle(label) {
+  if (!label) return undefined
+  const tone = label.startsWith('블루') ? 'blue' : 'red'
+  const weak = label.endsWith('(약)')
+  return { color: `var(--chip-${tone}-fg)`, fontWeight: weak ? 400 : 700, opacity: weak ? 0.75 : 1 }
 }
 
 // 확률 지표(정승%·플핸무%·플%) 8칸 전부 — 배당에서 바로 나오는 4칸(정·플)과
@@ -369,7 +399,9 @@ export function buildColumnGroups(availableCols, { hideIndicators = false, showO
       label1: '판정', label2: '', kind: 'flat',
       // 적중 — 시스템 판정의 픽을 그 행의 실제 결과(RT)와 대조한 값(computeAutoVerdict,
       // 2026-09-12 추가). 판정과 마찬가지로 위(초기)/아래(배변) 두 줄로 갈린다.
-      cols: [{ key: VERDICT_KEY, sub: '판정' }, { key: VERDICT_HIT_KEY, sub: '적중' }],
+      // 국배·해배 — 판정이 합친 두 의견(2026-09-22). 적중은 계속 판정 기준 하나뿐.
+      cols: [{ key: VERDICT_KEY, sub: '판정' }, { key: VERDICT_DOM_KEY, sub: '국배' },
+             { key: VERDICT_FOR_KEY, sub: '해배' }, { key: VERDICT_HIT_KEY, sub: '적중' }],
     })
   }
 
@@ -426,6 +458,8 @@ const COL_WIDTH = {
   // 정무·정역·플핸무·플핸승(2~3글자) — 실측 안 하고 감으로 잡았다(새 칸이라 아직
   // DB 값 분포를 캔버스로 잴 대상이 없다). 필요하면 나중에 실측해서 고칠 것.
   [VERDICT_KEY]: 54,
+  [VERDICT_DOM_KEY]: 54,
+  [VERDICT_FOR_KEY]: 54,
   // 적중(VERDICT_HIT) — 아래 PICK_VERDICT와 똑같은 뱃지(.cell-badge)를 그대로 쓰므로
   // 실측해 둔 그 폭(63)을 그대로 쓴다.
   [VERDICT_HIT_KEY]: 63,

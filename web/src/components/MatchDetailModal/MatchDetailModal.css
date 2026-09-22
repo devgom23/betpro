@@ -1157,9 +1157,24 @@
   border-top: 1px solid var(--border);
   display: flex;
   align-items: baseline;
-  flex-wrap: wrap;
   gap: 8px;              /* 나열 항목 사이 기본 간격(6-1장) */
   font-size: 13px;
+}
+
+/* 초기·배변을 화살표로 한 줄에 붙이던 걸 두 줄로 쌓는다 — 배변 줄만 줄바꿈해서
+   초기 줄과 같은 정렬로 둔다(2026-09-22 사용자 지정). */
+.newv-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.newv-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .newv-part {
@@ -1173,14 +1188,38 @@
   color: var(--text-muted);
 }
 
+/* 판정 옆 '국배 · 해배' 의견(2026-09-22) — 부가설명 크기, 라벨은 흐리게 값만 색. */
+.newv-markets {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-left: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.newv-market {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  cursor: help;
+}
+
 /* 엇갈림 픽 — 정(파랑)·플(빨강) 어느 편도 아니라 회색으로 둔다
    (리그 표의 .verdict-split과 같은 규칙). */
 .newv-split {
   color: var(--text-muted);
 }
 
-.newv-arrow {
+/* 판정 옆 표본 수 — '84.20% (512건)'의 괄호 부분(2026-09-22). */
+.newv-sample-n {
+  font-size: 11px;
   color: var(--text-muted);
+}
+
+.newv-sample-n.is-thin {
+  color: var(--chip-yellow-fg);
+  cursor: help;
 }
 
 /* 경기지표 제목 — 방향성·시스템 판정은 표 안(왼쪽 위 칸)에 이름을 넣는
@@ -1572,20 +1611,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* '초강추'(국≠해)·'강추'(접전) 뱃지 — 배변 판정에만 뜬다(verdictCalc.js strongPickTier).
-   적중(노랑)·보험(청록)과 같은 줄에 나란히 붙을 수 있어 그 둘과 안 겹치는 보라를 쓴다
-   (이 축은 이 뱃지 하나뿐). 두 단계가 같은 보라를 쓴다 — 글자로 이미 구분된다(사용자 지정). */
-.newv-strong {
-  margin-left: 4px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--chip-purple-bg);
-  color: var(--chip-purple-fg);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: help;
-}
-
 /* 4칸 표 — 확률 지표 표보다 좁아도 되므로 폭을 내용에 맡긴다(늘어나면 오른쪽이 빈다).
    칸 내용이 경기마다 갈려서(값이 있을 때와 "—") table-layout:auto로 두면 표 폭이
    들쭉날쭉 흔들린다 — fixed로 고정해 어느 경기를 열어도 표 폭이 같게 한다.
@@ -1639,16 +1664,15 @@
 /* 표본이 넉넉한 칸(15건+)만 방향 색을 입힌다 — 표본 숫자를 화면에서 뺀 대신
    색 하나가 두 가지를 말한다: 색이 있으면 '믿을 만한 표본', 색 종류가 방향.
    ⚠ 위 .dscope-ok b(기본 글자색)와 특이도가 같으므로 반드시 그 뒤에 와야 이긴다.
-   ⚠ 이 앱의 원래 축은 플핸=빨강이다(핸디기준점 양수·RT 역과 같은 축). 여기서만
-     초록을 쓰는 건 사용자 지정(2026-09-05) — 빨강이 '나쁘다/위험'으로도 읽혀서
-     방향 표시로는 오해를 부르기 때문이다. */
-.dscope-side-p b { color: var(--chip-green-fg); }
+   플핸=빨강·정=파랑 — 2026-09-22 사용자 지정으로 리그 표 판정·국배·해배 칸과 같은
+   축으로 맞췄다(2026-09-05~09-21에는 플핸을 초록으로 칠했었다). */
+.dscope-side-p b { color: var(--chip-red-fg); }
 .dscope-side-j b { color: var(--chip-blue-fg); }
 
 /* 위 두 규칙은 표 셀(td b) 전용이다 — 표 밖(시스템 판정 줄 등)에서 같은 색을 쓸
    때는 이 범용 버전을 쓴다. help-legend-card 안에서만 쓰던 걸 2026-09-06부터
    .pick-band-newverdict에서도 쓰게 되어 범위를 넓혔다. */
-.dscope-side-p-ink { color: var(--chip-green-fg); }
+.dscope-side-p-ink { color: var(--chip-red-fg); }
 .dscope-side-j-ink { color: var(--chip-blue-fg); }
 
 /* ── 색 기준 참고표 ─────────────────────────────────────────────────────
@@ -1703,8 +1727,8 @@
 }
 
 /* ⚠ 표 안에서는 .dscope-ok b 같은 규칙(특이도 0,1,1)이 먼저 잡으므로, 참고표 안의
-   색 견본은 그보다 특이도가 높아야 한다 — 안 그러면 초록/파랑이 흰색으로 나온다. */
-.help-legend-card .dscope-side-p-ink { color: var(--chip-green-fg); }
+   색 견본은 그보다 특이도가 높아야 한다 — 안 그러면 빨강/파랑이 흰색으로 나온다. */
+.help-legend-card .dscope-side-p-ink { color: var(--chip-red-fg); }
 .help-legend-card .dscope-side-j-ink { color: var(--chip-blue-fg); }
 
 /* 참고표에서 '여기는 약속을 못 지킨다'처럼 스스로 약점을 밝히는 칸 — 앱 전체의
@@ -1937,6 +1961,25 @@
 .sample-fold-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/* 표본 제목(정배·플핸·해배)과 방향성 선택박스 사이 — 그 표본이 조건으로 쓰는 배당
+   한 칸의 초기→배변 값(2026-09-22). 옅은 배경으로 뱃지처럼, 배변 값만 강조. */
+.detail-section h3 .sample-odds-info {
+  flex: none;
+  align-self: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+.detail-section h3 .sample-odds-info strong {
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 /* 표본 박스 제목 옆 '방향성' 드롭박스 — 메모 칸 바로 앞, 같은 모양(2026-09-15).

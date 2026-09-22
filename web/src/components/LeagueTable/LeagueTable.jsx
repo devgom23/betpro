@@ -3,7 +3,7 @@ import {
   buildColumnGroups, formatCell, cellStyle, myHitStyle, myPickStyle, myBetStyle, oddsBetStyle, flowSideStyle, formStyle, bettingDayStyle,
   computeAutoVerdict, pickVerdictStyle, pickVerdictSoftStyle, groupKey, splitIndicatorBatches, riskColClass, columnWidth,
   collapsedWidth, splitsOnFinal, oddsMoveDir, oddsUnmoved, riskUnmoved, riskMoveDir, toFinalRow, rtToText,
-  VERDICT_KEY, VERDICT_HIT_KEY, verdictCellStyle, finalSystemInfo, verdictAnyMarketMoved,
+  VERDICT_KEY, VERDICT_HIT_KEY, VERDICT_DOM_KEY, VERDICT_FOR_KEY, marketVerdictPick, opinionStyle, verdictCellStyle, finalSystemInfo, verdictAnyMarketMoved,
 } from './columnGroups'
 import { phaseVerdict, strongPickTier, STRONG_TIER_TITLE } from '../../utils/verdictCalc'
 import { seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
@@ -175,13 +175,31 @@ function dividerClass(g, isLastGroup) {
 // 알아볼 수 있어야 한다. 이번주 리스트처럼 여러 리그를 한 표에 모아 보여줄 때는
 // (row.L_LABEL이 붙어 올 때) 리그명 칸도 하나 더 유지한다 — 안 그러면 접힌 채로는
 // 어느 리그 경기인지 구분이 안 된다.
+// 판정 옆 '국배'·'해배' 칸 — 그 시장 혼자의 의견을 레드/블루로(2026-09-22 사용자 지정 —
+// 상세보기 표본 방향성과 같은 말, 확신이 약하면 '(약)' — verdictCalc opinionLabel). 의견이 없으면 '－'.
+function MarketVerdictCell({ row, isFinal, market, className }) {
+  const op = marketVerdictPick(row, isFinal, market)
+  return (
+    <td
+      className={className}
+      style={opinionStyle(op?.label)}
+      title={`${market === '국' ? '국내' : '해외'}배당만의 ${isFinal ? '배변' : '초기'} 의견`
+        + (op ? ` — ${op.pick} · ${op.key.slice(0, 1)})${op.key.slice(1)} 칸 · 과거 표본 ${op.total.toLocaleString()}건` : '')
+        + '\n블루=정 쪽 · 레드=플핸 쪽 · (약)=핸승·역 차이 10%p 미만(또는 표본 15건 미만).'
+        + ' 국배·해배가 서로 다르면 판정 칸이 엇갈림이 됩니다.'}
+    >
+      {op?.label || <span className="mypick-blank">－</span>}
+    </td>
+  )
+}
+
 function collapsedSpan(g, hasLeagueLabel) {
   if (g.label1 === '일반정보') return hasLeagueLabel ? 3 : 2
   // 경기정보를 접어도 순위·팀명·스코어·결과(HP/HT/HS/RT/AS/AT/AP)는 계속 보여준다 —
   // 접힌 채로도 어느 팀이 몇 위이고 결과가 어땠는지는 바로 알 수 있어야 한다.
   if (g.label1 === '경기정보') return 7
   // 판정·적중 둘 다 접어도 칸을 유지한다(위 g.label1 === '판정' 분기 참고) — 개수를
-  // 하드코딩하지 않고 실제 칸 수(g.cols.length, 지금은 2)를 그대로 쓴다.
+  // 하드코딩하지 않고 실제 칸 수(g.cols.length, 지금은 4 — 판정·국배·해배·적중)를 그대로 쓴다.
   if (g.label1 === '판정') return g.cols.length
   return 1
 }
@@ -862,6 +880,8 @@ export default function LeagueTable({
                               : <span className="mypick-blank">－</span>}
                             <SeasonEndMark row={baseRow} pick={split ? null : pick} />
                           </td>,
+                          <MarketVerdictCell key={`${gi}-dom`} row={baseRow} isFinal={isFinal} market="국" className="collapsed-cell" />,
+                          <MarketVerdictCell key={`${gi}-for`} row={baseRow} isFinal={isFinal} market="해" className="collapsed-cell" />,
                           <td key={`${gi}-hit`} className={`collapsed-cell${dividerClass(g, isLastGroup)}`}>
                             {hitVerdict.verdict ? (
                               <span
@@ -876,7 +896,7 @@ export default function LeagueTable({
                             )}
                           </td>,
                         ]
-                        cellKeys = [VERDICT_KEY, VERDICT_HIT_KEY]
+                        cellKeys = [VERDICT_KEY, VERDICT_DOM_KEY, VERDICT_FOR_KEY, VERDICT_HIT_KEY]
                       } else {
                         cells = [
                           // 헤더(collapsedWidth(null)=36px)와 같은 폭을 명시해 둔다 — 똥배는
@@ -989,7 +1009,7 @@ export default function LeagueTable({
                       // 적중 — 판정 바로 옆 칸(VERDICT_HIT_KEY, 2026-09-12 추가). 시스템
                       // 판정의 픽을 실제 결과(RT)와 대조한다 — 계산 함수는 '내 예측'의
                       // PICK_VERDICT와 같고(computeAutoVerdict) 대조하는 픽만 다르다.
-                      cellKeys = [VERDICT_KEY, VERDICT_HIT_KEY]
+                      cellKeys = [VERDICT_KEY, VERDICT_DOM_KEY, VERDICT_FOR_KEY, VERDICT_HIT_KEY]
                       const v = phaseVerdict(baseRow, isFinal, isFinal ? '배변' : '초기')
                       // 배변 줄인데 이 판정이 근거로 삼는 시장(국내·해외)이 하나도 안
                       // 움직였으면 '배변으로 다시 확인된 판정'인 것처럼 보여주지 않는다
@@ -1021,6 +1041,8 @@ export default function LeagueTable({
                             : <span className="mypick-blank">－</span>}
                           <SeasonEndMark row={baseRow} pick={split ? null : pick} />
                         </td>,
+                        <MarketVerdictCell key={`${gi}-dom`} row={baseRow} isFinal={isFinal} market="국" />,
+                        <MarketVerdictCell key={`${gi}-for`} row={baseRow} isFinal={isFinal} market="해" />,
                         <td key={`${gi}-hit`} className={dividerClass(g, isLastGroup).trim() || undefined}>
                           {hitVerdict.verdict ? (
                             <span

@@ -34,6 +34,11 @@ export const ODDS_PICK_OPTIONS = [
 // 일괄 변경했다(api/my_picks.py migrate_sample_note_direction 참고, 1회성 스크립트로 실행).
 // ⚠ 항목을 늘리면 api/main.py SAMPLE_DIRECTIONS에도 같이 넣어야 저장된다.
 export const SAMPLE_DIRECTION_OPTIONS = ['블루', '약블루', '레드', '약레드', '엇갈림', '몰라', '표본없음']
+// 화면 표기만 바꾼다(2026-09-22 사용자 지정 — 리그 표 국배·해배의 '레드(약)·블루(약)'과 같은 말).
+// 저장값('약블루'·'약레드')은 그대로 — 이미 고른 값·서버 검사(SAMPLE_DIRECTIONS)·집계가 전부
+// 이 저장값을 쓰므로 바꾸면 안 된다. 여기 없는 값은 저장값을 그대로 보여준다.
+export const SAMPLE_DIRECTION_TEXT = { 약블루: '블루(약)', 약레드: '레드(약)' }
+export const sampleDirectionText = (v) => SAMPLE_DIRECTION_TEXT[v] ?? v
 
 // 배답벳 — 배답픽과 마찬가지로 내픽과는 완전히 별개인 참고용 태그(MatchDetailModal.jsx
 // '배답벳' 드롭박스 전용). 판정·집계에는 안 쓰인다(2026-09-13 추가).

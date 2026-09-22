@@ -215,7 +215,30 @@ export function scopeCell(row, codes, final) {
     name: v ? directionName(v) : null,
     pick: v ? pickName(v) : null,
     total: lines.reduce((a, l) => a + l.total, 0),
+    pct: v,   // [핸승,핸무,무,역] 가중 % — 레드/블루 '(약)' 판단(opinionLabel)에 쓴다
+    // [핸승,핸무,무,역] 과거 표본 건수 그대로(줄 합) — 판정 옆 '표본 실측 %'(sampleWinRate)에 쓴다
+    counts: lines.reduce((acc, l) => acc.map((a, i) => a + l.vals[i]), [0, 0, 0, 0]),
   }
+}
+
+// 픽의 '표본 실측 당첨률' — 그 칸 과거 표본에서 이 픽이 당첨된 비율(정무=역 빼고 전부,
+// 플핸무=핸승 빼고 전부). 2026-09-22 사용자 지정: "구간별로 정한 %가 아니라 해당 표본에
+// 의해 실측된 %를 보여줘". 6대리그 대조(통)해 칸, 배변 35,740경기): 표본 % 70~75 → 실제
+// 71.6 · 75~80 → 79.1 · 80~85 → 82.2 · 85~90 → 86.3 · 90~95 → 91.9 · 95+ → 94.7
+// (초기도 같은 모양) — 표본 %가 실제와 거의 그대로 맞고, 묶음 평균(77.8~89%)보다 폭이
+// 넓게 갈린다. 95%+만 실제가 2~3%p 낮다(표본 적은 경기가 섞임).
+// 표본이 이보다 적으면 표본 %를 그대로 믿기 어렵다 — 2026-09-22 실측(배변, 픽을 낸 칸 기준):
+// 표본 10건 미만에서 표본 %가 100%였던 63경기의 실제 당첨 87.3%, 20~29건에서 94.7% → 84.1%.
+// 30건 이상부터 표본 %와 실제가 맞는다(30~49건 97.4→93.9 · 50~99건 95.4→93.8 · 100건+ 92.8→92.8).
+// 화면은 % 옆에 '표본 적음'을 붙이고, TOP 순위는 이 미만을 뒤로 보낸다.
+export const SAMPLE_RELIABLE_N = 30
+
+export function sampleWinRate(counts, pick) {
+  if (!counts) return null
+  const n = counts.reduce((a, b) => a + b, 0)
+  if (n <= 0) return null
+  const lose = DIR_SIDE[pick] === '정' ? counts[3] : counts[0]
+  return { rate: ((n - lose) / n) * 100, n }
 }
 
 // 배당 표 4칸(리)국·리)해·통)국·통)해)의 재료 — 정배 방향(FW/FL, KW/KL)에 따라
@@ -316,15 +339,16 @@ export function resolveOddsPhasePick(row, final) {
   const pickOf = (key) => scopeCell(row, codes[key], final).pick
   const picks = { 리국: pickOf('리국'), 리해: pickOf('리해'), 통국: pickOf('통국'), 통해: pickOf('통해') }
   const base = picks.통해
-  if (!base) return { pick: null, flipped: false }
+  if (!base) return { pick: null, flipped: false, key: null }
   const others = FLIP_ORDER.map((k) => picks[k]).filter(Boolean)
   const agree = others.filter((n) => DIR_SIDE[n] === DIR_SIDE[base]).length
   if (others.length > 0 && agree === 0) {
     const want = DIR_SIDE[base] === '정' ? '플' : '정'
-    const alt = FLIP_ORDER.map((k) => picks[k]).find((n) => n && DIR_SIDE[n] === want)
-    if (alt) return { pick: alt, flipped: true }
+    const altKey = FLIP_ORDER.find((k) => picks[k] && DIR_SIDE[picks[k]] === want)
+    if (altKey) return { pick: picks[altKey], flipped: true, key: altKey }
   }
-  return { pick: base, flipped: false }
+  // key = 픽을 낸 칸 — 판정 옆 '표본 실측 %'는 이 칸의 표본으로 잰다.
+  return { pick: base, flipped: false, key: '통해' }
 }
 
 // ── 엇갈림 — 국(리)국+통)국)과 해(리)해+통)해)가 서로 다른 픽을 낼 때 ─────────────
@@ -361,6 +385,50 @@ function splitDisplay(label, forrPick) {
 // 쌍(리·통) 하나의 의견 — 갈리면 통)쪽을 따른다.
 function pairSide(lig, tong) {
   return tong ?? lig ?? null
+}
+
+// ── 국배·해배 의견을 레드/블루로 (2026-09-22 사용자 지정) ──────────────────────
+// 리그 표 국배·해배 칸, 상세보기 방향성·배당 표 칸, 시스템 판정 옆 국배·해배는 이름
+// (정무·플핸무) 대신 방향만 '블루'(정 쪽)·'레드'(플 쪽)로 쓰고, 확신이 약하면 '(약)'을
+// 붙인다 — 상세보기 표본 방향성(블루·블루(약)·레드·레드(약))과 같은 말.
+//
+// '(약)' = 핸승%와 역%의 차이가 10%p 미만(또는 표본 15건 미만). 픽은 핸승과 역 중 작은
+// 쪽을 배제하는 것이라(pickName) 둘이 붙어 있으면 그만큼 아슬아슬한 배제다.
+// 2026-09-22 실측(6대리그, 통)국·통)해 칸, 초기·배변 각각):
+//                     강(10%p↑)            약(10%p 미만)
+//   국배 초기  당첨 85.5% 단통 64.7%(62%) · 당첨 77.5% 단통 53.3%(38%)
+//   국배 배변  당첨 85.3% 단통 64.6%(62%) · 당첨 77.9% 단통 53.8%(38%)
+//   해배 초기  당첨 85.7% 단통 65.1%(59%) · 당첨 77.9% 단통 53.1%(41%)
+//   해배 배변  당첨 85.7% 단통 65.6%(64%) · 당첨 79.2% 단통 53.3%(36%)
+// (컷 5%p면 약이 20%로 줄고 격차 −7%p, 15%p면 약이 54%로 늘고 격차 −8%p — 10%p가
+//  약을 '열에 넷'으로 두면서 격차가 뚜렷한 자리.) ⚠ 이 격차의 상당 부분은 배당 자체
+// (강정배일수록 차이가 크다)에서 온다 — '배당보다 더 맞는다'가 아니라 '이 의견이 얼마나
+// 확신하나'를 보여주는 표시다. 처음엔 표본 15건 기준만 썼는데 통)국·통)해는 표본이
+// 넉넉해 3.3만 경기 중 62~82경기에만 (약)이 붙어 사실상 안 나와서 바꿨다.
+export const OPINION_STRONG_N = 15
+export const OPINION_WEAK_MARGIN = 10
+
+export function opinionLabel(pick, total, pct) {
+  const side = DIR_SIDE[pick]
+  if (!side) return null
+  const base = side === '정' ? '블루' : '레드'
+  const margin = pct ? Math.abs(pct[0] - pct[3]) : null
+  const weak = total < OPINION_STRONG_N || (margin !== null && margin < OPINION_WEAK_MARGIN)
+  return weak ? `${base}(약)` : base
+}
+
+// 국배(market='국')·해배(market='해') 의견 — oddsPhaseSplit의 dom/forr와 같은 값
+// (쌍 안에서 통)쪽 우선, 없으면 리)쪽)에 그 칸의 표본 수를 같이 돌려준다.
+export function marketOpinion(row, final, market) {
+  const codes = oddsScopeCodes(row)
+  const keys = market === '국' ? ['통국', '리국'] : ['통해', '리해']
+  for (const key of keys) {
+    const c = scopeCell(row, codes[key], final)
+    if (c.pick) {
+      return { pick: c.pick, total: c.total, key, pct: c.pct, label: opinionLabel(c.pick, c.total, c.pct) }
+    }
+  }
+  return null
 }
 
 // 국·해가 갈렸는지와 각 쪽 의견. 한쪽이라도 의견이 없으면 갈림으로 보지 않는다.
@@ -473,18 +541,29 @@ export const PHASE_CELL_RATE = {
 // 강추는 '배변 플핸무 + 구간 평균 ★3'을 뼈대로 실측한 등급이라, 새 별로 판정하면
 // 강추 칸만 ★3으로 남아 스스로를 정의하는 순환이 된다(강추 2,985경기는 그대로 유지).
 export function phaseVerdict(row, final, label) {
-  const { pick, flipped } = resolveOddsPhasePick(row, final)
+  const { pick, flipped, key } = resolveOddsPhasePick(row, final)
   if (!pick) return { label, pick: null }
+  // 화면에 보여주는 % = 픽을 낸 칸의 표본 실측 당첨률(sampleWinRate, 2026-09-22 사용자 지정).
+  // 예전 묶음 평균(구간×픽×강추, PHASE_CELL_RATE)은 groupRate/groupN으로 남겨 툴팁에만 쓴다.
+  // 별(stars)은 그 묶음 평균을 잘라 매기던 것이라 이제 화면에 안 쓴다(null).
+  const codes = oddsScopeCodes(row)
+  const sampleOf = (k, p) => (k ? sampleWinRate(scopeCell(row, codes[k], final).counts, p) : null)
   // 국·해가 갈리면 픽 대신 '엇갈림'을 낸다 — 걸 자리가 아니라는 표시라 적중/보험/미적
   // 판정도 매기지 않는다(관망). 배변만 괄호에 방향(해 쪽)을 적는다(oddsPhaseSplit 주석).
   const sp = oddsPhaseSplit(row, final)
   if (sp.split) {
+    // 해 쪽 의견을 낸 칸(통)해 우선, 없으면 리)해 — pairSide와 같은 순서)의 표본 실측 %.
+    const fKey = scopeCell(row, codes.통해, final).pick ? '통해' : '리해'
+    const s = sampleOf(fKey, sp.forr)
     return {
       label,
       pick: sp.forr,                       // 걸어야 한다면 해 쪽 — 배변 6/6 근거
       split: true,
       display: splitDisplay(label, sp.forr),
-      rate: SPLIT_RATE[label] ?? null,     // 실측 상수(구간 평균) — 별점은 주지 않는다
+      rate: s ? s.rate : null,             // 해 쪽 칸의 표본 실측 %
+      n: s ? s.n : null,
+      sampleKey: fKey,
+      groupRate: SPLIT_RATE[label] ?? null, // 예전 표시값(엇갈림 전체 구간 평균) — 툴팁용
       stars: null,
       verdict: sysPickVerdict(sp.forr, row.RT),   // 적중/보험/미적은 그대로 매긴다
       flipped: false,
@@ -499,12 +578,13 @@ export function phaseVerdict(row, final, label) {
   const cell = bandRate !== null
     ? PHASE_CELL_RATE[label]?.[`${bandRate.toFixed(2)}|${pick}${strong ? '|강추' : ''}`]
     : null
-  const rate = cell ? cell[0] : bandRate
-  const n = cell ? cell[1] : (band ? band.n : null)
-  const stars = rate !== null ? starsOfNew(rate) : null
+  const groupRate = cell ? cell[0] : bandRate
+  const groupN = cell ? cell[1] : (band ? band.n : null)
+  const s = sampleOf(key, pick)
   const verdict = sysPickVerdict(pick, row.RT)
-  return { label, pick, split: false, display: pick, flipped, ratio, rate, n, stars,
-           bandRate, bandStars, strong, verdict }
+  return { label, pick, split: false, display: pick, flipped, ratio,
+           rate: s ? s.rate : null, n: s ? s.n : null, sampleKey: key, stars: null,
+           groupRate, groupN, bandRate, bandStars, strong, verdict }
 }
 
 // '접전' 기준선 — 정배배당(배변 기준, 낮은 쪽)이 이 값 이상이면 접전으로 본다.
