@@ -80,9 +80,80 @@ export function h2hVerdict(wdlAll, wdlHome) {
   return {
     label,
     tone,
+    // 화면 표기가 '홈우세/전적보합' 단어 대신 승/무/패 숫자로 바뀌어(2026-09-22
+    // 사용자 지정) 호출부가 이 셋을 직접 읽는다. th가 없으면(이 구장 기록 0건) 0/0/0.
+    w: th?.w ?? 0,
+    d: th?.d ?? 0,
+    l: th?.l ?? 0,
+    n: th?.n ?? 0,
     title: `홈팀 기준 이 구장 상대전적 판정(전체 맞대결이 아니라 홈 경기만 본다).\n`
       + `${fmt(th, h)}\n`
       + `기준: 표본보정 승점이 평균에서 ±${MARGIN.toFixed(2)} 넘게 벗어나면 우세/열세.`
       + ` 표본이 작으면 평균 쪽으로 끌어당겨(가상의 평균 경기 ${SHRINK}판을 섞어) 판정한다.`,
+  }
+}
+
+// ── 최근(이번 시즌 제외 최근 5개 시즌) 홈전적 (2026-09-22 사용자 지정) ────────────
+// "전적 보합/우세" 위 h2hVerdict는 그대로 두고(다른 신호(플핸85·같은방향)가 이미
+// 그 값으로 실측·측정돼 있어 손대지 않는다), 같은 경기의 상대전적 칩에 "최근에는
+// 어땠나"를 나란히 보여주기 위한 것 — 사용자 사례(AS로마 vs 인터밀란)에서 전체는
+// 5승6무6패(전적보합)인데 최근 5시즌(21-22~25-26)은 0승0무5패(원정우세)로 완전히
+// 갈렸다. "최근"의 정의(사용자 지정): 이번 시즌은 빼고 그 직전 5개 시즌.
+// 판정식은 h2hVerdict와 완전히 같다(기준선 1.582·보정K=5·여유폭±0.30) — 표본만 다르다.
+// matches는 새 API 호출 없이 /api/pick_ai가 이미 주는 h2h.matches(limit=500, cross=True,
+// 이 경기 이전까지 전부)를 그대로 쓴다.
+// 반환: null = 이 창 안에서 이 구장 맞대결이 0건 — 호출부가 '전적보합'이 아니라
+// '－'(표본 자체가 없음)로 그려서 "쟀더니 팽팽하다"와 구분한다.
+function seasonIdx(s) {
+  const n = parseInt(String(s || '').slice(0, 2), 10)
+  return Number.isFinite(n) ? n : null
+}
+
+function seasonLabel(k) {
+  const a = ((k % 100) + 100) % 100
+  const b = (a + 1) % 100
+  return `${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`
+}
+
+export const RECENT_SEASONS = 5
+
+export function h2hVerdictRecent(matches, host, season) {
+  const si = seasonIdx(season)
+  if (si === null || !Array.isArray(matches)) return null
+  const lo = si - RECENT_SEASONS
+  const hi = si - 1
+  let w = 0
+  let d = 0
+  let l = 0
+  for (const m of matches) {
+    if (String(m.HT || '').trim() !== host) continue
+    const ms = seasonIdx(m.S)
+    if (ms === null || ms < lo || ms > hi) continue
+    const hs = Number(m.HS)
+    const as = Number(m.AS)
+    if (!Number.isFinite(hs) || !Number.isFinite(as)) continue
+    if (hs > as) w += 1
+    else if (hs === as) d += 1
+    else l += 1
+  }
+  const n = w + d + l
+  if (n === 0) return null   // 이 창 안엔 이 구장 맞대결이 없다 — '표본없음'
+  const points = w * 3 + d
+  const h = (points + BASE_HOME * SHRINK) / (n + SHRINK)
+  let label
+  if (h >= BASE_HOME + MARGIN) label = '홈우세'
+  else if (h <= BASE_HOME - MARGIN) label = '원정우세'
+  else label = '전적보합'
+  const tone = label === '홈우세' ? 'blue' : label === '원정우세' ? 'red' : 'gray'
+  return {
+    label,
+    tone,
+    w,
+    d,
+    l,
+    n,
+    title: `최근 ${RECENT_SEASONS}시즌(이번 시즌 제외, ${seasonLabel(lo)}~${seasonLabel(hi)}) 홈 상대전적.\n`
+      + `${w}승 ${d}무 ${l}패 (${n}경기) → 표본보정 ${h.toFixed(2)} (평균 ${BASE_HOME.toFixed(2)})\n`
+      + `기준은 위 전체 판정과 같습니다(±${MARGIN.toFixed(2)}, 보정 K=${SHRINK}) — 표본만 최근 것으로 좁혔습니다.`,
   }
 }

@@ -7,7 +7,7 @@ import { formatTime, formatDt, scoreClass, LEAGUE_LABELS_SHORT } from '../../uti
 import { computeAutoVerdict, pickVerdictStyle, opinionStyle, marketVerdictPick } from '../LeagueTable/columnGroups'
 import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS, SAMPLE_DIRECTION_OPTIONS, sampleDirectionText } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
-import { h2hVerdict } from '../../utils/h2hVerdict'
+import { h2hVerdict, h2hVerdictRecent, RECENT_SEASONS } from '../../utils/h2hVerdict'
 import {
   drawTendency, drawRelation, VERDICT_TONE,
 } from '../../utils/systemVerdict'
@@ -553,17 +553,43 @@ function PickVerdictBadge({ row }) {
 // 주석 참고. '~만우세'가 없어지며 이 매핑도 2줄로 줄었다).
 const H2H_HOME_SIDE = { 홈우세: 'home', 원정우세: 'away' }
 
-function h2hRelation(verdictLabel, row, pick) {
-  const side = H2H_HOME_SIDE[verdictLabel]
-  if (!side || !pick || !DIR_SIDE[pick]) return null
-  const homeFav = marketFavHome(row.FW, row.FL)
-  if (homeFav === null) return null
-  const histFavorsMarketFav = (side === 'home') === homeFav
-  const pickWantsFav = DIR_SIDE[pick] === '정'
-  return histFavorsMarketFav === pickWantsFav ? '같은방향' : '다른방향'
+// 최근(이번 시즌 제외 5시즌) 홈전적 — '전체' 옆에 별도 칩으로 나온다(2026-09-22
+// 사용자 지정). recent===null이면 이 창 안엔 이 구장 맞대결이 없다는 뜻이라 '－'로
+// 표시해 '0/0/0'(쟀는데 한 번도 안 이기고 안 지고 안 비김 — 있을 수 없는 값)과
+// 구분한다. 플핸85 등 측정된 신호는 여전히 '전체' 값만 쓴다 — 이건 추가 표시일 뿐
+// 아직 어디에도 신호로 쓰지 않는다.
+// 정배가 이 구장에서 '안 졌다'(승+무) 쪽이 많은지 '졌다'(패) 쪽이 많은지로 파랑(정)/
+// 빨강(플) 글자색을 매긴다(2026-09-22 사용자 지정). 정배가 홈이면 승+무=정·패=플,
+// 정배가 원정이면 패(=원정 정배가 이김)=정·승+무(=원정 정배가 못 이김)=플로 뒤집는다
+// — '정'이 항상 '정배가 안 진다' 쪽이 되게. '정'은 팝업 제목의 (정)/(역)과 같은
+// 기준(homeIsFav, 국내배당 우선)을 쓴다 — 국내·해외 정배가 갈리는 경기(정배 국≠해)
+// 에서 해외 기준을 썼더니 화면의 (정)/(역) 표시와 반대로 나와 국내로 맞췄다
+// (2026-09-22 실측: AS로마 vs 인터밀란 — 국내는 인터, 해외는 로마가 정배).
+//
+// 기준이 애매해지지 않게, 큰 쪽이 작은 쪽의 **2배를 넘을 때만** 색을 준다(사용자
+// 지정 — "3/4/3(7대3)이면 색을 주지만 3/3/3·2/2/2(둘 다 정확히 2배)는 회색"). 작은
+// 쪽이 0이면(예: 3/2/0) 당연히 2배를 넘으므로 바로 색이 붙는다. 정배를 못 가리거나
+// (동배당) 표본이 0건이면 색 없이 회색.
+function h2hTone(w, d, l, row) {
+  const hostFav = homeIsFav(row)
+  if (hostFav === null) return 'gray'
+  const jung = hostFav ? w + d : l
+  const pl = hostFav ? l : w + d
+  const big = Math.max(jung, pl)
+  const small = Math.min(jung, pl)
+  if (big === 0) return 'gray'
+  if (small > 0 && big <= small * 2) return 'gray'
+  return jung > pl ? 'blue' : 'red'
 }
 
-function h2hChips(verdict, loading, row, pick) {
+// 뱃지 배경은 항상 회색(전적 뱃지 전용 색 없음, 2026-09-22 사용자 지정) — 대신 '전체'·
+// '최근5' 숫자 각각을 h2hTone으로 파랑/빨강 글자색만 입힌다(색 없으면 기본 글자색).
+function h2hValueText(w, d, l, row) {
+  const tone = h2hTone(w, d, l, row)
+  return tone === 'gray' ? undefined : { color: `var(--chip-${tone}-fg)`, fontWeight: 700 }
+}
+
+function h2hChips(verdict, loading, recent, row) {
   if (loading) {
     return [<MatchChip key="h2h" label="전적">…</MatchChip>]
   }
@@ -589,20 +615,23 @@ function h2hChips(verdict, loading, row, pick) {
       </MatchChip>,
     ]
   }
-  const rel = h2hRelation(verdict.label, row, pick)
+  const recentTitle = recent
+    ? recent.title
+    : `최근 ${RECENT_SEASONS}시즌(이번 시즌 제외) 안에는 이 구장에서 만난 적이 없습니다.`
   return [
     <MatchChip
       key="h2h"
       label="전적"
-      tone={verdict.tone}
-      title={verdict.title + (rel ? `\n지금 판정(${pick})과는 '${rel}'(사실 표시 — 값이 검증되지 않았다).` : '')}
+      tone="gray"
+      title={`${verdict.title}\n\n${recentTitle}`}
     >
-      {verdict.label}
-      {rel && (
-        <span className={`draw-rel draw-rel-${rel === '같은방향' ? 'ok' : 'bad'}`}>
-          {' '}· {rel}
-        </span>
-      )}
+      <span style={h2hValueText(verdict.w, verdict.d, verdict.l, row)}>
+        전체 {verdict.w}/{verdict.d}/{verdict.l}
+      </span>
+      {' '}·{' '}
+      {recent
+        ? <span style={h2hValueText(recent.w, recent.d, recent.l, row)}>최근5 {recent.w}/{recent.d}/{recent.l}</span>
+        : <span>최근5 －</span>}
     </MatchChip>,
   ]
 }
@@ -933,12 +962,16 @@ function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, same
   // 이것만 "그래서 어떻게 하라"에 가장 가까운 결론이라 눈에 먼저 들어와야 한다.
   // 시즌막판(정무 주의)도 '어떻게 하라'에 가까워 플핸85 바로 뒤에 둔다.
   // 아카이브(📌 내가 단 태그)는 그보다도 앞 — archiveChips 주석 참고.
+  // 전적 뱃지의 '최근5' — verdict(전체)가 있을 때만 뜻이 있다(h2hChips 첫맞대결 분기 참고).
+  const h2hRecent = verdict
+    ? h2hVerdictRecent(h2hMatches, String(row.HT || '').trim(), row.S)
+    : null
   const chips = [...archiveChips(archiveTags), ...axisChips(row, seasonSample, h2hMatches, axisStats),
     ...plhan85Chips(row, verdict), ...seasonStakeChips(row),
     ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
     ...favFlipChips(row), ...strongPickChips(row, fin),
     ...xgChips(row, xg),
-    ...h2hChips(verdict, h2hLoading, row, pick), ...drawChips(row, pick),
+    ...h2hChips(verdict, h2hLoading, h2hRecent, row), ...drawChips(row, pick),
     ...sameOddsChips(sameOdds)]
   return (
     <span className="match-chip-row">
