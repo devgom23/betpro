@@ -20,10 +20,14 @@
 // 판정에 쓰는 t는 두 줄의 t를 각각 구해 **평균**낸 값이다(사용자 지정).
 //
 //   두 줄 평균 t ≥ 1.25   블루     (정배승 71.41% · 기준선 54.02% 대비 +17.4%p)
-//   0 < 평균 t < 1.25     약블루   (정배승 58.78% · +4.8%p)
+//   0.5 ≤ 평균 t < 1.25   약블루   (정배승 59.72% · +5.7%p)
+//   −0.25 < 평균 t < 0.5  몰라     (정배승 54.44% — 기준선과 같다, 방향은 같아도 정보 없음)
 //   두 줄이 반대 방향     엇갈림   (정배승 52.54% — 거의 반반, 정보가 없다)
-//   −1.5 < 평균 t ≤ 0     약레드   (플핸 52.28% · +6.3%p)
+//   −1.5 < 평균 t ≤ −0.25 약레드   (플핸 52.65% · +6.7%p)
 //   평균 t ≤ −1.5         레드     (플핸 58.35% · +12.4%p)
+// '몰라' 구간은 2026-09-24 사용자 요청으로 추가 — 애매한 걸 약블루·약레드로 억지로 찍지 말자.
+//   0.25 단위로 쪼개 기준선 대비 ±3%p 안쪽인 곳만 잘랐다(−0.25~0 −1.2p, 0~0.25 −0.9p,
+//   0.25~0.5 +2.1p / 바깥 0.5~0.75 +3.9p, −0.5~−0.25 −4.7p). 앞/뒤 절반 54.17 · 54.76.
 //   두 줄 다 표본 0건     표본없음
 // 경계 1.25/−1.5는 36,160경기 전수 실측에서 기준선 대비 ±10%p 이상 벌어지는 지점이다.
 // 앞/뒤 절반으로 갈라도 같다(블루 72.07→70.87 · 레드 42.32→41.15 · 엇갈림 52.73→52.30).
@@ -54,6 +58,8 @@ export const SAMPLE_FLOW_SD_X = 1.5858     // 화면 라벨용 — 36,160경기 
 export const SAMPLE_FLOW_MU = 0.1644       // 화면 라벨용 — 전수 평균 흐름(중심 보정)
 export const SAMPLE_BLUE_T = 1.25
 export const SAMPLE_RED_T = -1.5
+export const SAMPLE_UNKNOWN_LO = -0.25   // 이 사이는 '몰라'(정보 없음)
+export const SAMPLE_UNKNOWN_HI = 0.5
 export const SAMPLE_SECTION_ORDER = ['fav', 'pl', 'ffav', 'k_wl', 'f_wl', 'k_wdl', 'f_wdl']
 
 // 섹션의 '이 경기 방향 · 통합' 카운트 [핸승,핸무,무,역] — 서버 samples[key][0].total.
@@ -111,7 +117,8 @@ export function autoSampleDirection(selfVals, mirrorVals) {
   const t = ts.reduce((a, b) => a + b, 0) / ts.length
   let label
   if (t >= SAMPLE_BLUE_T) label = '블루'
-  else if (t > 0) label = '약블루'
+  else if (t >= SAMPLE_UNKNOWN_HI) label = '약블루'
+  else if (t > SAMPLE_UNKNOWN_LO) label = '몰라'
   else if (t > SAMPLE_RED_T) label = '약레드'
   else label = '레드'
   return { label, t, n, flow: null, clash: false, ...base }

@@ -1267,8 +1267,9 @@ function sampleAutoTitle(a) {
   return `자동 판정 — ${sampleDirectionText(a.label)}\n${lines.join('\n')}\n${verdict}\n`
     + 't = (경기당 흐름 − 0.1644) × √표본 ÷ 1.5858. 0.1644는 6대리그 전체 평균 흐름이라,'
     + ' 빼주면 t의 부호가 곧 "평균보다 정배 쪽인가"가 됩니다.\n'
-    + '기준(36,160경기 실측): 평균 t ≥ 1.25 블루(정배승 71.4%) · 0~1.25 블루(약)(58.8%)'
-    + ' · 두 줄 반대면 엇갈림(52.5% — 거의 반반) · −1.5~0 레드(약)(플핸 52.3%)'
+    + '기준(36,160경기 실측): 평균 t ≥ 1.25 블루(정배승 71.4%) · 0.5~1.25 블루(약)(59.7%)'
+    + ' · −0.25~0.5 몰라(54.4% — 전체 평균과 같음) · 두 줄 반대면 엇갈림(52.5%)'
+    + ' · −1.5~−0.25 레드(약)(플핸 52.7%)'
     + ' · −1.5 이하 레드(플핸 58.4%).\n'
     + '※ 자동값은 저장되지 않습니다 — 직접 고르면 그 값이 우선합니다.'
 }
@@ -2704,6 +2705,85 @@ const XG_CONFLICT = [
   ['접전 배당(2.3+) + 기대점수 압도(1.4+)', '125', '17.60%', '24.80%', '26.40%', '31.20%', '68.80%', '82.40%'],
   ['접전 배당(2.3+) + 기대점수 대등(<0.8)', '5,779', '17.39%', '21.42%', '30.23%', '30.96%', '69.04%', '82.61%'],
 ]
+
+// 표본 방향성 자동 판정 설명 팝업(2026-09-24 사용자 지정 — 정배 표본 제목 옆 ?).
+// 숫자는 utils/sampleDirection.js 맨 위 주석의 전수 실측과 똑같이 맞춰 둔다 — 기준을
+// 바꾸면 여기도 같이 고칠 것.
+function SampleDirectionLegend({ onClose }) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop help-legend-back" onClick={onClose}>
+      <div className="modal-card help-legend-card" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
+        <h2 className="modal-title">🧭 표본 방향성 — 자동 판정은 어떻게 정하나</h2>
+
+        <p className="help-legend-title">① 표의 두 줄을 같이 봅니다</p>
+        <p className="help-legend-note">
+          표본 표의 <b>위 줄</b>은 이 경기와 같은 자리(예: 홈이 정배)에서 같은 배당이 나온 경기,
+          <b> 아래 줄</b>은 같은 배당이 반대 자리(원정이 정배)에서 나온 경기입니다.
+          두 줄이 같은 방향을 가리키면 그 방향으로, 서로 반대면 <b>엇갈림</b>으로 판정합니다.
+          한 줄에만 표본이 있으면 있는 줄만으로 판정합니다.
+        </p>
+
+        <p className="help-legend-title">② 줄마다 t값을 구해 평균냅니다</p>
+        <p className="help-legend-note">
+          <b>t값</b>은 &quot;이 쏠림이 우연이 아닐 가능성&quot;을 표본 수까지 반영해 잰 숫자입니다.
+          <br />t = (경기당 흐름 − <b>0.1644</b>) × √표본 수 ÷ 1.5858
+          <br />경기당 흐름 = (핸승×2 + 핸무 − 무 − 역×2) ÷ 표본 수
+        </p>
+        <p className="help-legend-note">
+          <b>0.1644를 빼는 이유</b> — 정배승(핸승+핸무)이 원래 53.7%라서 흐름의 평균이 0이 아니라
+          +0.1644입니다. 이걸 안 빼면 6대리그 평균과 똑같은 표본도 &quot;정배 쪽&quot;으로 보입니다.
+          그래서 표의 &apos;흐름&apos; 칸이 +3처럼 플러스여도 판정은 레드(약)일 수 있습니다 —
+          흐름 칸은 보정 전 원점수입니다.
+        </p>
+
+        <p className="help-legend-title">③ 평균 t로 라벨을 정합니다 (6대리그 36,160경기 실측)</p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>라벨</th><th>평균 t</th><th>실제 정배승</th><th>뜻</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>블루</b></td><td>1.25 이상</td><td>71.4%</td><td>정배 쪽이 뚜렷</td></tr>
+            <tr><td><b>블루(약)</b></td><td>0.5 ~ 1.25</td><td>59.7%</td><td>정배 쪽이 약간</td></tr>
+            <tr><td><b>몰라</b></td><td>−0.25 ~ 0.5</td><td>54.4%</td><td>평균(54.0%)과 같음 — 정보 없음</td></tr>
+            <tr><td><b>엇갈림</b></td><td>두 줄이 반대 방향</td><td>52.5%</td><td>거의 반반 — 정보 없음</td></tr>
+            <tr><td><b>레드(약)</b></td><td>−1.5 ~ −0.25</td><td>47.4%</td><td>플핸 쪽이 약간(플핸 52.7%)</td></tr>
+            <tr><td><b>레드</b></td><td>−1.5 이하</td><td>41.7%</td><td>플핸 쪽이 뚜렷(플핸 58.4%)</td></tr>
+            <tr><td><b>표본없음</b></td><td>두 줄 다 0건</td><td>—</td><td>—</td></tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          전체 기간을 앞·뒤 절반으로 나눠도 수치가 거의 같습니다(블루 72.1 → 70.9 · 몰라 54.2 → 54.8
+          · 레드 42.3 → 41.2). 각 경기는 그 경기 날짜 <b>이전</b> 경기만으로 표본을 다시 세서 쟀습니다.
+        </p>
+
+        <p className="help-legend-title">④ 자동값이 기본, 직접 고르면 그게 우선</p>
+        <p className="help-legend-note">
+          드롭박스를 안 건드리면 자동 판정이 그대로 쓰이고, 직접 고르면 그 값이 우선합니다.
+          첫 줄 &apos;자동 …&apos;을 고르면 자동으로 돌아갑니다. 자동값은 저장하지 않고 볼 때마다
+          그 시점의 표본으로 다시 계산합니다.
+        </p>
+
+        <p className="help-legend-title">⑤ 주의</p>
+        <p className="help-legend-note">
+          표본 섹션 하나하나는 배당이 이미 아는 정보를 크게 넘지 못합니다 — 방향은 맞지만 그
+          정보의 대부분이 배당에서 옵니다. 플축·정축 뱃지는 이 화면 라벨이 아니라 예전 기준
+          (위 줄 하나 · 보정 없는 t)으로 셉니다. 그 방식이 플축 적중률이 더 높았기 때문입니다.
+        </p>
+      </div>
+    </div>
+  )
+}
 
 // 시즌전적 정의 팝업 — 다른 참고표(DirectionScopeLegend 등)와 같은 help-legend 꼴.
 // 2026-09-06 개편: '오늘과 같은 정배/역배 구도' 필터를 없애고, 스코어만 보는 단순
@@ -4479,6 +4559,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
     setSampleCollapsed((s) => ({ ...s, [key]: !s[key] }))
   }
   const [showSeasonLegend, setShowSeasonLegend] = useState(false)
+  const [showSampleDirLegend, setShowSampleDirLegend] = useState(false)
   const [pickData, setPickData] = useState(null)
   const [pickError, setPickError] = useState('')
   // 종합분석 카드를 화면에서 뺀 뒤로 이 응답에서 실제로 쓰는 건 이 둘과 streaks뿐이다.
@@ -4851,7 +4932,17 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
               >
                 {sampleCollapsed[key] ? '▸' : '▾'}
               </button>
-              {title}
+              {key === 'fav' ? (
+                // 방향성 자동 판정 설명은 첫 섹션(정배 표본)에만 단다(2026-09-24 사용자 지정).
+                <button
+                  type="button"
+                  className="help-btn"
+                  onClick={() => setShowSampleDirLegend(true)}
+                  title="방향성 자동 판정 기준 보기"
+                >
+                  {title} <span className="help-mark">?</span>
+                </button>
+              ) : title}
               <SampleOddsInfo row={row} kind={key} />
               {sampleNotes !== undefined && (
                 <>
@@ -4992,6 +5083,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
       </div>
     </div>
     {showSeasonLegend && <SeasonRecordLegend onClose={() => setShowSeasonLegend(false)} />}
+    {showSampleDirLegend && <SampleDirectionLegend onClose={() => setShowSampleDirLegend(false)} />}
     {showArchive && (
       <ArchiveTagModal
         row={row}
