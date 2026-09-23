@@ -526,6 +526,9 @@
 .schedule-ctx-team {
   font-weight: 700;
   color: var(--text-primary);
+  /* 이제 팀명이 아니라 '홈'/'원정' 두 글자만 들어간다(2026-09-23) — 폭을 줄인다. */
+  width: 1%;
+  white-space: nowrap;
 }
 
 .schedule-ctx-when.is-prev {
@@ -569,6 +572,179 @@
 .schedule-ctx-chip.loss {
   background: var(--chip-red-bg);
   color: var(--chip-red-fg);
+}
+
+/* 앞뒤 일정 + 같은 회차 동배당 결과 — 좌우 한 줄(2026-09-23 사용자 지정).
+   앞뒤 일정은 팀명·킥오프 시각을 빼서 좁아졌으니 flex-basis를 작게, 동배당 쪽은 크게
+   줘서 남는 폭을 동배당이 더 가져간다(약 2:3). flex(grid 아님)를 쓰는 이유 — 한쪽
+   섹션이 없을 때(일정도 동배당도 없을 수 있다) 나머지가 자동으로 폭을 다 채우게
+   하려면 grid의 고정 트랙 비율로는 안 되고 flex-grow가 필요하다. 팝업이 좁아지면
+   basis 아래로 줄어들며 두 줄로 내려간다. */
+.schedule-ctx-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.schedule-ctx-row > .detail-section {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.schedule-ctx-row > .schedule-ctx-section {
+  flex: 2 1 320px;
+}
+
+.schedule-ctx-row > .same-odds-section {
+  flex: 3 1 420px;
+}
+
+/* 같은 회차 동배당 결과 — 좌 정배 / 우 플핸, 각 칸 안에서 초기·배변 두 줄 */
+.same-odds-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.same-odds-col {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  padding: 8px 10px;
+}
+
+.same-odds-colhead {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.same-odds-colhead small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.same-odds-grp {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 4px 0;
+}
+
+.same-odds-grp + .same-odds-grp {
+  border-top: 1px dashed var(--border);
+}
+
+.same-odds-label {
+  flex: none;
+  width: 50px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.same-odds-label b {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.same-odds-list {
+  flex: 1;
+  min-width: 0;
+}
+
+.same-odds-game {
+  display: flex;
+  /* 리그·라운드 글자를 빼고(2026-09-24) 줄바꿈도 막았는데, flex-wrap:nowrap은
+     칸(행)이 여러 줄로 안 늘어서게만 막을 뿐 안의 글자 자체는 여전히 줄바꿈된다 —
+     그래서 날짜·팀명·배당 한 덩어리씩 white-space:nowrap을 따로 줘야 한 줄로 붙는다
+     (겪은 버그: '프라이부르'가 '프라이부'+'르'로 잘려 두 줄이 됐었다). 항목 사이
+     간격(gap)도 8→5px로 줄였다(사용자 지정 — 배당 정보 사이 갭을 좁혀 달라 함). */
+  flex-wrap: nowrap;
+  gap: 5px;
+  align-items: baseline;
+  padding: 1px 0;
+  font-size: 10px;
+  min-width: 0;
+  /* 그래도 다 못 들어가는 극단적으로 긴 팀명이 있으면 줄바꿈 대신 가로 스크롤로
+     빠진다 — 세로로 밀리며 다른 줄과 겹치는 것보다 낫다. */
+  overflow-x: auto;
+}
+
+.same-odds-when {
+  flex: none;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.same-odds-teams {
+  flex: none;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.same-odds-nums {
+  flex: none;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 겹친 배당 값만 파랑 — 어디가 같은 값인지 한눈에 보이게(사용자 지정) */
+.same-odds-hit {
+  color: var(--chip-blue-fg);
+  font-weight: 700;
+}
+
+.same-odds-none {
+  padding: 1px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.same-odds-rt {
+  flex: none;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.same-odds-rt.rt-핸승 {
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+}
+
+.same-odds-rt.rt-핸무 {
+  background: var(--chip-green-bg);
+  color: var(--chip-green-fg);
+}
+
+.same-odds-rt.rt-무 {
+  background: var(--chip-gray-bg);
+  color: var(--chip-gray-fg);
+}
+
+.same-odds-rt.rt-역 {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+}
+
+.same-odds-rt.is-pending {
+  background: transparent;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 /* 간격 28px → 12px(2026-09-17): 지표별 표본 543 + 간격 + 상대전적 최소 760이 스크롤

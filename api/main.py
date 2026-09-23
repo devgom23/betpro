@@ -699,92 +699,13 @@ def league_rows(code: str,
 # 결과반성·배답픽·배답벳 없음). 행 모양은 리그 조회(/api/leagues/{code})와 똑같다.
 
 def _same_odds_for(row: dict) -> Optional[dict]:
-    """같은 베팅 회차(금~월)에 같은 국내배당으로 뜬 6대리그 다른 경기 — 정배(KW/KL 중
-    낮은 쪽)와 플핸(언더독 핸디배당, KW>KL이면 KHW 아니면 KHL — K-PL 지표와 같은 규칙)
-    양쪽을 같이 찾는다(2026-09-20 — 정배만 보던 것에 플핸을 추가).
-    예전엔 상세보기를 연 화면이 들고 있던 목록 안에서만 찾아서, 리그 화면에서 열면 다른
-    리그 경기가 빠졌다 — 이제는 메뉴와 상관없이 공식 데이터 6대리그 전체에서 찾는다."""
-    try:
-        w, lo = float(row.get("KW")), float(row.get("KL"))
-    except (TypeError, ValueError):
-        return None
-    if not (np.isfinite(w) and np.isfinite(lo)) or w <= 0 or lo <= 0 or w == lo:
-        return None
-    fav_odds = f"{min(w, lo):.2f}"
-    # 언더독(플핸) 쪽 배당 — 자기 자신의 값. 못 구하면(핸디배당 자체가 없으면) 플핸 쪽은
-    # 그냥 건너뛰고 정배 쪽만 찾는다(정배는 위 guard를 이미 통과했으므로 항상 시도한다).
-    home_dog = w > lo
-    try:
-        pl_raw = float(row.get("KHW" if home_dog else "KHL"))
-    except (TypeError, ValueError):
-        pl_raw = None
-    pl_odds = f"{pl_raw:.2f}" if pl_raw is not None and np.isfinite(pl_raw) and pl_raw > 0 else None
-    try:
-        fri, mon = BETSLIPS._round_range(row.get("DT"))
-    except ValueError:
-        return None
-    self_key = _my_pick_key(row.get("S"), row.get("R"), row.get("No"), row.get("HT"), row.get("AT"))
-    raw_lo = (fri - timedelta(days=3)).strftime("%y-%m-%d")   # 화~목 경기도 이 회차 소속
-    raw_hi = mon.strftime("%y-%m-%d")
-    db = PATHS.get_master_db()
-    fav_others, pl_others = [], []
-    for code in PATHS.LEAGUES:
-        df = DATA.load_league_df(db, code)
-        if df.empty or not {"DT", "KW", "KL"}.issubset(df.columns):
-            continue
-        dt_str = df["DT"].astype(str).str.slice(0, 8)
-        sub = df[(dt_str >= raw_lo) & (dt_str <= raw_hi)]
-        if sub.empty:
-            continue
-        kw = pd.to_numeric(sub["KW"], errors="coerce")
-        kl = pd.to_numeric(sub["KL"], errors="coerce")
-        valid_fav = (kw != kl) & kw.notna() & kl.notna()
-        fav = np.minimum(kw, kl).round(2)
-        fav_hit = valid_fav & (fav == float(fav_odds))
-
-        pl_hit = pd.Series(False, index=sub.index)
-        if pl_odds is not None and {"KHW", "KHL"}.issubset(sub.columns):
-            khw = pd.to_numeric(sub["KHW"], errors="coerce")
-            khl = pd.to_numeric(sub["KHL"], errors="coerce")
-            r_pl = khw.where(kw > kl, khl).round(2)
-            pl_hit = valid_fav & r_pl.notna() & (r_pl == float(pl_odds))
-
-        hit = sub[fav_hit | pl_hit]
-        if hit.empty:
-            continue
-        for idx, r in hit.iterrows():
-            if _my_pick_key(r.get("S"), r.get("R"), r.get("No"), r.get("HT"), r.get("AT")) == self_key:
-                continue
-            try:
-                if BETSLIPS._round_range(r.get("DT"))[0] != fri:
-                    continue
-            except ValueError:
-                continue
-            entry_base = {
-                "league": PATHS.LEAGUE_LABEL.get(code, code),
-                "round": str(r.get("R") or "").strip(),
-                "dt": r.get("DT"),
-                "tm": None if pd.isna(r.get("TM")) else r.get("TM"),
-                "home": str(r.get("HT") or "").strip(),
-                "away": str(r.get("AT") or "").strip(),
-                # 지난 경기면 상세보기 뱃지 호버에 결과(스코어·핸승/핸무/무/역)까지 보여준다
-                # (2026-09-20 사용자 지정). 아직 안 끝난 경기는 셋 다 null.
-                "hs": None if pd.isna(r.get("HS")) else int(r.get("HS")),
-                "as_": None if pd.isna(r.get("AS")) else int(r.get("AS")),
-                "rt": None if pd.isna(r.get("RT")) else int(r.get("RT")),
-            }
-            if bool(fav_hit.loc[idx]):
-                fav_others.append({**entry_base, "homeFav": float(r["KW"]) < float(r["KL"])})
-            if bool(pl_hit.loc[idx]):
-                pl_others.append({**entry_base, "homeDog": float(r["KW"]) > float(r["KL"])})
-    fav_others.sort(key=lambda o: _betting_day_sort_key(o["dt"], o["tm"]))
-    pl_others.sort(key=lambda o: _betting_day_sort_key(o["dt"], o["tm"]))
-    result = {}
-    if fav_others:
-        result["fav"] = {"odds": fav_odds, "others": fav_others}
-    if pl_odds is not None and pl_others:
-        result["pl"] = {"odds": pl_odds, "others": pl_others}
-    return result or None
+    """상세보기 '같은 회차 동배당 결과' 섹션의 재료 — 같은 프로토 회차(금~화 / 수~목)에
+    국내 정배배당·플핸(언더독 핸디)배당이 똑같은 6대리그 다른 경기. 초기·배변 양쪽을
+    따로 찾는다(2026-09-23 사용자 지정).
+    계산은 api/same_odds.py 한 곳에서만 한다 — 리그 표의 이중밑줄과 이 섹션이 서로 다른
+    규칙으로 갈리면 안 되기 때문이다(예전엔 여기서 베팅내역 회차 규칙(금~월)으로 따로
+    긁어서, 수요일 경기가 주말 경기와 한 회차로 묶이는 문제가 있었다)."""
+    return SAMEODDS.for_match(row)
 
 
 @app.get("/api/match_detail")
@@ -1208,7 +1129,7 @@ def save_season_note(code: str, body: SeasonNoteBody, user: dict = Depends(get_c
 
 
 # 상세보기 표본 박스 7개 제목 옆 메모(2026-09-15) — 경기 하나 × 표본 박스 하나에 1개.
-SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl")
+SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl", "same_odds")   # same_odds = 회차 동배당 메모(2026-09-24)
 
 
 class SampleNoteBody(BaseModel):

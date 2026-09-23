@@ -95,43 +95,60 @@ function fetchSameOdds(keys) {
 }
 
 // 동배(승=패)는 어느 쪽이 정배인지 못 가리므로 뺀다.
-function favOddsKey(row, wk, lk) {
-  const w = Number(row?.[wk])
-  const l = Number(row?.[lk])
+// p — '' 초기 / 'E' 배변. 배변 줄도 똑같은 방식으로 겹침을 본다(2026-09-23 사용자 지정).
+function favOddsKey(row, p = '') {
+  const w = Number(row?.[p + SAME_ODDS_W])
+  const l = Number(row?.[p + SAME_ODDS_L])
   if (!Number.isFinite(w) || !Number.isFinite(l) || w <= 0 || l <= 0 || w === l) return null
   return Math.min(w, l).toFixed(2)
 }
 
-// 언더독(플핸) 핸디배당 값 — KW/KL로 언더독이 홈인지 원정인지 가른 뒤 그쪽 핸디배당을 쓴다.
-function plOddsKey(row) {
-  const w = Number(row?.KW)
-  const l = Number(row?.KL)
+// 언더독(플핸) 핸디배당 값 — 승/패 배당으로 언더독이 홈인지 원정인지 가른 뒤 그쪽 핸디배당을 쓴다.
+function plOddsKey(row, p = '') {
+  const w = Number(row?.[p + SAME_ODDS_W])
+  const l = Number(row?.[p + SAME_ODDS_L])
   if (!Number.isFinite(w) || !Number.isFinite(l) || w <= 0 || l <= 0 || w === l) return null
-  const homeDog = w > l
-  const v = Number(row?.[homeDog ? SAME_ODDS_HW : SAME_ODDS_HL])
+  const v = Number(row?.[p + (w > l ? SAME_ODDS_HW : SAME_ODDS_HL)])
   if (!Number.isFinite(v) || v <= 0) return null
   return v.toFixed(2)
 }
 
-// DT('YY-MM-DD (Xxx)')가 속한 베팅 회차의 첫날(금요일)을 키로 돌려준다 —
-// api/bet_slips.py의 _round_range와 완전히 같은 규칙(화/수/목 경기는 다가올
-// 금~월로 귀속). 회차 단위 조회(이번주 리스트 등)는 이미 같은 회차 행만 모아
-// 넘겨주므로 사실상 항상 같은 값이 나오지만, 리그 화면처럼 여러 회차가 섞인
-// 표에서도 회차를 넘나드는 오탐이 안 생기게 여기서도 정확히 가른다.
+// 서버 응답의 묶음 4종 — 어떤 칸에 밑줄을 긋고 호버에 뭐라고 쓸지까지 여기서 정한다.
+// col은 **화면 컬럼 키**다: 배변 줄도 표에서는 KW/KL/KHW/KHL 칸에 E 값을 넣어 그리므로
+// 접두사 없는 키를 돌려준다(값을 고를 때만 E를 붙인다).
+const DUP_KINDS = [
+  { key: 'fav', p: '', final: false, label: '정배', mark: '정' },
+  { key: 'pl', p: '', final: false, label: '플핸(언더독 핸디)', mark: '플' },
+  { key: 'efav', p: 'E', final: true, label: '정배(배변)', mark: '정' },
+  { key: 'epl', p: 'E', final: true, label: '플핸(언더독 핸디, 배변)', mark: '플' },
+]
+
+function dupPick(r, kind) {
+  const { p } = kind
+  const homeFav = Number(r[p + SAME_ODDS_W]) < Number(r[p + SAME_ODDS_L])
+  if (kind.key === 'fav' || kind.key === 'efav') {
+    return { col: homeFav ? SAME_ODDS_W : SAME_ODDS_L, odds: favOddsKey(r, p), markHome: homeFav }
+  }
+  return { col: homeFav ? SAME_ODDS_HL : SAME_ODDS_HW, odds: plOddsKey(r, p), markHome: !homeFav }
+}
+
+// DT('YY-MM-DD (Xxx)')가 속한 **프로토 회차**의 첫날을 키로 돌려준다 —
+// api/same_odds.py의 round_key와 완전히 같은 규칙이어야 한다(둘 중 하나만 고치면
+// 서버가 준 묶음과 화면이 요청한 회차가 어긋나 밑줄이 통째로 안 뜬다).
+// 프로토는 금~화 / 수~목으로 회차가 끊긴다 — 수·목은 그 주 수요일, 금·토·일은 그 주
+// 금요일, 월·화는 지난 금요일이 회차 첫날이다(2026-09-23 사용자 지적으로 고침:
+// 예전엔 베팅내역과 같은 금~월 규칙이라 수요일 경기가 주말 경기와 한 회차로 묶였다).
+const ROUND_BACK = { 3: 0, 4: 1, 5: 0, 6: 1, 0: 2, 1: 3, 2: 4 }   // getDay → 며칠 되감기
+
 function roundKey(dt) {
   const m = /(\d{2})-(\d{2})-(\d{2})/.exec(String(dt || ''))
   if (!m) return null
   const [, yy, mm, dd] = m
   const d = new Date(2000 + Number(yy), Number(mm) - 1, Number(dd))
   if (Number.isNaN(d.getTime())) return null
-  const wd = d.getDay()   // Sun=0 ... Sat=6
-  let fri
-  if (wd === 5 || wd === 6 || wd === 0) fri = d.getDate() - ((wd + 2) % 7)       // 금·토·일
-  else if (wd === 1) fri = d.getDate() - 3                                       // 월
-  else fri = d.getDate() + (5 - wd)                                              // 화·수·목 → 다가올 금
   // toISOString()은 UTC로 바꾸면서 자정 근처 날짜가 하루 밀릴 수 있어(KST는 UTC+9)
   // 쓰지 않는다 — 로컬 연/월/일을 그대로 문자열로 만든다.
-  const f = new Date(d.getFullYear(), d.getMonth(), fri)
+  const f = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ROUND_BACK[d.getDay()])
   const pad = (n) => String(n).padStart(2, '0')
   return `${f.getFullYear()}-${pad(f.getMonth() + 1)}-${pad(f.getDate())}`
 }
@@ -282,43 +299,28 @@ export default function LeagueTable({
   // 칸(KW/KL)인지, 호버 상세 문구 }. 서버가 준 묶음은 화면에 그리는 rows와 다른
   // 요청에서 온 객체라, 행 객체가 아니라 문자열 키(matchKey)로 잇는다.
   const dupCols = useMemo(() => {
-    const fav = new Map()
-    const pl = new Map()
-    const put = (out, group, pick) => {
-      for (const r of group) {
-        const key = matchKey(r)
-        const { col, odds, label, mark } = pick(r)
-        const entries = group.filter((o) => matchKey(o) !== key).map((o) => ({
-          dt: o.DT, tm: o.TM, round: o.R, home: o.HT, away: o.AT,
-          league: LEAGUE_LABELS[o.L] || o.L || '',
-          markHome: pick(o).markHome,
-          hs: o.HS ?? null, as_: o.AS ?? null, rt: o.RT ?? null,
-        }))
-        out.set(key, { col, title: sameOddsGroupTitle(label, odds, entries, mark) })
-      }
-    }
+    const out = { 초기: new Map(), 배변: new Map() }
     for (const kinds of Object.values(sameOdds)) {
-      for (const group of Object.values(kinds?.fav || {})) {
-        put(fav, group, (r) => ({
-          col: Number(r[SAME_ODDS_W]) < Number(r[SAME_ODDS_L]) ? SAME_ODDS_W : SAME_ODDS_L,
-          odds: favOddsKey(r, SAME_ODDS_W, SAME_ODDS_L),
-          markHome: Number(r[SAME_ODDS_W]) < Number(r[SAME_ODDS_L]),
-          label: '정배', mark: '정',
-        }))
-      }
-      for (const group of Object.values(kinds?.pl || {})) {
-        put(pl, group, (r) => ({
-          col: Number(r.KW) > Number(r.KL) ? SAME_ODDS_HW : SAME_ODDS_HL,
-          odds: plOddsKey(r),
-          markHome: Number(r.KW) > Number(r.KL),
-          label: '플핸(언더독 핸디)', mark: '플',
-        }))
+      for (const kind of DUP_KINDS) {
+        const target = out[kind.final ? '배변' : '초기']
+        for (const group of Object.values(kinds?.[kind.key] || {})) {
+          for (const r of group) {
+            const key = matchKey(r)
+            const { col, odds } = dupPick(r, kind)
+            const entries = group.filter((o) => matchKey(o) !== key).map((o) => ({
+              dt: o.DT, tm: o.TM, round: o.R, home: o.HT, away: o.AT,
+              league: LEAGUE_LABELS[o.L] || o.L || '',
+              markHome: dupPick(o, kind).markHome,
+              hs: o.HS ?? null, as_: o.AS ?? null, rt: o.RT ?? null,
+            }))
+            // 한 경기가 정배·플핸 양쪽에 걸릴 수 있어 칸(col)별로 따로 담는다.
+            target.set(`${key}\u0000${col}`, sameOddsGroupTitle(kind.label, odds, entries, kind.mark))
+          }
+        }
       }
     }
-    return { fav, pl }
+    return out
   }, [sameOdds])
-  const dupFavCol = dupCols.fav
-  const dupPlCol = dupCols.pl
   // 별표/내픽/메모 클릭 즉시 반영용 오버레이. 새로 조회하면(rows가 바뀌면) 서버가 다시
   // 내려준 최신값으로 자연히 대체되므로 초기화한다.
   // ref로도 같은 값을 들고 있는 이유: React state 갱신은 비동기라 "별표 클릭 직후 곧바로
@@ -1020,26 +1022,6 @@ export default function LeagueTable({
                       // 배경(oddsHitSide 등)이 묻혀 안 보인다 — 국내배당/해외배당 칸만 빼둔다.
                       const isOddsGroup = g.label1 === '국내배당' || g.label1 === '해외배당'
                       const isRiskGroup = g.kind === 'risk'
-                      // 같은 날 다른 경기와 국내 정배배당·플핸(언더독 핸디)배당 숫자가
-                      // 똑같으면 그 칸에 2중 밑줄 — 초기 배당 기준으로만 잰 값이라 초기
-                      // 줄에만 긋는다. 아랫줄(배변)은 matchKey가 초기 줄과 똑같아서(같은
-                      // 경기의 사본이라 S/R/No/HT/AT가 같다) isFinal로 직접 걸러야 한다
-                      // (2026-09-20 사용자 지적 — matchKey로 바꾸며 배변 줄까지 같이
-                      // 걸리는 버그가 생겼었다. 배변 값 자체로 다시 비교하지 않는 이유는
-                      // 비교 대상 풀(oddsPool)이 초기 배당 스냅샷이라 배변끼리 맞는지는
-                      // 아직 안 재기 때문 — 필요해지면 별도로 다뤄야 한다).
-                      const dupFavInfo = isFinal ? null : dupFavCol.get(matchKey(row))
-                      const dupPlInfo = isFinal ? null : dupPlCol.get(matchKey(row))
-                      const isDupFav = dupFavInfo?.col === c.key
-                      const isDupPl = dupPlInfo?.col === c.key
-                      const dupTitle = isDupFav ? dupFavInfo.title : isDupPl ? dupPlInfo.title : undefined
-                      const classNames = [
-                        isHighlighted ? 'cell-highlight' : '',
-                        isLastCol ? dividerClass(g, isLastGroup).trim() : '',
-                        riskColClass(g, c).trim(),
-                        isOddsGroup ? 'odds-group-cell' : '',
-                        (isDupFav || isDupPl) ? 'odds-dup-fav' : '',
-                      ].filter(Boolean).join(' ')
                       // 배변 줄인데 그 칸의 배당(또는 확률이 나오는 시장)이 실제로 안
                       // 움직였으면(초기·최종이 완전히 같으면) 같은 값을 또 보여주지 않고
                       // '-'로 비운다 — oddsUnmoved/riskUnmoved는 항상 원본(초기+최종이
@@ -1048,6 +1030,21 @@ export default function LeagueTable({
                       const isUnmovedFinal = isFinal
                         && ((isOddsGroup && oddsUnmoved(baseRow, c.key))
                           || (isRiskGroup && riskUnmoved(baseRow, c.key)))
+                      // 같은 회차 다른 경기와 국내 정배배당·플핸(언더독 핸디)배당 숫자가
+                      // 똑같으면 그 칸에 2중 밑줄. 초기 줄은 초기끼리, 배변 줄은 배변끼리
+                      // 따로 비교한다(2026-09-23 사용자 지정 — 예전엔 비교 대상 풀이 초기
+                      // 스냅샷뿐이라 배변 줄을 isFinal로 통째로 걸러냈다). 위아래 줄은
+                      // matchKey가 같으므로(같은 경기의 사본) 초기/배변 색인을 갈라 쓴다.
+                      // 값이 '-'로 비는 칸(안 움직인 배변)에는 긋지 않는다.
+                      const dupTitle = isUnmovedFinal ? undefined
+                        : dupCols[isFinal ? '배변' : '초기'].get(`${matchKey(row)}\u0000${c.key}`)
+                      const classNames = [
+                        isHighlighted ? 'cell-highlight' : '',
+                        isLastCol ? dividerClass(g, isLastGroup).trim() : '',
+                        riskColClass(g, c).trim(),
+                        isOddsGroup ? 'odds-group-cell' : '',
+                        dupTitle ? 'odds-dup-fav' : '',
+                      ].filter(Boolean).join(' ')
                       const text = isUnmovedFinal ? '-' : formatCell(g, c, value, row)
                       // 폼(PPG) 칸 — 상세보기 팝업의 폼 지표와 같은 스타일로, 뱃지가 아니라
                       // 칸 전체를 배경색으로 칠한다.

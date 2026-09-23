@@ -2,21 +2,33 @@
 // 블루/약블루 기준을 36,000여 경기를 보고 세워라, 7개가 한 방향이고 배당도 강하게 가리키면
 // 단통을 찍을 수 있는지 분석해라").
 //
-// ── 기준(각 섹션의 '이 경기 방향 · 통합' 줄로 판정) ──────────────────────────
-// t = 경기당 흐름 × √표본수 ÷ 1.585
-//   경기당 흐름 = (핸승×2+핸무 − 무 − 역×2) ÷ 표본수 (−2 ~ +2)
-//   1.585 = 핸승/핸무/무/역을 +2/+1/−1/−2로 놓았을 때의 전체 표준편차(6대리그 실측)
-// 흐름이 같아도 표본이 많을수록 t가 커진다 — 사용자가 직접 고른 라벨 435개를 보니
-// '약'은 흐름이 약할 때가 아니라 표본이 적을 때 붙였다(블루 표본 중앙 80 vs 약블루 4.5).
-// 그 감각을 숫자로 옮긴 것이다.
+// ── 기준 (2026-09-24 전면 개편 — 사용자 지정) ────────────────────────────────
+// 예전엔 '이 경기 방향'(위 줄) 하나만 보고 판정했다. 사용자가 실제로 라벨을 고를 때는
+// **위 줄과 아래 줄(반대 방향)을 같이** 봤다고 해서 그 방식으로 바꿨다:
+//   ① 두 줄이 같은 방향을 가리키면 → 블루(또는 레드), 크기가 작으면 '약'
+//   ② 두 줄이 서로 다른 방향이면  → 엇갈림 (크기와 무관)
+//   ③ 한 줄에만 표본이 있으면     → 있는 줄만으로 판정
 //
-//   t ≥ 2      블루     (국)정배 섹션 실측: 정배승 62~73%)
-//   1 ≤ t < 2  약블루   (정배승 57~58%)
-//   |t| < 1    엇갈림(표본 10건 이상) / 몰라(10건 미만)
-//   −2 < t ≤ −1 약레드  (플핸 55~57%)
-//   t ≤ −2     레드     (플핸 60~61%)
-//   표본 0건   표본없음
-// 사용자 라벨과 방향 일치 72%, 정반대로 갈린 건 435개 중 1건.
+// t = (경기당 흐름 − 0.1644) × √표본수 ÷ 1.5858
+//   경기당 흐름 = (핸승×2+핸무 − 무 − 역×2) ÷ 표본수 (−2 ~ +2)
+//   0.1644 = 6대리그 36,160경기 전체의 평균 흐름 ★ 2026-09-24 추가한 '중심 보정'
+//   1.5858 = 같은 전수의 표준편차(예전에 쓰던 1.585가 실측과 맞았다)
+// ★ 중심 보정을 왜 넣었나: 정배승(RT1+2)이 원래 53.73%라 흐름의 평균이 0이 아니라
+//   +0.1644다. 보정 없이 '흐름>0이면 정배 쪽'으로 보면, 실제로는 6대리그 평균과 똑같은
+//   표본이 '약블루'로 찍힌다(보정 전 t 0~0.75 구간 실측 정배승 49~53% — 기준선 54% 미만).
+//   빼주고 나면 부호가 곧 "평균보다 정배 쪽인가"가 되어 ①의 방향 비교가 뜻을 갖는다.
+// 판정에 쓰는 t는 두 줄의 t를 각각 구해 **평균**낸 값이다(사용자 지정).
+//
+//   두 줄 평균 t ≥ 1.25   블루     (정배승 71.41% · 기준선 54.02% 대비 +17.4%p)
+//   0 < 평균 t < 1.25     약블루   (정배승 58.78% · +4.8%p)
+//   두 줄이 반대 방향     엇갈림   (정배승 52.54% — 거의 반반, 정보가 없다)
+//   −1.5 < 평균 t ≤ 0     약레드   (플핸 52.28% · +6.3%p)
+//   평균 t ≤ −1.5         레드     (플핸 58.35% · +12.4%p)
+//   두 줄 다 표본 0건     표본없음
+// 경계 1.25/−1.5는 36,160경기 전수 실측에서 기준선 대비 ±10%p 이상 벌어지는 지점이다.
+// 앞/뒤 절반으로 갈라도 같다(블루 72.07→70.87 · 레드 42.32→41.15 · 엇갈림 52.73→52.30).
+// 7개 섹션 전부 같은 방향으로 갈렸다(블루계열−레드계열 정배승 차이 13.9~24.5%p).
+// 예전 방식보다 판정을 내는 줄이 53.3%→72.8%로 늘고, 블루 순도도 69.09%→71.41%로 올랐다.
 //
 // ⚠ 섹션 하나하나는 배당 이상의 정보를 거의 안 준다 — 위 실측 %는 같은 배당대의 기대치와
 //   거의 같다(초과분 −1.7~+1.1%p). 방향은 맞지만 그 정보가 배당에서 온 것이다.
@@ -30,7 +42,18 @@
 //   앞 12시즌 76.7%(n=30) → 뒤 6시즌 78.6%(n=70, z=3.52) · 리그 6/6 같은 방향(분데스·에레디 약함)
 //   초기 국내 플핸 배당 평균 1.48, 회수율 1.131 · 최근 시즌 기준 한 시즌 약 12경기
 // 셋 다 없이 7레드만이면 64.7%(기대 59.8%, z=1.04)로 약하다 — 그래서 뱃지는 따로 표시한다.
-export const SAMPLE_FLOW_SD = 1.585
+//
+// ⚠ 플축·정축은 위 화면 라벨을 쓰지 않는다(2026-09-24). 아래 plhanAxis/axisVerdict와
+//   서버 api/axis_stats.py는 예전 기준(이 경기 방향 한 줄 · 보정 없는 t ≤ −1 / ≥ 1)을
+//   그대로 쓴다 — 두 줄 평균으로 바꿔서 재보니 플축이 확실히 나빠졌기 때문이다
+//   (7레드: 예전 202건 플핸 71.29% → 새 기준 중 가장 좋은 임계로도 111건 67.57%).
+//   플축은 "이 경기의 배당 자리에서 플핸이 많이 나왔다"는 신호라 반대편 자리를 섞으면
+//   신호가 묽어진다. 그래서 화면 라벨(사람이 읽는 것)과 플축 내부 셈(성능)이 갈라져 있다.
+export const SAMPLE_FLOW_SD = 1.585        // 플축·정축 전용(예전 기준 유지)
+export const SAMPLE_FLOW_SD_X = 1.5858     // 화면 라벨용 — 36,160경기 전수 실측 표준편차
+export const SAMPLE_FLOW_MU = 0.1644       // 화면 라벨용 — 전수 평균 흐름(중심 보정)
+export const SAMPLE_BLUE_T = 1.25
+export const SAMPLE_RED_T = -1.5
 export const SAMPLE_SECTION_ORDER = ['fav', 'pl', 'ffav', 'k_wl', 'f_wl', 'k_wdl', 'f_wdl']
 
 // 섹션의 '이 경기 방향 · 통합' 카운트 [핸승,핸무,무,역] — 서버 samples[key][0].total.
@@ -40,6 +63,15 @@ export function sectionSelfTotal(samples, key) {
   return entries[0]?.total || null
 }
 
+// 섹션의 '반대 방향 · 통합' 카운트 — 표의 아래 줄(samples[key][1].total).
+// 같은 배당값이 반대 자리(원정↔홈, 언더독 반대편)에서 나온 경기들이다.
+export function sectionMirrorTotal(samples, key) {
+  const entries = samples?.[key]
+  if (!Array.isArray(entries) || entries.length < 2) return null
+  return entries[1]?.total || null
+}
+
+// 플축·정축이 쓰는 예전 t(중심 보정 없음, 한 줄 기준) — 바꾸지 말 것(위 ⚠ 참고).
 export function sampleFlowT(vals) {
   if (!vals) return { t: null, n: 0, flow: null }
   const n = vals.reduce((a, b) => a + (Number(b) || 0), 0)
@@ -49,16 +81,45 @@ export function sampleFlowT(vals) {
   return { t: (flow * Math.sqrt(n)) / SAMPLE_FLOW_SD, n, flow }
 }
 
-export function autoSampleDirection(vals) {
-  const { t, n, flow } = sampleFlowT(vals)
-  if (t === null) return { label: '표본없음', t: null, n: 0, flow: null }
+// 화면 라벨용 t — 중심 보정(−0.1644)을 넣어 '평균보다 정배 쪽인가'를 0 기준으로 만든다.
+export function sampleFlowTx(vals) {
+  if (!vals) return { t: null, n: 0, flow: null }
+  const n = vals.reduce((a, b) => a + (Number(b) || 0), 0)
+  if (n <= 0) return { t: null, n: 0, flow: null }
+  const [hs, hm, mu, yk] = vals.map((v) => Number(v) || 0)
+  const flow = (hs * 2 + hm - mu - yk * 2) / n
+  return { t: ((flow - SAMPLE_FLOW_MU) * Math.sqrt(n)) / SAMPLE_FLOW_SD_X, n, flow }
+}
+
+// 두 줄(이 경기 방향 / 반대 방향)로 방향을 판정한다 — 파일 맨 위 기준 주석 참고.
+// 반환에 self·mirror를 같이 실어 화면 툴팁이 두 줄을 그대로 보여줄 수 있게 한다.
+export function autoSampleDirection(selfVals, mirrorVals) {
+  const s = sampleFlowTx(selfVals)
+  const m = sampleFlowTx(mirrorVals)
+  const base = { self: s, mirror: m }
+  if (s.t === null && m.t === null) {
+    return { label: '표본없음', t: null, n: 0, flow: null, clash: false, ...base }
+  }
+  const n = s.n + m.n
+  // ② 두 줄이 서로 다른 방향을 가리키면 크기와 무관하게 엇갈림.
+  //    (한쪽이 정확히 평균이면(0) 반대라고 보지 않는다 — 나머지 한 줄을 따른다.)
+  if (s.t !== null && m.t !== null && s.t !== 0 && m.t !== 0 && Math.sign(s.t) !== Math.sign(m.t)) {
+    return { label: '엇갈림', t: (s.t + m.t) / 2, n, flow: null, clash: true, ...base }
+  }
+  // ①③ 같은 방향(또는 한 줄만 있음) — 두 t의 평균으로 강약을 가른다.
+  const ts = [s.t, m.t].filter((v) => v !== null)
+  const t = ts.reduce((a, b) => a + b, 0) / ts.length
   let label
-  if (t >= 2) label = '블루'
-  else if (t >= 1) label = '약블루'
-  else if (t <= -2) label = '레드'
-  else if (t <= -1) label = '약레드'
-  else label = n >= 10 ? '엇갈림' : '몰라'
-  return { label, t, n, flow }
+  if (t >= SAMPLE_BLUE_T) label = '블루'
+  else if (t > 0) label = '약블루'
+  else if (t > SAMPLE_RED_T) label = '약레드'
+  else label = '레드'
+  return { label, t, n, flow: null, clash: false, ...base }
+}
+
+// 화면이 samples에서 바로 판정까지 가는 지름길 — 두 줄을 알아서 꺼내 쓴다.
+export function autoSectionDirection(samples, key) {
+  return autoSampleDirection(sectionSelfTotal(samples, key), sectionMirrorTotal(samples, key))
 }
 
 function favHome(w, l) {
@@ -183,13 +244,23 @@ function h2hEdge(matches, row, favIsHome) {
 
 const side3 = (x, hi, lo) => (x >= hi ? '정배' : x <= lo ? '역배' : '보합')
 
+// 플축·정축이 세는 '레드/블루' — 화면 라벨(autoSampleDirection)과 일부러 다르다.
+// 이 경기 방향 한 줄만, 중심 보정 없는 예전 t로 t≤−1을 레드, t≥1을 블루로 센다
+// (= 예전 화면 라벨의 레드+약레드 / 블루+약블루와 똑같은 범위). 서버 api/axis_stats.py도
+// 같은 식이라 둘이 어긋나면 안 된다. 왜 안 바꿨는지는 이 파일 맨 위 ⚠ 참고.
+function axisSideLabel(vals) {
+  const { t } = sampleFlowT(vals)
+  if (t === null) return null
+  return t <= -1 ? '레드' : t >= 1 ? '블루' : null
+}
+
 // 플축·정축 판별. h2hMatches가 아직 없으면(불러오는 중) null — 전적이 필요한 조건이 있어서.
 // 반환: { pl: 'P1'|'P3'|'P2'|null, plAll: [...], jung: 'A'|'B'|null, ctx }
 export function axisVerdict(samples, row, h2hMatches) {
   if (!samples || !h2hMatches) return null
-  const labels = SAMPLE_SECTION_ORDER.map((k) => autoSampleDirection(sectionSelfTotal(samples, k)).label)
-  const nred = labels.filter((l) => l === '레드' || l === '약레드').length
-  const nblue = labels.filter((l) => l === '블루' || l === '약블루').length
+  const labels = SAMPLE_SECTION_ORDER.map((k) => axisSideLabel(sectionSelfTotal(samples, k)))
+  const nred = labels.filter((l) => l === '레드').length
+  const nblue = labels.filter((l) => l === '블루').length
   const kw = num(row.KW)
   const kl = num(row.KL)
   if (kw === null || kl === null) return null

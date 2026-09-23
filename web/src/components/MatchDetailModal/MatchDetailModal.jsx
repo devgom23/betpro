@@ -4,7 +4,7 @@ import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { formatTime, formatDt, scoreClass, LEAGUE_LABELS_SHORT } from '../../utils/format'
-import { computeAutoVerdict, pickVerdictStyle, opinionStyle, marketVerdictPick } from '../LeagueTable/columnGroups'
+import { computeAutoVerdict, pickVerdictStyle, opinionStyle, marketVerdictPick, rtToText } from '../LeagueTable/columnGroups'
 import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS, SAMPLE_DIRECTION_OPTIONS, sampleDirectionText } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict, h2hVerdictRecent, RECENT_SEASONS } from '../../utils/h2hVerdict'
@@ -28,8 +28,7 @@ import { rankByKind, rankInfoOf, top20Score } from '../../utils/weekTop20'
 import { buildRankBadge } from '../../utils/weekRankBadge'
 import { pickPatchBody } from '../../utils/pickSave'
 import { resolveExtraPick } from '../../utils/extraOdds'
-import { sameOddsGroupTitle } from '../../utils/sameOdds'
-import { autoSampleDirection, sectionSelfTotal, axisVerdict, axisMatchPct, AXIS_FALLBACK } from '../../utils/sampleDirection'
+import { autoSectionDirection, axisVerdict, axisMatchPct, AXIS_FALLBACK } from '../../utils/sampleDirection'
 import './MatchDetailModal.css'
 
 
@@ -696,42 +695,6 @@ function drawChips(row, pick) {
   ]
 }
 
-// 동배당 뱃지 — 같은 회차(금~월)에 다른 경기가 똑같은 국내배당으로 떴다는 알림.
-// 정배(KW/KL 중 낮은 쪽)와 플핸(언더독 핸디배당, K-PL과 같은 규칙)을 한 뱃지에
-// "(정)1.92ㆍ(플)1.75"로 같이 보여준다(2026-09-20 — 정배만 보던 것에 플핸을 추가,
-// 사용자 지정). 짝을 찾는 일은 백엔드가 한다(api/main.py _same_odds_for).
-// ⚠ 판단 재료가 아니라 그냥 알림이다. "같은 배당이 두 번 뜨면 하나는 깨진다"는
-// 속설은 6대리그 36,212경기 전수조사에서 사실이 아니었다(2026-09-04) — 그래서 좋다/
-// 나쁘다를 뜻하는 색(초록/빨강/노랑 등)은 안 쓴다. 다만 눈에 잘 안 띈다는 지적으로
-// (2026-09-20) 의미 없는 파란색만 입혀 구분되게 한다. 호버에는 경기 정보만 보여준다
-// — 실측 설명은 memory에 남겨 뒀다.
-// 호버 문구 자체는 sameOddsGroupTitle(utils/sameOdds.js)에서 만든다 — 리그 표
-// 이중밑줄 호버(LeagueTable.jsx dupFavCol/dupPlCol)와 완전히 같은 함수를 쓴다
-// (2026-09-20 사용자 지적 — 같은 내용이 두 곳에서 따로 구현돼 있어 한쪽만 고치면
-// 다른 쪽이 안 맞았다). 지난 경기(hs/as_/rt가 있음)면 스코어·판정까지 같이 나온다.
-function sameOddsChips(sameOdds) {
-  if (!sameOdds) return []
-  const { fav, pl } = sameOdds
-  if (!fav && !pl) return []
-  const parts = []
-  const titleParts = []
-  if (fav) {
-    parts.push(`(정)${fav.odds}`)
-    const entries = fav.others.map((o) => ({ ...o, markHome: o.homeFav }))
-    titleParts.push(`[정] ${sameOddsGroupTitle('정배', fav.odds, entries, '정')}`)
-  }
-  if (pl) {
-    parts.push(`(플)${pl.odds}`)
-    const entries = pl.others.map((o) => ({ ...o, markHome: o.homeDog }))
-    titleParts.push(`[플] ${sameOddsGroupTitle('플핸(언더독 핸디)', pl.odds, entries, '플')}`)
-  }
-  return [
-    <MatchChip key="same-odds" label="동" tone="blue" title={titleParts.join('\n\n')}>
-      {parts.join('ㆍ')}
-    </MatchChip>,
-  ]
-}
-
 // 추가배당 뱃지 — '배당' 제목 옆에 국내 ±2·±3.5 핸디·언더오버(api/kr_extra_odds.py) 중
 // 4종(2플핸·3.5플핸·2.5언더·3.5언더)만 보여준다(2026-09-20 사용자 지정 — "그냥 타이틀
 // 옆에 뱃지만"). 국배(와이즈토토) 기준이고, 그 경기에 실제로 그 배당이 있을 때만 뜬다.
@@ -966,8 +929,10 @@ function archiveChips(tags) {
   })
 }
 
-function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, sameOdds, xg, archiveTags, seasonSample, h2hMatches, axisStats }) {
-  // 똥배 → 국/해 엇갈림 → 전적 → 무 → 동배당을 세로로 쌓는다.
+function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, xg, archiveTags, seasonSample, h2hMatches, axisStats }) {
+  // 똥배 → 국/해 엇갈림 → 전적 → 무 순으로 세로로 쌓는다.
+  // (동배당 뱃지는 2026-09-23에 뺐다 — 같은 내용을 '같은 회차 동배당 결과' 섹션이
+  //  초기·배변까지 갈라 표로 보여주게 되면서 뱃지 쪽이 중복이 됐다. 사용자 지정.)
   // (배당차 뱃지는 2026-09-02에 옆 칸 표로 뺐다가 2026-09-05에 아예 삭제했다 —
   //  정배배당을 다시 적은 값이라 확률 지표와 중복이었다. DirectionScopeTable 주석 참고.)
   // 플핸85는 맨 앞에 둔다 — 다른 뱃지가 '이 경기가 어떤 경기인가'를 말하는 데 비해
@@ -983,8 +948,7 @@ function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, same
     ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
     ...favFlipChips(row), ...strongPickChips(row, fin),
     ...xgChips(row, xg),
-    ...h2hChips(verdict, h2hLoading, h2hRecent, row, pick), ...drawChips(row, pick),
-    ...sameOddsChips(sameOdds)]
+    ...h2hChips(verdict, h2hLoading, h2hRecent, row, pick), ...drawChips(row, pick)]
   return (
     <span className="match-chip-row">
       {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}
@@ -1259,12 +1223,12 @@ const DIRECTION_SAMPLE_LABEL_LINES = {
 // 표본 박스 제목 옆 메모 칸(2026-09-15 사용자 지정) — '경기 전 생각' 입력칸과 같은 모양·
 // 같은 저장 방식(칸을 벗어나거나 Enter를 누를 때, 바뀌었을 때만 저장). 경기 하나 ×
 // 표본 박스 하나에 1개라 내픽(my_picks)이 아니라 sample_notes에 따로 둔다.
-function SampleNoteInput({ value, onSave }) {
+function SampleNoteInput({ value, onSave, placeholder = '표본에 대한 의견' }) {
   return (
     <RichMemoInput
       className="sample-note-input"
       value={value || ''}
-      placeholder="표본에 대한 의견"
+      placeholder={placeholder}
       onCommit={onSave}
     />
   )
@@ -1285,13 +1249,27 @@ const SAMPLE_DIRECTION_CLASS = {
 // 않는다 — 그때그때 표본으로 다시 내고, 사용자가 직접 고른 값(435개)과 섞이지 않게.
 // 직접 고르면 그 값이 우선이고, 첫 줄 '자동 …'을 고르면 저장값을 지워 자동으로 돌아간다.
 // 기준·실측은 utils/sampleDirection.js 주석 참고.
+// 2026-09-24 개편 — 위 줄(이 경기 방향)과 아래 줄(반대 방향)을 같이 본다.
+// 계산 근거와 실측은 utils/sampleDirection.js 맨 위 주석에 전부 적어 뒀다.
+function sampleAutoLine(name, s) {
+  if (s.t === null) return `${name} 표본 없음`
+  return `${name} t ${s.t.toFixed(2)} (흐름 ${s.flow.toFixed(2)} · 표본 ${s.n}건)`
+}
+
 function sampleAutoTitle(a) {
-  const detail = a.t === null
-    ? '이 경기 방향 · 통합 줄에 표본이 없습니다.'
-    : `t = ${a.t.toFixed(2)} (경기당 흐름 ${a.flow.toFixed(2)} × √표본 ${a.n} ÷ 1.585)`
-  return `자동 판정 — ${sampleDirectionText(a.label)}\n${detail}\n`
-    + '기준(이 경기 방향 · 통합 줄): t≥2 블루 · 1~2 블루(약) · ±1 안쪽은 엇갈림(표본 10건↑)/몰라'
-    + ' · −1~−2 레드(약) · −2 이하 레드. 표본이 많을수록 같은 흐름이라도 t가 커집니다.\n'
+  if (a.label === '표본없음') {
+    return '자동 판정 — 표본없음\n두 줄 모두 통합 표본이 0건입니다.'
+  }
+  const lines = [sampleAutoLine('이 경기 방향', a.self), sampleAutoLine('반대 방향', a.mirror)]
+  const verdict = a.clash
+    ? '두 줄이 서로 다른 방향을 가리켜 엇갈림입니다(크기와 무관).'
+    : `두 줄이 같은 방향 → 평균 t ${a.t.toFixed(2)}`
+  return `자동 판정 — ${sampleDirectionText(a.label)}\n${lines.join('\n')}\n${verdict}\n`
+    + 't = (경기당 흐름 − 0.1644) × √표본 ÷ 1.5858. 0.1644는 6대리그 전체 평균 흐름이라,'
+    + ' 빼주면 t의 부호가 곧 "평균보다 정배 쪽인가"가 됩니다.\n'
+    + '기준(36,160경기 실측): 평균 t ≥ 1.25 블루(정배승 71.4%) · 0~1.25 블루(약)(58.8%)'
+    + ' · 두 줄 반대면 엇갈림(52.5% — 거의 반반) · −1.5~0 레드(약)(플핸 52.3%)'
+    + ' · −1.5 이하 레드(플핸 58.4%).\n'
     + '※ 자동값은 저장되지 않습니다 — 직접 고르면 그 값이 우선합니다.'
 }
 
@@ -2274,6 +2252,91 @@ function SampleTable({ row, scope, expanded }) {
 
 // 내픽 선택 + 한줄 메모 — 별표(중요)는 제목 옆 버튼으로 따로 처리한다.
 // onSavePick(patch)가 실제 저장을 담당하고, 여기선 즉시(낙관적) 반영만 한다.
+// ───────── 같은 회차 동배당 결과 ─────────
+// 같은 프로토 회차(금~화 / 수~목)에 국내 정배배당·플핸(언더독 핸디)배당이 이 경기와
+// 똑같았던 6대리그 다른 경기들. 초기·배변을 따로 추적한다(2026-09-23 사용자 지정).
+// 재료는 /api/match_detail의 same_odds — 계산은 전부 api/same_odds.py 한 곳에서 한다.
+// 초기와 배변 값이 같아도 두 줄을 그대로 둔다("움직였다가 제자리로 왔구나"가 보이게).
+// ⚠ 이건 신호가 아니라 그냥 알림이다 — "같은 배당이 두 번 뜨면 하나는 깨진다"는 속설은
+// 6대리그 전수조사에서 사실이 아니었다(2026-09-04, LeagueTable.jsx 주석 참고).
+
+const SAME_ODDS_KIND_LABEL = { fav: '정배', pl: '플핸' }
+const SAME_ODDS_KIND_NOTE = { fav: '승/무/패 배당', pl: '핸디 승/무/패 배당' }
+// 취소(5)·연기(6)처럼 색이 없는 결과는 '무'와 같은 회색 칩으로 떨어뜨린다.
+const SAME_ODDS_RT_CLASS = new Set(['핸승', '핸무', '무', '역'])
+
+// '26-09-19 (Sat)' → '09-19(토)' — 자리가 좁아 연도와 공백을 뺀다.
+function sameOddsDt(dt) {
+  const ko = formatDt(dt)
+  return /^\d{2}-\d{2}-\d{2} \(/.test(ko) ? ko.slice(3).replace(' (', '(') : ko
+}
+
+function SameOddsGame({ g }) {
+  const rt = rtToText(g.rt)
+  const done = g.hs !== null && g.hs !== undefined && g.as_ !== null && g.as_ !== undefined
+  return (
+    <div className="same-odds-game">
+      <span className="same-odds-when">{sameOddsDt(g.dt)}</span>
+      {/* 리그·라운드(예: '분데스 4R')는 안 적는다 — 한 줄에 다 들어가게 폭을 줄여
+          달라는 사용자 지정(2026-09-24). 어느 경기인지는 날짜·팀명·배당으로 충분히
+          가려진다(같은 회차 안에서만 비교하므로 라운드 자체도 의미가 크지 않다). */}
+      <span className="same-odds-teams">{g.home}VS{g.away}</span>
+      {g.odds && (
+        <span className="same-odds-nums">
+          ({g.odds.map((v, i) => (
+            <Fragment key={i}>
+              {i > 0 && '/'}
+              {i === g.hit ? <span className="same-odds-hit">{v ?? '-'}</span> : (v ?? '-')}
+            </Fragment>
+          ))})
+        </span>
+      )}
+      {done
+        ? <span className={`same-odds-rt rt-${SAME_ODDS_RT_CLASS.has(rt) ? rt : '무'}`}>{g.hs}:{g.as_}{rt ? ` ${rt}` : ''}</span>
+        : <span className="same-odds-rt is-pending">예정</span>}
+    </div>
+  )
+}
+
+function SameOddsSection({ sameOdds, note, onSaveNote }) {
+  if (!sameOdds?.groups?.length) return null
+  // 제목 옆 설명글은 뺐다(2026-09-24 사용자 지정) — 그 자리에 다른 표본 섹션과 같은 메모 칸.
+  // 메모는 표본 메모(sample_notes)에 kind='same_odds'로 저장한다.
+  return (
+    <section className="detail-section same-odds-section">
+      <h3>
+        회차 동배당
+        <SampleNoteInput value={note} onSave={onSaveNote} placeholder="회차 동배당에 대한 의견" />
+      </h3>
+      <div className="same-odds-two">
+        {['fav', 'pl'].map((kind) => {
+          const groups = sameOdds.groups.filter((g) => g.kind === kind)
+          if (!groups.length) return null
+          return (
+            <div className="same-odds-col" key={kind}>
+              <div className="same-odds-colhead">
+                {SAME_ODDS_KIND_LABEL[kind]}
+                <small>{SAME_ODDS_KIND_NOTE[kind]}</small>
+              </div>
+              {groups.map((g) => (
+                <div className="same-odds-grp" key={g.key}>
+                  <div className="same-odds-label">{g.phase} <b>{g.odds}</b></div>
+                  <div className="same-odds-list">
+                    {g.games.length
+                      ? g.games.map((gm, i) => <SameOddsGame key={i} g={gm} />)
+                      : <div className="same-odds-none">같은 배당 없음</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+
 // ───────── 앞뒤 일정(직전·다음 경기) ─────────
 // 서버 /api/schedule_context 한 줄: {days, comp, comp_short, venue, opponent, score, result, note, kickoff}
 
@@ -2285,20 +2348,24 @@ function scheduleDaysText(days) {
 
 const SCHEDULE_RESULT_CLASS = { 승: 'win', 무: 'draw', 패: 'loss' }
 
-function ScheduleContextSection({ ctx, ht, at }) {
+function ScheduleContextSection({ ctx }) {
   if (!ctx) return null
+  // '팀' 칸 — 예전엔 실제 팀명(헤타페/말라가)을 적었는데, 폭을 줄이려고 이 경기의
+  // 홈/원정 소속만 남긴다(2026-09-23 사용자 지정 — 옆의 '같은 회차 동배당 결과'에
+  // 너비를 더 내주기 위함). '장소'(m.venue)와는 다른 값이다 — 저건 그 앞뒤 경기 자체를
+  // 어디서 뛰었는지고, 이 칸은 지금 보는 경기에서 어느 쪽 팀인지다.
   const rows = []
-  for (const [team, side] of [[ht, ctx.home], [at, ctx.away]]) {
-    for (const [kind, m] of [['직전', side?.prev], ['다음', side?.next]]) {
-      if (m) rows.push({ team, kind, m })
+  for (const [side, teamCtx] of [['홈', ctx.home], ['원정', ctx.away]]) {
+    for (const [kind, m] of [['직전', teamCtx?.prev], ['다음', teamCtx?.next]]) {
+      if (m) rows.push({ side, kind, m })
     }
   }
   if (rows.length === 0) return null
   return (
-    <section className="detail-section">
+    <section className="detail-section schedule-ctx-section">
       <h3>
         앞뒤 일정
-        <span className="detail-section-note">두 팀의 바로 앞뒤 경기(리그·컵 포함), 리그 상대 옆 괄호는 그 라운드 직전 순위/승점</span>
+        <span className="detail-section-note">두 팀의 바로 앞뒤 경기(리그·컵 포함), 리그 상대 옆 괄호는 그 라운드 직전 순위</span>
       </h3>
       <div className="schedule-ctx-wrap">
         <table className="detail-table schedule-ctx-table">
@@ -2313,16 +2380,15 @@ function ScheduleContextSection({ ctx, ht, at }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ team, kind, m }, i) => {
-              const firstOfTeam = i === 0 || rows[i - 1].team !== team
+            {rows.map(({ side, kind, m }, i) => {
+              const firstOfSide = i === 0 || rows[i - 1].side !== side
               return (
-                <tr key={`${team}-${kind}`} className={firstOfTeam && i > 0 ? 'schedule-ctx-split' : undefined}>
-                  <td className="schedule-ctx-team">{firstOfTeam ? team : ''}</td>
+                <tr key={`${side}-${kind}`} className={firstOfSide && i > 0 ? 'schedule-ctx-split' : undefined}>
+                  <td className="schedule-ctx-team">{firstOfSide ? side : ''}</td>
                   <td>
                     <span className={`schedule-ctx-when ${kind === '직전' ? 'is-prev' : 'is-next'}`}>
                       {scheduleDaysText(m.days)}
                     </span>
-                    <span className="schedule-ctx-dim"> {m.kickoff.slice(5)}</span>
                   </td>
                   <td>{m.comp}</td>
                   <td>{m.venue}</td>
@@ -2558,9 +2624,12 @@ function MyPickBar({ row, onSavePick, memoLead }) {
   )
 }
 
-// 마이픽바 둘째 줄 왼쪽 — 아래 표본 7개 섹션에서 고른 방향성을 블루 쪽/레드 쪽으로 묶어 센다
-// (2026-09-17 사용자 지정, 시안 B안). 고른 값만 보여준다 — 0개인 묶음은 안 뜨고, 괄호 안
-// 강·약도 0이 아닌 것만 적는다. 섹션에서 바꾸면 sampleNotes가 바로 바뀌어 여기도 따라간다.
+// 마이픽바 둘째 줄 왼쪽 — 아래 표본 7개 섹션의 방향성을 블루 쪽/레드 쪽으로 묶어 센다
+// (2026-09-17 사용자 지정, 시안 B안). 0개인 묶음은 안 뜨고, 괄호 안 강·약도 0이 아닌 것만
+// 적는다. 섹션에서 바꾸면 sampleNotes가 바로 바뀌어 여기도 따라간다.
+// 2026-09-24부터 **자동 판정이 기본값**이다 — 직접 고른 값이 있으면 그게 우선이고, 없으면
+// 자동값을 센다(사용자 지정: "내가 고르면 사심이 들어간다"). 예전엔 직접 고른 것만 세서
+// 아무것도 안 고르면 뱃지가 통째로 안 보였다.
 // 표본 섹션 7개 [키, 제목] — 섹션 목록과 위 방향성 집계가 같이 쓴다.
 const SAMPLE_SECTIONS = [
   ['fav', '정배 표본'],
@@ -2581,9 +2650,13 @@ const DIRECTION_TALLY_GROUPS = [
   { label: '표본X', cls: 'is-nosample', strong: '표본없음' },
 ]
 
-function DirectionTally({ notes, keys }) {
+function DirectionTally({ notes, keys, samples }) {
   if (!notes) return null
-  const values = keys.map((k) => notes[k]?.direction).filter(Boolean)
+  // 직접 고른 값 우선, 없으면 자동 판정 — 둘 다 없을 때(표본 로딩 중)만 빠진다.
+  const picked = keys.map((k) => notes[k]?.direction).filter(Boolean).length
+  const values = keys
+    .map((k) => notes[k]?.direction || (samples ? autoSectionDirection(samples, k).label : null))
+    .filter(Boolean)
   const count = (v) => values.filter((x) => x === v).length
   const chips = DIRECTION_TALLY_GROUPS.map((g) => {
     const s = count(g.strong)
@@ -2593,7 +2666,10 @@ function DirectionTally({ notes, keys }) {
   }).filter((g) => g.total > 0)
   if (chips.length === 0) return null
   return (
-    <span className="direction-tally" title={`아래 표본 ${keys.length}개에서 고른 방향성 (미선택 ${keys.length - values.length}개)`}>
+    <span
+      className="direction-tally"
+      title={`아래 표본 ${keys.length}개의 방향성 — 직접 고른 ${picked}개 + 자동 판정 ${values.length - picked}개`}
+    >
       {chips.map((g) => (
         <span key={g.label} className={`direction-tally-chip ${g.cls}`}>
           {g.label} {g.total}
@@ -4275,7 +4351,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank, archiveTags, extraOdds, seasonSample, h2hMatches, axisStats }) {
+function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, seasonSample, h2hMatches, axisStats }) {
   // '경기지표'의 무·전적 뱃지와 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -4313,7 +4389,6 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, sameOdds, xg, weekRank
                   h2hLoading={h2hLoading}
                   pick={pick}
                   fin={fin}
-                  sameOdds={sameOdds}
                   xg={xg}
                   archiveTags={archiveTags}
                   seasonSample={seasonSample}
@@ -4694,14 +4769,19 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
         <MyPickBar
           row={row}
           onSavePick={onSavePick}
-          memoLead={<DirectionTally notes={sampleNotes} keys={SAMPLE_SECTION_KEYS} />}
+          memoLead={(
+            <DirectionTally
+              notes={sampleNotes}
+              keys={SAMPLE_SECTION_KEYS}
+              samples={seasonSample?.samples}
+            />
+          )}
         />
         {/* 그 아래 전부를 스크롤 영역으로 묶는다(2026-09-14 사용자 지정 — 헤더는
             고정, 아래만 스크롤). .detail-modal-card 주석 참고. */}
         <div className="detail-modal-scroll">
         <PickBand
           row={row}
-          sameOdds={sameOdds}
           h2hVerdict={h2hMark}
           h2hLoading={!pickData && !pickError}
           xg={seasonXg}
@@ -4742,8 +4822,17 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
         </section>
 
         {/* 앞뒤 일정 — 두 팀의 직전·다음 경기(리그·컵 포함) 표(2026-09-16 사용자 지정:
-            그래프 없이 표만, 배당과 표본 섹션 사이). 일정이 하나도 없으면 섹션째 숨긴다. */}
-        <ScheduleContextSection ctx={scheduleCtx} ht={ht} at={at} />
+            그래프 없이 표만, 배당과 표본 섹션 사이). 일정이 하나도 없으면 섹션째 숨긴다.
+            오른쪽에 '같은 회차 동배당 결과'를 나란히 둔다(2026-09-23 사용자 지정) —
+            한쪽이 없으면 남은 쪽이 폭을 다 쓴다(schedule-ctx-row는 auto-fit 그리드). */}
+        <div className="schedule-ctx-row">
+          <ScheduleContextSection ctx={scheduleCtx} />
+          <SameOddsSection
+            sameOdds={sameOdds}
+            note={sampleNotes?.same_odds?.memo}
+            onSaveNote={(memo) => saveSampleNote('same_odds', { memo: memo || null })}
+          />
+        </div>
 
         {/* 정배 표본 · 플핸 표본 · 해배 표본 · 국)승+패 · 해)승+패 · 국)승+무+패 · 해)승+무+패
             — 배당(PickBand)과 지표별 표본 사이에 배당과 같은 폭의 독립 섹션으로 둔다
@@ -4768,12 +4857,12 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
                 <>
                   <SampleDirectionSelect
                     value={sampleNotes[key]?.direction}
-                    auto={seasonSample ? autoSampleDirection(sectionSelfTotal(seasonSample.samples, key)) : null}
+                    auto={seasonSample ? autoSectionDirection(seasonSample.samples, key) : null}
                     onSave={(direction) => saveSampleNote(key, { direction })}
                   />
                   <SampleDirectionAuto
                     value={sampleNotes[key]?.direction}
-                    auto={seasonSample ? autoSampleDirection(sectionSelfTotal(seasonSample.samples, key)) : null}
+                    auto={seasonSample ? autoSectionDirection(seasonSample.samples, key) : null}
                   />
                   <SampleNoteInput
                     value={sampleNotes[key]?.memo}

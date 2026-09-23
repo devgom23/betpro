@@ -476,7 +476,9 @@ def _describe(con, m: dict, my_ids: set, center: datetime, names: dict) -> dict:
         rank_pts = (_standings_before(con, m["comp"], m["season"], rnd, names).get(opp_id)
                     if rnd else None)
         if rank_pts and rank_pts[0]:
-            opp_name = f"{opp_name}({rank_pts[0]}위/{rank_pts[1]}점)"
+            # 승점까지 적으면 '앞뒤 일정' 상대 칸이 길어져 한 줄에 안 들어간다 —
+            # 순위만 남긴다(2026-09-24 사용자 지정: 상대엔 팀이름과 순위만).
+            opp_name = f"{opp_name}({rank_pts[0]}위)"
     else:
         stage = _STAGE_KO.get(m["stage"], m["stage"] or "")
         comp_short = COMP_SHORT.get(m["comp"], m["comp_name"])
