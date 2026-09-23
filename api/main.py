@@ -96,6 +96,7 @@ import cup_matches as CUPS     # noqa: E402
 import collect_jobs as JOBS    # noqa: E402
 import axis_stats as AXIS      # noqa: E402
 import same_odds as SAMEODDS  # noqa: E402
+import sample_dir as SAMPLEDIR  # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -122,6 +123,8 @@ def _startup():
     PATHS.bootstrap()
     AUTH.ensure_default_admin(PATHS.get_auth_db())
     _warm_master_cache_async()
+    # 표본 방향성 시스템 판정 — 서버 켜자마자 뒤에서 한 번 맞춰 둔다(sample_dir.py 주석).
+    SAMPLEDIR.ensure()
 
 
 def _warm_master_cache_async():
@@ -633,6 +636,7 @@ def league_rows(code: str,
                 user: dict = Depends(get_current_user)):
     """
     대형 분석표 데이터. 저장된 값을 '불러오기만' 한다(재계산 없음 — 원칙 6-3).
+    (표본 방향성 시스템 판정은 리그 표가 바뀌었을 때만 뒤에서 따로 맞춘다 — sample_dir.ensure)
     season/round 미지정 시 최근 시즌·최근 라운드를 기본 선택. "ALL"이면 그 축은 필터 없음.
     배당 9종(kw~fl)을 넘기면 ±0.005 오차로 근사 일치하는 경기만 추린다(원본 조회 필터와 동일 규칙).
     ekw~efl(최종배당)도 같은 규칙으로 필터할 수 있다 — 화면 '배변' 체크박스용.
@@ -644,6 +648,8 @@ def league_rows(code: str,
     """
     _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
+    if scope == PATHS.SCOPE_MASTER:
+        SAMPLEDIR.ensure(db)
     # 표시용 순위(HP/AP) + 베팅 기대수익률(EV) 컬럼까지 붙은 표.
     # DB에 저장하지 않고 조회 때 계산하는 값이라, 경기가 쌓이면 값도 같이 갱신된다
     # (DB가 바뀌면 캐시가 풀리므로 — data_access.load_league_df_ev 참고).
@@ -734,10 +740,16 @@ def match_detail(code: str,
     _attach_my_picks(records, user["username"], code, scope)
     row = records[0]
     same_odds = _same_odds_for(row) if scope == PATHS.SCOPE_MASTER and code in PATHS.VALID_LEAGUES else None
+    # 표본 방향성 시스템 판정(저장값) — 공식 6대리그만. 아직 계산 전이면 None(화면이 직접 계산).
+    sample_dir = None
+    if scope == PATHS.SCOPE_MASTER and code in PATHS.VALID_LEAGUES:
+        SAMPLEDIR.ensure(db)
+        sample_dir = SAMPLEDIR.get(code, row, db)
     # 추가배당(±2·±3.5 핸디, 언더오버) — 상세보기 '배당' 제목 옆 뱃지가 쓴다(2026-09-20).
     # '이번주 벳'과 같은 인덱스(_kx_index)를 그대로 쓴다.
     extra_odds = KXODDS.lookup(_kx_index(db), code, row.get("S"), row.get("R"), row.get("HT"), row.get("AT"))
-    return {"code": code, "scope": scope, "row": row, "same_odds": same_odds, "extra_odds": extra_odds}
+    return {"code": code, "scope": scope, "row": row, "same_odds": same_odds, "extra_odds": extra_odds,
+            "sample_dir": sample_dir}
 
 
 @app.post("/api/cup_collect/start")
@@ -1169,6 +1181,14 @@ def save_sample_note(code: str, body: SampleNoteBody, user: dict = Depends(get_c
     if "memo" in body.model_fields_set:
         values["memo"] = (body.memo or "").strip() or None
     if "direction" in body.model_fields_set:
+        # 결과가 들어온 경기는 방향성을 못 바꾼다(2026-09-24 사용자 지정 — 그때 판단 그대로 고정).
+        db = _resolve_scope_db(body.scope, user)
+        idx = _pick_key_index(db, code).get(_my_pick_key(body.S, body.R, body.No, body.HT, body.AT))
+        if idx is not None:
+            rt = pd.to_numeric(DATA.load_league_df(db, code).loc[idx].get("RT"), errors="coerce")
+            if rt in (1, 2, 3, 4):
+                raise HTTPException(status_code=409,
+                                    detail="결과가 들어온 경기라 방향성을 바꿀 수 없습니다.")
         if body.direction and body.direction not in SAMPLE_DIRECTIONS:
             raise HTTPException(status_code=400, detail=f"알 수 없는 방향성: {body.direction}")
         values["direction"] = body.direction or None
@@ -1192,6 +1212,12 @@ def same_odds_rounds(rounds: str = "", user: dict = Depends(get_current_user)):
     if len(keys) > 60:
         raise HTTPException(status_code=400, detail="한 번에 60회차까지만 조회할 수 있습니다.")
     return {"rounds": SAMEODDS.for_rounds(keys)}
+
+
+@app.get("/api/admin/sample_dir")
+def sample_dir_status(admin: dict = Depends(get_admin_user)):
+    """표본 방향성 시스템 판정 저장 상태(뒤에서 도는 중인지, 마지막 결과 건수)."""
+    return SAMPLEDIR.status()
 
 
 @app.get("/api/axis_stats")
@@ -1269,23 +1295,10 @@ _MIRROR_SWAP = (("KW", "KL"), ("KHW", "KHL"), ("FW", "FL"))
 _SAMPLE_ODDS_KEYS = ("KW", "KD", "KL", "KHW", "KHD", "KHL", "FW", "FD", "FL")
 
 
-def _mirror_row(row_dict: dict) -> dict:
-    m = dict(row_dict)
-    for a, b in _MIRROR_SWAP:
-        m[a], m[b] = row_dict.get(b), row_dict.get(a)
-    m["RT"] = None
-    return m
-
-
-def _stored_counts(row_dict: dict, ind: str) -> list[int]:
-    out = []
-    for i in range(1, 5):
-        try:
-            v = float(row_dict.get(f"{ind} {i}"))
-        except (TypeError, ValueError):
-            v = float("nan")
-        out.append(0 if np.isnan(v) else int(v))
-    return out
+# 거울 경기·저장 지표 읽기는 sample_dir.py 한 곳에 둔다 — 시스템 판정(저장)과 이 표가
+# 반드시 같은 숫자를 쓰게(2026-09-24).
+_mirror_row = SAMPLEDIR.mirror_row
+_stored_counts = SAMPLEDIR.stored_counts
 
 
 def _json_num(v):

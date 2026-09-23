@@ -1257,6 +1257,18 @@ function sampleAutoLine(name, s) {
 }
 
 function sampleAutoTitle(a) {
+  // 결과가 들어와 고정된 시스템 판정(저장값) — 그때 계산한 라벨·t만 남아 있다.
+  if (a.stored) {
+    const when = a.src === 'asof'
+      ? '이 경기 날짜 이전 경기만으로 계산한 값입니다(결과가 먼저 있던 과거 경기).'
+      : '결과가 들어오기 직전에 계산해 둔 값입니다.'
+    return `시스템 판정 — ${sampleDirectionText(a.label)} (결과 확정 · 고정)
+`
+      + (a.t === null ? '' : `평균 t ${a.t.toFixed(2)}
+`)
+      + `${when}
+지금 표본 표 숫자는 그 뒤 경기까지 섞여 있어 판정과 다를 수 있습니다.`
+  }
   if (a.label === '표본없음') {
     return '자동 판정 — 표본없음\n두 줄 모두 통합 표본이 0건입니다.'
   }
@@ -1271,7 +1283,8 @@ function sampleAutoTitle(a) {
     + ' · −0.25~0.5 몰라(54.4% — 전체 평균과 같음) · 두 줄 반대면 엇갈림(52.5%)'
     + ' · −1.5~−0.25 레드(약)(플핸 52.7%)'
     + ' · −1.5 이하 레드(플핸 58.4%).\n'
-    + '※ 자동값은 저장되지 않습니다 — 직접 고르면 그 값이 우선합니다.'
+    + '※ 시스템 판정은 서버에 저장되고, 결과가 들어오면 그 값으로 고정됩니다.'
+    + ' 직접 고르면 그 값이 우선합니다(결과가 들어온 뒤에는 못 바꿉니다).'
 }
 
 // 직접 고른 값이 자동값과 다를 때만 옆에 자동값을 작게 보여준다.
@@ -1287,15 +1300,20 @@ function SampleDirectionAuto({ auto, value }) {
   )
 }
 
-function SampleDirectionSelect({ value, auto, onSave }) {
+// locked — 결과가 들어온 경기(2026-09-24 사용자 지정: 그때 판단 그대로 고정, 서버도 막는다).
+function SampleDirectionSelect({ value, auto, onSave, locked }) {
   const current = value || ''
   const shown = value || auto?.label || ''
+  const tip = !value && auto ? sampleAutoTitle(auto) : undefined
   return (
     <select
       className={`sample-dir-select ${SAMPLE_DIRECTION_CLASS[shown] || ''}${!value && auto ? ' is-auto' : ''}`}
       value={current}
       onChange={(e) => onSave(e.target.value || null)}
-      title={!value && auto ? sampleAutoTitle(auto) : undefined}
+      disabled={locked}
+      title={locked ? `결과가 들어온 경기라 방향성이 고정됐습니다.${tip ? `
+
+${tip}` : ''}` : tip}
     >
       <option value="">{auto ? `자동 ${sampleDirectionText(auto.label)}` : '방향성'}</option>
       {/* 값(value)은 저장값 그대로('약블루'·'약레드'), 글자만 '블루(약)'·'레드(약)'. */}
@@ -2651,12 +2669,12 @@ const DIRECTION_TALLY_GROUPS = [
   { label: '표본X', cls: 'is-nosample', strong: '표본없음' },
 ]
 
-function DirectionTally({ notes, keys, samples }) {
+function DirectionTally({ notes, keys, autoOf }) {
   if (!notes) return null
-  // 직접 고른 값 우선, 없으면 자동 판정 — 둘 다 없을 때(표본 로딩 중)만 빠진다.
+  // 직접 고른 값 우선, 없으면 시스템 판정 — 둘 다 없을 때(표본 로딩 중)만 빠진다.
   const picked = keys.map((k) => notes[k]?.direction).filter(Boolean).length
   const values = keys
-    .map((k) => notes[k]?.direction || (samples ? autoSectionDirection(samples, k).label : null))
+    .map((k) => notes[k]?.direction || autoOf(k)?.label || null)
     .filter(Boolean)
   const count = (v) => values.filter((x) => x === v).length
   const chips = DIRECTION_TALLY_GROUPS.map((g) => {
@@ -2767,11 +2785,28 @@ function SampleDirectionLegend({ onClose }) {
           · 레드 42.3 → 41.2). 각 경기는 그 경기 날짜 <b>이전</b> 경기만으로 표본을 다시 세서 쟀습니다.
         </p>
 
-        <p className="help-legend-title">④ 자동값이 기본, 직접 고르면 그게 우선</p>
+        <p className="help-legend-title">④ 시스템 판정은 저장되고, 결과가 들어오면 고정됩니다</p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>시점</th><th>시스템 판정</th><th>내 판정(직접 고른 값)</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>결과 전</td>
+              <td>배당이 등록·갱신될 때마다 다시 계산해 저장</td>
+              <td>언제든 바꿀 수 있고, 있으면 시스템 판정보다 우선</td>
+            </tr>
+            <tr>
+              <td><b>결과 후</b></td>
+              <td><b>마지막 값으로 고정</b></td>
+              <td><b>변경 불가</b>(드롭박스 잠김)</td>
+            </tr>
+          </tbody>
+        </table>
         <p className="help-legend-note">
-          드롭박스를 안 건드리면 자동 판정이 그대로 쓰이고, 직접 고르면 그 값이 우선합니다.
-          첫 줄 &apos;자동 …&apos;을 고르면 자동으로 돌아갑니다. 자동값은 저장하지 않고 볼 때마다
-          그 시점의 표본으로 다시 계산합니다.
+          두 판정은 따로 저장되어, 나중에 &quot;시스템이 맞았나, 내가 고친 게 맞았나&quot;를 비교할 수
+          있습니다. 결과가 먼저 있던 과거 경기는 그 경기 날짜 이전 경기만으로 계산해 채웠습니다.
+          드롭박스 첫 줄 &apos;자동 …&apos;을 고르면 내 판정을 지우고 시스템 판정으로 돌아갑니다.
         </p>
 
         <p className="help-legend-title">⑤ 주의</p>
@@ -4503,7 +4538,7 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveT
   )
 }
 
-function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onClose, onSavePick }) {
+function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, weekRank, extraOdds, onClose, onSavePick }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
   const rt = rtLabel(row.RT)
@@ -4644,6 +4679,18 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
   // 표본 박스 제목 옆 방향성·메모 — {kind: {direction, memo}}. undefined = 불러오는 중(그동안은 칸을 안 그려서
   // 빈 칸에 쓰다가 늦게 온 저장값에 덮이는 일을 막는다).
   const [sampleNotes, setSampleNotes] = useState(undefined)
+  // 결과가 들어온 경기 — 방향성(내 판정) 드롭박스를 잠근다(서버도 409로 막는다).
+  const resultIn = [1, 2, 3, 4].includes(Number(row.RT))
+  // 섹션별 시스템 판정. 결과가 들어와 고정된 경기는 서버 저장값(sample_dir)을 그대로 쓰고,
+  // 아직 결과 전이면 지금 표본 표로 계산한다 — 서버 저장값도 결과 전엔 같은 숫자로 계산하므로
+  // 둘이 같다(2026-09-24 검증: 결과 없는 40경기×7섹션 불일치 0).
+  // 고정된 경기를 화면에서 다시 계산하면 안 되는 이유: 표본 아래 줄이 지금 DB로 세어져
+  // 그 경기 뒤에 치른 경기까지 섞이기 때문이다.
+  function sampleAutoOf(key) {
+    const saved = sampleDir?.locked ? sampleDir.labels?.[key] : null
+    if (saved) return { label: saved.label, t: saved.t, stored: true, src: sampleDir.src }
+    return seasonSample ? autoSectionDirection(seasonSample.samples, key) : null
+  }
   useEffect(() => {
     let alive = true
     setSampleNotes(undefined)
@@ -4851,11 +4898,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
           row={row}
           onSavePick={onSavePick}
           memoLead={(
-            <DirectionTally
-              notes={sampleNotes}
-              keys={SAMPLE_SECTION_KEYS}
-              samples={seasonSample?.samples}
-            />
+            <DirectionTally notes={sampleNotes} keys={SAMPLE_SECTION_KEYS} autoOf={sampleAutoOf} />
           )}
         />
         {/* 그 아래 전부를 스크롤 영역으로 묶는다(2026-09-14 사용자 지정 — 헤더는
@@ -4948,13 +4991,11 @@ function MatchDetailBody({ code, row, scope, sameOdds, weekRank, extraOdds, onCl
                 <>
                   <SampleDirectionSelect
                     value={sampleNotes[key]?.direction}
-                    auto={seasonSample ? autoSectionDirection(seasonSample.samples, key) : null}
+                    auto={sampleAutoOf(key)}
+                    locked={resultIn}
                     onSave={(direction) => saveSampleNote(key, { direction })}
                   />
-                  <SampleDirectionAuto
-                    value={sampleNotes[key]?.direction}
-                    auto={seasonSample ? autoSectionDirection(seasonSample.samples, key) : null}
-                  />
+                  <SampleDirectionAuto value={sampleNotes[key]?.direction} auto={sampleAutoOf(key)} />
                   <SampleNoteInput
                     value={sampleNotes[key]?.memo}
                     onSave={(memo) => saveSampleNote(key, { memo: memo || null })}
@@ -5227,6 +5268,7 @@ export default function MatchDetailModal({ code, scope, row: ident, onClose, onP
         row={row}
         scope={scope}
         sameOdds={loaded.data.same_odds}
+        sampleDir={loaded.data.sample_dir}
         weekRank={weekRank}
         extraOdds={loaded.data.extra_odds}
         onClose={onClose}

@@ -112,7 +112,8 @@ def _build(db: str) -> dict:
 def index(db: str | None = None) -> dict:
     """회차별 동배당 묶음(캐시). DB가 바뀌면 data_access 캐시가 알아서 다시 만든다."""
     db = db or PATHS.get_master_db()
-    return DATA.cached_derive(db, "same_odds_index_v2", lambda: _build(db))
+    return DATA.cached_derive(db, "same_odds_index_v2", lambda: _build(db),
+                              tables=tuple(PATHS.LEAGUES))
 
 
 def for_rounds(rounds, db: str | None = None) -> dict:

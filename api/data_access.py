@@ -55,6 +55,12 @@ def _token(db_path: str, tables):
         return (st["epoch"],) + tuple(st["tables"].get(t, 0) for t in tables)
 
 
+def tables_token(db_path: str, tables) -> tuple:
+    """그 테이블들이 마지막으로 바뀐 시점을 가리키는 값 — 달라졌으면 누가 썼다는 뜻이다.
+    '뒤에서 다시 계산할 때가 됐나'를 가늠하는 데 쓴다(sample_dir.ensure)."""
+    return _token(db_path, tuple(tables))
+
+
 @contextmanager
 def table_write(db_path: str, *tables: str):
     """DB에 쓰는 코드를 감싼다 — 끝나면 적은 테이블에 기대는 캐시만 풀린다.
