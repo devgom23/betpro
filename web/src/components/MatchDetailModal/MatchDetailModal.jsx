@@ -558,38 +558,50 @@ const H2H_HOME_SIDE = { 홈우세: 'home', 원정우세: 'away' }
 // 표시해 '0/0/0'(쟀는데 한 번도 안 이기고 안 지고 안 비김 — 있을 수 없는 값)과
 // 구분한다. 플핸85 등 측정된 신호는 여전히 '전체' 값만 쓴다 — 이건 추가 표시일 뿐
 // 아직 어디에도 신호로 쓰지 않는다.
-// 정배가 이 구장에서 '안 졌다'(승+무) 쪽이 많은지 '졌다'(패) 쪽이 많은지로 파랑(정)/
-// 빨강(플) 글자색을 매긴다(2026-09-22 사용자 지정). 정배가 홈이면 승+무=정·패=플,
-// 정배가 원정이면 패(=원정 정배가 이김)=정·승+무(=원정 정배가 못 이김)=플로 뒤집는다
-// — '정'이 항상 '정배가 안 진다' 쪽이 되게. '정'은 팝업 제목의 (정)/(역)과 같은
-// 기준(homeIsFav, 국내배당 우선)을 쓴다 — 국내·해외 정배가 갈리는 경기(정배 국≠해)
-// 에서 해외 기준을 썼더니 화면의 (정)/(역) 표시와 반대로 나와 국내로 맞췄다
-// (2026-09-22 실측: AS로마 vs 인터밀란 — 국내는 인터, 해외는 로마가 정배).
+// ── 전적 숫자 색 — 이 경기 판정이 묻는 것과 같은 질문으로 과거를 센다 ──────────
+// (2026-09-22~23 사용자 지정) 먼저 승/무/패를 **정배 입장**으로 바꾼다(정배가 원정이면
+// 홈의 승과 패를 뒤집는다). 정배는 팝업 제목의 (정)/(역)과 같은 기준 — 국내배당 우선
+// (homeIsFav, 2026-09-23 사용자 확정: "국내 배당을 우선").
 //
-// 기준이 애매해지지 않게, 큰 쪽이 작은 쪽의 **2배를 넘을 때만** 색을 준다(사용자
-// 지정 — "3/4/3(7대3)이면 색을 주지만 3/3/3·2/2/2(둘 다 정확히 2배)는 회색"). 작은
-// 쪽이 0이면(예: 3/2/0) 당연히 2배를 넘으므로 바로 색이 붙는다. 정배를 못 가리거나
-// (동배당) 표본이 0건이면 색 없이 회색.
-function h2hTone(w, d, l, row) {
-  const hostFav = homeIsFav(row)
-  if (hostFav === null) return 'gray'
-  const jung = hostFav ? w + d : l
-  const pl = hostFav ? l : w + d
+// 그 다음 **판정 방향에 따라 무승부를 어느 쪽으로 세는지가 달라진다** — 판정이 묻는
+// 질문 자체가 다르기 때문이다(CLAUDE.md 5-1의 두 픽 정의 그대로):
+//   판정 정무  = "역은 안 나온다" → 정배가 **안 진다**(승+무) 대 **진다**(패)
+//   판정 플핸무 = "핸승은 안 나온다" → 정배가 **이긴다**(승) 대 **못 이긴다**(무+패)
+// 같은 전적이라도 판정이 뭐냐에 따라 색이 달라진다(사용자 지정: "정배 역배와 판정에
+// 따라 색상을 변경").
+//   예) 피오렌티나 vs 나폴리(정배=나폴리·원정, 전체 1/7/9 = 정배 9승7무1패):
+//       판정이 플핸무면 9 대 8(이긴 경기 vs 못 이긴 경기)이라 팽팽 → 회색
+//       판정이 정무였다면 16 대 1(안 진 경기 vs 진 경기)이라 → 파랑
+//
+// 색은 큰 쪽이 작은 쪽의 **2.5배를 넘을 때만** 준다(2026-09-23 사용자 지정 — 2배에서
+// 올렸다: "3/5/3(8대3=2.67배)은 색, 3/4/3(7대3=2.33배)·3/3/3(2배)은 판정보류").
+// 작은 쪽이 0이면 바로 색이 붙는다. 정배를 못 가리거나(동배당) 판정이 없거나 표본이
+// 0건이면 회색.
+const H2H_COLOR_RATIO = 2.5
+
+function h2hTone(w, d, l, row, pick) {
+  const favHome = homeIsFav(row)
+  const side = DIR_SIDE[pick]
+  if (favHome === null || !side) return 'gray'
+  const favW = favHome ? w : l      // 정배가 이긴 경기
+  const favL = favHome ? l : w      // 정배가 진 경기
+  const jung = side === '정' ? favW + d : favW
+  const pl = side === '정' ? favL : d + favL
   const big = Math.max(jung, pl)
   const small = Math.min(jung, pl)
   if (big === 0) return 'gray'
-  if (small > 0 && big <= small * 2) return 'gray'
+  if (small > 0 && big <= small * H2H_COLOR_RATIO) return 'gray'
   return jung > pl ? 'blue' : 'red'
 }
 
 // 뱃지 배경은 항상 회색(전적 뱃지 전용 색 없음, 2026-09-22 사용자 지정) — 대신 '전체'·
 // '최근5' 숫자 각각을 h2hTone으로 파랑/빨강 글자색만 입힌다(색 없으면 기본 글자색).
-function h2hValueText(w, d, l, row) {
-  const tone = h2hTone(w, d, l, row)
+function h2hValueText(w, d, l, row, pick) {
+  const tone = h2hTone(w, d, l, row, pick)
   return tone === 'gray' ? undefined : { color: `var(--chip-${tone}-fg)`, fontWeight: 700 }
 }
 
-function h2hChips(verdict, loading, recent, row) {
+function h2hChips(verdict, loading, recent, row, pick) {
   if (loading) {
     return [<MatchChip key="h2h" label="전적">…</MatchChip>]
   }
@@ -625,12 +637,12 @@ function h2hChips(verdict, loading, recent, row) {
       tone="gray"
       title={`${verdict.title}\n\n${recentTitle}`}
     >
-      <span style={h2hValueText(verdict.w, verdict.d, verdict.l, row)}>
+      <span style={h2hValueText(verdict.w, verdict.d, verdict.l, row, pick)}>
         전체 {verdict.w}/{verdict.d}/{verdict.l}
       </span>
       {' '}·{' '}
       {recent
-        ? <span style={h2hValueText(recent.w, recent.d, recent.l, row)}>최근5 {recent.w}/{recent.d}/{recent.l}</span>
+        ? <span style={h2hValueText(recent.w, recent.d, recent.l, row, pick)}>최근5 {recent.w}/{recent.d}/{recent.l}</span>
         : <span>최근5 －</span>}
     </MatchChip>,
   ]
@@ -971,7 +983,7 @@ function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, same
     ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
     ...favFlipChips(row), ...strongPickChips(row, fin),
     ...xgChips(row, xg),
-    ...h2hChips(verdict, h2hLoading, h2hRecent, row), ...drawChips(row, pick),
+    ...h2hChips(verdict, h2hLoading, h2hRecent, row, pick), ...drawChips(row, pick),
     ...sameOddsChips(sameOdds)]
   return (
     <span className="match-chip-row">
