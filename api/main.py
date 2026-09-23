@@ -95,6 +95,7 @@ import standings               # noqa: E402
 import cup_matches as CUPS     # noqa: E402
 import collect_jobs as JOBS    # noqa: E402
 import axis_stats as AXIS      # noqa: E402
+import same_odds as SAMEODDS  # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -1255,6 +1256,21 @@ def save_sample_note(code: str, body: SampleNoteBody, user: dict = Depends(get_c
     MYPICKS.upsert_sample_note(user["username"], code, body.scope, body.S, body.R, body.No,
                                body.HT, body.AT, body.kind, values)
     return {"ok": True}
+
+
+@app.get("/api/same_odds")
+def same_odds_rounds(rounds: str = "", user: dict = Depends(get_current_user)):
+    """회차별 동배당 묶음(국배 기준, 6대리그). rounds=회차키(금요일 YYYY-MM-DD) 쉼표 구분.
+
+    리그 표의 이중밑줄이 쓴다 — 예전엔 화면이 /api/week_list(오늘 회차)만 보고 찾아서
+    회차가 넘어가면 지난 회차 밑줄이 통째로 사라졌다(same_odds.py 주석 참고).
+    """
+    keys = [r.strip() for r in str(rounds).split(",") if r.strip()]
+    if not keys:
+        return {"rounds": {}}
+    if len(keys) > 60:
+        raise HTTPException(status_code=400, detail="한 번에 60회차까지만 조회할 수 있습니다.")
+    return {"rounds": SAMEODDS.for_rounds(keys)}
 
 
 @app.get("/api/axis_stats")

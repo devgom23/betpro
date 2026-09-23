@@ -72,32 +72,26 @@ const VERDICT_HIT_SPLIT_TITLE = '엇갈림(국·해가 갈린 경기)에서 나�
   + ' 적중/보험/미적 값 자체는 그대로지만, 갈리지 않은 경기보다 한 단계 아래라'
   + ' 원래 색의 톤을 낮춰 칠합니다.'
 
-// 동배당 측정은 6대리그로만 한다(2026-09-05, 사용자 지정) — K1/K2(내 데이터)는
-// 배당 형성 방식이 달라 섞으면 안 되고, 필요하면 K1/K2끼리 따로 재야 한다.
-const MAJOR_LEAGUES = new Set(Object.keys(LEAGUE_LABELS))
 
-// oddsPool prop을 안 받은 화면(EPL 단일 리그 표 등)이 동배당 비교 대상으로 쓸 이번주
-// 회차 전체 목록 — 모듈 스코프에 캐시해서, 같은 화면에 표가 여러 개 떠 있어도
-// (이번주 리스트 요일별 표처럼) 요청을 한 번만 보낸다. TTL 30초 — 그 안에 새로
-// 저장된 배당은 살짝 늦게 반영되지만, 이건 판단 재료가 아니라 알림이라 감내한다.
-let _oddsPoolCache = null   // { data, ts }
-let _oddsPoolPromise = null
-const ODDS_POOL_TTL_MS = 30000
-function fetchOddsPool() {
-  if (_oddsPoolCache && Date.now() - _oddsPoolCache.ts < ODDS_POOL_TTL_MS) {
-    return Promise.resolve(_oddsPoolCache.data)
+// 동배당(같은 회차에 국내배당이 똑같은 경기) — 서버가 회차별로 미리 묶어 둔 걸 받아 쓴다
+// (api/same_odds.py). 예전엔 /api/week_list(오늘이 속한 회차)를 받아 그 안에서만 찾아서,
+// 회차가 넘어가면 어제까지 보이던 지난 회차 밑줄이 통째로 사라졌다(2026-09-23 사용자 제보).
+// 회차 키(금요일 YYYY-MM-DD)별로 모듈에 캐시해 둔다 — 이번주 리스트처럼 표가 여러 개
+// 떠 있어도 같은 회차를 두 번 받지 않는다.
+const _sameOddsCache = new Map()   // 회차키 → Promise<{ fav, pl }>
+const SAME_ODDS_CHUNK = 60         // 서버가 한 번에 받는 회차 수 상한과 같은 값
+
+function fetchSameOdds(keys) {
+  const need = keys.filter((k) => !_sameOddsCache.has(k))
+  for (let i = 0; i < need.length; i += SAME_ODDS_CHUNK) {
+    const chunk = need.slice(i, i + SAME_ODDS_CHUNK)
+    const p = api.get(`/api/same_odds?rounds=${encodeURIComponent(chunk.join(','))}`)
+      .then((res) => res?.rounds || {})
+      .catch(() => ({}))
+    for (const k of chunk) _sameOddsCache.set(k, p.then((r) => r[k] || { fav: {}, pl: {} }))
   }
-  if (!_oddsPoolPromise) {
-    _oddsPoolPromise = api.get('/api/week_list')
-      .then((res) => {
-        const data = res?.rows || []
-        _oddsPoolCache = { data, ts: Date.now() }
-        return data
-      })
-      .catch(() => [])
-      .finally(() => { _oddsPoolPromise = null })
-  }
-  return _oddsPoolPromise
+  return Promise.all(keys.map((k) => _sameOddsCache.get(k)))
+    .then((list) => list.reduce((acc, v, i) => { acc[keys[i]] = v; return acc }, {}))
 }
 
 // 동배(승=패)는 어느 쪽이 정배인지 못 가리므로 뺀다.
@@ -248,13 +242,6 @@ export default function LeagueTable({
   // true면 '배답' 그룹(배답픽/배답벳)을 해외배당·판정 옆에 보여준다 — 아카이브 '배답벳'
   // 탭 전용(2026-09-14 사용자 지정). 다른 화면은 이 값이 columns에 있어도 안 켠다.
   showOddsBet = false,
-  // 동배당 2중밑줄 비교 대상 — 안 주면(대부분의 화면) 이 컴포넌트가 알아서
-  // /api/week_list(이번주 회차 전체, 6대리그+내 데이터)를 받아 쓴다. 이번주 리스트
-  // 화면(WeekListPage)은 요일별로 표를 쪼개 하루치씩만 rows로 넘기므로, 그 표 하나만
-  // 보면 다른 요일에 뜬 동배당을 못 잡는다(2026-09-20 사용자 지적 — "표에서 보이는
-  // 밑줄은 이 화면에 대한 기준이 애매하다") — 그 화면은 이미 전체 주간 데이터를
-  // 들고 있으니 oddsPool로 그걸 그대로 넘긴다(중복 요청 방지).
-  oddsPool,
 }) {
   // 이번주 픽처럼 여러 리그·스코프를 한 표에 모아 보여줄 때는 행마다 실제 소속
   // 리그(L)·스코프(scope)가 다를 수 있다 — LeagueTable에 준 code/scope prop은
@@ -271,103 +258,67 @@ export default function LeagueTable({
   // 상세보기로 열 경기 — 이 행에서는 "어떤 경기인지"만 넘기고, 화면 값은 상세보기가
   // /api/match_detail에서 새로 받는다(MatchDetailModal.jsx 맨 아래 참고).
   const [detailRow, setDetailRow] = useState(null)
-  // 동배당 비교 대상 풀 — oddsPool prop을 받았으면 그걸(예: 이번주 리스트 화면이 이미
-  // 들고 있는 회차 전체) 쓰고, 안 받았으면 이 컴포넌트가 알아서 /api/week_list를 받아
-  // 채운다(fetchOddsPool, 모듈 캐시라 같은 화면에 표가 여러 개 있어도 요청은 한 번).
-  const [internalOddsPool, setInternalOddsPool] = useState([])
+  // 이 표가 그리는 경기들이 속한 회차만 서버에 물어본다(fetchSameOdds 주석 참고).
+  const roundKeys = useMemo(() => {
+    const set = new Set()
+    for (const r of rows || []) {
+      const rk = roundKey(r?.DT)
+      if (rk) set.add(rk)
+    }
+    return [...set].sort()
+  }, [rows])
+  const [sameOdds, setSameOdds] = useState({})
   useEffect(() => {
-    if (oddsPool) return
+    if (!roundKeys.length) {
+      setSameOdds({})
+      return undefined
+    }
     let alive = true
-    fetchOddsPool().then((data) => { if (alive) setInternalOddsPool(data) })
+    fetchSameOdds(roundKeys).then((d) => { if (alive) setSameOdds(d) })
     return () => { alive = false }
-  }, [oddsPool])
-  const poolRows = oddsPool || internalOddsPool
-  // '회차|국내 정배배당' → 그 배당으로 뜬 경기들. 비교 대상은 이 표에 보이는 rows가
-  // 아니라 poolRows(이번주 회차 전체)다 — 표 하나(예: 단일 리그, 이번주 리스트의
-  // 하루치)만 보면 다른 리그·다른 요일에 뜬 동배당을 놓친다(2026-09-20 — "표에서
-  // 보이는 밑줄은 이 화면에 대한 기준이 애매하다"는 지적으로 rows 스코프에서
-  // poolRows 스코프로 바꿨다. 상세보기 '동' 뱃지의 6대리그 전체 검색과 이제 같은 범위).
-  const sameOddsIndex = useMemo(() => {
-    const idx = new Map()
-    for (const r of poolRows || []) {
-      if (!MAJOR_LEAGUES.has(rowCode(r))) continue   // K1/K2는 빼고 6대리그끼리만 겹침을 본다
-      const rk = roundKey(r?.DT)
-      if (rk === null) continue
-      const v = favOddsKey(r, SAME_ODDS_W, SAME_ODDS_L)
-      if (v === null) continue
-      const key = `${rk}|${v}`
-      const arr = idx.get(key)
-      if (arr) arr.push(r)
-      else idx.set(key, [r])
-    }
-    return idx
-    // rowCode는 매 렌더 새로 만들어지는 함수라 그대로 deps에 넣으면 이 루프가
-    // (poolRows가 안 바뀌어도) 렌더마다 돈다 — rowCode가 실제로 캡처하는 건 code prop
-    // 하나뿐이라 그걸 대신 넣는다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poolRows, code])
-  // 플핸(언더독 핸디) 쪽도 같은 방식으로 겹침을 본다(2026-09-20 추가).
-  const samePlIndex = useMemo(() => {
-    const idx = new Map()
-    for (const r of poolRows || []) {
-      if (!MAJOR_LEAGUES.has(rowCode(r))) continue
-      const rk = roundKey(r?.DT)
-      if (rk === null) continue
-      const v = plOddsKey(r)
-      if (v === null) continue
-      const key = `${rk}|${v}`
-      const arr = idx.get(key)
-      if (arr) arr.push(r)
-      else idx.set(key, [r])
-    }
-    return idx
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poolRows, code])
+  }, [roundKeys])
+
   // 표에서 그 숫자에 2중 밑줄을 긋기 위한 색인 — matchKey(S|R|No|HT|AT) → { 어느
-  // 칸(KW/KL)인지, 호버 상세 문구 }. poolRows는 화면에 그리는 rows와 다른 요청에서 온
-  // 객체라 참조가 서로 다를 수 있어(2026-09-20), 행 객체 대신 문자열 키(matchKey)로 잇는다.
-  const dupFavCol = useMemo(() => {
-    const out = new Map()
-    for (const group of sameOddsIndex.values()) {
-      if (group.length < 2) continue
+  // 칸(KW/KL)인지, 호버 상세 문구 }. 서버가 준 묶음은 화면에 그리는 rows와 다른
+  // 요청에서 온 객체라, 행 객체가 아니라 문자열 키(matchKey)로 잇는다.
+  const dupCols = useMemo(() => {
+    const fav = new Map()
+    const pl = new Map()
+    const put = (out, group, pick) => {
       for (const r of group) {
         const key = matchKey(r)
-        const col = Number(r[SAME_ODDS_W]) < Number(r[SAME_ODDS_L]) ? SAME_ODDS_W : SAME_ODDS_L
-        const odds = favOddsKey(r, SAME_ODDS_W, SAME_ODDS_L)
+        const { col, odds, label, mark } = pick(r)
         const entries = group.filter((o) => matchKey(o) !== key).map((o) => ({
           dt: o.DT, tm: o.TM, round: o.R, home: o.HT, away: o.AT,
-          league: LEAGUE_LABELS[rowCode(o)] || rowCode(o) || '',
-          markHome: Number(o[SAME_ODDS_W]) < Number(o[SAME_ODDS_L]),
+          league: LEAGUE_LABELS[o.L] || o.L || '',
+          markHome: pick(o).markHome,
           hs: o.HS ?? null, as_: o.AS ?? null, rt: o.RT ?? null,
         }))
-        out.set(key, { col, title: sameOddsGroupTitle('정배', odds, entries, '정') })
+        out.set(key, { col, title: sameOddsGroupTitle(label, odds, entries, mark) })
       }
     }
-    return out
-    // rowCode는 매 렌더 새로 만들어지는 함수라 deps에 넣지 않는다(위 sameOddsIndex와 같은 이유).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sameOddsIndex])
-  // 플핸(언더독 핸디) 쪽 2중 밑줄 색인 — dupFavCol과 같은 구조.
-  const dupPlCol = useMemo(() => {
-    const out = new Map()
-    for (const group of samePlIndex.values()) {
-      if (group.length < 2) continue
-      for (const r of group) {
-        const key = matchKey(r)
-        const col = Number(r.KW) > Number(r.KL) ? SAME_ODDS_HW : SAME_ODDS_HL
-        const odds = plOddsKey(r)
-        const entries = group.filter((o) => matchKey(o) !== key).map((o) => ({
-          dt: o.DT, tm: o.TM, round: o.R, home: o.HT, away: o.AT,
-          league: LEAGUE_LABELS[rowCode(o)] || rowCode(o) || '',
-          markHome: Number(o.KW) > Number(o.KL),
-          hs: o.HS ?? null, as_: o.AS ?? null, rt: o.RT ?? null,
+    for (const kinds of Object.values(sameOdds)) {
+      for (const group of Object.values(kinds?.fav || {})) {
+        put(fav, group, (r) => ({
+          col: Number(r[SAME_ODDS_W]) < Number(r[SAME_ODDS_L]) ? SAME_ODDS_W : SAME_ODDS_L,
+          odds: favOddsKey(r, SAME_ODDS_W, SAME_ODDS_L),
+          markHome: Number(r[SAME_ODDS_W]) < Number(r[SAME_ODDS_L]),
+          label: '정배', mark: '정',
         }))
-        out.set(key, { col, title: sameOddsGroupTitle('플핸(언더독 핸디)', odds, entries, '플') })
+      }
+      for (const group of Object.values(kinds?.pl || {})) {
+        put(pl, group, (r) => ({
+          col: Number(r.KW) > Number(r.KL) ? SAME_ODDS_HW : SAME_ODDS_HL,
+          odds: plOddsKey(r),
+          markHome: Number(r.KW) > Number(r.KL),
+          label: '플핸(언더독 핸디)', mark: '플',
+        }))
       }
     }
-    return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [samePlIndex])
+    return { fav, pl }
+  }, [sameOdds])
+  const dupFavCol = dupCols.fav
+  const dupPlCol = dupCols.pl
   // 별표/내픽/메모 클릭 즉시 반영용 오버레이. 새로 조회하면(rows가 바뀌면) 서버가 다시
   // 내려준 최신값으로 자연히 대체되므로 초기화한다.
   // ref로도 같은 값을 들고 있는 이유: React state 갱신은 비동기라 "별표 클릭 직후 곧바로
