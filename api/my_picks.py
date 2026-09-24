@@ -258,6 +258,46 @@ def upsert_sample_note(username: str, code: str, scope: str, s: str, r: str, no:
         con.close()
 
 
+def _ensure_season_week_notes(con) -> None:
+    """시즌분석 회차 메모 — 시즌 × 회차(회차 첫날 'YYYY-MM-DD')에 1개(2026-09-24 사용자 지정).
+    엑셀에 손으로 적던 관찰(플핸데이, 단통방 대세론 등)을 회차마다 남긴다.
+    ⚠ season_notes는 이미 리그 화면 '시즌 지표' 메모(리그×라운드)가 쓰는 이름이라 따로 둔다."""
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS season_week_notes (
+            season TEXT NOT NULL, wk TEXT NOT NULL, memo TEXT, updated_dt TEXT,
+            PRIMARY KEY (season, wk)
+        )
+        """
+    )
+
+
+def list_season_week_notes(username: str, season: str) -> dict:
+    con = _connect(username)
+    try:
+        _ensure_season_week_notes(con)
+        rows = con.execute("SELECT wk, memo FROM season_week_notes WHERE season = ?", (season,)).fetchall()
+        return {r["wk"]: r["memo"] for r in rows if r["memo"]}
+    finally:
+        con.close()
+
+
+def upsert_season_week_note(username: str, season: str, wk: str, memo: str | None) -> None:
+    con = _connect(username)
+    try:
+        _ensure_season_week_notes(con)
+        con.execute(
+            """
+            INSERT INTO season_week_notes (season, wk, memo, updated_dt) VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(season, wk) DO UPDATE SET memo = excluded.memo, updated_dt = excluded.updated_dt
+            """,
+            (season, wk, (memo or "").strip() or None),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
 def migrate_sample_note_direction(username: str, old: str, new: str) -> int:
     """방향성 선택지 이름이 바뀌었을 때(예: '크로스'→'엇갈림', 2026-09-20) 그 계정에
     이미 저장된 값을 전부 갈아 끼운다. 일회성 마이그레이션 스크립트에서만 부른다 —

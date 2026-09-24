@@ -13,12 +13,13 @@ import WeeklyPickPage from './WeeklyPickPage'
 import WeekListPage from './WeekListPage'
 import WeekTopPage from './WeekTopPage'
 import ArchivePage from './ArchivePage'
+import SeasonAnalysisPage from './SeasonAnalysisPage'
 import UserLeagueModal from '../components/UserLeagueModal/UserLeagueModal'
 import CupCollectButton from '../components/CupCollectButton/CupCollectButton'
 import './MainPage.css'
 
 // 공식 데이터에만 있는 탭들. 내 데이터는 "내가 만든 리그"만 쓰므로 여기 탭은 띄우지 않는다.
-const MASTER_ONLY_TABS = ['total', 'h2h', 'admin_master', 'admin_accounts']
+const MASTER_ONLY_TABS = ['season', 'total', 'h2h', 'admin_master', 'admin_accounts']
 
 function formatDateTime(date) {
   if (!date) return '-'
@@ -158,6 +159,12 @@ export default function MainPage() {
       {view === 'leagues' && (
       <nav className="tab-bar">
         <div className="tab-bar-leagues">
+          {/* 시즌분석 — 6대리그 전체 흐름이라 리그 탭 맨 앞(2026-09-24 사용자 지정). 공식 데이터만. */}
+          {!isUser && (
+            <button className={activeTab === 'season' ? 'active' : ''} onClick={() => setActiveTab('season')}>
+              시즌분석
+            </button>
+          )}
           {leagues.map((lg) => (
             <button
               key={lg.code}
@@ -213,6 +220,7 @@ export default function MainPage() {
         {view === 'bet_history' && <BetHistoryPage scope={scope} />}
         {view === 'archive' && <ArchivePage />}
         {view === 'leagues' && <>
+        {!isUser && activeTab === 'season' && <SeasonAnalysisPage />}
         {!isUser && activeTab === 'total' && <TotalDbPage scope={scope} />}
         {!isUser && activeTab === 'h2h' && <HeadToHeadPage scope={scope} />}
         {!isUser && activeTab === 'admin_master' && user.role === 'admin' && <AdminMasterPage />}

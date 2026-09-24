@@ -1,0 +1,319 @@
+/* 시즌분석(2026-09-24) — 시즌 회차표 + 주간 라운드 지표. 색은 앱 공통 토큰(--chip-*)만 쓴다. */
+.sa-page {
+  padding: 12px 16px 40px;
+}
+
+.sa-page .note {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.sa-error {
+  color: var(--chip-red-fg);
+}
+
+.sa-section {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-surface-2);
+}
+
+.sa-section > h2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.sa-season {
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sa-scroll {
+  overflow-x: auto;
+}
+
+.sa-page table {
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sa-page th,
+.sa-page td {
+  padding: 4px 5px;
+  border: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sa-page th {
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sa-page th small {
+  display: block;
+  font-weight: 400;
+}
+
+/* 시즌 표 */
+.sa-season-table .lg {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 64px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-weight: 700;
+  text-align: left;
+}
+
+.sa-season-table .sum-col {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  min-width: 96px;
+  background: var(--bg-surface);
+}
+
+.sa-season-table th.mon {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.sa-season-table th.wk {
+  min-width: 58px;
+  cursor: pointer;
+}
+
+.sa-season-table th.wk:hover {
+  color: var(--text-primary);
+}
+
+.sa-season-table th.wk-date {
+  font-weight: 400;
+}
+
+.sa-season-table th.t-mid {
+  color: var(--chip-purple-fg);
+}
+
+.sa-season-table .t-rest {
+  background: repeating-linear-gradient(45deg, var(--bg-surface-2), var(--bg-surface-2) 5px, var(--bg-surface) 5px, var(--bg-surface) 10px);
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.sa-season-table .sel {
+  box-shadow: inset 0 0 0 2px var(--chip-yellow-fg);
+}
+
+.sa-season-table td.cell b {
+  display: block;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sa-season-table td.cell span {
+  display: block;
+  font-weight: 700;
+}
+
+.sa-season-table td.jung {
+  background: color-mix(in srgb, var(--chip-blue-bg) 70%, transparent);
+}
+
+.sa-season-table td.jung span {
+  color: var(--chip-blue-fg);
+}
+
+.sa-season-table td.pl {
+  background: color-mix(in srgb, var(--chip-red-bg) 70%, transparent);
+}
+
+.sa-season-table td.pl span {
+  color: var(--chip-red-fg);
+}
+
+.sa-season-table td.even span {
+  color: var(--chip-gray-fg);
+}
+
+.sa-season-table td.future b,
+.sa-season-table td.future span {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* 연기 경기가 있는 라운드 — 글자 대신 주황 테두리(선택 열의 노랑과 구분) */
+.sa-season-table td.moved-late {
+  box-shadow: inset 0 0 0 2px #fb923c;
+}
+
+.sa-season-table td.moved-late.sel {
+  box-shadow: inset 0 0 0 2px var(--chip-yellow-fg), inset 0 0 0 4px #fb923c;
+}
+
+.sa-page tr.total td {
+  border-top: 2px solid var(--border-strong);
+}
+
+.sa-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sa-legend .mid {
+  color: var(--chip-purple-fg);
+}
+
+.sa-legend .sw {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  border-radius: 3px;
+  vertical-align: -2px;
+}
+
+.sw-jung { background: var(--chip-blue-bg); }
+.sw-pl { background: var(--chip-red-bg); }
+.sw-even { background: var(--chip-gray-bg); }
+.sw-moved { box-shadow: inset 0 0 0 2px #fb923c; }
+
+/* 주간 라운드 지표 */
+.sa-kpi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sa-grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.sa-card {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.sa-grid2 .sa-card {
+  margin-bottom: 0;
+}
+
+.sa-card h3 {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.sa-table {
+  width: 100%;
+}
+
+.sa-fixed {
+  table-layout: fixed;
+}
+
+/* 똥배 표 — 리그 칸 폭을 전부 같게 */
+.sa-ddong {
+  width: 100%;
+  min-width: 900px;
+  table-layout: fixed;
+}
+
+.sa-ddong col.c-day { width: 70px; }
+.sa-ddong col.c-sum { width: 90px; }
+
+.sa-ddong td.dd-cell {
+  vertical-align: top;
+  text-align: left;
+  white-space: normal;
+}
+
+.sa-ddong .dd {
+  display: block;
+  margin: 2px 0;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.sa-ddong .dd.j { border-color: var(--chip-blue-fg); }
+.sa-ddong .dd.p { border-color: var(--chip-red-fg); }
+
+.sa-ddong .dd small {
+  margin-left: 4px;
+  color: var(--text-muted);
+}
+
+.sa-moved {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.sa-moved li {
+  margin: 2px 0;
+}
+
+.sa-memo {
+  width: 100%;
+  min-height: 64px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.sa-page .blue { color: var(--chip-blue-fg); font-weight: 700; }
+.sa-page .red { color: var(--chip-red-fg); font-weight: 700; }
+.sa-page .green { color: var(--chip-green-fg); font-weight: 700; }
+.sa-page .gray { color: var(--chip-gray-fg); }
+
+.sa-page .chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sa-page .chip.blue { background: var(--chip-blue-bg); }
+.sa-page .chip.red { background: var(--chip-red-bg); }
+.sa-page .chip.gray { background: var(--chip-gray-bg); }
+.sa-page .chip.orange { background: color-mix(in srgb, #fb923c 25%, transparent); color: #fb923c; }

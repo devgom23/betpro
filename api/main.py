@@ -98,6 +98,7 @@ import axis_stats as AXIS      # noqa: E402
 import same_odds as SAMEODDS  # noqa: E402
 import sample_dir as SAMPLEDIR  # noqa: E402
 import book_dir as BOOKDIR      # noqa: E402
+import season_view as SEASONVIEW  # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -1226,6 +1227,32 @@ def same_odds_rounds(rounds: str = "", user: dict = Depends(get_current_user)):
     if len(keys) > 60:
         raise HTTPException(status_code=400, detail="한 번에 60회차까지만 조회할 수 있습니다.")
     return {"rounds": SAMEODDS.for_rounds(keys)}
+
+
+# ───────────────── 시즌분석(2026-09-24 사용자 지정 — season_view.py) ─────────────────
+@app.get("/api/season_view")
+def season_view(season: str = "", user: dict = Depends(get_current_user)):
+    """6대리그 시즌 회차표 + 회차별 경기(주간 라운드 지표용) + 이 계정의 회차 메모."""
+    seasons = SEASONVIEW.seasons()
+    if not seasons:
+        return {"seasons": [], "season": None, "data": None, "notes": {}}
+    s = season if season in seasons else seasons[0]
+    return {"seasons": seasons, "season": s, "data": SEASONVIEW.get(s),
+            "notes": MYPICKS.list_season_week_notes(user["username"], s)}
+
+
+class SeasonNoteBody(BaseModel):
+    season: str
+    wk: str
+    memo: Optional[str] = None
+
+
+@app.post("/api/season_notes")
+def save_season_note(body: SeasonNoteBody, user: dict = Depends(get_current_user)):
+    if not re.match(r"^\d{2}-\d{2}$", body.season) or not re.match(r"^\d{4}-\d{2}-\d{2}$", body.wk):
+        raise HTTPException(status_code=400, detail="시즌·회차 표기가 올바르지 않습니다.")
+    MYPICKS.upsert_season_week_note(user["username"], body.season, body.wk, body.memo)
+    return {"ok": True}
 
 
 @app.get("/api/admin/book_dir")
