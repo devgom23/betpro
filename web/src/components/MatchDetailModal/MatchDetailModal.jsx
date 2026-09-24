@@ -2378,7 +2378,7 @@ function MbSampleChip({ book, ph, v, favHome }) {
   )
 }
 
-function MultiBookSection({ books, bookDir, row, onHelp }) {
+function MultiBookSection({ books, bookDir, row, onHelp, note, onSaveNote }) {
   const [tab, setTab] = useState('eu')
   if (!books?.length) return null
   const by = Object.fromEntries(books.map((b) => [b.book, b]))
@@ -2411,6 +2411,8 @@ function MultiBookSection({ books, bookDir, row, onHelp }) {
           <span className="mb-dir mb-dir-red">레드 {t1.red}</span>
           {t1.gray > 0 && <span className="mb-dir mb-dir-gray">보합 {t1.gray}</span>}
         </span>
+        {/* 경기별 메모 — 회차 동배당과 같은 표본 메모(sample_notes, kind='books', 2026-09-24 사용자 지정) */}
+        {onSaveNote && <SampleNoteInput value={note} onSave={onSaveNote} placeholder="12개 배당사에 대한 의견" />}
         <span className="mb-tabs">
           {Object.entries(markets).map(([k, mk]) => (
             <button key={k} type="button" className={`mb-tab${k === tab ? ' is-on' : ''}`} onClick={() => setTab(k)}>
@@ -5193,7 +5195,14 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
         />
 
         {/* 12개 배당사 — 배당 섹션 바로 아래(2026-09-24 사용자 지정). 자료가 없으면 섹션째 숨긴다. */}
-        <MultiBookSection books={books} bookDir={bookDir} row={row} onHelp={() => setShowMultiBookLegend(true)} />
+        <MultiBookSection
+          books={books}
+          bookDir={bookDir}
+          row={row}
+          onHelp={() => setShowMultiBookLegend(true)}
+          note={sampleNotes?.books?.memo}
+          onSaveNote={sampleNotes !== undefined ? (memo) => saveSampleNote('books', { memo: memo || null }) : null}
+        />
 
         {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,
             배당 바로 아래). 시즌전적·연속기록·최근10 날짜는 pick_ai 응답이 오면 채워진다. */}
