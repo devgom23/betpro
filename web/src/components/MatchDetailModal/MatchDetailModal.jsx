@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
+import { toBlob } from 'html-to-image'
 import { api, saveBlob } from '../../api/client'
 import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
@@ -4835,8 +4836,8 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
       </span>
     )
   }
-  const [downloading, setDownloading] = useState(false)
-  const [downloadError, setDownloadError] = useState('')
+  const [shooting, setShooting] = useState(false)
+  const [shotError, setShotError] = useState('')
 
   useEffect(() => {
     function onKey(e) {
@@ -5048,6 +5049,8 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
   // 위쪽에 있는 카드들(배당/폼 지표/최근10경기) 높이가 바뀌어도 다시 재야 해서, 개별
   // 요소가 아니라 전체 modal-columns 크기 변화를 관찰한다.
   const sampleSectionRef = useRef(null)
+  const cardRef = useRef(null)   // 스샷저장이 통째로 찍을 상세보기 카드
+  const shootingRef = useRef(false)
   const h2hSectionRef = useRef(null)
   const columnsRef = useRef(null)
   const [h2hMaxHeight, setH2hMaxHeight] = useState(null)
@@ -5079,31 +5082,75 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
     return () => ro.disconnect()
   }, [])
 
-  async function handleDownload() {
-    setDownloading(true)
-    setDownloadError('')
+  // 스샷저장 — 상세보기 전체(스크롤로만 보이던 아래쪽까지)를 한 장의 PNG로 내려받는다
+  // (2026-09-25 사용자 지정: 엑셀 다운로드를 대체). 파일은 이 PC의 다운로드 폴더로 간다.
+  // ⚠ html2canvas는 안 쓴다 — 상세보기에 쓰인 color-mix() 색을 못 읽어 통째로 실패한다
+  //   (2026-09-25 실측). html-to-image는 브라우저가 직접 그려서 같은 색 그대로 나온다.
+  // 원리: 상세보기 카드는 높이가 화면에 고정되고 안쪽만 스크롤이라, 찍는 동안만 카드 높이 제한과
+  //   안쪽 스크롤을 풀어 전체 높이를 드러내고, 다 찍으면 원래대로 되돌린다(finally).
+  async function handleScreenshot() {
+    const card = cardRef.current
+    if (!card || shootingRef.current) return   // 찍는 중에 또 눌러도 겹쳐 돌지 않게(원래 스타일 복구가 꼬인다)
+    shootingRef.current = true
+    setShooting(true)
+    setShotError('')
+    const scroller = card.querySelector('.detail-modal-scroll')
+    const scrollTop = scroller ? scroller.scrollTop : 0
+    // 안쪽 표 상자(12개 배당사·팀 흐름·앞뒤 일정)는 overflow:auto인데, 찍는 순간 글자 폭이 아주 조금
+    // 달라져 가로 스크롤 막대가 생기고 그 막대가 높이를 먹어 표 아래가 잘렸다(2026-09-25 사용자 지적).
+    // ⚠ 이 상자들의 overflow를 visible로 풀면 캡처가 끝나지 않고 멈춘다(2026-09-25 실측: 40초+) —
+    //   그래서 스크롤은 그대로 두고, 찍는 동안만 ① 스크롤 막대를 숨기고 ② 상자 아래에 막대만큼
+    //   여유를 준다. 상자 폭은 그대로라 표가 넘치는 경기에서도 화면과 같은 모양으로 나온다.
+    const wraps = [...card.querySelectorAll('.mb-wrap, .team-flow-wrap, .schedule-ctx-wrap')]
+    const targets = [card, scroller, ...wraps]
+    const saved = targets.filter(Boolean).map((el) => [el, el.getAttribute('style')])
+    const hideBars = document.createElement('style')
+    hideBars.textContent = '.detail-modal-card *::-webkit-scrollbar{display:none!important}'
+      + '.detail-modal-card *{scrollbar-width:none!important}'
+    document.head.appendChild(hideBars)
     try {
-      const params = new URLSearchParams({
-        scope,
-        season: String(row.S ?? ''),
-        round: String(row.R ?? ''),
-        no: String(row.No ?? ''),
+      card.style.maxHeight = 'none'
+      card.style.height = 'auto'
+      card.style.overflow = 'visible'
+      if (scroller) {
+        scroller.style.overflow = 'visible'
+        scroller.style.flex = 'none'
+      }
+      // 막대를 숨긴 뒤의 진짜 내용 높이만큼 상자를 늘린다(스크롤 막대 없이 전부 보이게)
+      await new Promise((r) => setTimeout(r, 120))   // rAF는 다른 탭을 보는 중엔 멈춰서 setTimeout 사용
+      wraps.forEach((el) => {
+        el.style.height = `${el.scrollHeight}px`
       })
-      const { blob, filename } = await api.download(
-        `/api/leagues/${code}/match_excel?${params.toString()}`
-      )
-      saveBlob(blob, filename)
+      await new Promise((r) => setTimeout(r, 120))   // rAF는 다른 탭을 보는 중엔 멈춰서 setTimeout 사용
+      const bg = getComputedStyle(document.body).backgroundColor
+      const blob = await toBlob(card, {
+        pixelRatio: 2,
+        backgroundColor: bg,
+        cacheBust: true,
+        // 화면에서만 필요한 조작 버튼은 사진에 안 넣는다
+        filter: (node) => !(node.classList && (node.classList.contains('detail-header-actions') || node.classList.contains('modal-close'))),
+      })
+      if (!blob) throw new Error('이미지를 만들지 못했습니다.')
+      const clean = (v) => String(v ?? '').replace(/[\\/:*?"<>|\s]+/g, '')
+      const d = new Date()
+      const pad = (n) => String(n).padStart(2, '0')
+      const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`
+      saveBlob(blob, `${clean(row.HT)}vs${clean(row.AT)}_${clean(row.S)}_${clean(row.R)}_${stamp}.png`)
     } catch (err) {
-      setDownloadError(err.message)
+      setShotError(`스샷 저장 실패: ${err.message || err}`)
     } finally {
-      setDownloading(false)
+      hideBars.remove()
+      saved.forEach(([el, st]) => (st === null ? el.removeAttribute('style') : el.setAttribute('style', st)))
+      if (scroller) scroller.scrollTop = scrollTop
+      shootingRef.current = false
+      setShooting(false)
     }
   }
 
   return (
     <>
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card detail-modal-card" onClick={(e) => e.stopPropagation()}>
+      <div ref={cardRef} className="modal-card detail-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="detail-header-actions">
           <button
             className="detail-header-btn"
@@ -5114,17 +5161,17 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           </button>
           <button
             className="detail-header-btn"
-            onClick={handleDownload}
-            disabled={downloading}
-            title="지금 화면 그대로 엑셀로 받기"
+            onClick={handleScreenshot}
+            disabled={shooting}
+            title="상세보기 전체 화면(아래로 스크롤해야 보이는 부분까지)을 이미지 한 장으로 저장"
           >
-            {downloading ? '다운로드 중...' : '⬇ 엑셀 다운로드'}
+            {shooting ? '저장 중...' : '📷 스샷저장'}
           </button>
         </div>
         <button className="modal-close" onClick={onClose} aria-label="닫기">
           ✕
         </button>
-        {downloadError && <p className="detail-download-error">{downloadError}</p>}
+        {shotError && <p className="detail-download-error">{shotError}</p>}
 
         {/* 2026-09-12: 날짜/별표/팀/결과 배지를 한 줄로 합쳤다(예전엔 제목줄+메타줄 2줄).
             결과가 있는 경기는 팀 사이 'vs' 대신 스코어를 넣고 이긴 쪽만 빨강(winner-score,
