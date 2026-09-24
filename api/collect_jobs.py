@@ -1,8 +1,11 @@
 """
 스코어맨을 오래 두드리는 수집을 API 서버 안에서 뒤로 돌린다(2026-09-18 사용자 지정).
 
-  ① 리그 외 배당 및 결과 수집 — 화면 버튼([리그 외 배당 및 결과 수집]).
-     api/cup_matches.collect_season을 그대로 돌린다(명령 프롬프트의 collect_cups.py와 같음).
+  ① 리그 외 경기 일정·결과 수집 — 화면 버튼([리그 외 경기 및 결과 수집]).
+     6대리그 팀의 유럽대항전·컵 경기 일정·결과만 받는다(상세보기 '앞뒤 일정'을 만들기 위한 정보).
+     ⚠ 2026-09-24 사용자 지정: 배당(12개사·국내배당)은 더 이상 여기서 받지 않는다 —
+     cup_odds.db에 쌓기만 하고 읽는 곳이 없었고 수집 시간의 대부분을 차지했다. 리그 경기의
+     12개사 배당은 ②가 받는다. api/cup_matches.collect_season(with_odds=False).
   ② 리그 경기 12개사 배당 — '해배 가져오기' 저장 뒤·'최신배당 불러오기' 뒤에 그 경기들만.
      multibook.db에 쌓는다(master.db는 안 건드려서 리그 캐시에 영향이 없다).
 
@@ -73,7 +76,7 @@ def start_cup(season: str | None = None) -> dict:
         try:
             with _SCOREMAN_LOCK:
                 log(f"{season} 시즌 수집 시작")
-                res = CUP.collect_season(season, with_odds=True, log=log)
+                res = CUP.collect_season(season, with_odds=False, log=log)
             with _cup_guard:
                 _cup["result"] = res
         except Exception as e:  # noqa: BLE001 — 어떤 실패든 화면에 사유를 남긴다
@@ -124,6 +127,15 @@ def queue_league_books(path: str, code: str, items: list[tuple]) -> int:
         finally:
             with _books_guard:
                 _books["last"] = {"code": code, "saved": saved, "failed": failed, "at": _now()}
+                drained = _books["pending"] <= 0
+            if drained:
+                # 12개사 배당이 다 쌓였으면 회사별 방향을 바로 다시 계산해 둔다 — 상세보기를 열 때
+                # 저장된 값이 이미 최신이게(2026-09-24 사용자 지정). 늦게 import: 순환 import 방지.
+                try:
+                    import book_dir
+                    book_dir.ensure()
+                except Exception:  # noqa: BLE001 — 계산 실패가 수집 결과를 가리면 안 된다
+                    pass
 
     threading.Thread(target=run, name=f"league-books-{code}", daemon=True).start()
     return len(items)

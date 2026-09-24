@@ -239,6 +239,14 @@ def ensure(db=None) -> None:
     mb_path = MB.db_path_for(PATHS.SCOPE_MASTER)
     if not os.path.exists(mb_path):
         return
+    # 12개사 배당을 내려받는 중이면 기다린다 — 경기 하나 저장할 때마다 다시 세면 낭비라서,
+    # 대기열이 다 비었을 때(collect_jobs.queue_league_books) 한 번만 센다.
+    try:
+        import collect_jobs
+        if collect_jobs._books["pending"] > 0:
+            return
+    except Exception:  # noqa: BLE001
+        pass
     tok = _token(db, mb_path)
     with _LOCK:
         if _STATE["running"] or _STATE["token"] == tok:

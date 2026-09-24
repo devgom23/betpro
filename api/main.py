@@ -768,8 +768,8 @@ def match_detail(code: str,
 
 @app.post("/api/cup_collect/start")
 def cup_collect_start(user: dict = Depends(get_admin_user)):
-    """[리그 외 배당 및 결과 수집] 버튼 — 유럽대항전·컵 일정·결과, 12개사 배당, 국내배당을
-    뒤에서 받는다(api/collect_jobs.py). 이미 돌고 있으면 새로 시작하지 않는다."""
+    """[리그 외 경기 및 결과 수집] 버튼 — 6대리그 팀의 유럽대항전·컵 경기 일정·결과만 뒤에서
+    받는다(api/collect_jobs.py, 2026-09-24부터 배당은 안 받음). 이미 돌고 있으면 새로 시작하지 않는다."""
     return JOBS.start_cup()
 
 

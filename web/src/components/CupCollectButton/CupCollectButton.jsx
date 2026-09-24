@@ -2,10 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api/client'
 import './CupCollectButton.css'
 
-// [리그 외 배당 및 결과 수집] — 리그 탭 줄의 통합DB 왼쪽(2026-09-18 사용자 지정).
-// 누르면 서버가 뒤에서 유럽대항전·컵 일정·결과, 12개사 배당, 국내배당을 받는다
-// (api/collect_jobs.py). 몇 분 걸리므로 2초마다 진행 상황을 읽어 버튼 옆에 보여준다.
-// 리그 경기의 12개사 배당은 여기가 아니라 '해배 가져오기'·'최신배당 불러오기' 때 같이 받는다.
+// [리그 외 경기 및 결과 수집] — 리그 탭 줄의 통합DB 왼쪽(2026-09-18 사용자 지정).
+// 누르면 서버가 뒤에서 6대리그 팀의 유럽대항전·컵 경기 일정·결과를 받는다(api/collect_jobs.py).
+// 상세보기 '앞뒤 일정'을 만들기 위한 정보라 배당은 받지 않는다(2026-09-24 사용자 지정).
+// 2초마다 진행 상황을 읽어 버튼 옆에 보여준다. 리그 경기의 12개사 배당은 여기가 아니라
+// '해배 가져오기'·'최신배당 불러오기' 때 같이 받는다.
 
 const POLL_MS = 2000
 
@@ -21,7 +22,7 @@ function resultText(status) {
   const r = status.result
   if (!r) return ''
   const failed = r.failed?.length ? ` · 받기 실패 ${r.failed.length}곳(${r.failed.join(', ')})` : ''
-  return `완료 ${String(status.finished || '').slice(11, 16)} · 일정 ${r.matches?.toLocaleString() ?? 0}경기 · 12개사 ${r.mb_odds ?? 0} · 국배 ${r.kr_odds ?? 0}${failed}`
+  return `완료 ${String(status.finished || '').slice(11, 16)} · 일정 ${r.matches?.toLocaleString() ?? 0}경기${failed}`
 }
 
 export default function CupCollectButton() {
@@ -74,9 +75,9 @@ export default function CupCollectButton() {
         className="cup-collect-btn"
         onClick={start}
         disabled={running}
-        title="유럽대항전·컵 경기의 일정·결과와 12개사·국내배당을 최신으로 받습니다(몇 분 걸림)"
+        title="6대리그 팀의 유럽대항전·컵 경기 일정·결과를 최신으로 받습니다(앞뒤 일정용 — 배당은 안 받음)"
       >
-        {running ? '수집 중…' : '리그 외 배당 및 결과 수집'}
+        {running ? '수집 중…' : '리그 외 경기 및 결과 수집'}
       </button>
     </span>
   )
