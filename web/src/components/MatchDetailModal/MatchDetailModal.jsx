@@ -2271,6 +2271,280 @@ function SampleTable({ row, scope, expanded }) {
 
 // 내픽 선택 + 한줄 메모 — 별표(중요)는 제목 옆 버튼으로 따로 처리한다.
 // onSavePick(patch)가 실제 저장을 담당하고, 여기선 즉시(낙관적) 반영만 한다.
+// ───────── 12개 배당사 (스코어맨) ─────────
+// 우리 해외배당 기준인 Bet365를 포함해 12개 배당사가 같은 경기를 어떻게 봤는지(2026-09-24 사용자 지정).
+// 표는 배당사가 옆으로 늘어서고, 칸마다 큰 숫자 = 마감 / 작은 숫자 = 초기.
+// 정배승 확률·방향 두 줄은 승무패 배당으로 낸다(용어 풀이는 ? 팝업 — MultiBookLegend).
+// ⚠ 참고 표시일 뿐 판정에는 안 넣는다 — 배변(초기→마감 이동)은 신호가 아니라 갱신이라는
+//   예전 실측(메모리 reference-baebyeon-odds-movement)이 있어, 쌓인 뒤 따로 검증해야 한다.
+const MB_ORDER = ['Bet365', 'pinnacle', '1xBet', 'Sbobet', 'Crown', 'Macauslot', 'Interwetten',
+  'Mansion88', 'Vcbet', 'Easybet', '18Bet', '12bet']
+const MB_NAME = { pinnacle: '피나클' }
+
+// 표 머리글의 회사 이름은 5자까지만 보인다(2026-09-24 사용자 지정) — 전체 이름은 마우스를 올리면 나온다.
+const MB_NAME_MAX = 5
+function mbShortName(n) {
+  if (n === 'Bet365') return n   // 우리 기준 배당사라 '벳36'처럼 잘리면 오해된다 — 전부 보여준다(사용자 지정)
+  return [...(MB_NAME[n] || n)].slice(0, MB_NAME_MAX).join('')
+}
+
+function mbMarkets(ht, at) {
+  return {
+    eu: { label: '승무패', rows: [[`승 (${ht})`, 'EU_F1', 'EU_L1'], ['무', 'EU_FX', 'EU_LX'], [`패 (${at})`, 'EU_F2', 'EU_L2']] },
+    ah: { label: '핸디', rows: [['라인', 'AH_FG', 'AH_LG'], [`홈 (${ht})`, 'AH_F1', 'AH_L1'], [`원정 (${at})`, 'AH_F2', 'AH_L2']] },
+    ou: { label: '언오버', rows: [['기준점', 'OU_FG', 'OU_LG'], ['오버', 'OU_FO', 'OU_LO'], ['언더', 'OU_FU', 'OU_LU']] },
+  }
+}
+
+function mbVal(v) {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+// flipL / flipF — 이 배당이 그 회사의 정배 쪽인데 우리 정배(국내 초기)와 반대 팀일 때 ⇄를 붙인다
+// (2026-09-24 사용자 지정: "피나클 2.44 옆에 ⇄"). 값은 툴팁 문구.
+function MbNum({ last, first, line, flipL, flipF }) {
+  const l = mbVal(last)
+  const f = mbVal(first)
+  const fmt = (v) => (v === null ? '-' : line ? String(v) : v.toFixed(2))
+  const arrow = l !== null && f !== null && l !== f ? (l > f ? '▲' : '▼') : ''
+  return (
+    <>
+      <span className="mb-last">
+        {fmt(l)}
+        {(arrow || flipL) && (
+          <span className="mb-marks">
+            {arrow && <span className={l > f ? 'mb-up' : 'mb-dn'}>{arrow}</span>}
+            {flipL && <span className="mb-flip" title={flipL}>⇄</span>}
+          </span>
+        )}
+      </span>
+      <span className="mb-first">
+        {fmt(f)}
+        {flipF && <span className="mb-marks"><span className="mb-flip" title={flipF}>⇄</span></span>}
+      </span>
+    </>
+  )
+}
+
+// 그 회사가 정배로 본 자리 — true 홈 / false 원정 / null(동률·배당 없음). ph: 'F' 초기 / 'L' 마감.
+function mbBookFavHome(b, ph) {
+  const w = mbVal(b?.[`EU_${ph}1`])
+  const l = mbVal(b?.[`EU_${ph}2`])
+  if (w === null || l === null || w === l) return null
+  return w < l
+}
+
+// 배당사별 정배 표본 방향(api/book_dir.py) — 칩 색은 표본 방향성 드롭박스와 같은 톤.
+const MB_SAMPLE_CLASS = {
+  블루: 'mb-dir-blue', 약블루: 'mb-dir-blue-weak', 레드: 'mb-dir-red', 약레드: 'mb-dir-red-weak',
+}
+
+// 회사가 우리(국내 초기배당)와 반대 팀을 정배로 봤으면, 그 회사 표본의 블루/레드는 '그 회사 정배'
+// 기준이라 뜻이 거꾸로다 — 화면은 전부 우리 정배 기준으로 맞춰 뒤집어 보여준다(저장값은 그대로).
+const MB_FLIP = { 블루: '레드', 약블루: '약레드', 레드: '블루', 약레드: '약블루' }
+function mbSampleLabel(v, favHome) {
+  if (!v) return null
+  const flipped = favHome !== null && (v.pos === 'H') !== favHome
+  return { label: flipped ? (MB_FLIP[v.label] || v.label) : v.label, flipped }
+}
+
+function mbSampleTitle(book, ph, v, shown) {
+  const four = (c) => `핸승 ${c[0]} · 핸무 ${c[1]} · 무 ${c[2]} · 역 ${c[3]} (${c.reduce((a, b) => a + b, 0)}건)`
+  const side = v.pos === 'H' ? '홈' : '원정'
+  return `${MB_NAME[book] || book} ${ph === 'F' ? '초기' : '마감'} 정배배당 ${Number(v.odds).toFixed(2)} (${side} 정배)\n`
+    + `이 경기 방향: ${four(v.self)}\n반대 방향: ${four(v.mirror)}\n`
+    + (v.t === null ? '' : `평균 t ${Number(v.t).toFixed(2)} → ${sampleDirectionText(v.label)}\n`)
+    + (shown.flipped
+      ? `⚠ 이 회사는 우리와 반대 팀을 정배로 봤습니다 — 우리 정배 기준으로 뒤집어 ${sampleDirectionText(shown.label)}로 표시합니다.\n`
+      : '')
+    + (v.locked ? '결과가 들어와 고정된 값입니다.'
+      : v.src === 'asof' ? '이 경기 날짜 이전 경기만으로 센 값입니다.' : '결과 전 — 새 결과가 들어오면 다시 셉니다.')
+}
+
+function MbSampleChip({ book, ph, v, favHome }) {
+  if (!v) return <span className="mb-first">-</span>
+  const n = [...v.self, ...v.mirror].reduce((a, b) => a + b, 0)
+  const shown = mbSampleLabel(v, favHome)
+  return (
+    <span
+      className={`mb-dir ${MB_SAMPLE_CLASS[shown.label] || 'mb-dir-gray'}${shown.flipped ? ' mb-flipped' : ''}`}
+      title={mbSampleTitle(book, ph, v, shown)}
+    >
+      {shown.flipped && '⇄'}{sampleDirectionText(shown.label)}
+      <small>{n}</small>
+    </span>
+  )
+}
+
+function MultiBookSection({ books, bookDir, row, onHelp }) {
+  const [tab, setTab] = useState('eu')
+  if (!books?.length) return null
+  const by = Object.fromEntries(books.map((b) => [b.book, b]))
+  const names = MB_ORDER.filter((n) => by[n]).concat(books.map((b) => b.book).filter((n) => !MB_ORDER.includes(n)))
+  const ourFav = homeIsFav(row)               // 우리 정배(국내 초기배당 우선) — true 홈 / false 원정 / null 모름
+  const markets = mbMarkets(String(row.HT || '').trim(), String(row.AT || '').trim())
+  const m = markets[tab]
+  const mean = (key) => {
+    const v = names.map((n) => mbVal(by[n][key])).filter((x) => x !== null)
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+  }
+  // 제목 옆 합계 — 마감 방향(그 회사 배당의 과거 결과)을 우리 정배 기준으로 센다.
+  const t1 = { blue: 0, red: 0, gray: 0 }
+  names.forEach((n) => {
+    const lab = mbSampleLabel(bookDir?.[n]?.L, ourFav)?.label
+    if (lab === '블루' || lab === '약블루') t1.blue += 1
+    else if (lab === '레드' || lab === '약레드') t1.red += 1
+    else if (lab) t1.gray += 1
+  })
+  const cellCls = (n) => (n === 'Bet365' ? 'mb-base' : undefined)
+
+  return (
+    <section className="detail-section">
+      <h3>
+        <button type="button" className="help-btn" onClick={onHelp} title="12개 배당사 표 보는 법">
+          {names.length}개 배당사 <span className="help-mark">?</span>
+        </button>
+        <span className="mb-tally">
+          <span className="mb-dir mb-dir-blue">블루 {t1.blue}</span>
+          <span className="mb-dir mb-dir-red">레드 {t1.red}</span>
+          {t1.gray > 0 && <span className="mb-dir mb-dir-gray">보합 {t1.gray}</span>}
+        </span>
+        <span className="mb-tabs">
+          {Object.entries(markets).map(([k, mk]) => (
+            <button key={k} type="button" className={`mb-tab${k === tab ? ' is-on' : ''}`} onClick={() => setTab(k)}>
+              {mk.label}
+            </button>
+          ))}
+        </span>
+      </h3>
+      <div className="mb-wrap">
+        <table className="detail-table mb-table">
+          <thead>
+            <tr>
+              <th className="mb-lab">구분</th>
+              {names.map((n) => <th key={n} className={cellCls(n)} title={MB_NAME[n] || n}>{mbShortName(n)}</th>)}
+              <th>{names.length}사 평균<small>마감 / 초기</small></th>
+            </tr>
+          </thead>
+          <tbody>
+            {m.rows.map(([lab, fk, lk]) => {
+              const line = fk.endsWith('G')
+              // 승무패의 승(홈)·패(원정) 줄만 — 그 칸이 그 회사 정배 쪽이고 우리 정배와 반대면 ⇄.
+              const side = tab === 'eu' ? (fk === 'EU_F1' ? true : fk === 'EU_F2' ? false : null) : null
+              const flipMsg = (n, ph) => {
+                if (side === null || ourFav === null) return null
+                const bf = mbBookFavHome(by[n], ph)
+                if (bf !== side || bf === ourFav) return null
+                const ht = String(row.HT || '').trim()
+                const at = String(row.AT || '').trim()
+                return `${MB_NAME[n] || n} ${ph === 'F' ? '초기' : '마감'} — 정배: ${bf ? ht : at}`
+                  + ` (우리 정배: ${ourFav ? ht : at})`
+              }
+              return (
+                <tr key={lab}>
+                  <td className="mb-lab">{lab}</td>
+                  {names.map((n) => (
+                    <td key={n} className={cellCls(n)}>
+                      <MbNum last={by[n][lk]} first={by[n][fk]} line={line} flipL={flipMsg(n, 'L')} flipF={flipMsg(n, 'F')} />
+                    </td>
+                  ))}
+                  <td className="mb-avg"><MbNum last={mean(lk)} first={mean(fk)} /></td>
+                </tr>
+              )
+            })}
+            {['F', 'L'].map((ph, i) => {
+              const labs = names.map((n) => mbSampleLabel(bookDir?.[n]?.[ph], ourFav)?.label).filter(Boolean)
+              const blue = labs.filter((l) => l === '블루' || l === '약블루').length
+              const red = labs.filter((l) => l === '레드' || l === '약레드').length
+              return (
+                <tr key={ph} className={`mb-dir-row${i === 0 ? ' mb-dir-first' : ''}`}>
+                  <td className="mb-lab">방향 {ph === 'F' ? '초기' : '마감'}<small>그 회사 배당의 과거 결과</small></td>
+                  {names.map((n) => (
+                    <td key={n} className={cellCls(n)}><MbSampleChip book={n} ph={ph} v={bookDir?.[n]?.[ph]} favHome={ourFav} /></td>
+                  ))}
+                  <td className="mb-avg">블루 {blue} · 레드 {red}{labs.length - blue - red ? ` · 기타 ${labs.length - blue - red}` : ''}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+// 12개 배당사 표 보는 법 — 화면에서 뺀 용어 풀이를 여기 모았다(2026-09-24 사용자 지정).
+function MultiBookLegend({ onClose }) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop help-legend-back" onClick={onClose}>
+      <div className="modal-card help-legend-card" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
+        <h2 className="modal-title">📊 12개 배당사 — 표 보는 법</h2>
+
+        <p className="help-legend-title">① 무엇을 보여주나</p>
+        <p className="help-legend-note">
+          스코어맨에 올라온 배당사 12곳이 같은 경기를 어떻게 봤는지입니다. 첫 칸 <b>Bet365</b>가 우리
+          해외배당의 기준 배당사(다른 칸보다 진한 배경)입니다. 칸마다 <b>큰 숫자 = 마감</b>,
+          <b> 작은 숫자 = 초기</b>, ▲▼는 초기보다 오르고 내린 것입니다. 맨 오른쪽은 Bet365를 포함한
+          12사 평균(마감 / 초기)입니다. 탭으로 승무패·핸디·언오버를 바꿔 봅니다. 회사 이름은 5자까지만
+          보이고, 마우스를 올리면 전체 이름이 나옵니다.
+        </p>
+
+        <p className="help-legend-title">② 방향 초기 · 방향 마감</p>
+        <p className="help-legend-note">
+          그 회사가 매긴 <b>정배배당 값</b>(초기 / 마감 따로)이 같았던 과거 경기를 찾아, 실제로
+          핸승·핸무·무·역이 몇 번 나왔는지로 방향을 냅니다. 예를 들어 피나클이 초기 2.07을 매겼다면
+          &quot;피나클이 2.07을 매겼던 과거 경기들&quot;을 셉니다 — Bet365 배당으로 센 표본과 다를 수 있습니다.
+          정배가 같은 자리(홈/원정)였던 경기와 반대 자리였던 경기 두 줄을 보고, 판정 기준은 표본
+          방향성(정배 표본 ?)과 똑같습니다. 그 경기 날짜 <b>이전</b> 경기만 세고, 결과가 들어오면
+          그때 값으로 고정합니다.
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>칩</th><th>뜻</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>블루 · 블루(약)</b></td><td>그 배당이 과거에 정배 쪽 결과(핸승·핸무)로 더 많이 끝남</td></tr>
+            <tr><td><b>레드 · 레드(약)</b></td><td>플핸 쪽 결과(무·역)로 더 많이 끝남</td></tr>
+            <tr><td><b>몰라 · 엇갈림</b></td><td>표본이 적거나 두 줄이 서로 반대 — 방향 없음</td></tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          칩 옆 숫자는 표본 경기 수이고, 마우스를 올리면 핸승·핸무·무·역 개수와 평균 t가 나옵니다.
+          제목 옆 블루·레드 개수는 <b>마감 방향</b>을 12사 전부로 센 것입니다.
+        </p>
+
+        <p className="help-legend-title">③ ⇄ 표시 — 회사가 반대 팀을 정배로 본 경우</p>
+        <p className="help-legend-note">
+          회사가 우리(국내 초기배당)와 <b>반대 팀을 정배로 본 경우</b> 그 회사 표본의 블루·레드는 그 회사
+          정배 기준이라 뜻이 거꾸로입니다. 그래서 우리 정배 기준으로 뒤집어 보여주고 칩 앞에 <b>⇄</b>를
+          붙입니다. 승무패 표에서도 그 회사가 정배로 본 배당 숫자 옆에 <b>⇄</b>가 붙습니다(초기·마감 따로).
+        </p>
+
+        <p className="help-legend-title">④ 주의 — 참고용입니다</p>
+        <p className="help-legend-note">
+          이 표는 판정에 넣지 않습니다. 12사 배당은 아직 최근 3시즌뿐이라 칸마다 표본이 수십 건 수준이고,
+          적으면 판정이 약하게(몰라·약) 나오는 게 정상입니다. 과거 시즌을 더 받으면 자동으로 다시 셉니다.
+          방향이 실제로 결과를 가르는지는 자료가 쌓인 뒤 따로 검증해야 합니다.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+
 // ───────── 같은 회차 동배당 결과 ─────────
 // 같은 프로토 회차(금~화 / 수~목)에 국내 정배배당·플핸(언더독 핸디)배당이 이 경기와
 // 똑같았던 6대리그 다른 경기들. 초기·배변을 따로 추적한다(2026-09-23 사용자 지정).
@@ -4538,7 +4812,7 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveT
   )
 }
 
-function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, weekRank, extraOdds, onClose, onSavePick }) {
+function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir, weekRank, extraOdds, onClose, onSavePick }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
   const rt = rtLabel(row.RT)
@@ -4595,6 +4869,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, weekRank, extr
   }
   const [showSeasonLegend, setShowSeasonLegend] = useState(false)
   const [showSampleDirLegend, setShowSampleDirLegend] = useState(false)
+  const [showMultiBookLegend, setShowMultiBookLegend] = useState(false)
   const [pickData, setPickData] = useState(null)
   const [pickError, setPickError] = useState('')
   // 종합분석 카드를 화면에서 뺀 뒤로 이 응답에서 실제로 쓰는 건 이 둘과 streaks뿐이다.
@@ -4917,6 +5192,9 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, weekRank, extr
           axisStats={axisStats}
         />
 
+        {/* 12개 배당사 — 배당 섹션 바로 아래(2026-09-24 사용자 지정). 자료가 없으면 섹션째 숨긴다. */}
+        <MultiBookSection books={books} bookDir={bookDir} row={row} onHelp={() => setShowMultiBookLegend(true)} />
+
         {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,
             배당 바로 아래). 시즌전적·연속기록·최근10 날짜는 pick_ai 응답이 오면 채워진다. */}
         <section className="detail-section">
@@ -5125,6 +5403,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, weekRank, extr
     </div>
     {showSeasonLegend && <SeasonRecordLegend onClose={() => setShowSeasonLegend(false)} />}
     {showSampleDirLegend && <SampleDirectionLegend onClose={() => setShowSampleDirLegend(false)} />}
+    {showMultiBookLegend && <MultiBookLegend onClose={() => setShowMultiBookLegend(false)} />}
     {showArchive && (
       <ArchiveTagModal
         row={row}
@@ -5271,6 +5550,8 @@ export default function MatchDetailModal({ code, scope, row: ident, onClose, onP
         sampleDir={loaded.data.sample_dir}
         weekRank={weekRank}
         extraOdds={loaded.data.extra_odds}
+        books={loaded.data.books}
+        bookDir={loaded.data.book_dir}
         onClose={onClose}
         onSavePick={handleSavePick}
       />

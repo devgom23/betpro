@@ -97,6 +97,7 @@ import collect_jobs as JOBS    # noqa: E402
 import axis_stats as AXIS      # noqa: E402
 import same_odds as SAMEODDS  # noqa: E402
 import sample_dir as SAMPLEDIR  # noqa: E402
+import book_dir as BOOKDIR      # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -125,6 +126,7 @@ def _startup():
     _warm_master_cache_async()
     # 표본 방향성 시스템 판정 — 서버 켜자마자 뒤에서 한 번 맞춰 둔다(sample_dir.py 주석).
     SAMPLEDIR.ensure()
+    BOOKDIR.ensure()   # 배당사별 정배 표본 방향(book_dir.py)
 
 
 def _warm_master_cache_async():
@@ -650,6 +652,7 @@ def league_rows(code: str,
     db = _resolve_scope_db(scope, user)
     if scope == PATHS.SCOPE_MASTER:
         SAMPLEDIR.ensure(db)
+        BOOKDIR.ensure(db)
     # 표시용 순위(HP/AP) + 베팅 기대수익률(EV) 컬럼까지 붙은 표.
     # DB에 저장하지 않고 조회 때 계산하는 값이라, 경기가 쌓이면 값도 같이 갱신된다
     # (DB가 바뀌면 캐시가 풀리므로 — data_access.load_league_df_ev 참고).
@@ -748,8 +751,19 @@ def match_detail(code: str,
     # 추가배당(±2·±3.5 핸디, 언더오버) — 상세보기 '배당' 제목 옆 뱃지가 쓴다(2026-09-20).
     # '이번주 벳'과 같은 인덱스(_kx_index)를 그대로 쓴다.
     extra_odds = KXODDS.lookup(_kx_index(db), code, row.get("S"), row.get("R"), row.get("HT"), row.get("AT"))
+    # 12개 배당사(스코어맨) 초기·마감 배당 — 상세보기 '12개 배당사' 섹션(2026-09-24 사용자 지정).
+    # 쌓아 둔 multibook.db를 읽기만 한다(수집은 해배 가져오기·최신배당 불러오기 뒤에 따로 돈다).
+    mb_path = MBODDS.db_path_for(scope, user["username"] if scope == PATHS.SCOPE_USER else None)
+    mb_key = KXODDS._key(code, row.get("S"), row.get("R"), row.get("HT"), row.get("AT"))
+    books = [{k: v for k, v in b.items() if k == "book" or k in MBODDS.VAL_COLS}
+             for b in MBODDS.load_for_keys(mb_path, [mb_key]).get(mb_key, [])]
+    # 배당사별 정배 표본 방향(초기·마감) — 공식 6대리그만(book_dir.py).
+    book_dir = {}
+    if scope == PATHS.SCOPE_MASTER and code in PATHS.VALID_LEAGUES:
+        BOOKDIR.ensure(db)
+        book_dir = BOOKDIR.get(code, row)
     return {"code": code, "scope": scope, "row": row, "same_odds": same_odds, "extra_odds": extra_odds,
-            "sample_dir": sample_dir}
+            "sample_dir": sample_dir, "books": books, "book_dir": book_dir}
 
 
 @app.post("/api/cup_collect/start")
@@ -1212,6 +1226,12 @@ def same_odds_rounds(rounds: str = "", user: dict = Depends(get_current_user)):
     if len(keys) > 60:
         raise HTTPException(status_code=400, detail="한 번에 60회차까지만 조회할 수 있습니다.")
     return {"rounds": SAMEODDS.for_rounds(keys)}
+
+
+@app.get("/api/admin/book_dir")
+def book_dir_status(admin: dict = Depends(get_admin_user)):
+    """배당사별 정배 표본 방향 계산 상태."""
+    return BOOKDIR.status()
 
 
 @app.get("/api/admin/sample_dir")

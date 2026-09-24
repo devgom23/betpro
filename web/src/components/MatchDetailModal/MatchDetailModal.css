@@ -2532,3 +2532,155 @@
 }
 
 /* .rt-badge 모양은 components/RtBadge/RtBadge.css 로 옮겼다. */
+
+
+/* 12개 배당사(스코어맨) — 배당 섹션 아래 표(2026-09-24). 배당사가 옆으로 늘어서고
+   칸마다 큰 숫자 마감 / 작은 숫자 초기. 용어 풀이는 ? 팝업(MultiBookLegend). */
+.mb-tally {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.mb-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.mb-tab {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mb-tab.is-on {
+  border-color: var(--border-strong);
+  background: var(--chip-gray-bg);
+  color: var(--text-primary);
+}
+
+.mb-wrap {
+  overflow-x: auto;
+}
+
+.mb-table th,
+.mb-table td {
+  padding: 3px 4px;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.mb-table th small,
+.mb-table td.mb-lab small {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.mb-table td.mb-lab,
+.mb-table th.mb-lab {
+  text-align: left;
+  padding-left: 8px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.mb-table .mb-base {
+  background: var(--bg-surface);
+}
+
+/* 숫자는 12사 평균 칸처럼 가운데 정렬. ▲▼⇄는 숫자 바로 옆에 '매달려'(position:absolute) 글자 폭에
+   안 들어가므로, 표시가 붙은 칸도 안 붙은 칸도 숫자가 같은 자리에 온다(2026-09-24 사용자 지정). */
+.mb-last,
+.mb-first {
+  display: block;
+  position: relative;
+  text-align: center;
+}
+
+.mb-marks {
+  position: absolute;
+  margin-left: 2px;
+  white-space: nowrap;
+}
+
+.mb-last {
+  color: var(--text-primary);
+}
+
+.mb-first {
+  font-size: 12px;   /* 초기 배당 — 10px은 잘 안 보인다는 지적(2026-09-24) */
+  color: var(--text-muted);
+}
+
+.mb-up {
+  color: var(--chip-red-fg);
+}
+
+.mb-dn {
+  color: var(--chip-blue-fg);
+}
+
+.mb-table td.mb-avg {
+  color: var(--text-primary);
+}
+
+.mb-table tr.mb-dir-first td {
+  border-top: 2px solid var(--border-strong);
+}
+
+.mb-dir {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mb-dir small {
+  margin-left: 2px;
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.mb-dir-blue {
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+}
+
+.mb-dir-red {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+}
+
+.mb-dir-gray {
+  background: var(--chip-gray-bg);
+  color: var(--chip-gray-fg);
+}
+
+
+.mb-dir-blue-weak {
+  background: color-mix(in srgb, var(--chip-blue-bg) 50%, var(--bg-surface));
+  color: var(--chip-blue-fg);
+}
+
+.mb-dir-red-weak {
+  background: color-mix(in srgb, var(--chip-red-bg) 50%, var(--bg-surface));
+  color: var(--chip-red-fg);
+}
+
+
+/* 회사가 우리와 반대 팀을 정배로 본 배당 옆 ⇄ (2026-09-24) */
+.mb-flip {
+  margin-left: 2px;
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+  cursor: help;
+}
