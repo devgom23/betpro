@@ -133,7 +133,7 @@ def queue_league_books(path: str, code: str, items: list[tuple]) -> int:
                 # 저장된 값이 이미 최신이게(2026-09-24 사용자 지정). 늦게 import: 순환 import 방지.
                 try:
                     import book_dir
-                    book_dir.ensure()
+                    book_dir.ensure(force=True)
                 except Exception:  # noqa: BLE001 — 계산 실패가 수집 결과를 가리면 안 된다
                     pass
 

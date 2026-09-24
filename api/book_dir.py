@@ -28,6 +28,7 @@
 import os
 import sqlite3
 import threading
+import time
 from collections import defaultdict
 from datetime import datetime
 
@@ -203,7 +204,8 @@ def get(code, row, mb_path=None) -> dict:
 
 # ── 뒤에서 자동으로 — 리그 결과나 12사 배당(백필 포함)이 바뀌면 다시 돈다 ──────────
 _LOCK = threading.Lock()
-_STATE = {"running": False, "error": None, "token": None, "last": None}
+_STATE = {"running": False, "error": None, "token": None, "last": None, "done_at": 0.0}
+COOLDOWN = 600   # 초 — 백필이 계속 저장하는 동안 요청마다 다시 세지 않게(자료가 많으면 한 번에 수십 초)
 
 
 def _token(db, mb_path):
@@ -227,6 +229,7 @@ def _run(db, mb_path, tok):
         _STATE["last"] = refresh(db, mb_path)
         _STATE["error"] = None
         _STATE["token"] = tok
+        _STATE["done_at"] = time.time()
     except Exception as e:   # noqa: BLE001 — 뒤에서 도는 작업이라 실패를 상태로 남긴다
         _STATE["error"] = f"{type(e).__name__}: {e}"
     finally:
@@ -234,7 +237,8 @@ def _run(db, mb_path, tok):
             _STATE["running"] = False
 
 
-def ensure(db=None) -> None:
+def ensure(db=None, force=False) -> None:
+    """force=True — 수집이 방금 끝났을 때(collect_jobs)는 쿨다운 없이 바로 센다."""
     db = db or PATHS.get_master_db()
     mb_path = MB.db_path_for(PATHS.SCOPE_MASTER)
     if not os.path.exists(mb_path):
@@ -250,6 +254,8 @@ def ensure(db=None) -> None:
     tok = _token(db, mb_path)
     with _LOCK:
         if _STATE["running"] or _STATE["token"] == tok:
+            return
+        if not force and time.time() - _STATE["done_at"] < COOLDOWN:
             return
         _STATE["running"] = True
     threading.Thread(target=_run, args=(db, mb_path, tok), name="book-dir", daemon=True).start()

@@ -61,7 +61,19 @@ def main(seasons):
             sub = df[df["S"].astype(str).str.strip() == season]
             if sub.empty:
                 continue
-            sched = CRAWL.apply_aliases(SM.season_schedule(league_id, scoreman_season(season)), aliases)
+            sched = []
+            for attempt in range(1, 6):
+                # 스코어맨이 일정 파일을 잠깐 거부하면 빈 목록이 온다 — 그대로 두면 그 시즌 전체가
+                # '일정에서 못 찾음'으로 조용히 건너뛰어지므로(2026-09-24 시험에서 실제로 0경기가 나왔다)
+                # 몇 번 다시 받아 본다.
+                sched = CRAWL.apply_aliases(SM.season_schedule(league_id, scoreman_season(season)), aliases)
+                if sched:
+                    break
+                log(f"{code} {season}: 일정 파일이 비어 있음 — {attempt}/5회, 30초 뒤 다시")
+                time.sleep(30)
+            if not sched:
+                log(f"{code} {season}: ⚠ 일정 파일을 끝내 못 받음 — 이 시즌은 건너뜀(같은 명령을 다시 실행하면 이어서 받음)")
+                continue
             mid_of = {(str(g["HT"]).strip(), str(g["AT"]).strip()): g["mid"] for g in sched}
             done = MB.done_keys(out_path, code, season)
             todo, unmatched = [], []
