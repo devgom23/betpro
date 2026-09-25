@@ -224,6 +224,21 @@ def _token(db, mb_path):
     return (DATA.tables_token(db, tuple(PATHS.LEAGUES)), mb)
 
 
+BUSY_WINDOW = 600   # 초 — mb_odds 마지막 저장이 이보다 최근이면 '백필 중'으로 본다
+
+
+def _writing_now(mb_path) -> bool:
+    try:
+        con = sqlite3.connect(mb_path, timeout=30)
+        try:
+            last = con.execute("SELECT MAX(updated_dt) FROM mb_odds").fetchone()[0]
+        finally:
+            con.close()
+        return bool(last) and (datetime.now() - datetime.strptime(last, "%Y-%m-%d %H:%M:%S")).total_seconds() < BUSY_WINDOW
+    except (sqlite3.Error, ValueError, TypeError):
+        return False
+
+
 def _run(db, mb_path, tok):
     try:
         _STATE["last"] = refresh(db, mb_path)
@@ -251,6 +266,12 @@ def ensure(db=None, force=False) -> None:
             return
     except Exception:  # noqa: BLE001
         pass
+    # 명령 프롬프트 백필(backfill_multibook.py)이 지금 저장 중이면 미룬다 — 따로 도는 프로세스라
+    # 위 대기열로는 안 잡힌다. 한 번 세는 데 33만 줄을 파이썬으로 훑어 수 분 걸리고 그동안 서버의
+    # 다른 요청이 전부 느려져, 백필 중 상세보기가 10~17초씩 걸렸다(2026-09-25 실측). 이미 저장된
+    # 결과(mb_dir)로 화면은 그대로 나오고, 백필이 멈춘 뒤 첫 상세보기에서 한 번만 다시 센다.
+    if not force and _writing_now(mb_path):
+        return
     tok = _token(db, mb_path)
     with _LOCK:
         if _STATE["running"] or _STATE["token"] == tok:

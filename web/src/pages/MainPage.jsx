@@ -87,7 +87,7 @@ export default function MainPage() {
         <div className="top-bar-brand">
           <img className="app-logo" src="/logo.png" alt="BET PRO W" />
           <span className="app-name">BET PRO W</span>
-          <span className="app-version-chip">v2.0</span>
+          <span className="app-version-chip">v3.0</span>
         </div>
 
         <div className="scope-toggle">
