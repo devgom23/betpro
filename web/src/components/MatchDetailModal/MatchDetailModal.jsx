@@ -2280,7 +2280,20 @@ function SampleTable({ row, scope, expanded }) {
 //   예전 실측(메모리 reference-baebyeon-odds-movement)이 있어, 쌓인 뒤 따로 검증해야 한다.
 const MB_ORDER = ['Bet365', 'pinnacle', '1xBet', 'Sbobet', 'Crown', 'Macauslot', 'Interwetten',
   'Mansion88', 'Vcbet', 'Easybet', '18Bet', '12bet']
-const MB_NAME = { pinnacle: '피나클' }
+const MB_NAME = { pinnacle: '피나클', AVG12: '12사 평균' }
+// 13번째 배당사 '12사 평균'(api/book_dir.py AVG_BOOK) — 회사들 평균 배당을 한 회사처럼 보고 과거 통계를
+// 따로 센 방향(2026-09-25 사용자 지정). 표의 맨 오른쪽 평균 칸 방향 줄에 나온다.
+const MB_AVG_BOOK = 'AVG12'
+
+// 평균 배당을 소수 둘째 자리로 — 끝자리가 딱 5면 올린다(1.245 → 1.25). 서버가 13번째 배당사
+// 과거 통계를 찾을 때 쓰는 평균값(book_dir._avg2)과 같은 규칙이라, 화면 숫자와 통계 기준값이 어긋나지 않는다.
+// 소수로 더하면 컴퓨터 소수 오차로 끝자리가 흔들려서 ×1000 정수로 더해 나눈다(셋째 자리까지 쓰는 회사가 있다).
+function mbMean(vals) {
+  if (!vals.length) return null
+  const milli = vals.reduce((a, v) => a + Math.round(v * 1000), 0)
+  const n = vals.length
+  return Math.floor((2 * milli + 10 * n) / (20 * n)) / 100
+}
 
 // 표 머리글의 회사 이름은 5자까지만 보인다(2026-09-24 사용자 지정) — 전체 이름은 마우스를 올리면 나온다.
 const MB_NAME_MAX = 5
@@ -2385,7 +2398,7 @@ function MultiBookSection({ books, bookDir, row, onHelp, note, onSaveNote }) {
   const m = markets[tab]
   const mean = (key) => {
     const v = names.map((n) => mbVal(by[n][key])).filter((x) => x !== null)
-    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+    return mbMean(v)
   }
   // 제목 옆 합계 — 마감 방향(그 회사 배당의 과거 결과)을 우리 정배 기준으로 센다.
   const t1 = { blue: 0, red: 0, gray: 0 }
@@ -2463,7 +2476,10 @@ function MultiBookSection({ books, bookDir, row, onHelp, note, onSaveNote }) {
                   {names.map((n) => (
                     <td key={n} className={cellCls(n)}><MbSampleChip book={n} ph={ph} v={bookDir?.[n]?.[ph]} favHome={ourFav} /></td>
                   ))}
-                  <td className="mb-avg">블루 {blue} · 레드 {red}{labs.length - blue - red ? ` · 기타 ${labs.length - blue - red}` : ''}</td>
+                  <td className="mb-avg">
+                    <MbSampleChip book={MB_AVG_BOOK} ph={ph} v={bookDir?.[MB_AVG_BOOK]?.[ph]} favHome={ourFav} />
+                    <small className="mb-avg-tally">블루 {blue} · 레드 {red}{labs.length - blue - red ? ` · 기타 ${labs.length - blue - red}` : ''}</small>
+                  </td>
                 </tr>
               )
             })}
@@ -2497,8 +2513,8 @@ function MultiBookLegend({ onClose }) {
           스코어맨에 올라온 배당사 12곳이 같은 경기를 어떻게 봤는지입니다. 첫 칸 <b>Bet365</b>가 우리
           해외배당의 기준 배당사(다른 칸보다 진한 배경)입니다. 칸마다 <b>큰 숫자 = 마감</b>,
           <b> 작은 숫자 = 초기</b>, ▲▼는 초기보다 오르고 내린 것입니다. 맨 오른쪽은 Bet365를 포함한
-          12사 평균(마감 / 초기)입니다. 탭으로 승무패·핸디·언오버를 바꿔 봅니다. 회사 이름은 5자까지만
-          보이고, 마우스를 올리면 전체 이름이 나옵니다.
+          12사 평균(마감 / 초기, 소수 셋째 자리에서 반올림)입니다. 탭으로 승무패·핸디·언오버를 바꿔 봅니다.
+          회사 이름은 5자까지만 보이고, 마우스를 올리면 전체 이름이 나옵니다.
         </p>
 
         <p className="help-legend-title">② 방향 초기 · 방향 마감</p>
@@ -2524,6 +2540,11 @@ function MultiBookLegend({ onClose }) {
           칩 옆 숫자는 표본 경기 수이고, 마우스를 올리면 핸승·핸무·무·역 개수와 평균 t가 나옵니다.
           제목 옆 블루·레드 개수는 <b>마감 방향</b>을 12사 전부로 센 것입니다.
         </p>
+        <p className="help-legend-note">
+          <b>맨 오른쪽 평균 칸의 칩 = 13번째 배당사 &apos;12사 평균&apos;</b>입니다. 12사 평균 배당을 한 회사의
+          배당처럼 보고 같은 방식으로 셉니다 — 평균 정배가 1.32면 &quot;과거에 12사 평균 정배가 1.32였던 경기들&quot;의
+          결과입니다(배당을 낸 회사가 3곳 미만인 경기는 뺍니다). 그 아래 작은 글씨는 12개 회사 칩을 센 개수입니다.
+        </p>
 
         <p className="help-legend-title">③ ⇄ 표시 — 회사가 반대 팀을 정배로 본 경우</p>
         <p className="help-legend-note">
@@ -2534,9 +2555,11 @@ function MultiBookLegend({ onClose }) {
 
         <p className="help-legend-title">④ 주의 — 참고용입니다</p>
         <p className="help-legend-note">
-          이 표는 판정에 넣지 않습니다. 12사 배당은 아직 최근 3시즌뿐이라 칸마다 표본이 수십 건 수준이고,
-          적으면 판정이 약하게(몰라·약) 나오는 게 정상입니다. 과거 시즌을 더 받으면 자동으로 다시 셉니다.
-          방향이 실제로 결과를 가르는지는 자료가 쌓인 뒤 따로 검증해야 합니다.
+          이 표는 판정에 넣지 않습니다. 12사 배당을 6대리그 18시즌 전부 받은 뒤(2026-09-25) 전 경기로
+          재 보니, 회사별 방향 투표도 12사 평균 방향도 <b>같은 배당대 평균보다 더 맞히지 못했습니다</b>
+          (마감 기준 −0.75%p · −0.62%p). 특히 <b>마감 판정과 12사 방향이 서로 반대면 판정 쪽이 맞았습니다</b> —
+          판정 편 단통 56.8% vs 같은 배당 평균 54.0%(+2.8%p, 4,668경기, 앞·뒤 시즌 모두 같은 방향).
+          12사가 판정 반대로 세게 몰릴수록(9~13표) 12사 쪽이 더 틀렸습니다(−4.5%p).
         </p>
       </div>
     </div>

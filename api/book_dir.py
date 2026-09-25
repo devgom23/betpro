@@ -40,6 +40,8 @@ from sample_dir import judge
 
 TABLE = "mb_dir"
 PHASES = ("F", "L")
+AVG_BOOK = "AVG12"      # 13번째 배당사 '12사 평균' — mb_dir에만 있다(mb_odds에는 없음)
+AVG_MIN_BOOKS = 3
 
 _SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS "{TABLE}" (
@@ -63,6 +65,14 @@ def _fav(w, l):
     if not (w > 0 and l > 0) or w == l:
         return None
     return (w, "H") if w < l else (l, "A")
+
+
+def _avg2(total, n):
+    """평균을 소수 둘째 자리로 — 끝자리가 딱 5면 올린다(1.245 → 1.25). total은 배당×1000 정수의 합(Vcbet 2.875처럼 셋째 자리까지 쓰는 회사가 있다).
+    소수로 더해 round()하면 컴퓨터 소수 오차로 1.2449999…가 되어 1.24로 내려가기도 해서, 같은 경기가
+    계산할 때마다 1.24/1.25로 흔들렸다(2026-09-25 발견, 약 4%). 정수로 더하고 나누면 순서와 무관하게
+    늘 같은 값이다. 화면의 12사 평균 숫자(MatchDetailModal mbMean)도 같은 규칙을 쓴다."""
+    return ((2 * total + 10 * n) // (20 * n)) / 100
 
 
 def _matches(db):
@@ -96,12 +106,32 @@ def compute(db, mb_path):
     finally:
         con.close()
     by_book = defaultdict(list)
+    sums = defaultdict(lambda: {ph: [0, 0, 0] for ph in PHASES})   # 12사 평균용 — 경기별 승·패 배당×1000 합과 회사 수
     for code, s, r, ht, at, book, f1, f2, l1, l2 in rows:
         k = (code, s, r, ht, at)
         g = games.get(k)
         if g is None:
             continue
         by_book[book].append((g[0], g[1], k, {"F": _fav(f1, f2), "L": _fav(l1, l2)}))
+        for ph, w, l in (("F", f1, f2), ("L", l1, l2)):
+            try:
+                w, l = float(w), float(l)
+            except (TypeError, ValueError):
+                continue
+            if w > 0 and l > 0:
+                acc_ = sums[k][ph]
+                acc_[0] += round(w * 1000)
+                acc_[1] += round(l * 1000)
+                acc_[2] += 1
+    # 13번째 배당사 '12사 평균'(2026-09-25 사용자 지정) — 회사들의 승·패 배당 평균(소수 둘째 자리)을
+    # 한 회사의 배당처럼 보고 똑같이 센다. 평균 정배가 1.32면 과거에 평균 정배가 1.32였던 경기를 찾는다.
+    # 3곳 미만만 배당을 낸 경기는 평균이 한두 회사 값과 같아 뜻이 없어 뺀다.
+    for k, d in sums.items():
+        favs = {ph: (_fav(_avg2(d[ph][0], d[ph][2]), _avg2(d[ph][1], d[ph][2])) if d[ph][2] >= AVG_MIN_BOOKS else None)
+                for ph in PHASES}
+        if favs["F"] or favs["L"]:
+            g = games[k]
+            by_book[AVG_BOOK].append((g[0], g[1], k, favs))
 
     out = {}
     for book, items in by_book.items():
@@ -174,6 +204,10 @@ def refresh(db=None, mb_path=None) -> dict:
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)""", write)
         con.executemany(f"""UPDATE "{TABLE}" SET locked = 1, updated_dt = '{now}'
             WHERE code=? AND S=? AND R=? AND HT=? AND AT=? AND book=? AND phase=?""", lock)
+        # 이번에 다시 쓰이지 않은 재구성 값(asof)은 더 이상 나오지 않는 값이다 — 예: 배당이 고쳐져 평균
+        # 승·패가 같아지면 정배가 없어진다. 남겨 두면 옛 방향이 화면에 계속 뜬다(2026-09-25 발견).
+        # 결과가 들어와 고정된 값(live·locked)은 건드리지 않는다.
+        con.execute(f"""DELETE FROM "{TABLE}" WHERE src = 'asof' AND locked = 0 AND updated_dt < ?""", (now,))
         con.commit()
     finally:
         con.close()
@@ -239,6 +273,25 @@ def _writing_now(mb_path) -> bool:
         return False
 
 
+def _disk_fresh(db, mb_path) -> bool:
+    """mb_dir가 마지막 12사 배당 저장·리그 DB 변경보다 나중에 계산돼 있나."""
+    try:
+        con = sqlite3.connect(mb_path, timeout=30)
+        try:
+            if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (TABLE,)).fetchone():
+                return False
+            odds_last = con.execute("SELECT MAX(updated_dt) FROM mb_odds").fetchone()[0]
+            dir_last = con.execute(f'SELECT MAX(updated_dt) FROM "{TABLE}"').fetchone()[0]
+        finally:
+            con.close()
+        if not dir_last or (odds_last and dir_last < odds_last):
+            return False
+        league_last = datetime.fromtimestamp(os.path.getmtime(db)).strftime("%Y-%m-%d %H:%M:%S")
+        return dir_last >= league_last
+    except (sqlite3.Error, OSError):
+        return False
+
+
 def _run(db, mb_path, tok):
     try:
         _STATE["last"] = refresh(db, mb_path)
@@ -275,6 +328,13 @@ def ensure(db=None, force=False) -> None:
     tok = _token(db, mb_path)
     with _LOCK:
         if _STATE["running"] or _STATE["token"] == tok:
+            return
+        # 서버를 켠 직후(token 없음) 파일의 결과가 이미 최신이면 다시 세지 않는다 — 서버가 재시작될
+        # 때마다(코드 저장 --reload 포함) 수 분씩 서버를 붙잡던 문제(2026-09-25). 명령 프롬프트에서
+        # refresh()를 따로 돌려 둔 결과도 이 덕분에 그대로 쓴다.
+        if _STATE["token"] is None and not force and _disk_fresh(db, mb_path):
+            _STATE["token"] = tok
+            _STATE["done_at"] = time.time()
             return
         if not force and time.time() - _STATE["done_at"] < COOLDOWN:
             return

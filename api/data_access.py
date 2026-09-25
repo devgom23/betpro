@@ -99,9 +99,25 @@ def _cached(db_path: str, key_name: str, tables, build):
     hit = _CACHE.get(key)
     if hit and hit[0] == tok:
         return hit[1]
-    val = build()
-    _CACHE[key] = (tok, val)
-    return val
+    # 같은 항목을 여러 곳에서 동시에 만들지 않는다 — 먼저 시작한 쪽이 만드는 동안 나머지는
+    # 기다렸다가 그 결과를 받는다. 서버를 켠 직후 미리 읽기(_warm_master_cache_async)·표본 방향
+    # 재계산·첫 화면 요청이 같은 리그 6개를 각자 읽느라 서로 느려져 시즌분석 첫 조회가 21~29초
+    # 걸렸다(2026-09-25 실측, 25초 뒤에 열면 0.2초). 항목마다 자물쇠가 따로라 다른 항목끼리는
+    # 막지 않고, 만드는 순서가 늘 '합친 표 → 리그 표' 한 방향이라 서로 물고 멈출 일도 없다.
+    with _BUILD_LOCKS_LOCK:
+        lock = _BUILD_LOCKS.setdefault(key, threading.Lock())
+    with lock:
+        tok = _token(db_path, tables)
+        hit = _CACHE.get(key)
+        if hit and hit[0] == tok:
+            return hit[1]
+        val = build()
+        _CACHE[key] = (tok, val)
+        return val
+
+
+_BUILD_LOCKS = {}
+_BUILD_LOCKS_LOCK = threading.Lock()
 
 
 # 똥사 위험도 — 똥배가 무/역으로 뒤집힐 확률(%). 6대리그 똥배 7,724건 실측 로지스틱 회귀.

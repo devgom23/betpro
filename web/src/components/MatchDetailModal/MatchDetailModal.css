@@ -2686,3 +2686,11 @@
   font-weight: 700;
   cursor: help;
 }
+
+/* 평균 칸 방향 줄 — 13번째 배당사 '12사 평균' 칩 아래에 12사 칩 개수 */
+.mb-avg-tally {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+}

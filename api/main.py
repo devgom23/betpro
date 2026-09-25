@@ -124,10 +124,9 @@ def _startup():
     """부팅 시 폴더/DB 존재 보장 + 기본 관리자 생성."""
     PATHS.bootstrap()
     AUTH.ensure_default_admin(PATHS.get_auth_db())
+    # 미리 읽기가 끝난 뒤 같은 스레드에서 표본 방향(sample_dir)·배당사별 방향(book_dir)을 맞춘다
+    # — 동시에 돌리면 셋이 같은 리그를 두고 CPU를 나눠 써서 첫 화면 조회가 느려졌다(2026-09-25).
     _warm_master_cache_async()
-    # 표본 방향성 시스템 판정 — 서버 켜자마자 뒤에서 한 번 맞춰 둔다(sample_dir.py 주석).
-    SAMPLEDIR.ensure()
-    BOOKDIR.ensure()   # 배당사별 정배 표본 방향(book_dir.py)
 
 
 def _warm_master_cache_async():
@@ -147,12 +146,42 @@ def _warm_master_cache_async():
             db_path = PATHS.get_master_db()
             for lg in DATA.LEAGUES:
                 DATA.load_league_df(db_path, lg)
+            # 화면(리그 표·이번주 리스트·상세보기)이 실제로 쓰는 표 — 순위·EV까지 붙인 것.
+            # 원본만 데워 두면 첫 조회 때 리그마다 이 계산을 또 기다렸다(6개 합계 2.2초, 2026-09-25).
+            for lg in DATA.LEAGUES:
+                DATA.load_league_df_ev(db_path, lg)
             DATA.load_total_df(db_path)        # 통합DB 탭이 쓰는 전체 표
             DATA.load_total_h2h_df(db_path)    # 상세보기(상대전적)가 쓰는 슬림 표
         except Exception:
             pass
+        # 표본 방향성 시스템 판정·배당사별 방향 — 서버 켜진 뒤 한 번 맞춰 둔다(sample_dir.py·book_dir.py 주석).
+        SAMPLEDIR.ensure()
+        BOOKDIR.ensure()
 
     threading.Thread(target=_warm, daemon=True).start()
+
+
+def _json_default(o):
+    """_fast_json용 — numpy 숫자·날짜처럼 json이 모르는 값만 바꾼다."""
+    import numpy as np
+    if isinstance(o, np.integer):
+        return int(o)
+    if isinstance(o, np.floating):
+        return None if np.isnan(o) else float(o)
+    if isinstance(o, np.bool_):
+        return bool(o)
+    if hasattr(o, "isoformat"):
+        return o.isoformat()
+    raise TypeError(f"JSON으로 바꿀 수 없는 값: {type(o).__name__}")
+
+
+def _fast_json(payload: dict) -> Response:
+    """큰 표 응답을 FastAPI 값 검사(jsonable_encoder) 없이 바로 보낸다.
+    행이 df_to_records로 이미 JSON 값이라 검사가 필요 없는데, 수천 행×150칸이면 그 검사만
+    2초가 걸렸다(2026-09-25 실측: 리그 전체시즌 판정요약 — 함수 1.2초 + 검사 2.1초)."""
+    import json as _json
+    body = _json.dumps(payload, ensure_ascii=False, default=_json_default, separators=(",", ":"))
+    return Response(content=body.encode("utf-8"), media_type="application/json")
 
 
 # ─────────────────────────── 스코프 해석 ───────────────────────────
@@ -687,7 +716,7 @@ def league_rows(code: str,
             page = page[want]
     records = DATA.df_to_records(page)
     _attach_my_picks(records, user["username"], code, scope)
-    return {
+    return _fast_json({
         "columns": list(page.columns)
                    + ["IMPORTANT", "MY_PICK", "MY_P", "MY_HIT", "MY_BET"],
         "rows": records,
@@ -698,7 +727,7 @@ def league_rows(code: str,
         "hit_summary": _hit_summary(_my_pick_verdict_series(sub, user["username"], code, scope)),
         "odds_summary": _odds_summary(sub),
         "can_write": PATHS.can_write(scope, user.get("role")),
-    }
+    })
 
 
 # ───────────────── 상세보기 (경기 1개 — 모든 메뉴 공용) ─────────────────
@@ -4706,7 +4735,7 @@ def total_view(scope: str = PATHS.SCOPE_MASTER,
 
     rt_summary = _rt_summary(view)
 
-    return {
+    return _fast_json({
         "columns": list(total_df.columns),
         "rows": DATA.df_to_records(view.head(limit)),
         "total": len(view),
@@ -4715,7 +4744,7 @@ def total_view(scope: str = PATHS.SCOPE_MASTER,
         "season": season,
         "round": round,
         "rt_summary": rt_summary,
-    }
+    })
 
 
 # ─────────────────────────── 재계산 (통합DB 탭 버튼 2종) ───────────────────────────
