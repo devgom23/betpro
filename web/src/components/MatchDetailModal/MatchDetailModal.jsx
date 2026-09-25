@@ -2314,16 +2314,12 @@ function MbNum({ last, first, line, flipL, flipF }) {
     <>
       <span className="mb-last">
         {fmt(l)}
-        {(arrow || flipL) && (
-          <span className="mb-marks">
-            {arrow && <span className={l > f ? 'mb-up' : 'mb-dn'}>{arrow}</span>}
-            {flipL && <span className="mb-flip" title={flipL}>⇄</span>}
-          </span>
-        )}
+        {flipL && <span className="mb-flip" title={flipL}>⇄</span>}
+        {arrow && <span className={`mb-arrow ${l > f ? 'mb-up' : 'mb-dn'}`}>{arrow}</span>}
       </span>
       <span className="mb-first">
         {fmt(f)}
-        {flipF && <span className="mb-marks"><span className="mb-flip" title={flipF}>⇄</span></span>}
+        {flipF && <span className="mb-flip" title={flipF}>⇄</span>}
       </span>
     </>
   )

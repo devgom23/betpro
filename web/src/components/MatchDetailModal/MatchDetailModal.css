@@ -2595,19 +2595,21 @@
   background: var(--bg-surface);
 }
 
-/* 숫자는 12사 평균 칸처럼 가운데 정렬. ▲▼⇄는 숫자 바로 옆에 '매달려'(position:absolute) 글자 폭에
-   안 들어가므로, 표시가 붙은 칸도 안 붙은 칸도 숫자가 같은 자리에 온다(2026-09-24 사용자 지정). */
+/* 숫자는 칸 왼쪽 정렬, ⇄는 숫자 바로 옆, ▲▼는 칸 오른쪽 끝(2026-09-25 사용자 지정).
+   ▲▼는 오른쪽 끝에 '매달려'(position:absolute) 있어 글자 폭에 안 들어가므로, 표시가 붙은 칸도
+   안 붙은 칸도 숫자가 같은 자리에 온다. 오른쪽 여백은 ▲▼가 숫자와 겹치지 않을 자리. */
 .mb-last,
 .mb-first {
   display: block;
   position: relative;
-  text-align: center;
+  padding-right: 14px;
+  text-align: left;
 }
 
-.mb-marks {
+.mb-arrow {
   position: absolute;
-  margin-left: 2px;
-  white-space: nowrap;
+  top: 0;
+  right: 0;
 }
 
 .mb-last {
