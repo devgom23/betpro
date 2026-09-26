@@ -73,30 +73,59 @@ function AvgCell({ v, base, tol }) {
   return <>{f2(v)}</>
 }
 
-function Card({ c, game, tol }) {
+// 무 값이 이번 경기와 많이 다른 표본 표시(2026-09-26 사용자 지정) — 0.20 이상 주황 / 0.30 이상 빨강(글자색만, 차이값 기준).
+// 12사 평균 무·국배 무에만 건다. 무 차이가 결과 일치율과 관계 있다는 실측은 없어서(103,001장, 차이별 일치율 26% 안팎) 신뢰도 점수가 아니라
+// '이 표본은 무가 많이 다르다'는 눈 표시다.
+const DRAW_WARN = 20
+const DRAW_BAD = 30
+function drawGap(v, base) {
+  if (v === null || v === undefined || base === null || base === undefined) return null
+  const d = Math.round(Math.abs(v - base) * 100)
+  return d >= DRAW_BAD ? 'bad' : d >= DRAW_WARN ? 'warn' : null
+}
+function DrawMark({ v, base, children }) {
+  const g = drawGap(v, base)
+  if (!g) return children
+  return (
+    <span className={g === 'bad' ? 'ts-draw-bad' : 'ts-draw-warn'} title={`이번 경기 무 ${f2(base)}와 ${f2(Math.abs(v - base))} 차이 — ${g === 'bad' ? '0.30 이상(빨강)' : '0.20 이상(주황)'}`}>
+      {children}
+    </span>
+  )
+}
+
+// 카드 하나의 고유키 — 신뢰 체크를 기억할 때 쓴다(같은 경기는 기본/넓힘 탭이 달라도 같은 카드).
+const cardKey = (c) => `${c.lg}|${c.S}|${c.R}|${c.ht}|${c.at}`
+
+function Card({ c, game, tol, trusted, onTrust }) {
   const sameH = c.kh !== null && game.kh !== null && c.kh === game.kh
   const hRef = [game.khw, game.khd, game.khl]
   const hVals = [c.khw, c.khd, c.khl]
   return (
-    <div className={`ts-card${c.prev ? ' ts-prev' : ''}`} title={c.prev ? '더 좁은 폭(앞 탭)의 표본에도 있던 경기' : undefined}>
+    <div className={`ts-card${c.prev ? ' ts-prev' : ''}${trusted ? ' ts-trust' : ''}`} title={c.prev ? '더 좁은 폭(앞 탭)의 표본에도 있던 경기' : undefined}>
       <div className="ts-card-top">
         <b>{c.dt.slice(2)}</b>
+        <label className="ts-trust-lab" title="이 표본을 신뢰하면 체크">
+          <input type="checkbox" checked={!!trusted} onChange={() => onTrust(cardKey(c))} />
+          신뢰
+        </label>
         <span>{c.lg} · {c.S} · {/R$/.test(c.R) ? c.R : `${c.R}R`}</span>
       </div>
       <div className="ts-card-teams">
         <span>{c.ht}</span>
-        <span className="ts-score">{c.hs ?? '-'} : {c.as_ ?? '-'}</span>
+        <span className="ts-score">
+          <b className={c.hs > c.as_ ? 'ts-win' : undefined}>{c.hs ?? '-'}</b> : <b className={c.as_ > c.hs ? 'ts-win' : undefined}>{c.as_ ?? '-'}</b>
+        </span>
         <span>{c.at}</span>
       </div>
       <table className="ts-card-table">
         <tbody>
           <tr>
             <td>평균</td>
-            {c.A.map((v, i) => <td key={i}><AvgCell v={v} base={game.A[i]} tol={tol} /></td>)}
+            {c.A.map((v, i) => <td key={i}>{i === 1 ? <DrawMark v={v} base={game.A[i]}><AvgCell v={v} base={game.A[i]} tol={tol} /></DrawMark> : <AvgCell v={v} base={game.A[i]} tol={tol} />}</td>)}
           </tr>
           <tr>
             <td>국배</td>
-            {c.K.map((v, i) => <td key={i}><OddsCell v={v} base={game.K[i]} tol={tol} /></td>)}
+            {c.K.map((v, i) => <td key={i}>{i === 1 ? <DrawMark v={v} base={game.K[i]}><OddsCell v={v} base={game.K[i]} tol={tol} /></DrawMark> : <OddsCell v={v} base={game.K[i]} tol={tol} />}</td>)}
           </tr>
           <tr title={c.khw === null ? '핸디 배당이 없는 경기입니다(20-21 시즌 이전 경기는 없는 경우가 많습니다)' : undefined}>
             <td>핸디 {khText(c.kh)}</td>
@@ -111,7 +140,7 @@ function Card({ c, game, tol }) {
 // 결과별 건수 — (핸승/핸무/무/역) 순서
 const cntText = (a) => `(${a.cnt.join('/')})`
 
-function Band({ title, area: base, game, tol: baseTol }) {
+function Band({ title, area: base, game, tol: baseTol, trusted, onTrust }) {
   // 표본 탭(2026-09-26) — 쓴 폭 표본과, 표본이 실제로 늘어나는 더 넓은 폭 표본을 탭으로 나란히 둔다.
   const [wide, setWide] = useState(false)
   const nx = base.next
@@ -147,7 +176,7 @@ function Band({ title, area: base, game, tol: baseTol }) {
                 <span>{area.cnt[k - 1]}건{area.cnt[k - 1] > cards.length ? ` 중 ${cards.length}` : ''}</span>
               </div>
               <div className="ts-cards">
-                {cards.length ? cards.map((c, i) => <Card key={i} c={c} game={game} tol={tol} />) : <div className="ts-empty">—</div>}
+                {cards.length ? cards.map((c, i) => <Card key={i} c={c} game={game} tol={tol} trusted={trusted.has(cardKey(c))} onTrust={onTrust} />) : <div className="ts-empty">—</div>}
               </div>
             </div>
           )
@@ -161,6 +190,26 @@ function Band({ title, area: base, game, tol: baseTol }) {
 export default function TripleSampleSection({ code, scope, row, noteSlot }) {
   const [data, setData] = useState(undefined)   // undefined 불러오는 중 · null 실패
   const [help, setHelp] = useState(false)
+  // 신뢰 체크 — 이 경기에서 내가 믿는 표본 카드들. 브라우저(localStorage)에 경기별로 기억한다(다른 기기·브라우저와는 공유 안 됨).
+  const trustKey = `ts-trust:${code}|${scope}|${row.S}|${row.R}|${row.HT}|${row.AT}`
+  const [trusted, setTrusted] = useState(() => new Set())
+  useEffect(() => {
+    try {
+      setTrusted(new Set(JSON.parse(localStorage.getItem(trustKey) || '[]')))
+    } catch { setTrusted(new Set()) }
+  }, [trustKey])
+  const toggleTrust = (ck) => {
+    setTrusted((prev) => {
+      const next = new Set(prev)
+      if (next.has(ck)) next.delete(ck)
+      else next.add(ck)
+      try {
+        if (next.size) localStorage.setItem(trustKey, JSON.stringify([...next]))
+        else localStorage.removeItem(trustKey)
+      } catch { /* 저장 불가 환경 — 이번 화면에서만 유지 */ }
+      return next
+    })
+  }
   const key = `${code}|${scope}|${row.S}|${row.R}|${row.HT}|${row.AT}`
   useEffect(() => {
     let alive = true
@@ -193,8 +242,8 @@ export default function TripleSampleSection({ code, scope, row, noteSlot }) {
             <span>국배 <span className="ts-nums">{data.game.K.map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
             <span>국핸디 ({khText(data.game.kh) || '-'}) <span className="ts-nums">{[data.game.khw, data.game.khd, data.game.khl].map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
           </div>
-          <Band title={`같은 리그 (${data.game.lg})`} area={data.same} game={data.game} tol={data.tol.same} />
-          <Band title="통합 (다른 리그)" area={data.other} game={data.game} tol={data.tol.other} />
+          <Band title={`같은 리그 (${data.game.lg})`} area={data.same} game={data.game} tol={data.tol.same} trusted={trusted} onTrust={toggleTrust} />
+          <Band title="통합 (다른 리그)" area={data.other} game={data.game} tol={data.tol.other} trusted={trusted} onTrust={toggleTrust} />
         </>
       )}
       {help && <TripleSampleLegend onClose={() => setHelp(false)} />}
@@ -266,6 +315,8 @@ function TripleSampleLegend({ onClose }) {
             <tr><td><span className="ts-a-same">2.55</span></td><td>12사 평균이 이번 경기와 <b>같은 값</b> (파랑 밑줄)</td></tr>
             <tr><td><span className="ts-near">2.26</span></td><td><b>비슷한 값</b> (12사 평균·국배·국핸디 공통, 글자색만) — 같은 값은 아니면서 <b>그 영역의 허용 폭 안</b>(같은 리그 ±0.03, 통합 ±0.02)입니다. 국배·국핸디는 여기에 더해 <b>국내 호가 단위로 1~2칸 차이</b>인 값도 포함합니다(호가 단위: 2.5 미만 0.01 · 2.5~5 0.05 · 5 이상 0.10, 무는 0.05). 12사 평균 승·패는 검색 조건 자체가 폭 안이라 같은 값이 아니면 대부분 이 색이 됩니다 — 차이를 보려면 무 칸과 국배를 함께 보세요</td></tr>
             <tr><td><span className="ts-near ts-close">1.81</span></td><td><b>아주 가까운 값</b> (비슷한 값 중에서 밑줄) — 표본을 찾느라 폭이 <b>1~4칸</b>이면 이번 경기와 <b>1칸 이내</b>, <b>5칸 이상</b>이면 <b>2칸 이내</b>인 값입니다. 예: 이번 경기 12사 평균 패가 1.80이고 폭 5칸으로 찾은 표본이 1.81이면 1칸 차이라 거의 같은 값이니 밑줄을 긋습니다. 칸은 12사 평균이 0.01, 국배·국핸디는 국내 호가 단위입니다. 밑줄은 두 탭 모두, 같은 리그·통합 모두에 똑같이 적용됩니다.</td></tr>
+            <tr><td>☑ 신뢰</td><td>카드 날짜 옆 체크박스 — <b>이 표본은 믿는다</b>고 표시하면 <b>신뢰</b> 글자가 초록 굵은 글씨로 바뀝니다. 경기별로 이 브라우저에 기억됩니다(다른 기기와는 공유되지 않습니다).</td></tr>
+            <tr><td><span className="ts-draw-warn">3.61</span> / <span className="ts-draw-bad">3.48</span></td><td><b>무 값이 많이 다른 표본</b> (12사 평균 무·국배 무의 글자색) — 이번 경기 무와의 차이가 <b>0.20 이상이면 주황, 0.30 이상이면 빨강</b>입니다. 예: 이번 경기 무가 3.82이면 3.61(0.21 차이)은 주황, 3.48(0.34 차이)은 빨강. 승·패가 폭 안에 들어와도 무가 이만큼 다르면 배당 모양이 다른 경기라는 눈 표시입니다. 무 차이가 클수록 결과가 덜 맞는다는 실측은 없어서(카드 103,001장, 차이별 결과 일치율 26% 안팎으로 비슷) 점수가 아니라 참고 표시입니다.</td></tr>
             <tr><td>핸디 +1</td><td>국내 핸디 배당(홈팀 기준선 ±1). 기준선이 같을 때만 같은 값·차이를 표시합니다. 핸디 배당은 20-21 시즌부터 거의 전 경기에 있고 그 이전은 없는 경우가 많아 <b>-</b>로 보입니다</td></tr>
           </tbody>
         </table>

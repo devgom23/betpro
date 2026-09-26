@@ -144,6 +144,16 @@
   color: var(--text-muted);
 }
 
+/* 이긴 팀의 점수 빨강 — 앱 전체 관례(winner-score)와 같은 색 */
+.ts-score b {
+  font-weight: 400;
+}
+
+.ts-score b.ts-win {
+  font-weight: 700;
+  color: var(--chip-red-fg);
+}
+
 .ts-card-table {
   width: 100%;
   table-layout: fixed;
@@ -198,4 +208,36 @@
 .ts-card.ts-prev {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* 무 값이 이번 경기와 크게 다른 표본 — 0.20 이상 주황 / 0.30 이상 빨강(글자색만) */
+.ts-draw-warn {
+  color: #f97316; /* 진한 주황 — 비슷한 값(ts-near, 호박색)과 구분 */
+  font-weight: 700;
+}
+
+.ts-draw-bad {
+  color: var(--chip-red-fg);
+  font-weight: 700;
+}
+
+/* 신뢰 체크 — 날짜 옆 체크박스, 체크하면 '신뢰' 글자만 초록 굵게(카드 배경은 그대로) */
+.ts-trust-lab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ts-card-top .ts-trust-lab input {
+  margin: 0;
+}
+
+.ts-card.ts-trust .ts-trust-lab {
+  color: var(--chip-green-fg);
+  font-weight: 700;
 }
