@@ -4938,7 +4938,16 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
   // (승/무/패)(핸디 승/무/패)로 붙인다. 예: (2.55/3.60/2.20)(1.57/4.05/3.95). 배변이 아니라 초기 배당이다.
   // 홈 칸(첫째)·원정 칸(셋째)은 정배 쪽 파랑 / 역배 쪽 빨강(글자색만), 무(가운데)는 그대로. 정배를 못 가리면 색 없음.
   const titleHomeFav = homeIsFav(row)
-  const titleOdds = (keys) => (
+  // 결과가 나온 경기는 적중한 배당에 밑줄 — 승무패는 스코어로, 핸디는 스코어+핸디기준점(KH, 홈 기준)으로
+  // 가른다(홈 득점−원정 득점+KH가 양수면 핸디 승, 0이면 무, 음수면 패. 2026-09-26 6,245경기로 저장 RT와 99.9% 일치 확인).
+  const sc = (v) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? null : Number(v))
+  const [tHs, tAs, tKh] = [sc(row.HS), sc(row.AS), sc(row.KH)]
+  const sign3 = (x) => (x > 0 ? 0 : x === 0 ? 1 : 2)
+  const titleHit = [
+    tHs !== null && tAs !== null ? sign3(tHs - tAs) : null,
+    tHs !== null && tAs !== null && tKh !== null ? sign3(tHs - tAs + tKh) : null,
+  ]
+  const titleOdds = (keys, hit) => (
     <span>
       (
       {keys.map((k, i) => {
@@ -4946,7 +4955,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
         return (
           <span key={k}>
             {i > 0 && ' / '}
-            <span className={cls}>{numOrDash(row[k])}</span>
+            <span className={`${cls || ''}${hit === i ? ' title-odds-hit' : ''}`.trim() || undefined}>{numOrDash(row[k])}</span>
           </span>
         )
       })}
@@ -5323,8 +5332,8 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             {rankSuffix(row.AP)}
             <TeamBetRecord name={at} />
             <span className="detail-title-odds">
-              {titleOdds(['KW', 'KD', 'KL'])}
-              {titleOdds(['KHW', 'KHD', 'KHL'])}
+              {titleOdds(['KW', 'KD', 'KL'], titleHit[0])}
+              {titleOdds(['KHW', 'KHD', 'KHL'], titleHit[1])}
             </span>
           </span>
           <span className="detail-title-badges">

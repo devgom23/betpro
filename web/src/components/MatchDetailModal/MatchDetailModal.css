@@ -2718,3 +2718,9 @@
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* 결과가 나온 경기 — 적중한 배당 밑줄(제목 줄) */
+.title-odds-hit {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
