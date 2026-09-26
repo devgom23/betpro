@@ -39,15 +39,6 @@ def list_tags(username: str) -> list[dict]:
         con.close()
 
 
-def get_tag(username: str, tag_id: int) -> dict | None:
-    con = _connect(username)
-    try:
-        r = con.execute("SELECT * FROM archive_tags WHERE id=?", (tag_id,)).fetchone()
-        return dict(r) if r else None
-    finally:
-        con.close()
-
-
 def create_tag(username: str, *, kind: str, scope: str, code: str, team_a: str,
                team_b: str | None, tag: str, memo: str | None, span: str,
                s, r, no, ht: str, at: str,

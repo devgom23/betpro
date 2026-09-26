@@ -157,10 +157,6 @@ td.sticky-col {
   background: var(--fold-btn-bg-hover);
 }
 
-.bet-cart-btn-on {
-  background: rgba(34, 197, 94, 0.35);
-}
-
 .league-table tbody tr:hover td {
   background: var(--row-hover);
 }

@@ -193,3 +193,9 @@
   font-weight: 700;
   color: var(--text-primary);
 }
+
+/* 넓힌 폭 탭에서, 더 좁은 폭(앞 탭) 표본에도 있던 경기 — 테두리 강조 */
+.ts-card.ts-prev {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}

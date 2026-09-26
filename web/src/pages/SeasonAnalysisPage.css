@@ -109,10 +109,6 @@
   font-weight: 400;
 }
 
-.sa-season-table th.t-mid {
-  color: var(--chip-purple-fg);
-}
-
 .sa-season-table .t-rest {
   background: repeating-linear-gradient(45deg, var(--bg-surface-2), var(--bg-surface-2) 5px, var(--bg-surface) 5px, var(--bg-surface) 10px);
   color: var(--text-muted);

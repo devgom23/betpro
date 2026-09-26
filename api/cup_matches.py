@@ -366,39 +366,6 @@ def save_kr_odds(items: list) -> int:
 
 
 # ─────────────────────────── 조회(상세보기용) ───────────────────────────
-def team_ids_for(db_name: str, code: str) -> list:
-    """우리 DB 팀명 → 스코어맨 팀번호(시즌마다 따로 저장돼도 번호는 같다)."""
-    path = schedule_db()
-    if not os.path.exists(path):
-        return []
-    con = sqlite3.connect(path)
-    try:
-        return [r[0] for r in con.execute(
-            "SELECT DISTINCT team_id FROM sm_teams WHERE db_name = ? AND code = ?", (db_name, code))]
-    finally:
-        con.close()
-
-
-def matches_around(team_ids: list, center: datetime, days: int = 10) -> list:
-    """그 팀이 center 기준 앞뒤 days일 안에 뛴(뛸) 리그 외 경기 — 시각 순."""
-    path = schedule_db()
-    if not team_ids or not os.path.exists(path):
-        return []
-    lo = (center - timedelta(days=days)).strftime("%Y-%m-%d %H:%M")
-    hi = (center + timedelta(days=days)).strftime("%Y-%m-%d %H:%M")
-    ph = ",".join("?" for _ in team_ids)
-    con = sqlite3.connect(path)
-    con.row_factory = sqlite3.Row
-    try:
-        rows = con.execute(
-            f"SELECT * FROM cup_matches WHERE (home_id IN ({ph}) OR away_id IN ({ph})) "
-            f"AND kickoff BETWEEN ? AND ? ORDER BY kickoff",
-            (*team_ids, *team_ids, lo, hi)).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        con.close()
-
-
 def _extra_outcome(extra: str):
     """연장·승부차기 원문 → (연장 스코어 (홈,원정)|None, 승부차기 스코어 문자열|None, 승자 1/2|None).
 

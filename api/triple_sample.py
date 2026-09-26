@@ -44,15 +44,8 @@ _LG_LABEL = {"EPL": "EPL", "LALIGA": "라리가", "SERIEA": "세리에A", "BUNDE
 
 
 def _mb_state(mb_path):
-    """(12사 배당 줄 수, 마지막 저장 시각) — 없으면 (0, None)."""
-    try:
-        con = sqlite3.connect(mb_path, timeout=30)
-        try:
-            return con.execute("SELECT COUNT(*), MAX(updated_dt) FROM mb_odds").fetchone()
-        finally:
-            con.close()
-    except sqlite3.Error:
-        return (0, None)
+    """(12사 배당 줄 수, 마지막 저장 시각) — 없으면 (0, None). 5초간 재사용(multibook_odds.mb_state)."""
+    return MB.mb_state(mb_path) or (0, None)
 
 
 def _mb_busy(last):
@@ -149,8 +142,8 @@ def _card(ix, j):
             "kh": _f(r["KH"]), "khw": _f(r["KHW"]), "khd": _f(r["KHD"]), "khl": _f(r["KHL"])}
 
 
-def _pick(ix, qi, mask):
-    """mask를 만족하는 경기들을 가까운 순으로 정렬해 결과별 카드로."""
+def _pick(ix, qi, mask, prev=None):
+    """mask를 만족하는 경기들을 가까운 순으로 정렬해 결과별 카드로. prev = 더 좁은 폭의 표본 mask — 거기 든 경기는 카드에 prev=True(넓힌 탭에서 테두리 강조용)."""
     A, K = ix["A"], ix["K"]
     idx = np.where(mask)[0]
     if len(idx) == 0:
@@ -161,7 +154,7 @@ def _pick(ix, qi, mask):
     order = np.lexsort((-ix["days"][idx], d_d, np.round(d_wl, 6)))
     idx = idx[order]
     rts = ix["rt"][idx].astype(int)
-    cards = {str(k): [_card(ix, j) for j in idx[rts == k][:PER_COLUMN]] for k in (1, 2, 3, 4)}
+    cards = {str(k): [dict(_card(ix, j), prev=bool(prev is not None and prev[j])) for j in idx[rts == k][:PER_COLUMN]] for k in (1, 2, 3, 4)}
     return {"n": int(len(idx)), "cnt": [int((rts == k).sum()) for k in (1, 2, 3, 4)], "cards": cards}
 
 
@@ -183,35 +176,34 @@ def query(db, code, season, rnd, ht, at):
             & (ix["days"] < day))
     pool[qi] = False
 
-    def within(tick):
-        e = tick + 1e-9
-        return (np.abs(A[:, 0] - A[qi, 0]) <= e) & (np.abs(A[:, 2] - A[qi, 2]) <= e) \
-            & (np.abs(K[:, 0] - K[qi, 0]) <= e) & (np.abs(K[:, 2] - K[qi, 2]) <= e)
+    # 경기마다 '승·패 네 값 중 가장 크게 벌어진 칸 수'를 한 번만 구해 두면(정수 칸), 폭을 몇 칸으로 하든 dd <= 폭 비교 한 번이다
+    dd = np.rint(np.maximum.reduce([np.abs(A[:, 0] - A[qi, 0]), np.abs(A[:, 2] - A[qi, 2]),
+                                    np.abs(K[:, 0] - K[qi, 0]), np.abs(K[:, 2] - K[qi, 2])]) * 100)
 
     same = ix["code"] == ix["code"][qi]
     r = ix["G"].iloc[qi]
 
     def widen(base, start):
-        """start칸에서 시작해 표본이 1건이라도 나올 때까지 1칸씩 넓힌다. (결과, 쓴 칸 수) — 끝까지 없으면 start칸의 빈 결과."""
-        for k in range(start, MAX_TICK + 1):
-            m = base & within(k / 100)
-            if m.any():
-                return _pick(ix, qi, m), k
-        return _pick(ix, qi, base & within(start / 100)), start
+        """start칸에서 시작해 표본이 1건이라도 나올 때까지 넓힌다(= 가장 가까운 경기의 칸 수). (결과, 쓴 칸 수) — MAX_TICK 안에 없으면 start칸의 빈 결과."""
+        d = dd[base]
+        k = max(start, int(d.min())) if d.size else None
+        if k is None or k > MAX_TICK:
+            return _pick(ix, qi, base & (dd <= start)), start
+        return _pick(ix, qi, base & (dd <= k)), k
 
-    def nxt(base, k, n0):
-        """더 넓힌 미리보기 — 표본이 실제로 늘어나는(다른 표본이 처음 더해지는) 폭까지 1칸씩 넓힌다.
-        폭만 넓어지고 표본이 그대로면 볼 게 없으므로 건너뛴다(예: ±2칸 1건 → ±3칸 1건이면 ±4칸까지)."""
-        for j in range(k + 1, MAX_TICK + 1):
-            m = base & within(j / 100)
-            if int(m.sum()) > n0:
-                return {"tol": j / 100, "area": _pick(ix, qi, m)}
-        return None
+    def nxt(base, k):
+        """더 넓힌 미리보기 — 표본이 실제로 늘어나는(다른 표본이 처음 더해지는) 폭. 폭만 넓어지고 표본이 그대로인 칸은 건너뛴다
+        (예: ±2칸 1건 → ±3칸 1건이면 ±4칸까지)."""
+        d = dd[base & (dd > k)]
+        if not d.size or int(d.min()) > MAX_TICK:
+            return None
+        j = int(d.min())
+        return {"tol": j / 100, "area": _pick(ix, qi, base & (dd <= j), prev=base & (dd <= k))}
 
     same_res, same_k = widen(pool & same, START_TICK)
     other_res, other_k = widen(pool & ~same, START_TICK)
-    same_res["next"] = nxt(pool & same, same_k, same_res["n"])
-    other_res["next"] = nxt(pool & ~same, other_k, other_res["n"])
+    same_res["next"] = nxt(pool & same, same_k)
+    other_res["next"] = nxt(pool & ~same, other_k)
     return {"ready": True,
             "game": {"A": [float(x) for x in A[qi]], "K": [float(x) for x in K[qi]], "n_books": int(ix["nb"][qi]),
                      "kh": _f(r["KH"]), "khw": _f(r["KHW"]), "khd": _f(r["KHD"]), "khl": _f(r["KHL"]), "lg": _LG_LABEL.get(code, code)},

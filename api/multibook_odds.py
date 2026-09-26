@@ -12,6 +12,7 @@
 """
 import os
 import sqlite3
+import time
 from datetime import datetime
 
 import betpro_paths as PATHS
@@ -30,6 +31,30 @@ CREATE TABLE IF NOT EXISTS "{TABLE}" (
     PRIMARY KEY (code, S, R, HT, AT, book)
 )
 """
+
+
+_STATE_MEMO = {}   # 경로 → (확인 시각, (줄 수, 마지막 저장 시각))
+STATE_TTL = 5      # 초
+
+
+def mb_state(mb_path: str):
+    """12사 배당 표(mb_odds)의 (줄 수, 마지막 저장 시각) — 없으면 None.
+    이 표는 33만 줄이라 COUNT/MAX가 100ms쯤 걸리는데, 상세보기를 열 때마다 두 곳(표본·배당사별 방향)이
+    '다시 만들 때가 됐나' 확인하느라 매번 물었다(2026-09-26 실측: 표본 조회 114ms 중 106ms). 5초 안에는 앞선 답을 재사용한다."""
+    now = time.time()
+    hit = _STATE_MEMO.get(mb_path)
+    if hit and now - hit[0] < STATE_TTL:
+        return hit[1]
+    try:
+        con = sqlite3.connect(mb_path, timeout=30)
+        try:
+            val = con.execute("SELECT COUNT(*), MAX(updated_dt) FROM mb_odds").fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        val = None
+    _STATE_MEMO[mb_path] = (now, val)
+    return val
 
 
 def db_path_for(scope: str, username: str | None = None) -> str:

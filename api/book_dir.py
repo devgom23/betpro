@@ -247,14 +247,7 @@ def _token(db, mb_path):
     ⚠ 파일 수정 시각을 쓰면 안 된다: 우리 계산 결과(mb_dir)도 같은 파일에 쓰므로, 저장 →
     시각 바뀜 → 또 계산이 끝없이 돈다(WAL이라 시각이 늦게 바뀌어 '저장 뒤 값 기억'도 빗나감,
     2026-09-24 실제로 상세보기가 20초 넘게 멈췄다). 그래서 mb_odds 표 내용만 본다."""
-    try:
-        con = sqlite3.connect(mb_path, timeout=30)
-        try:
-            mb = con.execute("SELECT COUNT(*), MAX(updated_dt) FROM mb_odds").fetchone()
-        finally:
-            con.close()
-    except sqlite3.Error:
-        mb = None
+    mb = MB.mb_state(mb_path)   # 5초간 재사용 — 33만 줄을 요청마다 세지 않는다
     return (DATA.tables_token(db, tuple(PATHS.LEAGUES)), mb)
 
 

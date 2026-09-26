@@ -108,7 +108,7 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000", "http://127.0.0.1:3000",
 ]
 
-app = FastAPI(title="BETPRO API", version="3.0.0",
+app = FastAPI(title="BETPRO API", version="3.1.0",
               description="BETPRO 분석 엔진을 노출하는 백엔드 API (골격)")
 
 app.add_middleware(

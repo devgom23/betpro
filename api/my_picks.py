@@ -298,23 +298,6 @@ def upsert_season_week_note(username: str, season: str, wk: str, memo: str | Non
         con.close()
 
 
-def migrate_sample_note_direction(username: str, old: str, new: str) -> int:
-    """방향성 선택지 이름이 바뀌었을 때(예: '크로스'→'엇갈림', 2026-09-20) 그 계정에
-    이미 저장된 값을 전부 갈아 끼운다. 일회성 마이그레이션 스크립트에서만 부른다 —
-    화면 코드 경로에는 없다. 바뀐 행 수를 돌려준다."""
-    con = _connect(username)
-    try:
-        _ensure_sample_notes(con)
-        cur = con.execute(
-            "UPDATE sample_notes SET direction = ?, updated_dt = datetime('now') WHERE direction = ?",
-            (new, old),
-        )
-        con.commit()
-        return cur.rowcount
-    finally:
-        con.close()
-
-
 def upsert_season_note(username: str, code: str, scope: str, s: str, r: str, memo: str | None) -> None:
     con = _connect(username)
     try:
