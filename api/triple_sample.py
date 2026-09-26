@@ -7,10 +7,12 @@
   12사 평균(초기) : 스코어맨 12개 회사 초기 배당 평균(6곳 이상인 경기). 소수 둘째 자리로 반올림
                     — book_dir._avg2·화면 12개 배당사 표의 평균(mbMean)과 같은 규칙(끝자리 5는 올림)
   국배(초기)      : 국내 초기 배당(KW·KD·KL)
-  위  영역 = 같은 리그  ±SAME_LEAGUE_TICK(±3칸 = ±0.03)
-  아래 영역 = 통합(다른 리그만) ±ALL_LEAGUE_TICK(±2칸 = ±0.02) — 같은 리그 경기는 위에 이미 나오므로 뺀다
+  위  영역 = 같은 리그 · 아래 영역 = 통합(다른 리그만 — 같은 리그 경기는 위에 이미 나오므로 뺀다)
+  폭은 둘 다 완전 일치(±0칸)에서 시작해 0건이면 1칸씩 넓힌다(2026-09-26 사용자 지정)
   칸 = 소수 둘째 자리 한 눈금(0.01). 국내 호가 단위는 2.5 미만 0.01 · 2.5~5 0.05 · 5↑ 0.10이라
   2.5 이상 구간에서는 이 폭이 사실상 '같은 값'만 잡는다(도움말에도 적어 둠).
+[넓히기] 시작 폭에서 표본이 0건이면 1칸씩 넓혀 1건 이상 나오는 첫 폭을 쓴다(2026-09-26, 최대 MAX_TICK칸).
+     화면에는 '±N칸' — N=실제 쓴 폭(0이 완전 일치).
 [시점] 이 경기 날짜 '이전'에 끝난(결과 RT 1~4) 경기만. 같은 날 경기는 서로 안 센다.
 [정렬] 승·패 차이(12사+국배)의 합이 작은 순 → 무 차이 → 최근. 결과(RT)별로 갈라 칸마다 최대 PER_COLUMN장.
 
@@ -30,10 +32,10 @@ import data_access as DATA
 import multibook_odds as MB
 from kr_extra_odds import _key
 
-SAME_LEAGUE_TICK = 0.03
-ALL_LEAGUE_TICK = 0.02
+START_TICK = 0        # 시작 폭(칸) — 완전 일치부터. 0건이면 1칸씩 넓힌다(같은 리그·통합 각각)
 MIN_BOOKS = 6
 PER_COLUMN = 12
+MAX_TICK = 15        # 표본이 1건도 없을 때 폭을 넓히는 한계(칸) — 이보다 넓으면 '비슷한 배당'이라 하기 어렵다
 BUSY_WINDOW = 600   # 초 — 12사 배당 저장이 이보다 최근이면(백필 중) 만들어 둔 색인을 그대로 쓴다
 
 _CACHE = {"tok": None, "val": None}
@@ -188,9 +190,32 @@ def query(db, code, season, rnd, ht, at):
 
     same = ix["code"] == ix["code"][qi]
     r = ix["G"].iloc[qi]
+
+    def widen(base, start):
+        """start칸에서 시작해 표본이 1건이라도 나올 때까지 1칸씩 넓힌다. (결과, 쓴 칸 수) — 끝까지 없으면 start칸의 빈 결과."""
+        for k in range(start, MAX_TICK + 1):
+            m = base & within(k / 100)
+            if m.any():
+                return _pick(ix, qi, m), k
+        return _pick(ix, qi, base & within(start / 100)), start
+
+    def nxt(base, k, n0):
+        """더 넓힌 미리보기 — 표본이 실제로 늘어나는(다른 표본이 처음 더해지는) 폭까지 1칸씩 넓힌다.
+        폭만 넓어지고 표본이 그대로면 볼 게 없으므로 건너뛴다(예: ±2칸 1건 → ±3칸 1건이면 ±4칸까지)."""
+        for j in range(k + 1, MAX_TICK + 1):
+            m = base & within(j / 100)
+            if int(m.sum()) > n0:
+                return {"tol": j / 100, "area": _pick(ix, qi, m)}
+        return None
+
+    same_res, same_k = widen(pool & same, START_TICK)
+    other_res, other_k = widen(pool & ~same, START_TICK)
+    same_res["next"] = nxt(pool & same, same_k, same_res["n"])
+    other_res["next"] = nxt(pool & ~same, other_k, other_res["n"])
     return {"ready": True,
             "game": {"A": [float(x) for x in A[qi]], "K": [float(x) for x in K[qi]], "n_books": int(ix["nb"][qi]),
                      "kh": _f(r["KH"]), "khw": _f(r["KHW"]), "khd": _f(r["KHD"]), "khl": _f(r["KHL"]), "lg": _LG_LABEL.get(code, code)},
-            "same": _pick(ix, qi, pool & same & within(SAME_LEAGUE_TICK)),
-            "other": _pick(ix, qi, pool & ~same & within(ALL_LEAGUE_TICK)),
-            "tol": {"same": SAME_LEAGUE_TICK, "other": ALL_LEAGUE_TICK}}
+            "same": same_res, "other": other_res,
+            "tol": {"same": same_k / 100, "other": other_k / 100},
+            "ticks": {"same": same_k, "other": other_k},
+            "start": START_TICK}

@@ -39,6 +39,11 @@
   font-weight: 700;
 }
 
+.ts-close {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .ts-a-same {
   border-bottom: 2px solid var(--accent);
 }
@@ -164,4 +169,27 @@
   text-align: center;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* 표본 폭 탭 — 쓴 폭 / 더 넓은 폭 */
+.ts-tabs {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.ts-tab {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ts-tab.is-on {
+  border-color: var(--accent);
+  background: var(--bg-input);
+  font-weight: 700;
+  color: var(--text-primary);
 }

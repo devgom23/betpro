@@ -5,7 +5,7 @@ import './TripleSample.css'
 
 // 상세보기 '표본' 섹션 — 12개 배당사 섹션 바로 아래(2026-09-26 사용자 지정).
 // 12사 평균 승·패 + 국배 승·패가 둘 다 비슷한 과거 경기를 결과(핸승·핸무·무·역)별 4칸으로 보여준다.
-//   위   = 같은 리그 ±3칸 / 아래 = 통합(다른 리그만) ±2칸. 계산·기준은 서버 api/triple_sample.py.
+//   위   = 같은 리그 / 아래 = 통합(다른 리그만). 폭은 둘 다 ±0칸(완전 일치)에서 시작해 0건이면 1건 나올 때까지 1칸씩 넓히고, 제목에 쓴 폭(±N칸)을 적는다. 계산·기준은 서버 api/triple_sample.py.
 // 카드 = 경기일 · 팀 이름(스코어) · 12사 평균 · 국배 · 국핸디.
 //   이번 경기와 국배·국핸디가 '같은 값'이면 노랑 배경, 1~2칸 차이면 글자색만(배지처럼 안 보이게),
 //   12사 평균이 같은 값이면 파랑 밑줄.
@@ -25,6 +25,20 @@ function ticksApart(v, ref) {
 }
 const f2 = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(2))
 const khText = (v) => (v === null || v === undefined ? '' : `${v > 0 ? '+' : ''}${v}`)
+
+// 아주 비슷한 값(밑줄) — 폭을 넓혀 찾은 표본은 값이 멀어지니 그중에서도 특히 가까운 값을 따로 표시한다.
+// 쓴 폭 1~4칸이면 1칸 이내, 5칸 이상이면 2칸 이내(2026-09-26 사용자 지정). 완전 일치(0칸)는 비슷한 값이 없다.
+// 칸 = 12사 평균은 0.01, 국배·국핸디는 국내 호가 단위.
+function closeLimit(tol) {
+  const k = Math.round(tol * 100)
+  return k >= 5 ? 2 : k >= 1 ? 1 : 0
+}
+function isClose(v, base, tol, useTick) {
+  const lim = closeLimit(tol)
+  if (!lim) return false
+  const t = useTick ? ticksApart(v, base) : Math.round(Math.abs(v - base) * 100)
+  return t !== null && t <= lim
+}
 
 // 값 하나의 상태 — 같은 값(same) / 비슷한 값(near) / 그 밖(null).
 //   비슷한 값 = 같은 값이 아니면서 ① 이 영역의 허용 폭 안(같은 리그 ±0.03 · 통합 ±0.02)이거나
@@ -47,7 +61,7 @@ function OddsCell({ v, base, tol }) {
   if (v === null || v === undefined) return <>-</>
   const st = stateOf(v, base, tol, true)
   if (st === 'same') return <span className="ts-same">{f2(v)}</span>
-  if (st === 'near') return <span className="ts-near" title={`이번 경기 ${f2(base)}와 비슷한 값(${f2(Math.abs(v - base))} 차이)`}>{f2(v)}</span>
+  if (st === 'near') return <span className={`ts-near${isClose(v, base, tol, true) ? ' ts-close' : ''}`} title={`이번 경기 ${f2(base)}와 비슷한 값(${f2(Math.abs(v - base))} 차이)${isClose(v, base, tol, true) ? ' — 특히 가까움' : ''}`}>{f2(v)}</span>
   return <>{f2(v)}</>
 }
 
@@ -55,7 +69,7 @@ function OddsCell({ v, base, tol }) {
 function AvgCell({ v, base, tol }) {
   const st = stateOf(v, base, tol, false)
   if (st === 'same') return <span className="ts-a-same">{f2(v)}</span>
-  if (st === 'near') return <span className="ts-near" title={`이번 경기 12사 평균 ${f2(base)}와 비슷한 값(${f2(Math.abs(v - base))} 차이)`}>{f2(v)}</span>
+  if (st === 'near') return <span className={`ts-near${isClose(v, base, tol, false) ? ' ts-close' : ''}`} title={`이번 경기 12사 평균 ${f2(base)}와 비슷한 값(${f2(Math.abs(v - base))} 차이)${isClose(v, base, tol, false) ? ' — 특히 가까움' : ''}`}>{f2(v)}</span>
   return <>{f2(v)}</>
 }
 
@@ -94,12 +108,34 @@ function Card({ c, game, tol }) {
   )
 }
 
-function Band({ title, sub, area, game, tol }) {
+// 결과별 건수 — (핸승/핸무/무/역) 순서
+const cntText = (a) => `(${a.cnt.join('/')})`
+
+function Band({ title, area: base, game, tol: baseTol }) {
+  // 표본 탭(2026-09-26) — 쓴 폭 표본과, 표본이 실제로 늘어나는 더 넓은 폭 표본을 탭으로 나란히 둔다.
+  const [wide, setWide] = useState(false)
+  const nx = base.next
+  const on = wide && !!nx
+  const area = on ? nx.area : base
+  const tol = on ? nx.tol : baseTol
+  const kb = Math.round(baseTol * 100)
   return (
     <div className="ts-band">
       <div className="ts-band-head">
         <span>{title}</span>
-        <small>{sub} · 표본 {area.n}건</small>
+        {nx ? (
+          <span className="ts-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={!on} className={`ts-tab${on ? '' : ' is-on'}`} onClick={() => setWide(false)}>
+              ±{kb}칸 · 표본 {base.n}건 {cntText(base)}
+            </button>
+            <button type="button" role="tab" aria-selected={on} className={`ts-tab${on ? ' is-on' : ''}`} onClick={() => setWide(true)}
+              title="표본이 더 늘어나는 폭까지 넓힌 표본">
+              ±{Math.round(nx.tol * 100)}칸 · 표본 {nx.area.n}건 {cntText(nx.area)}
+            </button>
+          </span>
+        ) : (
+          <small>±{kb}칸 · 표본 {base.n}건 {cntText(base)}</small>
+        )}
       </div>
       <div className="ts-cols">
         {[1, 2, 3, 4].map((k) => {
@@ -157,8 +193,8 @@ export default function TripleSampleSection({ code, scope, row, noteSlot }) {
             <span>국배 <span className="ts-nums">{data.game.K.map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
             <span>국핸디 ({khText(data.game.kh) || '-'}) <span className="ts-nums">{[data.game.khw, data.game.khd, data.game.khl].map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
           </div>
-          <Band title={`같은 리그 (${data.game.lg})`} sub={`±${Math.round(data.tol.same * 100)}칸`} area={data.same} game={data.game} tol={data.tol.same} />
-          <Band title="통합 (다른 리그)" sub={`±${Math.round(data.tol.other * 100)}칸`} area={data.other} game={data.game} tol={data.tol.other} />
+          <Band title={`같은 리그 (${data.game.lg})`} area={data.same} game={data.game} tol={data.tol.same} />
+          <Band title="통합 (다른 리그)" area={data.other} game={data.game} tol={data.tol.other} />
         </>
       )}
       {help && <TripleSampleLegend onClose={() => setHelp(false)} />}
@@ -197,14 +233,13 @@ function TripleSampleLegend({ onClose }) {
             <tr><th>영역</th><th>어디서 찾나</th><th>허용 폭</th></tr>
           </thead>
           <tbody>
-            <tr><td><b>같은 리그</b> (위)</td><td>이 경기와 같은 리그의 과거 경기</td><td>±3칸 (±0.03)</td></tr>
-            <tr><td><b>통합</b> (아래)</td><td>6대리그 전체 중 <b>다른 리그</b> 경기 — 같은 리그 경기는 위에 이미 나오므로 뺍니다</td><td>±2칸 (±0.02)</td></tr>
+            <tr><td><b>같은 리그</b> (위)</td><td>이 경기와 같은 리그의 과거 경기</td><td>±0칸부터, 0건이면 1칸씩 넓힘</td></tr>
+            <tr><td><b>통합</b> (아래)</td><td>6대리그 전체 중 <b>다른 리그</b> 경기 — 같은 리그 경기는 위에 이미 나오므로 뺍니다</td><td>±0칸부터, 0건이면 1칸씩 넓힘</td></tr>
           </tbody>
         </table>
         <p className="help-legend-note">
-          <b>칸</b> = 소수 둘째 자리 한 눈금(0.01)입니다. 예를 들어 12사 평균 승이 2.55이면 같은 리그는 2.52~2.58,
-          통합은 2.53~2.57까지 봅니다. 승·패 네 값이 <b>모두</b> 폭 안이어야 표본이 됩니다.
-          같은 리그는 폭을 더 넓게(±3칸), 통합은 더 좁게(±2칸) 잡아 <b>같은 리그를 우선</b>했습니다.
+          <b>칸</b> = 소수 둘째 자리 한 눈금(0.01)입니다. 예를 들어 12사 평균 승이 2.55이고 폭이 ±2칸이면 2.53~2.57까지 봅니다. 승·패 네 값이 <b>모두</b> 폭 안이어야 표본이 됩니다.
+          폭은 같은 리그·통합 모두 <b>완전 일치(±0칸)</b>에서 시작하고, 표본이 0건이면 <b>1건이 나올 때까지 1칸씩 넓혀</b>(최대 ±15칸) 찾습니다. 제목에 실제로 쓴 폭을 <b>±5칸</b>처럼 적으니, 숫자가 작을수록 배당이 더 비슷한 표본입니다. 폭을 넓혀 표본이 1건뿐이면 근거가 약해서, 표본이 늘어나는 더 넓은 폭을 <b>탭</b>으로 나란히 두었습니다(탭을 누르면 그 표본으로 바뀝니다). 끝까지 없으면 비어 있습니다.
         </p>
 
         <p className="help-legend-title">③ 12사 평균 · 국배는 어떤 값인가</p>
@@ -218,7 +253,7 @@ function TripleSampleLegend({ onClose }) {
         <p className="help-legend-note">
           이 경기 날짜 <b>이전</b>에 끝난 경기만 씁니다(같은 날 경기는 서로 세지 않습니다). 카드는 결과별 칸 안에서
           승·패 차이(12사+국배)가 작은 순 → 무 차이가 작은 순 → 최근 순이고, 칸마다 최대 12장까지 보입니다.
-          표본 개수는 칸 제목 옆(예: <b>3건 중 12</b>)에 적힙니다.
+          표본 개수는 칸 제목 옆(예: <b>3건 중 12</b>)에 적힙니다. 제목 줄의 <b>표본 9건 (3/1/6/4)</b>에서 괄호 안 숫자는 <b>핸승/핸무/무/역</b> 순서의 결과별 건수입니다.
         </p>
 
         <p className="help-legend-title">⑤ 카드 읽는 법</p>
@@ -230,6 +265,7 @@ function TripleSampleLegend({ onClose }) {
             <tr><td><span className="ts-same">2.50</span></td><td>이번 경기와 <b>같은 값</b> (국배·국핸디, 노랑 배경)</td></tr>
             <tr><td><span className="ts-a-same">2.55</span></td><td>12사 평균이 이번 경기와 <b>같은 값</b> (파랑 밑줄)</td></tr>
             <tr><td><span className="ts-near">2.26</span></td><td><b>비슷한 값</b> (12사 평균·국배·국핸디 공통, 글자색만) — 같은 값은 아니면서 <b>그 영역의 허용 폭 안</b>(같은 리그 ±0.03, 통합 ±0.02)입니다. 국배·국핸디는 여기에 더해 <b>국내 호가 단위로 1~2칸 차이</b>인 값도 포함합니다(호가 단위: 2.5 미만 0.01 · 2.5~5 0.05 · 5 이상 0.10, 무는 0.05). 12사 평균 승·패는 검색 조건 자체가 폭 안이라 같은 값이 아니면 대부분 이 색이 됩니다 — 차이를 보려면 무 칸과 국배를 함께 보세요</td></tr>
+            <tr><td><span className="ts-near ts-close">1.81</span></td><td><b>아주 가까운 값</b> (비슷한 값 중에서 밑줄) — 표본을 찾느라 폭이 <b>1~4칸</b>이면 이번 경기와 <b>1칸 이내</b>, <b>5칸 이상</b>이면 <b>2칸 이내</b>인 값입니다. 예: 이번 경기 12사 평균 패가 1.80이고 폭 5칸으로 찾은 표본이 1.81이면 1칸 차이라 거의 같은 값이니 밑줄을 긋습니다. 칸은 12사 평균이 0.01, 국배·국핸디는 국내 호가 단위입니다. 밑줄은 두 탭 모두, 같은 리그·통합 모두에 똑같이 적용됩니다.</td></tr>
             <tr><td>핸디 +1</td><td>국내 핸디 배당(홈팀 기준선 ±1). 기준선이 같을 때만 같은 값·차이를 표시합니다. 핸디 배당은 20-21 시즌부터 거의 전 경기에 있고 그 이전은 없는 경우가 많아 <b>-</b>로 보입니다</td></tr>
           </tbody>
         </table>
