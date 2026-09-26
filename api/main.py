@@ -98,6 +98,7 @@ import axis_stats as AXIS      # noqa: E402
 import same_odds as SAMEODDS  # noqa: E402
 import sample_dir as SAMPLEDIR  # noqa: E402
 import book_dir as BOOKDIR      # noqa: E402
+import triple_sample as TRIPLE  # noqa: E402
 import season_view as SEASONVIEW  # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
@@ -154,6 +155,7 @@ def _warm_master_cache_async():
             DATA.load_total_h2h_df(db_path)    # 상세보기(상대전적)가 쓰는 슬림 표
         except Exception:
             pass
+        TRIPLE.warm(db_path)               # 상세보기 '표본' 섹션 색인(12사 평균·국배 배열) — 첫 조회를 기다리지 않게
         # 표본 방향성 시스템 판정·배당사별 방향 — 서버 켜진 뒤 한 번 맞춰 둔다(sample_dir.py·book_dir.py 주석).
         SAMPLEDIR.ensure()
         BOOKDIR.ensure()
@@ -836,6 +838,18 @@ def _queue_league_books(scope: str, user: dict, code: str, keys: list[tuple]) ->
         return 0
 
 
+@app.get("/api/triple_sample")
+def triple_sample(code: str, S: str, R: str, HT: str, AT: str,
+                  scope: str = PATHS.SCOPE_MASTER,
+                  user: dict = Depends(get_current_user)):
+    """상세보기 '표본' 섹션 — 12사 평균 승·패 + 국배 승·패가 둘 다 비슷한 과거 경기(위=같은 리그 ±3칸,
+    아래=다른 리그 ±2칸). 계산·기준은 api/triple_sample.py. 공식 6대리그만(12사 배당이 거기만 있다)."""
+    _check_league_for(code, scope, user)
+    if scope != PATHS.SCOPE_MASTER or code not in PATHS.VALID_LEAGUES:
+        return {"ready": False, "reason": "공식 6대리그에서만 표본을 냅니다"}
+    return TRIPLE.query(PATHS.get_master_db(), code, S, R, HT, AT)
+
+
 @app.get("/api/schedule_context")
 def schedule_context(code: str, HT: str, AT: str, DT: str, TM: Optional[float] = None,
                      scope: str = PATHS.SCOPE_MASTER,
@@ -1185,7 +1199,7 @@ def save_season_note(code: str, body: SeasonNoteBody, user: dict = Depends(get_c
 
 
 # 상세보기 표본 박스 7개 제목 옆 메모(2026-09-15) — 경기 하나 × 표본 박스 하나에 1개.
-SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl", "same_odds", "books")   # same_odds = 회차 동배당 · books = 12개 배당사 메모(2026-09-24)
+SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl", "same_odds", "books", "triple")   # same_odds = 회차 동배당 · books = 12개 배당사 메모(2026-09-24) · triple = 12사 평균·국배 표본 메모(2026-09-26)
 
 
 class SampleNoteBody(BaseModel):

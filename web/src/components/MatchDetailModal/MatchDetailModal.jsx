@@ -17,8 +17,10 @@ import {
   ODDS_PHASE_WEIGHTED_GRADE, PHASE_CELL_RATE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE,
   CLOSE_ODDS_CUT_K, CLOSE_ODDS_CUT_F, favFlip,
   marketSetMoved, RISK_FIELD_MARKET, DIRECTION_SCOPE_MARKET, ODDS_SCOPE_MARKET, opinionLabel, SAMPLE_RELIABLE_N,
+  plSplitAxis, PL_SPLIT_AXIS,
 } from '../../utils/verdictCalc'
 import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
+import TripleSampleSection from './TripleSample'
 import { RichMemoInput } from '../RichMemo/RichMemo'
 import { stripMemo } from '../../utils/richMemo'
 import {
@@ -809,6 +811,33 @@ function strongPickChips(row, fin) {
   ]
 }
 
+// ── 플축·국≠해 뱃지 (2026-09-26 사용자 지정) — 조건·실측은 verdictCalc.js plSplitAxis 주석 ──
+// 기존 플축(표본 방향 7개 기준)과 따로 세는 이유: 505경기 중 기존 플축과 겹치는 건 28경기뿐이었다.
+function plSplitAxisChips(row, fin) {
+  if (!plSplitAxis(row, fin)) return []
+  const a = PL_SPLIT_AXIS
+  const ht = String(row.HT || '').trim()
+  const at = String(row.AT || '').trim()
+  const kHome = Number(row.KW) < Number(row.KL)
+  const dog = kHome ? at : ht
+  return [
+    <MatchChip
+      key="pl-split-axis"
+      label="플축·국≠해"
+      tone="red"
+      title={'플축·국≠해 — 단통 플핸(무+역): "국내 정배는 못 이긴다"\n'
+        + `해외 마감 시장은 ${dog}을(를) 정배로 봤는데, 국내에서는 ${dog}이(가) 언더독이라 플핸 배당으로 살 수 있는 경기입니다.\n`
+        + `조건: 배변 판정 플핸무 + 해외(배변) 정배가 국내 초기 정배와 다른 팀 + 해외 정배배당 ${a.lo}~${a.hi}\n\n`
+        + `6대리그 18시즌 실측(그 경기 날짜 이전 자료만): 플 단통 ${a.rate}% (${a.n}경기, 같은 배당 평균보다 +${a.uplift}%p)\n`
+        + `국내 플핸 배당으로 건 회수율 ${a.roi}(핸디배당이 있는 ${a.roiN}경기) · 앞·뒤 시즌 모두, 6개 리그 전부 플러스\n`
+        + '※ 12사 방향 칩이 이 경기에서 \'정\'으로 보이는 경우가 많습니다 — 12사가 반대 팀을 정배로 봐서'
+        + ' 뒤집혀 찍힌 것이라 판정과 반대라고 걱정하지 않아도 됩니다.'}
+    >
+      {Math.round(a.rate)}%
+    </MatchChip>,
+  ]
+}
+
 // ── 플축 · 정축 뱃지 (2026-09-21 실측, 사용자 지정) ───────────────────────────
 // 축 = 보험 없는 단통. 플축 = 무+역(RT3+4), 정축 = 핸승+핸무(RT1+2).
 // 조건·실측은 utils/sampleDirection.js의 axisVerdict 주석. 방향성은 자동 판정 기준이라
@@ -945,6 +974,7 @@ function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, xg, 
     ? h2hVerdictRecent(h2hMatches, String(row.HT || '').trim(), row.S)
     : null
   const chips = [...archiveChips(archiveTags), ...axisChips(row, seasonSample, h2hMatches, axisStats),
+    ...plSplitAxisChips(row, fin),
     ...plhan85Chips(row, verdict), ...seasonStakeChips(row),
     ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
     ...favFlipChips(row), ...strongPickChips(row, fin),
@@ -2472,7 +2502,14 @@ function MultiBookSection({ books, bookDir, row, onHelp, note, onSaveNote }) {
               const red = labs.filter((l) => l === '레드' || l === '약레드').length
               return (
                 <tr key={ph} className={`mb-dir-row${i === 0 ? ' mb-dir-first' : ''}`}>
-                  <td className="mb-lab">방향 {ph === 'F' ? '초기' : '마감'}<small>그 회사 배당의 과거 결과</small></td>
+                  <td
+                    className="mb-lab"
+                    title={'그 회사가 매긴 정배배당이 같았던 과거 경기의 결과를 "전체 경기 평균"과 비교한 방향입니다.\n'
+                      + '판정(핸승과 역 중 무엇이 덜 나오나)과 묻는 것이 달라, 정배배당 1.7~2.1에서 자주 갈립니다'
+                      + '(배변 기준 37~43%). 갈려도 판정을 바꿀 근거가 아닙니다 — 자세한 건 제목 옆 ? 팝업 ⑤.'}
+                  >
+                    방향 {ph === 'F' ? '초기' : '마감'}<small>평균 경기 대비 · 판정과 다른 기준</small>
+                  </td>
                   {names.map((n) => (
                     <td key={n} className={cellCls(n)}><MbSampleChip book={n} ph={ph} v={bookDir?.[n]?.[ph]} favHome={ourFav} /></td>
                   ))}
@@ -2551,6 +2588,28 @@ function MultiBookLegend({ onClose }) {
           회사가 우리(국내 초기배당)와 <b>반대 팀을 정배로 본 경우</b> 그 회사 표본의 블루·레드는 그 회사
           정배 기준이라 뜻이 거꾸로입니다. 그래서 우리 정배 기준으로 뒤집어 보여주고 칩 앞에 <b>⇄</b>를
           붙입니다. 승무패 표에서도 그 회사가 정배로 본 배당 숫자 옆에 <b>⇄</b>가 붙습니다(초기·마감 따로).
+        </p>
+
+        <p className="help-legend-title">⑤ 판정과 방향이 자주 다른 이유 (2026-09-26 실측)</p>
+        <p className="help-legend-note">
+          두 방향은 <b>묻는 것이 다릅니다.</b> 12사 칩은 &quot;이 배당의 과거 흐름이 <b>전체 경기 평균</b>보다
+          정배 쪽인가&quot;를 묻고, 판정은 &quot;이 배당에서 <b>핸승과 역 중 무엇이 덜 나오나</b>&quot;를 묻습니다.
+          그래서 12사는 정배배당 약 1.8부터 레드로, 판정은 약 2.0부터 플로 넘어가고, 그 사이에서 자주 갈립니다.
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>해외 정배배당(배변)</th><th>1.5 미만</th><th>1.5~1.7</th><th>1.7~1.9</th><th>1.9~2.1</th><th>2.1~2.5</th><th>2.5 이상</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>판정과 12사가 갈린 비율</td><td>1% 미만</td><td>10%</td><td><b>37%</b></td><td><b>43%</b></td><td>24~26%</td><td>28%</td></tr>
+            <tr><td>갈렸을 때 판정 편 단통</td><td>—</td><td>55.9%</td><td>53.4%</td><td>49.2%</td><td>정 49.9% · <b>플 72.0%</b></td><td>68.6%</td></tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          1.7~2.1에서 갈리면 판정도 12사도 동전 던지기(단통 49~53%)라 축으로 걸 자리가 아닙니다.
+          2.1~2.5에서 판정 플인데 12사가 정으로 보이면 대부분(94%) 12사가 반대 팀을 정배로 본 경기라
+          뒤집혀 찍힌 것이고, 이때는 판정 쪽이 크게 맞았습니다 — 경기지표의 <b>플축·국≠해</b> 뱃지가 이 경우입니다.
+          12사 칩을 &apos;같은 배당에서 보통 나오는 흐름&apos; 대비로 바꿔 재 봐도 정보가 없었습니다(배변 −0.04%p).
         </p>
 
         <p className="help-legend-title">④ 주의 — 참고용입니다</p>
@@ -4115,17 +4174,18 @@ function NewSystemVerdictLegend({ onClose }) {
           6대리그 36,136경기 실측).
         </p>
         <table className="detail-table help-legend-table">
-          <thead><tr><th>시점</th><th>일치 당첨률</th><th>엇갈림 당첨률</th><th>차이</th></tr></thead>
+          <thead><tr><th>시점</th><th>일치 당첨 · 단통</th><th>엇갈림 당첨 · 단통</th><th>당첨 차이</th></tr></thead>
           <tbody>
-            <tr><td>초기</td><td>83.62%(n=30,931)</td><td>76.63%(n=4,887)</td><td><b>−6.98%p</b>(z=−11.98)</td></tr>
-            <tr><td>배변</td><td>84.06%(n=30,819)</td><td>78.05%(n=4,897)</td><td><b>−6.01%p</b>(z=−10.47)</td></tr>
+            <tr><td>초기</td><td>83.61% · 61.89%(n=30,949)</td><td>75.70% · 49.91%(n=4,893)</td><td><b>−7.91%p</b>(z=−13.54)</td></tr>
+            <tr><td>배변</td><td>84.06% · 62.56%(n=30,831)</td><td>78.68% · 52.60%(n=4,901)</td><td><b>−5.38%p</b>(z=−9.39)</td></tr>
           </tbody>
         </table>
         <p className="help-legend-note">
-          <b>배변에서 갈리면 해(해외)를 따르는 쪽이 확실히 낫다</b> — 해 따름 78.68% vs
-          국 따름 72.68%, <b>+6.00%p, z=6.92, 6대리그 전부 같은 방향</b>이라 괄호에 해 쪽
-          의견을 적는다. 초기는 어느 쪽도 못 가린다(해 75.69% vs 국 75.49%, z=0.24,
-          리그 3/6뿐) — 그래서 초기는 괄호 없이 &apos;엇갈림&apos;만 쓴다.
+          (2026-09-26 6대리그 18시즌으로 다시 잰 값) <b>배변에서 갈리면 해(해외)를 따르는 쪽이 낫다</b> —
+          당첨 해 따름 78.68% vs 국 따름 72.72%(단통 52.60% vs 47.40%)라 괄호에 해 쪽 의견을 적는다.
+          다만 해외 마감배당을 따르는 것과 같아 판정만의 추가 정보는 아니다. 초기는 어느 쪽도 못
+          가린다(당첨 해 75.70% vs 국 75.52%) — 그래서 초기는 괄호 없이 &apos;엇갈림&apos;만 쓴다.
+          엇갈림은 단통이 절반 수준이라 <b>축으로 걸 자리가 아니다.</b>
         </p>
         <p className="help-legend-note">
           적중/보험/미적은 엇갈림에도 <b>그대로 매긴다</b>(괄호의 해 쪽 방향 기준) —
@@ -4607,13 +4667,16 @@ function NewSystemVerdictLegend({ onClose }) {
 // 근거는 verdictCalc.js oddsPhaseSplit 주석(2026-09-20 6대리그 36,136경기 실측).
 const SYS_SPLIT_TITLE = {
   초기: '엇갈림 — 국내 지표와 해외 지표가 서로 다른 픽을 냈습니다.'
-    + ' 이 자리의 당첨률은 76.63%로, 둘이 같을 때(83.62%)보다 6.98%p 낮습니다(z=-11.98).'
-    + '\n초기에는 어느 쪽을 따라도 차이가 없어(해 75.69% vs 국 75.49%, z=0.24, 리그 3/6)'
+    + ' 이 자리의 당첨률은 75.70%·단통 49.91%로, 둘이 같을 때(당첨 83.61%·단통 61.89%)보다'
+    + ' 7.91%p 낮습니다(6대리그 18시즌 35,842경기, z=-13.54, 2026-09-26).'
+    + '\n초기에는 어느 쪽을 따라도 차이가 없어(당첨 해 75.70% vs 국 75.52% · 단통 49.91% vs 50.09%)'
     + ' 방향을 붙이지 않습니다.',
   배변: '엇갈림 — 국내 지표와 해외 지표가 서로 다른 픽을 냈습니다.'
-    + ' 이 자리의 당첨률은 78.68%로, 둘이 같을 때(84.06%)보다 6.01%p 낮습니다(z=-10.47).'
-    + '\n괄호 안은 해외 지표 쪽 의견입니다 — 배변에서 갈리면 해외를 따르는 쪽이 확실히'
-    + ' 낫습니다(78.68% vs 국내 72.68%, +6.00%p, z=6.92, 리그 6/6 만장일치).',
+    + ' 이 자리의 당첨률은 78.68%·단통 52.60%로, 둘이 같을 때(당첨 84.06%·단통 62.56%)보다'
+    + ' 5.38%p 낮습니다(6대리그 18시즌 35,732경기, z=-9.39, 2026-09-26).'
+    + '\n괄호 안은 해외 지표 쪽 의견입니다 — 배변에서 갈리면 해외를 따르는 쪽이 낫습니다'
+    + '(당첨 78.68% vs 국내 72.72% · 단통 52.60% vs 47.40%). 다만 해외 마감배당을 따르는 것과'
+    + ' 같아 판정만의 추가 정보는 아닙니다. 단통이 절반 수준이라 축으로 걸 자리가 아닙니다.',
 }
 
 // 시스템 판정 줄의 '국배 · 해배' — 판정이 합친 두 시장 혼자의 의견을 레드/블루('(약)'은
@@ -5268,6 +5331,21 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           onHelp={() => setShowMultiBookLegend(true)}
           note={sampleNotes?.books?.memo}
           onSaveNote={sampleNotes !== undefined ? (memo) => saveSampleNote('books', { memo: memo || null }) : null}
+        />
+
+        {/* 표본 — 12개 배당사 바로 아래(2026-09-26 사용자 지정). 12사 평균·국배 승·패가 비슷한 과거 경기를
+            결과별 4칸으로. 산출 방법은 제목 옆 ? 도움말, 제목 옆 입력칸은 같은 표본 메모(kind='triple'). */}
+        <TripleSampleSection
+          code={code}
+          scope={scope}
+          row={row}
+          noteSlot={sampleNotes !== undefined ? (
+            <SampleNoteInput
+              value={sampleNotes?.triple?.memo}
+              onSave={(memo) => saveSampleNote('triple', { memo: memo || null })}
+              placeholder="표본에 대한 의견"
+            />
+          ) : null}
         />
 
         {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,

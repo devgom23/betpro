@@ -1,0 +1,167 @@
+/* 상세보기 '표본' 섹션(2026-09-26) — 색은 앱 공통 토큰만 쓴다(다크/라이트 자동). */
+.ts-msg {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ts-ref {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-input);
+  font-size: 12px;
+}
+
+.ts-ref b {
+  color: var(--text-primary);
+}
+
+.ts-nums {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* 같은 값 = 노랑 배경 / 1~2칸 차이 = 글자색만 / 12사 평균 같은 값 = 파랑 밑줄 */
+.ts-same {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}
+
+.ts-near {
+  color: var(--warning-text);
+  font-weight: 700;
+}
+
+.ts-a-same {
+  border-bottom: 2px solid var(--accent);
+}
+
+.ts-band {
+  margin-top: 10px;
+}
+
+.ts-band:first-of-type {
+  margin-top: 0;
+}
+
+.ts-band-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-top: 2px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ts-band-head small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* 핸승 | 핸무 | 무 | 역 — 세로 구분선으로 나눈 4칸 */
+.ts-cols {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(190px, 1fr));
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ts-col {
+  min-width: 0;
+  padding: 8px;
+  border-left: 1px solid var(--border);
+}
+
+.ts-col:first-child {
+  border-left: 0;
+}
+
+.ts-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ts-cards {
+  display: grid;
+  gap: 6px;
+}
+
+.ts-card {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  font-size: 11px;
+}
+
+.ts-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+  color: var(--text-muted);
+}
+
+.ts-card-top b {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.ts-card-teams {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ts-score {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.ts-card-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.ts-card-table td {
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ts-card-table td:first-child {
+  width: 44px;
+  text-align: left;
+  color: var(--text-muted);
+}
+
+.ts-empty {
+  padding: 14px 4px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}

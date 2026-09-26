@@ -376,7 +376,9 @@ export function resolveOddsPhasePick(row, final) {
 // 적중/보험/미적 판정은 엇갈림에도 그대로 매긴다(괄호 방향 기준, 사용자 지정) — 대신
 // 뱃지를 각자 원래 색(적중 노랑·보험 청록·미적 빨강)의 톤 다운 버전으로 칠해
 // "엇갈림에서 나온 판정"임을 표시한다(columnGroups.js pickVerdictSoftStyle).
-export const SPLIT_RATE = { 초기: 76.63, 배변: 78.68 }
+// 2026-09-26 18시즌 전체(12사 백필 뒤)로 다시 잼 — 초기 76.63→75.70(n=4,893) · 배변 78.68(n=4,901, 그대로).
+// 단통(보험 뺀 적중)은 초기 49.91% · 배변 52.60%로 일치(61.89 · 62.56%)보다 10%p 낮다 — 축 자리가 아니다.
+export const SPLIT_RATE = { 초기: 75.70, 배변: 78.68 }
 
 function splitDisplay(label, forrPick) {
   return label === '배변' ? `엇(${DIR_SIDE[forrPick]})` : '엇갈림'
@@ -673,4 +675,29 @@ export const STRONG_TIER_TITLE = {
     + '\n⚠ 국내배당이 뒤집힌 경기라면 프로토에서는 플핸이 아니라 정무로 걸어야 같은'
     + ' 베팅이 됩니다(정·역이 가리키는 팀이 바뀌기 때문). 경기지표 줄의 정역반전'
     + ' 뱃지에서 어느 시장이 뒤집혔는지 확인하세요.',
+}
+
+// ── 플축·국≠해 (2026-09-26 사용자 지정) ─────────────────────────────────────
+// 배변 판정 플핸무 + 해외(배변) 정배가 국내 초기 정배와 다른 팀 + 해외 정배배당 2.1~2.5.
+// 해외 마감 시장은 국내 언더독을 정배로 봤는데, 국내에서는 그 팀을 플핸 배당으로 살 수 있는 경기다
+// ('국배·해배가 갈리면 해배를 따른다'와 같은 원리). 6대리그 18시즌 실측(그 경기 날짜 이전 자료만):
+//   플 단통 72.1% (n=505, 같은 배당 평균 대비 +11.1%p, z=5.10) · 앞·뒤 시즌 모두 · 6/6 리그 플러스
+//   강추 등급이 안 붙던 176경기도 72.2%(z=3.10) · 기존 플축(P1·P2·P3)과 겹치는 건 28경기뿐
+//   국내 플핸 배당으로 건 회수율 1.29(배변 배당, n=216 — 핸디배당이 있는 경기만) · 최근 6시즌 1.35
+// 같은 조건에서 해외 정배배당 2.5 이상은 +3.5%p로 약하고, 강추가 없는 쪽은 0이라 뺐다.
+// 판정과 12사 방향이 반대로 찍히는 경기(12사 정 · 판정 플)의 94%가 이 경우였다 — 12사가 반대 팀을
+// 정배로 봐서 화면에서 뒤집혀 '정'으로 보이는 것이다(메모리 reference-verdict-vs-12books).
+export const PL_SPLIT_AXIS = { lo: 2.1, hi: 2.5, rate: 72.1, n: 505, uplift: 11.1, roi: 1.29, roiN: 216 }
+
+export function plSplitAxis(row, fin) {
+  if (!fin || fin.pick !== '플핸무') return false
+  const hasE = numOrNull(row.EFW) !== null || numOrNull(row.EKW) !== null
+  if (!hasE) return false                       // 실측이 배변 배당이 들어온 경기만으로 쟀다
+  const dom = marketFavHome(row.KW, row.KL)     // 국내 초기 정배 = 결과(RT)의 기준
+  const fw = numOrNull(row.EFW) ?? numOrNull(row.FW)
+  const fl = numOrNull(row.EFL) ?? numOrNull(row.FL)
+  const forr = marketFavHome(fw, fl)
+  if (dom === null || forr === null || dom === forr) return false
+  const fav = Math.min(fw, fl)
+  return fav >= PL_SPLIT_AXIS.lo && fav < PL_SPLIT_AXIS.hi
 }
