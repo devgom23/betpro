@@ -5392,7 +5392,21 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             <SampleNoteInput
               value={sampleNotes?.triple?.memo}
               onSave={(memo) => saveSampleNote('triple', { memo: memo || null })}
-              placeholder="표본에 대한 의견"
+              placeholder="우선순위 1. 같은리그 2. 최신순 3. 일치순"
+            />
+          ) : null}
+          sameNoteSlot={sampleNotes !== undefined ? (
+            <SampleNoteInput
+              value={sampleNotes?.triple_same?.memo}
+              onSave={(memo) => saveSampleNote('triple_same', { memo: memo || null })}
+              placeholder="같은 리그 표본 의견"
+            />
+          ) : null}
+          otherNoteSlot={sampleNotes !== undefined ? (
+            <SampleNoteInput
+              value={sampleNotes?.triple_other?.memo}
+              onSave={(memo) => saveSampleNote('triple_other', { memo: memo || null })}
+              placeholder="통합 표본 의견"
             />
           ) : null}
         />

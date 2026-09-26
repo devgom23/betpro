@@ -145,7 +145,7 @@ const trustText = (a, trusted) => {
   return n ? ` (신뢰ㆍ${n}건)` : ''
 }
 
-function Band({ title, area: base, game, tol: baseTol, trusted, onTrust }) {
+function Band({ title, area: base, game, tol: baseTol, trusted, onTrust, noteSlot }) {
   // 표본 탭(2026-09-26) — 쓴 폭 표본과, 표본이 실제로 늘어나는 더 넓은 폭 표본을 탭으로 나란히 둔다.
   const [wide, setWide] = useState(false)
   const nx = base.next
@@ -170,6 +170,7 @@ function Band({ title, area: base, game, tol: baseTol, trusted, onTrust }) {
         ) : (
           <small>±{kb}칸 · 표본 {base.n}건 {cntText(base)}{trustText(base, trusted)}</small>
         )}
+        {noteSlot}
       </div>
       <div className="ts-cols">
         {[1, 2, 3, 4].map((k) => {
@@ -192,7 +193,7 @@ function Band({ title, area: base, game, tol: baseTol, trusted, onTrust }) {
 }
 
 // noteSlot — 제목 옆 의견 입력칸(상위에서 SampleNoteInput을 만들어 넘긴다: 다른 섹션 메모와 같은 저장 경로)
-export default function TripleSampleSection({ code, scope, row, noteSlot }) {
+export default function TripleSampleSection({ code, scope, row, noteSlot, sameNoteSlot, otherNoteSlot }) {
   const [data, setData] = useState(undefined)   // undefined 불러오는 중 · null 실패
   const [help, setHelp] = useState(false)
   // 신뢰 체크 — 이 경기에서 내가 믿는 표본 카드들. 브라우저(localStorage)에 경기별로 기억한다(다른 기기·브라우저와는 공유 안 됨).
@@ -247,8 +248,8 @@ export default function TripleSampleSection({ code, scope, row, noteSlot }) {
             <span>국배 <span className="ts-nums">{data.game.K.map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
             <span>국핸디 ({khText(data.game.kh) || '-'}) <span className="ts-nums">{[data.game.khw, data.game.khd, data.game.khl].map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
           </div>
-          <Band title={`같은 리그 (${data.game.lg})`} area={data.same} game={data.game} tol={data.tol.same} trusted={trusted} onTrust={toggleTrust} />
-          <Band title="통합 (다른 리그)" area={data.other} game={data.game} tol={data.tol.other} trusted={trusted} onTrust={toggleTrust} />
+          <Band title={`같은 리그 (${data.game.lg})`} area={data.same} game={data.game} tol={data.tol.same} trusted={trusted} onTrust={toggleTrust} noteSlot={sameNoteSlot} />
+          <Band title="통합 (다른 리그)" area={data.other} game={data.game} tol={data.tol.other} trusted={trusted} onTrust={toggleTrust} noteSlot={otherNoteSlot} />
         </>
       )}
       {help && <TripleSampleLegend onClose={() => setHelp(false)} />}

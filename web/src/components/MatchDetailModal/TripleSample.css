@@ -250,3 +250,11 @@
 :root[data-theme='light'] .ts-card-top b.ts-date-new {
   color: #0a58ff; /* 선명한 파랑(라이트) */
 }
+
+/* 같은 리그·통합 제목 줄의 메모칸 — 탭 오른쪽 남는 폭을 다 채운다(flex) */
+.ts-band-head .sample-note-input {
+  flex: 1 1 160px;
+  min-width: 0;
+  align-self: center;
+  font-weight: 400;
+}
