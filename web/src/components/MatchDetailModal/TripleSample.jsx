@@ -103,7 +103,7 @@ function Card({ c, game, tol, trusted, onTrust }) {
   return (
     <div className={`ts-card${c.prev ? ' ts-prev' : ''}${trusted ? ' ts-trust' : ''}`} title={c.prev ? '더 좁은 폭(앞 탭)의 표본에도 있던 경기' : undefined}>
       <div className="ts-card-top">
-        <b>{c.dt.slice(2)}</b>
+        <b className={Number(c.dt.slice(0, 4)) >= 2020 ? 'ts-date-new' : undefined} title={Number(c.dt.slice(0, 4)) >= 2020 ? '2020년 이후 경기' : undefined}>{c.dt.slice(2)}</b>
         <label className="ts-trust-lab" title="이 표본을 신뢰하면 체크">
           <input type="checkbox" checked={!!trusted} onChange={() => onTrust(cardKey(c))} />
           신뢰
@@ -320,6 +320,7 @@ function TripleSampleLegend({ onClose }) {
             <tr><td><span className="ts-a-same">2.55</span></td><td>12사 평균이 이번 경기와 <b>같은 값</b> (파랑 밑줄)</td></tr>
             <tr><td><span className="ts-near">2.26</span></td><td><b>비슷한 값</b> (12사 평균·국배·국핸디 공통, 글자색만) — 같은 값은 아니면서 <b>그 영역의 허용 폭 안</b>(같은 리그 ±0.03, 통합 ±0.02)입니다. 국배·국핸디는 여기에 더해 <b>국내 호가 단위로 1~2칸 차이</b>인 값도 포함합니다(호가 단위: 2.5 미만 0.01 · 2.5~5 0.05 · 5 이상 0.10, 무는 0.05). 12사 평균 승·패는 검색 조건 자체가 폭 안이라 같은 값이 아니면 대부분 이 색이 됩니다 — 차이를 보려면 무 칸과 국배를 함께 보세요</td></tr>
             <tr><td><span className="ts-near ts-close">1.81</span></td><td><b>아주 가까운 값</b> (비슷한 값 중에서 밑줄) — 표본을 찾느라 폭이 <b>1~4칸</b>이면 이번 경기와 <b>1칸 이내</b>, <b>5칸 이상</b>이면 <b>2칸 이내</b>인 값입니다. 예: 이번 경기 12사 평균 패가 1.80이고 폭 5칸으로 찾은 표본이 1.81이면 1칸 차이라 거의 같은 값이니 밑줄을 긋습니다. 칸은 12사 평균이 0.01, 국배·국핸디는 국내 호가 단위입니다. 밑줄은 두 탭 모두, 같은 리그·통합 모두에 똑같이 적용됩니다.</td></tr>
+            <tr><td><b className="ts-date-new">24-09-14</b></td><td>카드 날짜가 <b>2020년 이후</b> 경기면 날짜 색이 다릅니다(최근 경기 구분용).</td></tr>
             <tr><td>☑ 신뢰</td><td>카드 날짜 옆 체크박스 — <b>이 표본은 믿는다</b>고 표시하면 <b>신뢰</b> 글자가 초록 굵은 글씨로 바뀌고, 위쪽 탭 제목의 표본 건수 옆에 <b>(신뢰ㆍ1건)</b>처럼 체크한 카드 수가 붙습니다(체크한 게 없으면 안 붙습니다). 경기별로 이 브라우저에 기억됩니다(다른 기기와는 공유되지 않습니다).</td></tr>
             <tr><td><span className="ts-draw-warn">3.61</span> / <span className="ts-draw-bad">3.48</span></td><td><b>무 값이 많이 다른 표본</b> (12사 평균 무·국배 무의 글자색) — 이번 경기 무와의 차이가 <b>0.20 이상이면 주황, 0.30 이상이면 빨강</b>입니다. 예: 이번 경기 무가 3.82이면 3.61(0.21 차이)은 주황, 3.48(0.34 차이)은 빨강. 승·패가 폭 안에 들어와도 무가 이만큼 다르면 배당 모양이 다른 경기라는 눈 표시입니다. 무 차이가 클수록 결과가 덜 맞는다는 실측은 없어서(카드 103,001장, 차이별 결과 일치율 26% 안팎으로 비슷) 점수가 아니라 참고 표시입니다.</td></tr>
             <tr><td>핸디 +1</td><td>국내 핸디 배당(홈팀 기준선 ±1). 기준선이 같을 때만 같은 값·차이를 표시합니다. 핸디 배당은 20-21 시즌부터 거의 전 경기에 있고 그 이전은 없는 경우가 많아 <b>-</b>로 보입니다</td></tr>

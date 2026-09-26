@@ -241,3 +241,12 @@
   color: var(--chip-green-fg);
   font-weight: 700;
 }
+
+/* 2020년 이후 경기 — 카드 날짜 색 */
+.ts-card-top b.ts-date-new {
+  color: #4d9fff; /* 선명한 파랑(다크) */
+}
+
+:root[data-theme='light'] .ts-card-top b.ts-date-new {
+  color: #0a58ff; /* 선명한 파랑(라이트) */
+}
