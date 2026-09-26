@@ -845,7 +845,7 @@ function plSplitAxisChips(row, fin) {
 function axisContextText(c) {
   const side = (s) => (s === '보합' ? '보합' : `${s}편`)
   const h2hTxt = c.h2hN ? `${side(c.h2h)}(${c.h2hN}경기, ${c.h2hEdge >= 0 ? '+' : ''}${c.h2hEdge.toFixed(2)})` : '맞대결 없음'
-  return `자동 방향성: 레드 ${c.nred} · 블루 ${c.nblue} (5개 중)\n`
+  return `자동 방향성: 레드 ${c.nred} · 블루 ${c.nblue} (7개 중)\n`
     + `국내 정배배당 ${c.jungOdds.toFixed(2)} · 배당신호 ${c.cues.length ? c.cues.join('·') : '없음'}\n`
     + `전적(최근 5시즌) ${h2hTxt} · 시즌폼 ${side(c.form)} · 순위 ${side(c.rank)}`
 }
@@ -900,8 +900,8 @@ function axisChips(row, seasonSample, h2hMatches, axisStats) {
     chips.push(
       <MatchChip
         key="pl-red7"
-        label="5레드"
-        title={'자동 방향성 5개가 전부 레드·레드(약)지만 플축 조건(배당신호, 또는 정배배당 2.1 초과 +'
+        label="7레드"
+        title={'자동 방향성 7개가 전부 레드·레드(약)지만 플축 조건(배당신호, 또는 정배배당 2.1 초과 +'
           + ' 전적 정배편 아님)이 없습니다.\n'
           + `이런 경기는 지난 ${m.tier.n}경기 단통 플핸 ${pct1(m.tier.rate)} — 같은 배당 기대 ${pct1(m.tier.exp)}와`
           + ' 차이가 없어 색을 입히지 않았습니다.\n\n' + axisContextText(v.ctx)}
@@ -1248,6 +1248,7 @@ function seasonSampleCells(vals) {
 const DIRECTION_SAMPLE_LABEL_LINES = {
   fav: ['국)정배'], pl: ['국)플핸'], ffav: ['해)정배'],
   k_wl: ['국)', '승+패'], f_wl: ['해)', '승+패'],
+  k_wdl: ['국)', '승+무', '+패'], f_wdl: ['해)', '승+무', '+패'],
 }
 
 // 표본 박스 제목 옆 메모 칸(2026-09-15 사용자 지정) — '경기 전 생각' 입력칸과 같은 모양·
@@ -3003,13 +3004,15 @@ function MyPickBar({ row, onSavePick, memoLead }) {
 // 2026-09-24부터 **자동 판정이 기본값**이다 — 직접 고른 값이 있으면 그게 우선이고, 없으면
 // 자동값을 센다(사용자 지정: "내가 고르면 사심이 들어간다"). 예전엔 직접 고른 것만 세서
 // 아무것도 안 고르면 뱃지가 통째로 안 보였다.
-// 표본 섹션 5개 [키, 제목](2026-09-26 국·해 승+무+패 두 섹션은 사용자 지정으로 뺐다) — 섹션 목록과 위 방향성 집계가 같이 쓴다.
+// 표본 섹션 7개 [키, 제목] — 섹션 목록과 위 방향성 집계가 같이 쓴다.
 const SAMPLE_SECTIONS = [
   ['fav', '정배 표본'],
   ['pl', '플핸 표본'],
   ['ffav', '해배 표본'],
   ['k_wl', '국)승+패'],
   ['f_wl', '해)승+패'],
+  ['k_wdl', '국)승+무+패'],
+  ['f_wdl', '해)승+무+패'],
 ]
 const SAMPLE_SECTION_KEYS = SAMPLE_SECTIONS.map(([k]) => k)
 

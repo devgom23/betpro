@@ -60,10 +60,7 @@ export const SAMPLE_BLUE_T = 1.25
 export const SAMPLE_RED_T = -1.5
 export const SAMPLE_UNKNOWN_LO = -0.25   // 이 사이는 '몰라'(정보 없음)
 export const SAMPLE_UNKNOWN_HI = 0.5
-const NSEC = 5
-const P3_MIN = 4 // 예전 7개 중 5
-const B_MIN = 4 // 예전 7개 중 6
-export const SAMPLE_SECTION_ORDER = ['fav', 'pl', 'ffav', 'k_wl', 'f_wl']   // 2026-09-26 승+무+패 2개 제외 → 5개
+export const SAMPLE_SECTION_ORDER = ['fav', 'pl', 'ffav', 'k_wl', 'f_wl', 'k_wdl', 'f_wdl']
 
 // 섹션의 '이 경기 방향 · 통합' 카운트 [핸승,핸무,무,역] — 서버 samples[key][0].total.
 export function sectionSelfTotal(samples, key) {
@@ -167,18 +164,17 @@ function firstNum(...vs) {
 //    (결과가 새로 들어오면 뒤에서 다시 계산 — /api/axis_stats).
 // A: 뱃지 % = 이 경기 배당의 기대치(서버가 맞춘 배당 모델) + 그 등급이 배당보다 더 맞은 몫(uplift).
 //    그래서 같은 P1이라도 배당에 따라 %가 달라진다.
-// 아래 FALLBACK은 서버 응답을 못 받았을 때만 쓰는 값(2026-09-26 표본 5개 기준으로 다시 측정 — 아래 위쪽 표의
-// 7개 기준 숫자는 옛 기록이다. 5개로 줄이자 P1 78.0→67.5%, P2 76.0→65.3%로 크게 떨어졌고 P3만 76.8%로 남았다).
+// 아래 FALLBACK은 서버 응답을 못 받았을 때만 쓰는 값(2026-09-21 32,935경기 측정).
 // ⚠ 정축 B는 A가 아닌 경기만 센 값이다(A 포함 82.6% → A 제외 81.3%).
 export const AXIS_FALLBACK = {
   model: { coef: [0.150831, -0.003402, -0.053116, 1.135303, -0.118703, -0.017575] },
   tiers: {
-    P1: { side: '플', n: 231, rate: 67.53, exp: 64.32, uplift: 3.21, early: 73.08, late: 65.92, roi: 0.982, per_season: 29.8, text: '5레드 + 배당신호' },
-    P3: { side: '플', n: 125, rate: 76.8, exp: 64.4, uplift: 12.4, early: 76.47, late: 77.03, roi: 1.094, per_season: 12.3, text: '4레드↑ + 배당신호 + 전적 역배편 + 폼·순위 정배편 아님' },
-    P2: { side: '플', n: 346, rate: 65.32, exp: 61.73, uplift: 3.59, early: 69.33, late: 64.21, roi: 0.958, per_season: 45.2, text: '5레드 + 국내 정배배당 2.1 초과 + 전적 정배편 아님' },
-    A: { side: '정', n: 430, rate: 85.35, exp: 83.66, uplift: 1.69, early: 85.17, late: 85.57, roi: 0.918, per_season: 32.3, text: '정배배당 1.15↓ + 블루5 + 전적·순위·폼 전부 정배편' },
-    B: { side: '정', n: 610, rate: 78.36, exp: 80.3, uplift: -1.94, early: 78.19, late: 78.77, roi: 0.882, per_season: 29.8, text: '정배배당 1.20↓ + 블루4↑ + 전적·순위 정배편' },
-    RED7: { side: '플', n: 110, rate: 55.45, exp: 56.68, uplift: -1.23, early: 71.43, late: 51.69, roi: 0.851, per_season: 14.8, text: '5레드인데 플축 조건 없음' },
+    P1: { side: '플', n: 100, rate: 78.0, exp: 64.38, uplift: 13.62, early: 76.67, late: 78.57, roi: 1.131, per_season: 11.7, text: '7레드 + 배당신호' },
+    P3: { side: '플', n: 116, rate: 77.59, exp: 64.26, uplift: 13.32, early: 75.86, late: 79.31, roi: 1.111, per_season: 9.7, text: '5레드↑ + 배당신호 + 전적 역배편 + 폼·순위 정배편 아님' },
+    P2: { side: '플', n: 146, rate: 76.03, exp: 62.22, uplift: 13.8, early: 77.27, late: 75.49, roi: 1.108, per_season: 17.0, text: '7레드 + 국내 정배배당 2.1 초과 + 전적 정배편 아님' },
+    A: { side: '정', n: 242, rate: 84.71, exp: 83.52, uplift: 1.19, early: 83.44, late: 87.06, roi: 0.908, per_season: 14.2, text: '정배배당 1.15↓ + 블루7 + 전적·순위·폼 전부 정배편' },
+    B: { side: '정', n: 401, rate: 81.3, exp: 81.29, uplift: 0.0, early: 80.63, late: 82.43, roi: 0.905, per_season: 24.7, text: '정배배당 1.20↓ + 블루6↑ + 전적·순위 정배편' },
+    RED7: { side: '플', n: 37, rate: 56.76, exp: 57.01, uplift: -0.25, early: 50.0, late: 58.62, roi: 0.873, per_season: 4.8, text: '7레드인데 플축 조건 없음' },
   },
   seasons: { early: '09-10~20-21', late: '21-22~26-27' },
 }
@@ -289,13 +285,13 @@ export function axisVerdict(samples, row, h2hMatches) {
   const h2h = side3(h.edge, 0.3, -0.3)
 
   const plAll = []
-  if (nred === NSEC && cues.length) plAll.push('P1')
-  if (nred >= P3_MIN && cues.length && h2h === '역배' && form !== '정배' && rank !== '정배') plAll.push('P3')
-  if (nred === NSEC && jungOdds > 2.1 && h2h !== '정배') plAll.push('P2')
+  if (nred === 7 && cues.length) plAll.push('P1')
+  if (nred >= 5 && cues.length && h2h === '역배' && form !== '정배' && rank !== '정배') plAll.push('P3')
+  if (nred === 7 && jungOdds > 2.1 && h2h !== '정배') plAll.push('P2')
 
   let jung = null
-  if (jungOdds <= 1.15 && nblue === NSEC && h2h === '정배' && rank === '정배' && form === '정배') jung = 'A'
-  else if (jungOdds <= 1.2 && nblue >= B_MIN && h2h === '정배' && rank === '정배') jung = 'B'
+  if (jungOdds <= 1.15 && nblue === 7 && h2h === '정배' && rank === '정배' && form === '정배') jung = 'A'
+  else if (jungOdds <= 1.2 && nblue >= 6 && h2h === '정배' && rank === '정배') jung = 'B'
 
   return {
     pl: plAll[0] || null, plAll, jung,
