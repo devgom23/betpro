@@ -2707,3 +2707,14 @@
   font-size: 10px;
   color: var(--text-muted);
 }
+
+/* 제목 줄 국내 배당 두 묶음 — (승/무/패)(핸디 승/무/패) */
+.detail-title-odds {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}

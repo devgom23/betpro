@@ -2420,6 +2420,7 @@ function MbSampleChip({ book, ph, v, favHome }) {
 
 function MultiBookSection({ books, bookDir, row, onHelp, note, onSaveNote }) {
   const [tab, setTab] = useState('eu')
+  const [folded, setFolded] = useState(true)   // 기본은 접힘 — 접히면 '방향 마감' 줄만(2026-09-26 사용자 지정)
   if (!books?.length) return null
   const by = Object.fromEntries(books.map((b) => [b.book, b]))
   const names = MB_ORDER.filter((n) => by[n]).concat(books.map((b) => b.book).filter((n) => !MB_ORDER.includes(n)))
@@ -2443,6 +2444,15 @@ function MultiBookSection({ books, bookDir, row, onHelp, note, onSaveNote }) {
   return (
     <section className="detail-section">
       <h3>
+        <button
+          type="button"
+          className="sample-fold-btn"
+          onClick={() => setFolded((f) => !f)}
+          title={folded ? '펼치기' : '접기'}
+          aria-expanded={!folded}
+        >
+          {folded ? '▸' : '▾'}
+        </button>
         <button type="button" className="help-btn" onClick={onHelp} title="12개 배당사 표 보는 법">
           {names.length}개 배당사 <span className="help-mark">?</span>
         </button>
@@ -2453,13 +2463,13 @@ function MultiBookSection({ books, bookDir, row, onHelp, note, onSaveNote }) {
         </span>
         {/* 경기별 메모 — 회차 동배당과 같은 표본 메모(sample_notes, kind='books', 2026-09-24 사용자 지정) */}
         {onSaveNote && <SampleNoteInput value={note} onSave={onSaveNote} placeholder="12개 배당사에 대한 의견" />}
-        <span className="mb-tabs">
+        {!folded && <span className="mb-tabs">
           {Object.entries(markets).map(([k, mk]) => (
             <button key={k} type="button" className={`mb-tab${k === tab ? ' is-on' : ''}`} onClick={() => setTab(k)}>
               {mk.label}
             </button>
           ))}
-        </span>
+        </span>}
       </h3>
       <div className="mb-wrap">
         <table className="detail-table mb-table">
@@ -2471,7 +2481,7 @@ function MultiBookSection({ books, bookDir, row, onHelp, note, onSaveNote }) {
             </tr>
           </thead>
           <tbody>
-            {m.rows.map(([lab, fk, lk]) => {
+            {!folded && m.rows.map(([lab, fk, lk]) => {
               const line = fk.endsWith('G')
               // 승무패의 승(홈)·패(원정) 줄만 — 그 칸이 그 회사 정배 쪽이고 우리 정배와 반대면 ⇄.
               const side = tab === 'eu' ? (fk === 'EU_F1' ? true : fk === 'EU_F2' ? false : null) : null
@@ -2496,7 +2506,7 @@ function MultiBookSection({ books, bookDir, row, onHelp, note, onSaveNote }) {
                 </tr>
               )
             })}
-            {['F', 'L'].map((ph, i) => {
+            {(folded ? ['L'] : ['F', 'L']).map((ph, i) => {
               const labs = names.map((n) => mbSampleLabel(bookDir?.[n]?.[ph], ourFav)?.label).filter(Boolean)
               const blue = labs.filter((l) => l === '블루' || l === '약블루').length
               const red = labs.filter((l) => l === '레드' || l === '약레드').length
@@ -2659,7 +2669,7 @@ function SameOddsGame({ g }) {
         <span className="same-odds-nums">
           ({g.odds.map((v, i) => (
             <Fragment key={i}>
-              {i > 0 && '/'}
+              {i > 0 && ' / '}
               {i === g.hit ? <span className="same-odds-hit">{v ?? '-'}</span> : (v ?? '-')}
             </Fragment>
           ))})
@@ -4924,22 +4934,25 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
   const at = String(row.AT || '').trim()
   const rt = rtLabel(row.RT)
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
-  const homeFav = homeIsFav(row)
-  // (정)/(역) 옆에 초기 배당(일반배당/핸디배당)을 바로 붙인다 — 뱃지 줄에 따로 두면
-  // 어느 팀 배당인지 눈으로 안 이어진다는 지적으로, 팀명·순위 바로 옆으로 옮겼다
-  // (2026-09-14 사용자 지정 — 시안으로 먼저 확인받음). 배변(최종배당)이 아니라 초기
-  // 배당(KW/KL·KHW/KHL)만 보여준다.
-  const titleRoleSuffix = (isHome) => {
-    if (homeFav === null) return null
-    const isFav = isHome ? homeFav : !homeFav
-    const wKey = isHome ? 'KW' : 'KL'
-    const hKey = isHome ? 'KHW' : 'KHL'
-    return (
-      <span className={isFav ? 'odds-role-fav' : 'odds-role-dog'}>
-        {' '}({isFav ? '정' : '역'} {numOrDash(row[wKey])}/{numOrDash(row[hKey])})
-      </span>
-    )
-  }
+  // 제목 줄 배당(2026-09-26 사용자 지정) — 팀별 (정/역 승/핸디)를 없애고, 원정팀 뒤에 국내 초기 배당 두 묶음을
+  // (승/무/패)(핸디 승/무/패)로 붙인다. 예: (2.55/3.60/2.20)(1.57/4.05/3.95). 배변이 아니라 초기 배당이다.
+  // 홈 칸(첫째)·원정 칸(셋째)은 정배 쪽 파랑 / 역배 쪽 빨강(글자색만), 무(가운데)는 그대로. 정배를 못 가리면 색 없음.
+  const titleHomeFav = homeIsFav(row)
+  const titleOdds = (keys) => (
+    <span>
+      (
+      {keys.map((k, i) => {
+        const cls = titleHomeFav === null || i === 1 ? undefined : (i === 0) === titleHomeFav ? 'odds-role-fav' : 'odds-role-dog'
+        return (
+          <span key={k}>
+            {i > 0 && ' / '}
+            <span className={cls}>{numOrDash(row[k])}</span>
+          </span>
+        )
+      })}
+      )
+    </span>
+  )
   const [shooting, setShooting] = useState(false)
   const [shotError, setShotError] = useState('')
 
@@ -5294,7 +5307,6 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           <span className="detail-title-teams">
             {ht}
             {rankSuffix(row.HP)}
-            {titleRoleSuffix(true)}
             <TeamBetRecord name={ht} />
             {hasScore ? (
               <span className="detail-title-score">
@@ -5309,8 +5321,11 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             )}
             {at}
             {rankSuffix(row.AP)}
-            {titleRoleSuffix(false)}
             <TeamBetRecord name={at} />
+            <span className="detail-title-odds">
+              {titleOdds(['KW', 'KD', 'KL'])}
+              {titleOdds(['KHW', 'KHD', 'KHL'])}
+            </span>
           </span>
           <span className="detail-title-badges">
             {rt ? <RtBadge label={rt} /> : <DdongBadge row={row} />}
