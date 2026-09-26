@@ -339,6 +339,19 @@
   cursor: default;
 }
 
+.verdict-lead {
+  flex: none;
+  margin-right: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.verdict-lead.is-blue { color: var(--chip-blue-fg); }
+.verdict-lead.is-red { color: var(--chip-red-fg); }
+.verdict-lead.is-gray { color: var(--chip-gray-fg); }
+
 .direction-tally-chip {
   display: inline-flex;
   align-items: baseline;

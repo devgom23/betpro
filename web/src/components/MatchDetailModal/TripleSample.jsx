@@ -26,18 +26,40 @@ function ticksApart(v, ref) {
 const f2 = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(2))
 const khText = (v) => (v === null || v === undefined ? '' : `${v > 0 ? '+' : ''}${v}`)
 
-// 국배·국핸디 한 칸 — 같은 값 노랑 배경 / 1~2칸 차이 글자색만
-function OddsCell({ v, base }) {
-  if (v === null || v === undefined) return <>-</>
-  const t = ticksApart(v, base)
-  if (t === 0) return <span className="ts-same">{f2(v)}</span>
-  if (t !== null && t <= NEAR_TICKS) {
-    return <span className="ts-near" title={`이번 경기 ${f2(base)}와 ${Math.round(t)}칸 차이`}>{f2(v)}</span>
+// 값 하나의 상태 — 같은 값(same) / 비슷한 값(near) / 그 밖(null).
+//   비슷한 값 = 같은 값이 아니면서 ① 이 영역의 허용 폭 안(같은 리그 ±0.03 · 통합 ±0.02)이거나
+//              ② (국배·국핸디만) 국내 호가 단위로 1~2칸 차이.
+//   12사 평균은 계산으로 나오는 값이라 호가 단위가 없어 ①만 쓴다.
+function stateOf(v, base, tol, useTick) {
+  if (v === null || v === undefined || base === null || base === undefined) return null
+  const d = Math.round(Math.abs(v - base) * 100)
+  if (d === 0) return 'same'
+  if (d <= Math.round(tol * 100)) return 'near'
+  if (useTick) {
+    const t = ticksApart(v, base)
+    if (t !== null && t <= NEAR_TICKS) return 'near'
   }
+  return null
+}
+
+// 국배·국핸디 한 칸 — 같은 값 노랑 배경 / 비슷한 값 글자색만
+function OddsCell({ v, base, tol }) {
+  if (v === null || v === undefined) return <>-</>
+  const st = stateOf(v, base, tol, true)
+  if (st === 'same') return <span className="ts-same">{f2(v)}</span>
+  if (st === 'near') return <span className="ts-near" title={`이번 경기 ${f2(base)}와 비슷한 값(${f2(Math.abs(v - base))} 차이)`}>{f2(v)}</span>
   return <>{f2(v)}</>
 }
 
-function Card({ c, game }) {
+// 12사 평균 한 칸 — 같은 값 파랑 밑줄 / 비슷한 값 글자색만
+function AvgCell({ v, base, tol }) {
+  const st = stateOf(v, base, tol, false)
+  if (st === 'same') return <span className="ts-a-same">{f2(v)}</span>
+  if (st === 'near') return <span className="ts-near" title={`이번 경기 12사 평균 ${f2(base)}와 비슷한 값(${f2(Math.abs(v - base))} 차이)`}>{f2(v)}</span>
+  return <>{f2(v)}</>
+}
+
+function Card({ c, game, tol }) {
   const sameH = c.kh !== null && game.kh !== null && c.kh === game.kh
   const hRef = [game.khw, game.khd, game.khl]
   const hVals = [c.khw, c.khd, c.khl]
@@ -56,17 +78,15 @@ function Card({ c, game }) {
         <tbody>
           <tr>
             <td>평균</td>
-            {c.A.map((v, i) => (
-              <td key={i}>{Math.abs(v - game.A[i]) < 1e-9 && i !== 1 ? <span className="ts-a-same">{f2(v)}</span> : f2(v)}</td>
-            ))}
+            {c.A.map((v, i) => <td key={i}><AvgCell v={v} base={game.A[i]} tol={tol} /></td>)}
           </tr>
           <tr>
             <td>국배</td>
-            {c.K.map((v, i) => <td key={i}><OddsCell v={v} base={game.K[i]} /></td>)}
+            {c.K.map((v, i) => <td key={i}><OddsCell v={v} base={game.K[i]} tol={tol} /></td>)}
           </tr>
           <tr title={c.khw === null ? '핸디 배당이 없는 경기입니다(20-21 시즌 이전 경기는 없는 경우가 많습니다)' : undefined}>
             <td>핸디 {khText(c.kh)}</td>
-            {hVals.map((v, i) => <td key={i}><OddsCell v={v} base={sameH ? hRef[i] : null} /></td>)}
+            {hVals.map((v, i) => <td key={i}><OddsCell v={v} base={sameH ? hRef[i] : null} tol={tol} /></td>)}
           </tr>
         </tbody>
       </table>
@@ -74,7 +94,7 @@ function Card({ c, game }) {
   )
 }
 
-function Band({ title, sub, area, game }) {
+function Band({ title, sub, area, game, tol }) {
   return (
     <div className="ts-band">
       <div className="ts-band-head">
@@ -91,7 +111,7 @@ function Band({ title, sub, area, game }) {
                 <span>{area.cnt[k - 1]}건{area.cnt[k - 1] > cards.length ? ` 중 ${cards.length}` : ''}</span>
               </div>
               <div className="ts-cards">
-                {cards.length ? cards.map((c, i) => <Card key={i} c={c} game={game} />) : <div className="ts-empty">—</div>}
+                {cards.length ? cards.map((c, i) => <Card key={i} c={c} game={game} tol={tol} />) : <div className="ts-empty">—</div>}
               </div>
             </div>
           )
@@ -137,8 +157,8 @@ export default function TripleSampleSection({ code, scope, row, noteSlot }) {
             <span>국배 <span className="ts-nums">{data.game.K.map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
             <span>국핸디 ({khText(data.game.kh) || '-'}) <span className="ts-nums">{[data.game.khw, data.game.khd, data.game.khl].map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
           </div>
-          <Band title={`같은 리그 (${data.game.lg})`} sub={`±${Math.round(data.tol.same * 100)}칸`} area={data.same} game={data.game} />
-          <Band title="통합 (다른 리그)" sub={`±${Math.round(data.tol.other * 100)}칸`} area={data.other} game={data.game} />
+          <Band title={`같은 리그 (${data.game.lg})`} sub={`±${Math.round(data.tol.same * 100)}칸`} area={data.same} game={data.game} tol={data.tol.same} />
+          <Band title="통합 (다른 리그)" sub={`±${Math.round(data.tol.other * 100)}칸`} area={data.other} game={data.game} tol={data.tol.other} />
         </>
       )}
       {help && <TripleSampleLegend onClose={() => setHelp(false)} />}
@@ -208,8 +228,8 @@ function TripleSampleLegend({ onClose }) {
           </thead>
           <tbody>
             <tr><td><span className="ts-same">2.50</span></td><td>이번 경기와 <b>같은 값</b> (국배·국핸디, 노랑 배경)</td></tr>
-            <tr><td><span className="ts-near">2.26</span></td><td>이번 경기와 <b>1~2칸 차이</b> — 글자색만 바뀝니다. 국배 한 칸은 <b>국내 호가 단위</b>(2.5 미만 0.01 · 2.5~5 0.05 · 5 이상 0.10, 무는 0.05)를 씁니다</td></tr>
-            <tr><td><span className="ts-a-same">2.55</span></td><td>12사 평균이 이번 경기와 같은 값 (파랑 밑줄)</td></tr>
+            <tr><td><span className="ts-a-same">2.55</span></td><td>12사 평균이 이번 경기와 <b>같은 값</b> (파랑 밑줄)</td></tr>
+            <tr><td><span className="ts-near">2.26</span></td><td><b>비슷한 값</b> (12사 평균·국배·국핸디 공통, 글자색만) — 같은 값은 아니면서 <b>그 영역의 허용 폭 안</b>(같은 리그 ±0.03, 통합 ±0.02)입니다. 국배·국핸디는 여기에 더해 <b>국내 호가 단위로 1~2칸 차이</b>인 값도 포함합니다(호가 단위: 2.5 미만 0.01 · 2.5~5 0.05 · 5 이상 0.10, 무는 0.05). 12사 평균 승·패는 검색 조건 자체가 폭 안이라 같은 값이 아니면 대부분 이 색이 됩니다 — 차이를 보려면 무 칸과 국배를 함께 보세요</td></tr>
             <tr><td>핸디 +1</td><td>국내 핸디 배당(홈팀 기준선 ±1). 기준선이 같을 때만 같은 값·차이를 표시합니다. 핸디 배당은 20-21 시즌부터 거의 전 경기에 있고 그 이전은 없는 경우가 많아 <b>-</b>로 보입니다</td></tr>
           </tbody>
         </table>

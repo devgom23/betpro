@@ -28,20 +28,23 @@ import pandas as pd
 import betpro_paths as PATHS
 import data_access as DATA
 
-VERSION = 1
-SECTIONS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl")
+VERSION = 2   # 2: 표본 섹션 7개→5개(2026-09-26, 국·해 승+무+패 제외)
+SECTIONS = ("fav", "pl", "ffav", "k_wl", "f_wl")
+NSEC = len(SECTIONS)
+P3_MIN = 4   # 예전 7개 중 5 → 5개 중 4(실측: 3으로 두면 P3 69.0% n=261로 흐려짐)
+B_MIN = 4    # 예전 7개 중 6 → 5개 중 4(5로 두면 n=108로 줄고 앞시즌 68%)
 FLOW_SD = 1.585
 LATE_SEASONS = 6          # '최근 N시즌' 확인 구간
 H2H_SEASONS = 5           # 전적은 이번 시즌 포함 최근 5시즌
 H2H_BASE, H2H_K = 1.363, 5
 
 TIER_TEXT = {
-    "P1": "7레드 + 배당신호",
-    "P3": "5레드↑ + 배당신호 + 전적 역배편 + 폼·순위 정배편 아님",
-    "P2": "7레드 + 국내 정배배당 2.1 초과 + 전적 정배편 아님",
-    "A": "정배배당 1.15↓ + 블루7 + 전적·순위·폼 전부 정배편",
-    "B": "정배배당 1.20↓ + 블루6↑ + 전적·순위 정배편",
-    "RED7": "7레드인데 플축 조건 없음",
+    "P1": "5레드 + 배당신호",
+    "P3": "4레드↑ + 배당신호 + 전적 역배편 + 폼·순위 정배편 아님",
+    "P2": "5레드 + 국내 정배배당 2.1 초과 + 전적 정배편 아님",
+    "A": "정배배당 1.15↓ + 블루5 + 전적·순위·폼 전부 정배편",
+    "B": "정배배당 1.20↓ + 블루4↑ + 전적·순위 정배편",
+    "RED7": "5레드인데 플축 조건 없음",
 }
 MODEL_FEATURES = ("m_k", "m_f", "m_fe", "has_fe", "fav_home")
 
@@ -284,12 +287,12 @@ def compute(db=None) -> dict:
     late_set = set(seasons[-LATE_SEASONS:])
     d["late"] = d["S"].isin(late_set)
 
-    p1 = (d.nred == 7) & d.cue
-    p3 = (d.nred >= 5) & d.cue & (d.h2h == "역배") & (d.form != "정배") & (d["rank"] != "정배")
-    p2 = (d.nred == 7) & (d.jung > 2.1) & (d.h2h != "정배")
-    ja = (d.jung <= 1.15) & (d.nblue == 7) & (d.h2h == "정배") & (d["rank"] == "정배") & (d.form == "정배")
-    jb = (d.jung <= 1.2) & (d.nblue >= 6) & (d.h2h == "정배") & (d["rank"] == "정배") & ~ja
-    red7 = (d.nred == 7) & ~(p1 | p2 | p3)
+    p1 = (d.nred == NSEC) & d.cue
+    p3 = (d.nred >= P3_MIN) & d.cue & (d.h2h == "역배") & (d.form != "정배") & (d["rank"] != "정배")
+    p2 = (d.nred == NSEC) & (d.jung > 2.1) & (d.h2h != "정배")
+    ja = (d.jung <= 1.15) & (d.nblue == NSEC) & (d.h2h == "정배") & (d["rank"] == "정배") & (d.form == "정배")
+    jb = (d.jung <= 1.2) & (d.nblue >= B_MIN) & (d.h2h == "정배") & (d["rank"] == "정배") & ~ja
+    red7 = (d.nred == NSEC) & ~(p1 | p2 | p3)
 
     def tier(m, side):
         sub = d[m]

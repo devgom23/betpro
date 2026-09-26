@@ -845,7 +845,7 @@ function plSplitAxisChips(row, fin) {
 function axisContextText(c) {
   const side = (s) => (s === '보합' ? '보합' : `${s}편`)
   const h2hTxt = c.h2hN ? `${side(c.h2h)}(${c.h2hN}경기, ${c.h2hEdge >= 0 ? '+' : ''}${c.h2hEdge.toFixed(2)})` : '맞대결 없음'
-  return `자동 방향성: 레드 ${c.nred} · 블루 ${c.nblue} (7개 중)\n`
+  return `자동 방향성: 레드 ${c.nred} · 블루 ${c.nblue} (5개 중)\n`
     + `국내 정배배당 ${c.jungOdds.toFixed(2)} · 배당신호 ${c.cues.length ? c.cues.join('·') : '없음'}\n`
     + `전적(최근 5시즌) ${h2hTxt} · 시즌폼 ${side(c.form)} · 순위 ${side(c.rank)}`
 }
@@ -900,8 +900,8 @@ function axisChips(row, seasonSample, h2hMatches, axisStats) {
     chips.push(
       <MatchChip
         key="pl-red7"
-        label="7레드"
-        title={'자동 방향성 7개가 전부 레드·레드(약)지만 플축 조건(배당신호, 또는 정배배당 2.1 초과 +'
+        label="5레드"
+        title={'자동 방향성 5개가 전부 레드·레드(약)지만 플축 조건(배당신호, 또는 정배배당 2.1 초과 +'
           + ' 전적 정배편 아님)이 없습니다.\n'
           + `이런 경기는 지난 ${m.tier.n}경기 단통 플핸 ${pct1(m.tier.rate)} — 같은 배당 기대 ${pct1(m.tier.exp)}와`
           + ' 차이가 없어 색을 입히지 않았습니다.\n\n' + axisContextText(v.ctx)}
@@ -1248,7 +1248,6 @@ function seasonSampleCells(vals) {
 const DIRECTION_SAMPLE_LABEL_LINES = {
   fav: ['국)정배'], pl: ['국)플핸'], ffav: ['해)정배'],
   k_wl: ['국)', '승+패'], f_wl: ['해)', '승+패'],
-  k_wdl: ['국)', '승+무', '+패'], f_wdl: ['해)', '승+무', '+패'],
 }
 
 // 표본 박스 제목 옆 메모 칸(2026-09-15 사용자 지정) — '경기 전 생각' 입력칸과 같은 모양·
@@ -3004,15 +3003,13 @@ function MyPickBar({ row, onSavePick, memoLead }) {
 // 2026-09-24부터 **자동 판정이 기본값**이다 — 직접 고른 값이 있으면 그게 우선이고, 없으면
 // 자동값을 센다(사용자 지정: "내가 고르면 사심이 들어간다"). 예전엔 직접 고른 것만 세서
 // 아무것도 안 고르면 뱃지가 통째로 안 보였다.
-// 표본 섹션 7개 [키, 제목] — 섹션 목록과 위 방향성 집계가 같이 쓴다.
+// 표본 섹션 5개 [키, 제목](2026-09-26 국·해 승+무+패 두 섹션은 사용자 지정으로 뺐다) — 섹션 목록과 위 방향성 집계가 같이 쓴다.
 const SAMPLE_SECTIONS = [
   ['fav', '정배 표본'],
   ['pl', '플핸 표본'],
   ['ffav', '해배 표본'],
   ['k_wl', '국)승+패'],
   ['f_wl', '해)승+패'],
-  ['k_wdl', '국)승+무+패'],
-  ['f_wdl', '해)승+무+패'],
 ]
 const SAMPLE_SECTION_KEYS = SAMPLE_SECTIONS.map(([k]) => k)
 
@@ -3050,6 +3047,28 @@ function DirectionTally({ notes, keys, autoOf }) {
           {g.detail && <small>({g.detail})</small>}
         </span>
       ))}
+    </span>
+  )
+}
+
+// 최종 판정 — 상단 내픽 바에서 방향성 블루/레드 배지 바로 왼쪽에 글자로만(2026-09-26 사용자 지정:
+// "뱃지 말고 그냥 텍스트로 최종 판정만, '판정'이라는 단어도 삭제"). 값은 아래 판정 줄(PickBand)이
+// 최종으로 쓰는 것과 같다 — 배변 판정, 배변에 픽이 없으면 초기 판정(pick = fin.pick ?? init.pick).
+// 정무=파랑 · 플핸무=빨강 · 엇갈림(배변은 엇(정)/엇(플))=회색 글자색만(배경 없음).
+function VerdictLead({ row }) {
+  const init = phaseVerdict(row, false, '초기')
+  const fin = phaseVerdict(row, true, '배변')
+  const v = fin.pick ? fin : init
+  if (!v.pick) return null
+  const name = v.split ? v.display : v.pick
+  const cls = v.split ? 'is-gray' : DIR_SIDE[v.pick] === '정' ? 'is-blue' : 'is-red'
+  const pct = v.rate !== null && v.rate !== undefined ? ` · 표본 실측 ${v.rate.toFixed(2)}%(${(v.n ?? 0).toLocaleString()}건)` : ''
+  return (
+    <span
+      className={`verdict-lead ${cls}`}
+      title={`최종 ${v.label} 판정: ${name}${v.split ? ' (국내·해외 지표가 갈렸습니다)' : ''}${pct}`}
+    >
+      {name}
     </span>
   )
 }
@@ -5304,7 +5323,10 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           row={row}
           onSavePick={onSavePick}
           memoLead={(
-            <DirectionTally notes={sampleNotes} keys={SAMPLE_SECTION_KEYS} autoOf={sampleAutoOf} />
+            <>
+              <VerdictLead row={row} />
+              <DirectionTally notes={sampleNotes} keys={SAMPLE_SECTION_KEYS} autoOf={sampleAutoOf} />
+            </>
           )}
         />
         {/* 그 아래 전부를 스크롤 영역으로 묶는다(2026-09-14 사용자 지정 — 헤더는
