@@ -258,3 +258,9 @@
   align-self: center;
   font-weight: 400;
 }
+
+/* 이번 경기에 나오는 팀과 같은 팀명 — 글자만 하이라이트(배경 없음) */
+.ts-team-hit {
+  color: var(--chip-yellow-fg);
+  font-weight: 800;
+}
