@@ -4355,6 +4355,21 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
                 aliases = CRAWL.list_aliases(udb, body.scope, code, source="kr")
                 rows = CRAWL.apply_aliases(raw["rows"], aliases)
                 kidx = {(r["HT"].strip(), r["AT"].strip()): r for r in rows}
+                # 연기된 경기(2026-09-27 사용자 제보 — K1 22R 강원 vs 인천: 저장 날짜는 원래 일정 08-08인데
+                # 실제로는 09-27에 열림). 라운드 날짜 범위의 회차에는 그 경기가 없어 최신배당을 못 받았다.
+                # 그 범위에서 못 찾았고 아직 결과가 없는 경기가 있으면, 오늘 앞뒤 7일 회차를 한 번 더 뒤진다.
+                def _no_result(i):
+                    return "HS" not in df.columns or pd.isna(pd.to_numeric(df.at[i, "HS"], errors="coerce"))
+                missing = [i for i in idxs if _no_result(i)
+                           and (str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip()) not in kidx]
+                today = datetime.now()
+                if missing and d1 < today - timedelta(days=1):
+                    try:
+                        raw2 = KRCRAWL.fetch_by_dates(league_name, today - timedelta(days=7), today + timedelta(days=7))
+                        for r2 in CRAWL.apply_aliases(raw2["rows"], aliases):
+                            kidx.setdefault((r2["HT"].strip(), r2["AT"].strip()), r2)
+                    except KRCRAWL.CrawlError:
+                        pass
                 kx_items = []
                 for i in idxs:
                     r = kidx.get((str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip()))

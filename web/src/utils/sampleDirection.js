@@ -230,12 +230,12 @@ function num(v) {
 // 최근 5시즌 맞대결(홈팀 관점) → 정배 관점 보정승점 차. matches = pick_ai h2h.matches
 // (경기 직전까지·최신순 최대 15경기 — 한 시즌 2번씩이라 5시즌이면 다 들어온다).
 function h2hEdge(matches, row, favIsHome) {
-  const si = parseInt(String(row.S).slice(0, 2), 10)
+  const si = seasonNo(row.S)
   const ht = String(row.HT).trim()
   let pts = 0
   let n = 0
   for (const m of matches || []) {
-    const ms = parseInt(String(m.S).slice(0, 2), 10)
+    const ms = seasonNo(m.S)
     const hs = num(m.HS)
     const as = num(m.AS)
     if (!Number.isFinite(ms) || ms < si - 4 || ms > si || hs === null || as === null) continue
@@ -263,6 +263,12 @@ function axisSideLabel(vals) {
 
 // 플축·정축 판별. h2hMatches가 아직 없으면(불러오는 중) null — 전적이 필요한 조건이 있어서.
 // 반환: { pl: 'P1'|'P3'|'P2'|null, plAll: [...], jung: 'A'|'B'|null, ctx }
+// 시즌 순번 — '26-27'은 앞 두 자리, K리그처럼 연도 시즌 '2026'은 뒤 두 자리(utils/h2hVerdict.js seasonIdx와 같은 규칙).
+function seasonNo(v) {
+  const t = String(v ?? '').trim()
+  return /^[0-9]{4}$/.test(t) ? Number(t) % 100 : parseInt(t.slice(0, 2), 10)
+}
+
 export function axisVerdict(samples, row, h2hMatches) {
   if (!samples || !h2hMatches) return null
   const labels = SAMPLE_SECTION_ORDER.map((k) => axisSideLabel(sectionSelfTotal(samples, k)))

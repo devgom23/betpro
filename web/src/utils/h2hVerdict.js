@@ -104,13 +104,20 @@ export function h2hVerdict(wdlAll, wdlHome) {
 // 이 경기 이전까지 전부)를 그대로 쓴다.
 // 반환: null = 이 창 안에서 이 구장 맞대결이 0건 — 호출부가 '전적보합'이 아니라
 // '－'(표본 자체가 없음)로 그려서 "쟀더니 팽팽하다"와 구분한다.
+// 시즌 순번 — 유럽식 '26-27'은 앞 두 자리(26), K리그처럼 연도 한 해가 한 시즌인 '2026'은 뒤 두 자리(26).
+// ⚠ 2026-09-27 수정 — 예전엔 둘 다 앞 두 자리만 읽어 '2023'·'2024'·'2026'이 전부 20이 됐다.
+//   그래서 K리그(내 데이터 리그)는 '최근5'(이번 시즌 제외 최근 5시즌) 창에 한 경기도 안 들어가
+//   항상 '최근5 －'로 나왔다(사용자 제보: K1 22R 강원 vs 인천).
 function seasonIdx(s) {
-  const n = parseInt(String(s || '').slice(0, 2), 10)
+  const t = String(s || '').trim()
+  if (/^\d{4}$/.test(t)) return Number(t) % 100
+  const n = parseInt(t.slice(0, 2), 10)
   return Number.isFinite(n) ? n : null
 }
 
-function seasonLabel(k) {
+function seasonLabel(k, yearly) {
   const a = ((k % 100) + 100) % 100
+  if (yearly) return `20${String(a).padStart(2, '0')}`
   const b = (a + 1) % 100
   return `${String(a).padStart(2, '0')}-${String(b).padStart(2, '0')}`
 }
@@ -120,6 +127,7 @@ export const RECENT_SEASONS = 5
 export function h2hVerdictRecent(matches, host, season) {
   const si = seasonIdx(season)
   if (si === null || !Array.isArray(matches)) return null
+  const yearly = /^\d{4}$/.test(String(season || '').trim())
   const lo = si - RECENT_SEASONS
   const hi = si - 1
   let w = 0
@@ -152,7 +160,7 @@ export function h2hVerdictRecent(matches, host, season) {
     d,
     l,
     n,
-    title: `최근 ${RECENT_SEASONS}시즌(이번 시즌 제외, ${seasonLabel(lo)}~${seasonLabel(hi)}) 홈 상대전적.\n`
+    title: `최근 ${RECENT_SEASONS}시즌(이번 시즌 제외, ${seasonLabel(lo, yearly)}~${seasonLabel(hi, yearly)}) 홈 상대전적.\n`
       + `${w}승 ${d}무 ${l}패 (${n}경기) → 표본보정 ${h.toFixed(2)} (평균 ${BASE_HOME.toFixed(2)})\n`
       + `기준은 위 전체 판정과 같습니다(±${MARGIN.toFixed(2)}, 보정 K=${SHRINK}) — 표본만 최근 것으로 좁혔습니다.`,
   }
