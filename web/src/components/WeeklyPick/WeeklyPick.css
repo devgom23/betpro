@@ -1,0 +1,617 @@
+/* 이번주 픽 카드 보드·사다리 벳·저장된 벳(2026-09-27). 색은 앱 공통 토큰만 쓴다(다크/라이트 자동). */
+
+/* 날짜 탭 */
+.wk-dtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.wk-dtabs button {
+  padding: 4px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wk-dtabs button small {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.wk-dtabs button.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.wk-dtabs button.is-on small {
+  color: #fff;
+}
+
+/* 보드: 메인 | 사이드 × 정 | 플 */
+.wk-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(250px, 1fr));
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.wk-grp {
+  grid-column: span 2;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.wk-grp.is-main {
+  border-right: 2px solid var(--border-strong);
+}
+
+.wk-grp small,
+.wk-sub small {
+  margin-left: 6px;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.wk-sub {
+  padding: 4px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.wk-sub.is-jung {
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+}
+
+.wk-sub.is-pl {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+}
+
+.wk-sub.is-edge,
+.wk-col.is-edge {
+  border-right: 2px solid var(--border-strong);
+}
+
+.wk-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 160px;
+  padding: 8px;
+  border-right: 1px solid var(--border);
+}
+
+.wk-col:last-child,
+.wk-sub:nth-child(6) {
+  border-right: 0;
+}
+
+.wk-empty {
+  padding: 18px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.wk-dashed {
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+}
+
+/* 경기 카드 */
+.wk-card {
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+}
+
+.wk-card.has-pick {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.wk-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wk-top b {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.wk-star {
+  color: #f5c542;
+}
+
+.wk-x {
+  margin-left: auto;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.wk-x:hover {
+  color: var(--chip-red-fg);
+}
+
+.wk-teams {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  margin: 4px 0 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wk-teams:hover {
+  color: var(--accent);
+}
+
+.wk-vs,
+.wk-score {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.wk-score b {
+  font-weight: 400;
+}
+
+.wk-score b.wk-win {
+  font-weight: 700;
+  color: var(--chip-red-fg);
+}
+
+.wk-picks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-bottom: 6px;
+}
+
+.wk-lb {
+  margin-right: -2px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.wk-chip {
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.wk-chip.is-blue { background: var(--chip-blue-bg); color: var(--chip-blue-fg); }
+.wk-chip.is-red { background: var(--chip-red-bg); color: var(--chip-red-fg); }
+.wk-chip.is-green { background: var(--chip-green-bg); color: var(--chip-green-fg); }
+.wk-chip.is-gray { background: var(--chip-gray-bg); color: var(--chip-gray-fg); }
+.wk-chip.is-yellow { background: var(--chip-yellow-bg); color: var(--chip-yellow-fg); }
+
+.wk-memo {
+  margin: -2px 0 6px;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-left: 2px solid var(--border-strong);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wk-mk {
+  display: grid;
+  grid-template-columns: 44px repeat(3, 1fr);
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.wk-mk-lab {
+  align-self: center;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+
+.wk-mk-lab i {
+  display: block;
+  font-style: normal;
+  color: var(--chip-yellow-fg);
+}
+
+.wk-od {
+  position: relative;
+  padding: 3px 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.wk-od small {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.wk-od b {
+  font-size: 13px;
+}
+
+.wk-od:hover {
+  border-color: var(--accent);
+}
+
+.wk-od.is-fav b { color: var(--chip-blue-fg); }
+.wk-od.is-dog b { color: var(--chip-red-fg); }
+
+.wk-od.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.wk-od.is-on small,
+.wk-od.is-on b,
+.wk-od.is-on .wk-mv {
+  color: #fff;
+}
+
+.wk-od.is-hit {
+  outline: 2px solid var(--chip-green-fg);
+}
+
+.wk-od.is-hit::after {
+  content: '✔';
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--chip-green-bg);
+  color: var(--chip-green-fg);
+  font-size: 10px;
+}
+
+.wk-od.is-empty {
+  padding: 3px 2px;
+  text-align: center;
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.wk-mv {
+  margin-left: 2px;
+  font-size: 9px;
+}
+
+.wk-mv.up { color: var(--chip-red-fg); }
+.wk-mv.dn { color: var(--chip-blue-fg); }
+
+/* 내픽 미정 */
+.wk-nopick {
+  margin-top: 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+}
+
+.wk-nopick-h {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.wk-nopick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+.wk-nopick-list .wk-card {
+  margin: 0;
+}
+
+/* 이번주 벳(사다리) */
+.wk-slip {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.wk-slip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  font-size: 12px;
+}
+
+.wk-slip-bar small {
+  color: var(--text-muted);
+}
+
+.wk-k {
+  margin-right: 6px;
+  color: var(--text-muted);
+}
+
+.wk-editing {
+  color: var(--chip-yellow-fg);
+}
+
+.wk-sum {
+  color: var(--chip-red-fg);
+}
+
+.wk-grow {
+  flex: 1;
+}
+
+.wk-budget {
+  width: 110px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 700;
+  text-align: right;
+}
+
+.wk-btn {
+  margin-left: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.wk-btn.is-pri {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.wk-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.wk-slip-note {
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wk-ladder-wrap {
+  max-height: 460px;
+  overflow: auto;
+}
+
+.wk-ladder {
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.wk-ladder th,
+.wk-ladder td {
+  padding: 5px 8px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.wk-ladder th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+}
+
+.wk-lg-col {
+  min-width: 130px;
+  color: var(--text-primary) !important;
+}
+
+.wk-lg-col small {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.wk-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.wk-tag.is-axis { background: var(--chip-yellow-bg); color: var(--chip-yellow-fg); }
+.wk-tag.is-multi { background: var(--chip-blue-bg); color: var(--chip-blue-fg); }
+
+.wk-role-ax { color: var(--chip-yellow-fg); font-weight: 700; }
+.wk-role-main { color: var(--chip-blue-fg); font-weight: 700; }
+.wk-role-ins { color: var(--chip-green-fg); font-weight: 700; }
+
+.wk-odds2 {
+  font-weight: 800;
+  color: var(--chip-yellow-fg);
+}
+
+.wk-ladder .is-pos { color: var(--chip-red-fg); }
+.wk-ladder .is-neg { color: var(--chip-blue-fg); }
+
+.wk-ladder tfoot td {
+  background: var(--bg-surface-2);
+  font-weight: 700;
+}
+
+.wk-right {
+  text-align: right !important;
+}
+
+.wk-stake {
+  width: 92px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* 저장된 벳 */
+.wk-sv {
+  margin-bottom: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.wk-sv-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) 110px 60px 110px minmax(150px, 1fr) 120px 28px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wk-sv-row:hover {
+  background: var(--row-hover);
+}
+
+.wk-sv-name {
+  font-weight: 700;
+}
+
+.wk-sv-name small {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.wk-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.wk-sv-tg {
+  text-align: center;
+  font-size: 16px;
+}
+
+.wk-st {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.wk-st.is-reg {
+  background: var(--chip-green-bg);
+  color: var(--chip-green-fg);
+}
+
+.wk-sv-body {
+  border-top: 1px solid var(--border);
+}
+
+.wk-sv-sum {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wk-sv-act {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.wk-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 50;
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: var(--chip-green-bg);
+  color: var(--chip-green-fg);
+  font-weight: 700;
+  transform: translateX(-50%);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
+}

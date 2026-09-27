@@ -1689,9 +1689,10 @@ def _scope_league_labels(scope: str, user: dict) -> dict:
 
 @app.get("/api/weekly_picks")
 def weekly_picks(user: dict = Depends(get_current_user)):
-    """공식 데이터·내 데이터를 가리지 않고 별표(★=온별, starred==2)로 표시한 경기를
-    전부 모아 보여준다. 반개(★반개=보류·고민중, starred==1)는 아직 확정 전이라 여기
-    안 넣는다 — "이번주 벳"은 실제로 조합을 짤 대상이라 확정된 것만 섞여야 한다.
+    """공식 데이터·내 데이터를 가리지 않고 별표로 표시한 경기를 전부 모아 보여준다.
+    2026-09-27부터 반개(starred==1)도 넣는다 — 이번주 픽 화면이 카드 보드로 바뀌면서
+    온별(★★)=메인, 반개(★)=사이드 칸으로 나눠 보여주기 때문(사용자 지정). 예전엔
+    "확정 전이라 안 넣는다"였다. IMPORTANT에 실제 별 단계(1/2)를 그대로 싣는다.
     리그 표와 같은 컬럼 구성을 그대로 쓰되 어느 리그 경기인지 알 수 있도록
     L(리그 코드)을 채워서 내려준다."""
     username = user["username"]
@@ -1707,7 +1708,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
             starred = {
                 _my_pick_key(p["S"], p["R"], p["No"], p["HT"], p["AT"]): p
                 for p in MYPICKS.list_my_picks(username, code, scope)
-                if p["starred"] == 2 and not p["wp_hidden"]
+                if p["starred"] in (1, 2) and not p["wp_hidden"]
             }
             if not starred:
                 continue
@@ -1734,7 +1735,7 @@ def weekly_picks(user: dict = Depends(get_current_user)):
                 rec["L"] = code
                 rec["L_LABEL"] = labels.get(code, code)
                 rec["scope"] = scope
-                rec["IMPORTANT"] = 2
+                rec["IMPORTANT"] = p["starred"]
                 rec["MY_PICK"] = p["pick"]
                 rec["MY_P"] = p["p"]
                 rec["MY_HIT"] = p["hit"]
@@ -2142,6 +2143,23 @@ def create_bet_batch(body: BetBatchBody, user: dict = Depends(get_current_user))
         [bet.model_dump() for bet in body.bets],
         body.memo,
     )
+    return {"ok": True, "batch_id": batch_id}
+
+
+class BetBatchReplaceBody(BetBatchBody):
+    batch_id: str
+
+
+@app.post("/api/bet_slips/replace_batch")
+def replace_bet_batch(body: BetBatchReplaceBody, user: dict = Depends(get_current_user)):
+    """이번주 픽 '저장된 벳'에서 이미 등록한 벳을 수정 저장할 때 — 그 묶음을 새 내용으로 바꾼다."""
+    try:
+        batch_id = BETSLIPS.replace_batch(
+            user["username"], body.scope, body.batch_id,
+            [bet.model_dump() for bet in body.bets], body.memo,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"ok": True, "batch_id": batch_id}
 
 

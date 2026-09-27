@@ -1,51 +1,75 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
-import LeagueTable, { selectKey } from '../components/LeagueTable/LeagueTable'
-import BetSlip, { matchKey } from '../components/BetSlip/BetSlip'
+import MatchDetailModal from '../components/MatchDetailModal/MatchDetailModal'
+import WeekCard from '../components/WeeklyPick/WeekCard'
+import LadderTable, { MAX_ROWS } from '../components/WeeklyPick/LadderTable'
+import {
+  buildCombos, buildLegs, cardMarkets, comboCount, comboToBet, dayKey, dayLabel, mainSideOf, matchKey, pickSide, splitBudget,
+} from '../components/WeeklyPick/weekBet'
+import '../components/WeeklyPick/WeeklyPick.css'
 import './WeeklyPickPage.css'
 
-const SLIP_IDS_KEY = 'betpro_week_bet_slip_ids'
+// 이번주 픽(2026-09-27 개편, 사용자 지정 — 목업 web/public/mockups/weekly_pick_mock.html).
+//   위: 날짜 탭 + 카드 보드(메인/사이드 = 의견 B-Ma·B-Si·축-Si, 없으면 별 단계 × 정/플 = 내픽 계열). 카드의 배당을 눌러 벳에 담는다.
+//   가운데: 이번주 벳 = 사다리(경기 하나가 한 층, 층마다 하나씩 고른 모든 조합이 한 줄). 층 수 제한 없음.
+//   아래: 저장된 벳(프로토 구매내역처럼 한 줄씩, 접힘/펼침) → 벳 등록하면 베팅내역으로.
+// 예전 화면(리그 표 목록 + 선택 1~4 벳 슬립, components/BetSlip)은 이 화면으로 바뀌었다.
+// 지금 짜는 조합·저장된 벳은 이 브라우저(localStorage)에 남는다 — 새로고침해도 그대로.
+const SEL_KEY = 'betpro_week_sel_v2'
+const SAVED_KEY = 'betpro_week_saved_v2'
 
-// 슬립 카드 자체(몇 개가 떠 있는지)도 새로고침·탭 이동에도 남아있어야 한다 —
-// 안의 경기·벳금액은 BetSlip이 자기 id로 따로 저장한다.
-function loadSlipIdsState() {
+function loadJson(key, fallback) {
   try {
-    const raw = localStorage.getItem(SLIP_IDS_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed.slipIds) && parsed.slipIds.length > 0 && typeof parsed.nextId === 'number') {
-      return parsed
-    }
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : fallback
   } catch {
-    // 무시하고 기본값으로
+    return fallback
   }
-  return null
+}
+function saveJson(key, v) {
+  try { localStorage.setItem(key, JSON.stringify(v)) } catch { /* 저장 불가 — 이번 화면에서만 유지 */ }
 }
 
-function rangeLabel(rows) {
-  const dts = rows.map((r) => String(r.DT || '')).filter(Boolean).sort()
-  if (dts.length === 0) return null
-  const clean = (s) => s.replace(/\s*\(.+\)$/, '').replace(/^(\d{2})-/, '20$1-')
-  return `${clean(dts[0])} ~ ${clean(dts[dts.length - 1])}`
+const BOXES = [['M', '정'], ['M', '플'], ['S', '정'], ['S', '플']]
+const fmt = (v) => Math.round(v || 0).toLocaleString()
+const nowText = () => {
+  const d = new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  return `${String(d.getFullYear()).slice(2)}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+// 사다리 표에 넘길 모양(cols/rows) — 지금 짜는 벳과 저장된 벳이 같은 모양을 쓴다.
+function ladderView(legs, combos) {
+  return {
+    cols: legs.map((l) => ({ title: `${l.row.HT} vs ${l.row.AT}`, sub: l.mks, axis: l.axis })),
+    rows: combos.map((c) => ({ key: c.key, odds: c.odds, cells: c.path.map(({ p }) => ({ lab: p.lab, odds: p.odds, role: p.role })) })),
+  }
 }
 
 export default function WeeklyPickPage({ onGoBetHistory }) {
-  const [data, setData] = useState({ columns: [], rows: [] })
+  const [data, setData] = useState({ rows: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [clearing, setClearing] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
-  // 선택 삭제용 체크 상태. 키→행 전체를 들고 있어야 삭제 API에 code/scope/S/R/No/HT/AT를 보낼 수 있다.
-  const [selected, setSelected] = useState(new Map())
-  // 슬립은 "저장"을 누를 때마다 옆에 하나씩 늘어난다. 탭을 벗어났다 돌아오거나
-  // 새로고침해도 "삭제"를 누르기 전까지는 그대로 남아있어야 해서 localStorage에 저장한다.
-  const persisted = loadSlipIdsState()
-  const [slipIds, setSlipIds] = useState(persisted?.slipIds ?? [1])
-  const [nextId, setNextId] = useState(persisted?.nextId ?? 2)
+  const [dateSel, setDateSel] = useState('ALL')
+  const [detailRow, setDetailRow] = useState(null)
+  const [extraOdds, setExtraOdds] = useState(new Map())
+  // 선택: matchKey → [{m,i}] (Map은 JSON이 안 돼 [키, 값] 배열로 저장)
+  const [sel, setSel] = useState(() => new Map(loadJson(SEL_KEY, { sel: [] }).sel))
+  const [stakes, setStakes] = useState(() => loadJson(SEL_KEY, {}).stakes || {})
+  const [budget, setBudget] = useState(() => loadJson(SEL_KEY, {}).budget ?? 100000)
+  const [editing, setEditing] = useState(() => loadJson(SEL_KEY, {}).editing ?? null)
+  const [saved, setSaved] = useState(() => loadJson(SAVED_KEY, []))
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
 
+  useEffect(() => { saveJson(SEL_KEY, { sel: [...sel.entries()], stakes, budget, editing }) }, [sel, stakes, budget, editing])
+  useEffect(() => { saveJson(SAVED_KEY, saved) }, [saved])
   useEffect(() => {
-    localStorage.setItem(SLIP_IDS_KEY, JSON.stringify({ slipIds, nextId }))
-  }, [slipIds, nextId])
+    if (!notice) return undefined
+    const t = setTimeout(() => setNotice(''), 3000)
+    return () => clearTimeout(t)
+  }, [notice])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -58,16 +82,12 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
       setLoading(false)
     }
   }, [])
-
   useEffect(() => { load() }, [load])
 
-  // 추가배당(±2·±3.5 핸디, 언더오버) — 벳 슬립 유형 드롭박스에 쓴다. 슬립이 여러 개여도
-  // 한 번만 불러 경기 키(matchKey)로 나눠 준다. data.rows(상태 값 그대로)에 걸어야
-  // 렌더마다 새 배열이 생겨 다시 부르는 일이 없다.
-  const [extraOdds, setExtraOdds] = useState(new Map())
+  // 추가배당(±2·±3.5 핸디) — 카드의 '추가' 줄. 경기 키(matchKey)로 나눠 둔다.
   useEffect(() => {
     const list = data.rows || []
-    if (list.length === 0) {
+    if (!list.length) {
       setExtraOdds(new Map())
       return undefined
     }
@@ -75,122 +95,336 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
     api.post('/api/kr_extra_odds/lookup', {
       items: list.map((r) => ({ scope: r.scope, code: r.L, S: r.S, R: r.R, HT: r.HT, AT: r.AT })),
     })
-      .then((res) => {
-        if (alive) setExtraOdds(new Map(list.map((r, i) => [matchKey(r), res.items?.[i] ?? []])))
-      })
-      .catch(() => {
-        if (alive) setExtraOdds(new Map())
-      })
-    return () => {
-      alive = false
-    }
+      .then((res) => { if (alive) setExtraOdds(new Map(list.map((r, i) => [matchKey(r), res.items?.[i] ?? []]))) })
+      .catch(() => { if (alive) setExtraOdds(new Map()) })
+    return () => { alive = false }
   }, [data.rows])
 
-  const rows = data.rows || []
-  const period = rangeLabel(rows)
+  const rows = useMemo(() => data.rows || [], [data.rows])
+  const rowByKey = useMemo(() => new Map(rows.map((r) => [matchKey(r), r])), [rows])
+  const marketsByKey = useMemo(() => new Map(rows.map((r) => [matchKey(r), cardMarkets(r, extraOdds.get(matchKey(r)))])), [rows, extraOdds])
 
-  function toggleRow(row) {
-    setSelected((prev) => {
-      const key = selectKey(row)
+  const days = useMemo(() => [...new Set(rows.map((r) => dayKey(r.DT)))].sort(), [rows])
+  const dayText = useMemo(() => new Map(rows.map((r) => [dayKey(r.DT), dayLabel(r.DT)])), [rows])
+  const shown = rows.filter((r) => dateSel === 'ALL' || dayKey(r.DT) === dateSel)
+  const boxOf = (r) => {
+    const side = pickSide(r.MY_PICK)
+    return side ? `${mainSideOf(r)}${side}` : null
+  }
+
+  const legs = useMemo(() => buildLegs(sel, rowByKey, extraOdds), [sel, rowByKey, extraOdds])
+  const nCombo = comboCount(legs)
+  const combos = useMemo(() => (nCombo <= MAX_ROWS ? buildCombos(legs) : []), [legs, nCombo])
+  const stakeSum = combos.reduce((a, c) => a + (Number(stakes[c.key]) || 0), 0)
+  const wins = combos.filter((c) => Number(stakes[c.key]) > 0).map((c) => Math.floor(c.odds * stakes[c.key]))
+  const winText = wins.length ? (Math.min(...wins) === Math.max(...wins) ? `${fmt(wins[0])} 원` : `${fmt(Math.min(...wins))} ~ ${fmt(Math.max(...wins))} 원`) : '-'
+  const nAxis = legs.filter((l) => l.axis).length
+
+  function toggle(key, m, i) {
+    setSel((prev) => {
       const next = new Map(prev)
-      if (next.has(key)) next.delete(key)
-      else next.set(key, row)
+      const arr = [...(next.get(key) || [])]
+      const at = arr.findIndex((s) => s.m === m && s.i === i)
+      if (at >= 0) arr.splice(at, 1)
+      else arr.push({ m, i })
+      if (arr.length) next.set(key, arr)
+      else next.delete(key)
       return next
     })
   }
 
-  const allSelected = rows.length > 0 && rows.every((r) => selected.has(selectKey(r)))
-
-  function toggleSelectAll() {
-    if (allSelected) {
-      setSelected(new Map())
-      return
-    }
-    setSelected(new Map(rows.map((r) => [selectKey(r), r])))
+  function clearSlip() {
+    setSel(new Map())
+    setStakes({})
+    setEditing(null)
   }
 
-  async function handleDeleteSelected() {
-    if (selected.size === 0) return
-    if (!window.confirm(`선택한 ${selected.size}개 경기를 이번주 픽에서 지웁니다(리그 데이터는 그대로입니다). 계속할까요?`)) return
-    setClearing(true)
-    setError('')
+  async function hideRow(row) {
+    if (!window.confirm(`${row.HT} vs ${row.AT} 경기를 이번주 픽에서 숨깁니다(별표·리그 데이터는 그대로). 계속할까요?`)) return
     try {
-      const items = [...selected.values()].map((row) => ({
-        code: row.L, scope: row.scope, S: row.S, R: row.R, No: row.No, HT: row.HT, AT: row.AT,
-      }))
-      await api.post('/api/weekly_picks/hide', { items })
-      setSelected(new Map())
+      await api.post('/api/weekly_picks/hide', {
+        items: [{ code: row.L, scope: row.scope, S: row.S, R: row.R, No: row.No, HT: row.HT, AT: row.AT }],
+      })
+      setSel((prev) => {
+        const next = new Map(prev)
+        next.delete(matchKey(row))
+        return next
+      })
       await load()
     } catch (err) {
       setError(err.message)
-    } finally {
-      setClearing(false)
     }
   }
+
+  // 전체 삭제 — 지금 날짜 탭에 보이는 경기를 이번주 픽에서 한 번에 숨긴다(예전 '전체선택 + 선택 삭제'와 같은 동작).
+  // 별표·리그 데이터는 그대로이고, 그 경기들을 담아 둔 선택도 같이 뺀다.
+  async function hideAll() {
+    if (!shown.length) return
+    const what = dateSel === 'ALL' ? '전체' : dayText.get(dateSel)
+    if (!window.confirm(`${what} ${shown.length}경기를 이번주 픽에서 모두 지웁니다(별표·리그 데이터는 그대로입니다). 계속할까요?`)) return
+    try {
+      await api.post('/api/weekly_picks/hide', {
+        items: shown.map((row) => ({ code: row.L, scope: row.scope, S: row.S, R: row.R, No: row.No, HT: row.HT, AT: row.AT })),
+      })
+      setSel((prev) => {
+        const next = new Map(prev)
+        shown.forEach((row) => next.delete(matchKey(row)))
+        return next
+      })
+      setDateSel('ALL')
+      await load()
+      setNotice(`${shown.length}경기를 이번주 픽에서 지웠습니다`)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // 저장 — 지금 조합(선택·뱃금액)을 저장된 벳 한 줄로. 조합은 그대로 남는다(사용자 지정).
+  // 화면에 보이는 사다리(층·조합·배당)를 그대로 떠 둔다 — 나중에 배당이 바뀌어도 저장한 그때 값으로 등록된다.
+  function snapshot() {
+    const view = ladderView(legs, combos)
+    const bets = combos.filter((c) => Number(stakes[c.key]) > 0).map((c) => comboToBet(c, Number(stakes[c.key])))
+    const bad = combos.some((c) => c.path.some(({ p }) => !p.pickType))
+    return {
+      view, bets, bad, stakes: { ...stakes }, budget, sel: [...sel.entries()],
+      nLegs: legs.length, nAxis, nCombo: combos.length, stakeSum, winText,
+      summary: legs.map((l) => `${l.axis ? '[축]' : '[복수]'} ${l.row.HT} ${l.picks.map((p) => p.lab).join('+')}`).join(' · '),
+    }
+  }
+
+  async function saveSlip() {
+    if (!legs.length) return
+    const snap = snapshot()
+    if (snap.bad) {
+      setError('정배를 가릴 수 없는 경기(승·패 배당 동률 등)가 있어 픽 종류를 정하지 못했습니다 — 그 경기의 선택을 빼 주세요.')
+      return
+    }
+    setError('')
+    if (editing) {
+      const v = saved.find((x) => x.id === editing)
+      if (v?.status === 'reg') {
+        if (!snap.bets.length) { setError('뱃금액을 입력한 조합이 없습니다.'); return }
+        setBusy(true)
+        try {
+          const res = await api.post('/api/bet_slips/replace_batch', { scope: 'master', batch_id: v.batchId, bets: snap.bets })
+          setSaved((prev) => prev.map((x) => (x.id === editing ? { ...x, ...snap, batchId: res.batch_id, ts: nowText(), open: true } : x)))
+          setNotice('수정했습니다 — 베팅내역에도 반영했습니다')
+          setEditing(null)
+        } catch (err) {
+          setError(err.message)
+        } finally {
+          setBusy(false)
+        }
+        return
+      }
+      setSaved((prev) => prev.map((x) => (x.id === editing ? { ...x, ...snap, ts: nowText(), open: true } : x)))
+      setNotice('수정 내용을 저장했습니다')
+      setEditing(null)
+      return
+    }
+    const id = Math.max(0, ...saved.map((x) => x.id)) + 1
+    setSaved((prev) => [{ id, name: `이번주 벳 #${id}`, ts: nowText(), status: 'saved', open: true, ...snap }, ...prev])
+    setNotice('벳을 저장했습니다 — 조합은 그대로 남아 있습니다')
+  }
+
+  async function register(v) {
+    if (!v.bets.length) { setError('뱃금액을 입력한 조합이 없습니다 — 수정해서 뱃금액을 넣어 주세요.'); return }
+    setBusy(true)
+    setError('')
+    try {
+      const res = await api.post('/api/bet_slips', { scope: 'master', bets: v.bets })
+      setSaved((prev) => prev.map((x) => (x.id === v.id ? { ...x, status: 'reg', batchId: res.batch_id, open: false } : x)))
+      setNotice('베팅내역에 등록했습니다')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function startEdit(v) {
+    setSel(new Map(v.sel))
+    setStakes({ ...v.stakes })
+    setBudget(v.budget)
+    setEditing(v.id)
+    setDateSel('ALL')
+    setNotice(`${v.name} 내역을 카드와 이번주 벳에 불러왔습니다`)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function removeSaved(v) {
+    if (!window.confirm(`${v.name}을(를) 저장된 벳에서 지웁니다. 계속할까요?`)) return
+    setSaved((prev) => prev.filter((x) => x.id !== v.id))
+    if (editing === v.id) setEditing(null)
+  }
+
+  const view = ladderView(legs, combos)
+  const editName = editing ? saved.find((x) => x.id === editing)?.name : null
+  const noPick = shown.filter((r) => !boxOf(r))
 
   return (
     <div className="wp-page">
       <div className="wp-title-row">
         <h2 className="wp-title">📋 이번주 픽</h2>
         <button className="wp-guide-btn" onClick={() => setShowGuide(true)}>⚠ 배팅전필독</button>
-        {rows.length > 0 && (
-          <>
-            <button className="wp-clear-btn" onClick={toggleSelectAll} disabled={clearing}>
-              {allSelected ? '☐ 전체해제' : '☑ 전체선택'}
-            </button>
-            <button className="wp-clear-btn" onClick={handleDeleteSelected} disabled={clearing || selected.size === 0}>
-              🗑 선택 삭제{selected.size > 0 ? ` (${selected.size})` : ''}
-            </button>
-          </>
+        {shown.length > 0 && (
+          <button className="wp-clear-btn" onClick={hideAll} title="지금 날짜 탭에 보이는 경기를 이번주 픽에서 모두 지웁니다(별표·리그 데이터는 그대로)">
+            🗑 {dateSel === 'ALL' ? '전체 삭제' : `${dayText.get(dateSel)} 삭제`} ({shown.length})
+          </button>
         )}
       </div>
       <p className="wp-desc">
-        {period && <>{period} · </>}
-        별표(★) 표시한 경기 모음 · 체크 후 "선택 삭제"하면 이 화면에서만 빠집니다(리그 데이터는 유지)
+        별표 경기 {rows.length}개 · 메인/사이드는 의견(B-Ma·B-Si·축-Si, 없으면 ★★ 메인 / ★ 사이드), 정·플은 내픽으로 나눕니다 · 카드의 배당을 눌러 이번주 벳에 담습니다
+        (한 경기에서 1칸 = <b>축</b>, 2칸 이상 = <b>복수</b> — 가로·세로 모두 가능)
       </p>
 
       {loading && <div className="wp-empty">불러오는 중...</div>}
       {error && <div className="wp-empty error-text">{error}</div>}
-      {!loading && !error && rows.length === 0 && (
-        <div className="wp-empty">
-          별표(★) 표시한 경기가 없습니다. 리그 표에서 ☆를 눌러 이번주에 볼 경기를 골라주세요.
-        </div>
+      {!loading && rows.length === 0 && (
+        <div className="wp-empty">별표(★) 표시한 경기가 없습니다. 리그 표에서 ☆를 눌러 이번주에 볼 경기를 골라주세요.</div>
       )}
+
       {rows.length > 0 && (
-        <LeagueTable
-          columns={data.columns}
-          rows={rows}
-          scope="master"
-          selectable
-          selectedKeys={new Set(selected.keys())}
-          onToggleRow={toggleRow}
-          hideIndicators
-        />
+        <>
+          <div className="wk-dtabs">
+            {['ALL', ...days].map((d) => {
+              const n = rows.filter((r) => d === 'ALL' || dayKey(r.DT) === d).length
+              const k = rows.filter((r) => (d === 'ALL' || dayKey(r.DT) === d) && sel.has(matchKey(r))).length
+              return (
+                <button key={d} type="button" className={d === dateSel ? 'is-on' : undefined} onClick={() => setDateSel(d)}>
+                  {d === 'ALL' ? '전체' : dayText.get(d)}<small>{n}경기{k ? ` · 담김 ${k}` : ''}</small>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="wk-board">
+            <div className="wk-grp is-main">메인 <small>B-Ma · 축-정·플·고민 · ★★</small></div>
+            <div className="wk-grp">사이드 <small>B-Si · 축-Si · ★</small></div>
+            {BOXES.map(([ms, side], bi) => (
+              <div key={`h${bi}`} className={`wk-sub ${side === '정' ? 'is-jung' : 'is-pl'}${bi === 1 ? ' is-edge' : ''}`}>
+                {side}<small>{shown.filter((r) => boxOf(r) === ms + side).length}경기</small>
+              </div>
+            ))}
+            {BOXES.map(([ms, side], bi) => {
+              const list = shown.filter((r) => boxOf(r) === ms + side)
+              return (
+                <div key={`c${bi}`} className={`wk-col${bi === 1 ? ' is-edge' : ''}`}>
+                  {list.length ? list.map((r) => (
+                    <WeekCard
+                      key={matchKey(r)}
+                      row={r}
+                      markets={marketsByKey.get(matchKey(r)) || []}
+                      picked={sel.get(matchKey(r))}
+                      dayText={dayText.get(dayKey(r.DT))}
+                      onToggle={(m, i) => toggle(matchKey(r), m, i)}
+                      onOpen={() => setDetailRow(r)}
+                      onHide={() => hideRow(r)}
+                    />
+                  )) : <div className="wk-empty">별표 경기 없음</div>}
+                </div>
+              )
+            })}
+          </div>
+          {noPick.length > 0 && (
+            <div className="wk-nopick">
+              <div className="wk-nopick-h">내픽 미정 {noPick.length}경기 — 상세보기에서 내픽을 고르면 칸으로 들어갑니다</div>
+              <div className="wk-nopick-list">
+                {noPick.map((r) => (
+                  <WeekCard
+                    key={matchKey(r)}
+                    row={r}
+                    markets={marketsByKey.get(matchKey(r)) || []}
+                    picked={sel.get(matchKey(r))}
+                    dayText={dayText.get(dayKey(r.DT))}
+                    onToggle={(m, i) => toggle(matchKey(r), m, i)}
+                    onOpen={() => setDetailRow(r)}
+                    onHide={() => hideRow(r)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <h2 className="wp-title wp-title-bet">
         🎲 이번주 벳 <span className="wp-title-warn">똥배는 3번 생각하고 가자</span>
       </h2>
-
-      <div className="wp-slips">
-        {slipIds.map((id) => (
-          <BetSlip
-            key={id}
-            id={id}
-            rows={rows}
-            extraOdds={extraOdds}
-            scope="master"
-            canDelete={slipIds.length > 1}
-            onSave={() => {
-              setSlipIds((prev) => [...prev, nextId])
-              setNextId((n) => n + 1)
-            }}
-            onDelete={() => setSlipIds((prev) => prev.filter((s) => s !== id))}
-            onRegistered={onGoBetHistory}
-          />
-        ))}
+      <div className="wk-slip">
+        <div className="wk-slip-bar">
+          <b className={editing ? 'wk-editing' : undefined}>{editing ? `조합 — ${editName} 수정 중` : '조합'}</b>
+          {editing && <button type="button" className="wk-btn" onClick={clearSlip}>수정 취소</button>}
+          <span><span className="wk-k">선택 경기</span><b>{legs.length}경기</b>{legs.length > 0 && <small> (축 {nAxis} · 복수 {legs.length - nAxis})</small>}</span>
+          <span><span className="wk-k">조합</span><b>{nCombo.toLocaleString()}</b></span>
+          <span>
+            <span className="wk-k">총벳금액</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              className="wk-budget"
+              value={budget ? Number(budget).toLocaleString() : ''}
+              onChange={(e) => setBudget(Number(e.target.value.replace(/[^0-9]/g, '')) || 0)}
+            /> 원
+            <button type="button" className="wk-btn" disabled={!combos.length || !budget} onClick={() => setStakes((p) => ({ ...p, ...splitBudget(combos, budget) }))}>금액적용</button>
+          </span>
+          <span><span className="wk-k">뱃금액 합계</span><b className="wk-sum">{fmt(stakeSum)}</b> 원</span>
+          <span><span className="wk-k">당첨금</span><b>{winText}</b></span>
+          <span className="wk-grow" />
+          <button type="button" className="wk-btn" onClick={clearSlip} disabled={!sel.size}>전체 비우기</button>
+          <button type="button" className="wk-btn is-pri" onClick={saveSlip} disabled={!legs.length || busy}>{editing ? '수정 저장' : '벳 저장'}</button>
+        </div>
+        {legs.length ? (
+          <LadderTable cols={view.cols} rows={nCombo > MAX_ROWS ? new Array(nCombo) : view.rows} stakes={stakes} editable onStake={(k, v) => setStakes((p) => ({ ...p, [k]: v }))} />
+        ) : (
+          <div className="wk-empty">카드의 승/무/패 배당을 눌러 담으세요 — 한 경기에서 1칸만 고르면 <b>축</b>, 2칸 이상이면 <b>복수</b>(메인+보험)입니다.</div>
+        )}
+        <div className="wk-slip-note">
+          경기 하나가 사다리의 한 층입니다 — 층마다 하나씩 골라 내려가는 모든 조합이 한 줄씩 나옵니다(층 수 제한 없음).
+          뱃배당은 프로토처럼 소수 1자리로 올림합니다. 복수는 배당이 가장 낮은 칸이 메인, 나머지가 보험입니다.
+        </div>
       </div>
 
+      <h2 className="wp-title wp-title-bet">💾 저장된 벳</h2>
+      {saved.length === 0 ? (
+        <div className="wk-empty wk-dashed">아직 저장한 벳이 없습니다 — 위에서 조합을 짜고 <b>벳 저장</b>을 누르세요</div>
+      ) : saved.map((v) => (
+        <div className="wk-sv" key={v.id}>
+          <button type="button" className="wk-sv-row" onClick={() => setSaved((p) => p.map((x) => (x.id === v.id ? { ...x, open: !x.open } : x)))}>
+            <span className="wk-sv-name">{v.name}<small>축 {v.nAxis} · 복수 {v.nLegs - v.nAxis} · {v.nCombo}조합</small></span>
+            <span>{v.ts}</span>
+            <span className="wk-num">{v.nLegs}경기</span>
+            <span className="wk-num">{fmt(v.stakeSum)} 원</span>
+            <span className="wk-num">{v.winText}</span>
+            <span><span className={`wk-st ${v.status === 'reg' ? 'is-reg' : ''}`}>{v.status === 'reg' ? '베팅내역 등록됨' : '저장됨'}</span></span>
+            <span className="wk-sv-tg">{v.open ? '−' : '+'}</span>
+          </button>
+          {v.open && (
+            <div className="wk-sv-body">
+              <div className="wk-sv-sum">{v.summary}</div>
+              <LadderTable cols={v.view.cols} rows={v.view.rows} stakes={v.stakes} />
+              <div className="wk-sv-act">
+                {v.status === 'reg' && <span className="wk-st is-reg">베팅내역에 등록되었습니다</span>}
+                {v.status === 'reg' && onGoBetHistory && <button type="button" className="wk-btn" onClick={onGoBetHistory}>베팅내역 보기</button>}
+                {v.status !== 'reg' && <button type="button" className="wk-btn" onClick={() => removeSaved(v)}>삭제</button>}
+                <button type="button" className="wk-btn" onClick={() => startEdit(v)}>수정</button>
+                {v.status !== 'reg' && <button type="button" className="wk-btn is-pri" disabled={busy} onClick={() => register(v)}>벳 등록 → 베팅내역</button>}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {notice && <div className="wk-toast">{notice}</div>}
+      {detailRow && (
+        <MatchDetailModal
+          code={detailRow.L}
+          scope={detailRow.scope}
+          row={detailRow}
+          onClose={() => { setDetailRow(null); load() }}
+          onPickSaved={() => {}}
+        />
+      )}
       {showGuide && <BettingGuideModal onClose={() => setShowGuide(false)} />}
     </div>
   )

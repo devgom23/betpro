@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>이번주 픽 목업</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #111a2c; --card: #16213a; --line: #26324f; --line2: #33436a;
+    --tx: #e6ecf7; --mu: #8b98b5; --acc: #4d9fff;
+    --blue-bg: #1e3a6e; --blue-fg: #a9caff; --red-bg: #5a1f24; --red-fg: #ffabab;
+    --green-bg: #17402a; --green-fg: #93e2b0; --yel-bg: #4a3a0c; --yel-fg: #fde68a; --gray-fg: #cbd5e1;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--tx); font: 13px/1.4 'Malgun Gothic', system-ui, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 18px; }
+  .sub { color: var(--mu); font-size: 12px; margin-bottom: 12px; }
+  .note { padding: 8px 12px; margin-bottom: 12px; border: 1px dashed var(--line2); border-radius: 8px; color: var(--mu); font-size: 12px; }
+  .note b { color: var(--yel-fg); }
+
+  /* 보드: 메인 | 사이드 × 정 | 플 */
+  .board { display: grid; grid-template-columns: repeat(4, minmax(230px, 1fr)); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; background: var(--panel); }
+  .grp { padding: 8px; text-align: center; font-weight: 700; font-size: 14px; border-bottom: 1px solid var(--line); background: #0e1626; }
+  .grp.main { grid-column: 1 / 3; border-right: 2px solid var(--line2); }
+  .grp.side { grid-column: 3 / 5; }
+  .grp small { margin-left: 8px; font-weight: 400; color: var(--mu); font-size: 11px; }
+  .sub-h { padding: 6px 8px; text-align: center; font-weight: 700; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
+  .sub-h:nth-child(4) { border-right: 2px solid var(--line2); }
+  .sub-h:last-of-type { border-right: 0; }
+  .sub-h.jung { background: var(--blue-bg); color: var(--blue-fg); }
+  .sub-h.pl { background: var(--red-bg); color: var(--red-fg); }
+  .sub-h small { margin-left: 6px; font-weight: 400; opacity: .8; }
+  .col { min-height: 300px; padding: 8px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .col:nth-of-type(2) { border-right: 2px solid var(--line2); }
+  .col:last-child { border-right: 0; }
+  .empty { color: var(--mu); text-align: center; padding: 24px 0; font-size: 12px; }
+
+  /* 경기 카드 */
+  .gc { width: 100%; max-width: 360px; margin: 0 auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 8px 10px; }
+  .gc.has-pick { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+  .gc-top { display: flex; align-items: center; gap: 6px; color: var(--mu); font-size: 11px; }
+  .gc-top b { color: var(--tx); font-size: 12px; }
+  .gc-top .star { color: #f5c542; }
+  .chip { padding: 0 6px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .chip.b { background: var(--blue-bg); color: var(--blue-fg); }
+  .chip.r { background: var(--red-bg); color: var(--red-fg); }
+  .gc-top .push { margin-left: auto; }
+  .gc-teams { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin: 4px 0 6px; font-weight: 700; font-size: 13px; }
+  .gc-teams .vs { color: var(--mu); font-weight: 400; font-size: 11px; }
+  .gc-teams .score { color: var(--mu); font-weight: 400; font-size: 12px; }
+  .gc-teams .win { color: var(--red-fg); font-weight: 700; }
+  .mk { display: grid; grid-template-columns: 44px repeat(3, 1fr); gap: 4px; align-items: stretch; margin-top: 4px; }
+  .mk .lab { color: var(--mu); font-size: 11px; align-self: center; line-height: 1.2; }
+  .mk .lab i { display: block; font-style: normal; color: var(--yel-fg); }
+  .od { position: relative; padding: 4px 2px; text-align: center; border: 1px solid var(--line2); border-radius: 6px; background: #0e1626; color: var(--tx); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+  .od small { display: block; font-size: 10px; color: var(--mu); }
+  .od b { font-size: 13px; }
+  .od:hover { border-color: var(--acc); }
+  .od.fav b { color: var(--blue-fg); }
+  .od.dog b { color: var(--red-fg); }
+  .od.on { background: var(--acc); border-color: var(--acc); color: #04122a; }
+  .od.on small, .od.on b { color: #04122a; }
+  .od .mv { font-size: 9px; margin-left: 2px; }
+  .od .mv.up { color: #ff8a8a; } .od .mv.dn { color: #7db4ff; }
+  .od.on .mv { color: #04122a; }
+  .od.hit { outline: 2px solid var(--green-fg); }
+  .od.hit::after { content: '✔'; position: absolute; top: -6px; right: -4px; font-size: 10px; background: var(--green-bg); color: var(--green-fg); border-radius: 8px; padding: 0 3px; }
+  .gc-foot { margin-top: 6px; color: var(--mu); font-size: 11px; }
+
+  /* 이번주 벳 */
+  .slips-h { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 8px; }
+  .slips-h h2 { margin: 0; font-size: 16px; }
+  .slip { display: grid; grid-template-columns: minmax(300px, 1.6fr) minmax(260px, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+  .slip-l { border-right: 1px solid var(--line); }
+  .slip-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #0e1626; border-bottom: 1px solid var(--line); font-weight: 700; }
+  .slip-head .cnt { margin-left: auto; color: var(--mu); font-weight: 400; font-size: 12px; }
+  .pk { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  .pk .t { font-weight: 700; }
+  .pk .t small { display: block; color: var(--mu); font-weight: 400; font-size: 11px; }
+  .pk .pick { color: var(--acc); font-weight: 700; }
+  .pk .pick.hitc { color: var(--green-fg); }
+  .pk .x { background: none; border: 0; color: var(--mu); cursor: pointer; font-size: 14px; }
+  .slip-empty { padding: 28px 12px; text-align: center; color: var(--mu); }
+  .slip-r { padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .row .k { color: var(--mu); }
+  .row .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .row .v.big { font-size: 16px; color: var(--yel-fg); }
+  .inp { width: 130px; padding: 6px 8px; text-align: right; border: 1px solid var(--line2); border-radius: 6px; background: #0e1626; color: var(--tx); font: inherit; font-weight: 700; }
+  .btns { display: flex; gap: 8px; margin-top: auto; }
+  .btn { flex: 1; padding: 9px 10px; border: 0; border-radius: 6px; font: inherit; font-weight: 700; cursor: pointer; }
+  .btn.pri { background: var(--acc); color: #04122a; }
+  .btn.sec { background: #26324f; color: var(--tx); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .hint { margin-top: 10px; color: var(--mu); font-size: 11px; }
+
+  .tabs { display: flex; gap: 6px; margin: 8px 0 12px; }
+  .tabs button { padding: 7px 16px; border: 1px solid var(--line2); border-radius: 8px 8px 0 0; background: #0e1626; color: var(--mu); font: inherit; font-weight: 700; cursor: pointer; }
+  .tabs button.on { background: var(--acc); border-color: var(--acc); color: #04122a; }
+  .tabs .badge { margin-left: 4px; padding: 0 6px; border-radius: 10px; background: var(--red-bg); color: var(--red-fg); font-size: 11px; }
+  [hidden] { display: none !important; }
+  .saved-h { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 8px; }
+  .saved-h h2 { margin: 0; font-size: 16px; }
+  .sv { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 6px; overflow: hidden; }
+  .sv-row { display: grid; grid-template-columns: 30px minmax(160px,1.4fr) 150px 70px 90px 110px 140px 40px; gap: 6px; align-items: center; padding: 9px 12px; cursor: pointer; }
+  .sv-row:hover { background: #0e1626; }
+  .sv-row .name { font-weight: 700; }
+  .sv-row .name small { display: block; font-weight: 400; color: var(--mu); font-size: 11px; }
+  .sv-row .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .st { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .st.saved { background: var(--yel-bg); color: var(--yel-fg); }
+  .st.reg { background: var(--green-bg); color: var(--green-fg); }
+  .sv-tg { width: 26px; height: 26px; border: 1px solid var(--line2); border-radius: 4px; background: none; color: var(--tx); font-size: 16px; cursor: pointer; }
+  .sv-body { border-top: 1px solid var(--line); background: #0e1626; }
+  .sv-body .pk { grid-template-columns: 1fr auto auto; }
+  .sv-sum { display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; border-top: 1px solid var(--line); }
+  .sv-sum div { padding: 8px 4px; border-right: 1px solid var(--line); }
+  .sv-sum div:last-child { border-right: 0; }
+  .sv-sum small { display: block; color: var(--mu); font-size: 11px; }
+  .sv-sum b { font-variant-numeric: tabular-nums; }
+  .sv-act { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+  .sv-act .btn { flex: none; min-width: 120px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 18px; border-radius: 8px; background: var(--green-bg); color: var(--green-fg); font-weight: 700; box-shadow: 0 4px 16px #0008; }
+  table.bets { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); }
+  table.bets th { padding: 8px; background: #0e1626; color: var(--mu); font-weight: 700; border-bottom: 1px solid var(--line); }
+  table.bets td { padding: 8px; text-align: center; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  table.bets td.l { text-align: left; }
+  .dtabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .dtabs button { padding: 6px 14px; border: 1px solid var(--line2); border-radius: 18px; background: #0e1626; color: var(--mu); font: inherit; font-weight: 700; cursor: pointer; }
+  .dtabs button small { margin-left: 6px; font-weight: 400; opacity: .85; }
+  .dtabs button.on { background: var(--acc); border-color: var(--acc); color: #04122a; }
+  .dtabs button.has { color: var(--tx); }
+  .tagx { display: inline-block; min-width: 38px; padding: 2px 8px; border-radius: 4px; text-align: center; font-size: 11px; font-weight: 800; }
+  .tagx.ax { background: var(--yel-bg); color: var(--yel-fg); border: 1px solid var(--yel-fg); }
+  .tagx.mu { background: var(--blue-bg); color: var(--blue-fg); }
+  .pk.leg { grid-template-columns: 48px 1fr auto auto; }
+  .pk.leg.axis { border-left: 3px solid var(--yel-fg); }
+  .chips { display: flex; gap: 6px; }
+  .pc { padding: 3px 9px; border: 1px solid var(--line2); border-radius: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pc small { margin-right: 4px; font-weight: 400; color: var(--mu); }
+  .pc.main { border-color: var(--acc); color: var(--acc); }
+  .pc.ins { border-color: var(--green-fg); color: var(--green-fg); }
+  .pc.axc { border-color: var(--yel-fg); color: var(--yel-fg); }
+  .grp-h { padding: 5px 12px; font-size: 11px; color: var(--mu); background: #0b1424; border-bottom: 1px solid var(--line); }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; padding: 6px 12px; color: var(--mu); font-size: 11px; border-top: 1px solid var(--line); }
+  .slip2 { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+  .s2-bar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; padding: 10px 14px; background: #0e1626; border-bottom: 1px solid var(--line); }
+  .s2-bar .k { color: var(--mu); margin-right: 6px; }
+  .s2-bar b { font-variant-numeric: tabular-nums; }
+  .s2-bar .grow { flex: 1; }
+  .s2-bar .inp { width: 120px; }
+  .s2-bar .btn { flex: none; padding: 6px 14px; }
+  .combo-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+  table.combos { border-collapse: collapse; min-width: 100%; }
+  table.combos th, table.combos td { padding: 6px 10px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table.combos th { position: sticky; top: 0; background: #0e1626; color: var(--mu); font-weight: 700; z-index: 1; }
+  table.combos th.lg { min-width: 130px; color: var(--tx); }
+  table.combos th.lg small { display: block; font-weight: 400; color: var(--mu); font-size: 10px; }
+  table.combos td.pc-ax { color: var(--yel-fg); font-weight: 700; }
+  table.combos td.pc-main { color: var(--acc); font-weight: 700; }
+  table.combos td.pc-ins { color: var(--green-fg); font-weight: 700; }
+  table.combos td.od2 { font-weight: 800; color: var(--yel-fg); }
+  table.combos td.pf.pos { color: var(--red-fg); } table.combos td.pf.neg { color: var(--blue-fg); }
+  table.combos tfoot td { background: #0e1626; font-weight: 700; }
+  .st-in { width: 96px; padding: 4px 6px; text-align: right; border: 1px solid var(--line2); border-radius: 5px; background: #0b1424; color: var(--tx); font: inherit; font-weight: 700; }
+  .s2-note { padding: 6px 14px; color: var(--mu); font-size: 11px; border-top: 1px solid var(--line); }
+  .s2-empty { padding: 30px 12px; text-align: center; color: var(--mu); }
+  .s2-btns { display: flex; gap: 8px; }
+  .gc-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 0 0 6px; }
+  .gc-pick .lb { color: var(--mu); font-size: 10px; margin-right: -2px; }
+  .pk-chip { padding: 0 7px; border-radius: 10px; font-size: 11px; font-weight: 700; border: 1px solid transparent; }
+  .pk-chip.b { background: var(--blue-bg); color: var(--blue-fg); }
+  .pk-chip.r { background: var(--red-bg); color: var(--red-fg); }
+  .pk-chip.g { background: var(--green-bg); color: var(--green-fg); }
+  .pk-chip.n { background: #2a3448; color: var(--gray-fg); }
+  .pk-chip.y { background: var(--yel-bg); color: var(--yel-fg); }
+  .gc-note { margin: -2px 0 6px; padding: 3px 7px; border-left: 2px solid var(--line2); color: var(--mu); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<h1>📋 이번주 픽 <span style="font-weight:400;font-size:13px;color:var(--mu)">(목업)</span></h1>
+<div class="tabs"><button class="on" data-tab="pick">이번주 픽</button><button data-tab="bets">배팅내역<span class="badge" id="betsN">0</span></button></div>
+<div id="viewPick">
+<div class="sub">2026-09-27 ~ 2026-10-03 · 별표로 고른 경기 <span id="totalCnt"></span>경기</div>
+<div class="note">
+  <b>예시 데이터</b>입니다(실제 경기 배당 일부를 옮긴 것). 배당 버튼을 눌러 보세요 — 누르면 파랗게 바뀌고 아래 <b>이번주 벳</b>에 담깁니다.
+  핸디는 기본 핸디 아래에 <b>±2 · ±3.5 핸디가 있는 경기는 그 줄까지</b> 모두 나옵니다. 위쪽 <b>날짜 탭</b>을 누르면 그날 경기만 보이고(담은 벳은 날짜를 바꿔도 그대로 남습니다), 카드의 칸(메인/사이드 × 정/플)은 <b>내픽</b>으로 정해지고, 벳을 저장해도 조합은 그대로 남습니다. 저장된 벳의 <b>수정</b>을 누르면 위 카드와 이번주 벳에 그 내역이 다시 채워집니다. 한 경기에서 <b>1칸만 고르면 축</b>, <b>2칸 이상 고르면 복수(메인+보험)</b>입니다 — 승+무처럼 <b>가로</b>로도, 국배 무 + 핸디 핸무(무핸무)처럼 <b>세로(다른 줄)</b>로도 고를 수 있습니다. 아래 이번주 벳은 <b>사다리</b> — 경기(층)마다 하나씩 고른 모든 조합이 한 줄씩 나열되고, 층 수 제한은 없습니다. 같은 칸을 다시 누르면 빠집니다.
+</div>
+
+<div class="dtabs" id="dtabs"></div>
+<div class="board" id="board"></div>
+
+<div class="slips-h"><h2>이번주 벳</h2><span class="sub" style="margin:0">위 카드에서 고른 배당이 여기에 모입니다 · 저장하면 벳 내역으로 넘어갑니다</span></div>
+<div class="slip2">
+  <div class="s2-bar">
+    <b id="slipTitle">조합</b><button class="btn sec" id="cancelEdit" style="flex:none;padding:3px 10px;display:none">수정 취소</button>
+    <span><span class="k">선택 경기</span><b id="sCnt">0 경기</b> <small id="sAx" style="color:var(--mu)"></small></span>
+    <span><span class="k">조합</span><b id="sCombo">0</b></span>
+    <span><span class="k">총벳금액</span><input class="inp" id="budget" inputmode="numeric" value="100,000"> 원 <button class="btn sec" id="applyB">금액적용</button></span>
+    <span><span class="k">뱃금액 합계</span><b id="stakeSum" style="color:var(--red-fg)">0</b> 원</span>
+    <span><span class="k">당첨금 범위</span><b id="winRange">-</b></span>
+    <span class="grow"></span>
+    <span class="s2-btns"><button class="btn sec" id="clr">전체 비우기</button><button class="btn pri" id="save" disabled>벳 저장</button></span>
+  </div>
+  <div class="combo-wrap" id="combos"></div>
+  <div class="s2-note">한 경기가 사다리의 한 층입니다 — 각 층에서 하나씩 골라 내려가는 모든 경로가 한 줄씩 나열됩니다. 층(경기) 수에는 제한이 없고, 뱃배당은 프로토처럼 소수 1자리로 올림합니다. 뱃금액은 줄마다 직접 입력하거나 <b>금액적용</b>으로 총벳금액을 배당 역수 비중으로 나눠 담습니다.</div>
+</div>
+<div class="saved-h"><h2>저장된 벳</h2><span class="sub" style="margin:0">벳 저장을 누르면 한 줄씩 쌓입니다 · 줄을 누르면 펼쳐지고, 펼친 곳에서 <b>벳 등록</b>을 하면 배팅내역으로 넘어갑니다</span></div>
+<div id="saved"></div>
+<div class="hint">※ 카드의 배당은 <b>최신 배당</b>(배변)입니다. 초기 배당보다 올랐으면 <span style="color:#ff8a8a">▲</span>, 내렸으면 <span style="color:#7db4ff">▼</span>가 붙습니다. 파랑 숫자 = 정배 쪽, 빨강 = 역배 쪽.
+결과가 들어온 경기는 스코어가 나오고 <span style="color:var(--green-fg)">✔</span>가 적중한 배당에 붙습니다(마지막 칸 예시).</div>
+
+</div>
+<div id="viewBets" hidden>
+  <div class="saved-h"><h2>배팅내역</h2><span class="sub" style="margin:0">이번주 픽에서 <b>벳 등록</b>한 벳입니다(목업 — 실제 배팅내역 화면은 다음 작업에서 이 표에 맞춰 만듭니다)</span></div>
+  <div id="betsBox"></div>
+</div>
+<script>
+// 예시 경기 — 칸(메인/사이드 × 정/플)은 배답벳(메벳(정)/메벳(플)/사벳(정)/사벳(플))로 정한다.
+// od: [초기, 최신] × (승,무,패). hd: 핸디 기준점 + 승무패.
+const G = [
+  {id:1, box:'M정', dt:'09-27(일) 19:00', lg:'리그1 5R', ht:'모나코', at:'랑스', pick:'정무', p:'핸승', hit:'', note:'홈 강세 · 정배 그대로', star:2,
+   k:[[1.92,3.45,2.95],[1.83,3.50,3.15]],
+   h:[{l:-1, v:[[3.45,3.70,1.70],[3.40,3.65,1.77]]}, {l:-2, v:[[9.80,5.60,1.16],[9.20,5.50,1.19]]}]},
+  {id:2, box:'M정', dt:'09-27(일) 22:00', lg:'라리가 5R', ht:'비야레알', at:'셀타', pick:'정무', p:'핸승', hit:'P-고민', note:'셀타 원정에서 약함', star:2,
+   k:[[1.75,3.60,4.40],[1.72,3.65,4.55]],
+   h:[{l:-1, v:[[3.05,3.70,1.98],[3.05,3.70,1.98]]}]},
+  {id:3, box:'M플', dt:'09-27(일) 22:00', lg:'리그1 5R', ht:'니스', at:'릴', pick:'플핸무', p:'무', hit:'P-고민', note:'릴이 1위라 단독으로 못 간다', star:2,
+   k:[[3.20,3.15,1.93],[3.10,3.40,1.88]],
+   h:[{l:1, v:[[1.70,3.45,3.70],[1.66,3.40,3.95]]}, {l:2, v:[[1.21,5.20,7.90],[1.23,5.10,7.60]]}]},
+  {id:4, box:'M플', dt:'09-28(월) 03:45', lg:'세리에A 5R', ht:'AC밀란', at:'US레체', pick:'플핸무', p:'핸무', hit:'', note:'', star:2, res:{hs:2,as:0,k:0,h0:0,h1:1,h2:0},
+   k:[[1.55,3.80,5.90],[1.60,3.80,5.60]],
+   h:[{l:-1, v:[[2.60,3.60,2.45],[2.60,3.60,2.45]]}, {l:-2, v:[[5.10,4.20,1.55],[5.10,4.20,1.55]]}, {l:-3.5, v:[[12.50,6.80,1.10],[12.50,6.80,1.10]]}]},
+  {id:5, box:'M플', dt:'09-28(월) 04:00', lg:'에레디 5R', ht:'트벤테', at:'PSV', pick:'플핸', p:'무', hit:'P-엇갈', note:'국·해 방향이 갈림', star:2,
+   k:[[3.60,3.65,1.74],[3.40,3.60,1.84]],
+   h:[{l:1, v:[[1.66,3.80,4.05],[1.66,3.75,4.15]]}, {l:2, v:[[1.16,6.00,9.50],[1.17,5.90,9.30]]}, {l:3.5, v:[[1.05,9.80,16.00],[1.06,9.60,15.50]]}]},
+  {id:6, box:'S정', dt:'09-29(화) 20:45', lg:'분데스 4R', ht:'슈투트가', at:'도르트문', pick:'정무', p:'핸승', hit:'Pass', note:'', star:1,
+   k:[[2.30,3.55,2.85],[2.35,3.50,2.80]],
+   h:[{l:-1, v:[[4.10,3.60,1.62],[4.15,3.60,1.60]]}]},
+  {id:7, box:'S정', dt:'09-27(일) 17:00', lg:'EPL 6R', ht:'뉴캐슬', at:'헐시티', pick:'정무', p:'핸승', hit:'', note:'', star:1, res:{hs:2,as:1,k:0,h0:1,h1:0},
+   k:[[1.56,3.80,4.55],[1.56,3.80,4.55]],
+   h:[{l:-1, v:[[2.55,3.40,2.22],[2.55,3.40,2.22]]}, {l:-2, v:[[4.60,3.90,1.50],[4.60,3.90,1.50]]}]},
+  {id:8, box:'S플', dt:'09-30(수) 01:30', lg:'라리가 5R', ht:'헤타페', at:'발렌시아', pick:'플핸무', p:'무', hit:'P-빅겜', note:'무승부 냄새', star:1,
+   k:[[2.85,3.10,2.55],[2.90,3.10,2.50]],
+   h:[{l:0, v:[[2.85,3.10,2.55],[2.90,3.10,2.50]]}]},
+  {id:9, box:'S플', dt:'09-27(일) 15:00', lg:'리그1 5R', ht:'낭트', at:'툴루즈', pick:'플핸', p:'핸무', hit:'', note:'', star:1,
+   k:[[2.95,3.20,2.45],[2.80,3.15,2.60]],
+   h:[{l:1, v:[[1.60,3.90,4.40],[1.58,3.95,4.60]]}]},
+];
+// 칸은 내픽(MY_PICK)으로 정한다 — 정 계열(정무·정역·정·핸승·핸무·핸승핸무)은 '정', 나머지(플핸무·플핸승·플핸·2플핸·2플핸무·무·역·무핸무)는 '플'.
+// 메인/사이드는 별 등급으로 가른다(★★=메인, ★=사이드 — 사용자 확인 필요).
+const JUNG_PICKS = ['정무','정역','정','핸승','핸무','핸승핸무'];
+G.forEach(g => { g.box = (g.star>=2 ? 'M' : 'S') + (JUNG_PICKS.includes(g.pick) ? '정' : '플'); });
+const BOX = [
+  ['M정','메인','정','jung'],['M플','메인','플','pl'],['S정','사이드','정','jung'],['S플','사이드','플','pl']
+];
+const fmt = n => Number(n).toLocaleString('ko-KR');
+let dateSel = 'ALL';   // 날짜 탭 — 'ALL' 또는 '09-27(일)'
+const sel = new Map();   // 경기 id → [{m:'k'|'h0'.., i:0..2}, ...] — 승무패 줄·핸디 줄 어디서든, 가로·세로로 여러 칸
+const mOrder = m => m === 'k' ? 0 : 1 + (+m.slice(1));
+const selHas = (id, m, i) => (sel.get(id) || []).some(e => e.m === m && e.i === i);
+function toggleOd(id, m, i){
+  const arr = sel.get(id) || [];
+  const at = arr.findIndex(e => e.m === m && e.i === i);
+  if (at >= 0) arr.splice(at, 1); else arr.push({m, i});
+  arr.sort((a, b) => mOrder(a.m) - mOrder(b.m) || a.i - b.i);
+  if (arr.length) sel.set(id, arr); else sel.delete(id);
+}
+const LAB = ['승','무','패'];
+// 담은 경기들 → 다리(leg) 목록. 1칸=축, 2칸=복수. 축을 위에 둔다.
+const pickLab = (g, e) => e.m === 'k' ? LAB[e.i] : '핸' + LAB[e.i] + ' ' + lineTxt(g.h[+e.m.slice(1)].l).replace('H ', 'H');
+// 담은 경기들 → 층(leg) 목록. 칸 1개=축, 2개 이상=복수(가로든 세로든). 축을 위에 둔다.
+function legsOf(){
+  return [...sel.entries()].map(([id, arr]) => {
+    const g = G.find(x => x.id === id);
+    const ps = arr.map(e => ({m: e.m, i: e.i, lab: pickLab(g, e), odds: oddsOf(g, e.m)[1][e.i]}));
+    if (ps.length > 1) { const lo = Math.min(...ps.map(p => p.odds)); ps.forEach(p => { p.role = p.odds === lo ? 'main' : 'ins'; }); }   // 낮은 배당=메인, 나머지=보험(자동)
+    else ps[0].role = 'ax';
+    const mks = [...new Set(arr.map(e => e.m))].map(m => m === 'k' ? '승무패' : '핸디 ' + lineTxt(g.h[+m.slice(1)].l)).join(' + ');
+    return {id, title: `${g.ht} vs ${g.at}`, sub: `${g.lg} · ${g.dt} · ${mks}`, picks: ps, entries: arr.map(e => ({...e})), axis: ps.length === 1};
+  }).sort((a, b) => a.picks.length - b.picks.length);
+}
+let budget = 100000;
+let stakes = {};   // 조합 키 → 뱃금액
+const roundStake = v => Math.round(v / 100) * 100;
+// 사다리: 각 경기(층)에서 하나씩 고른 모든 경로. 뱃배당 = 다리 배당 곱을 소수 1자리로 올림(프로토 방식)
+function combosOf(L){
+  let acc = [[]];
+  for (const l of L) { const next = []; for (const c of acc) for (const p of l.picks) next.push([...c, {l, p}]); acc = next; }
+  return acc.map(legs => ({key: legs.map(x => x.l.id + ':' + x.p.m + ':' + x.p.i).join('|'), legs,
+    odds: Math.ceil(legs.reduce((a, x) => a * x.p.odds, 1) * 10 - 1e-9) / 10}));
+}
+function sumOf(L, st){
+  const cs = combosOf(L);
+  const stakeSum = cs.reduce((a, c) => a + (st[c.key] || 0), 0);
+  const wins = cs.filter(c => (st[c.key] || 0) > 0).map(c => Math.floor(c.odds * st[c.key]));
+  return {cs, n: cs.length, stakeSum, winMin: wins.length ? Math.min(...wins) : 0, winMax: wins.length ? Math.max(...wins) : 0,
+    axis: L.filter(l => l.axis).length, multi: L.filter(l => !l.axis).length};
+}
+const winText = sm => sm.winMax ? (sm.winMin === sm.winMax ? fmt(sm.winMax) + ' 원' : `${fmt(sm.winMin)} ~ ${fmt(sm.winMax)} 원`) : '-';
+function applyBudgetTo(L, bud){
+  const cs = combosOf(L); if (!cs.length) return {};
+  const w = cs.map(c => 1 / c.odds), ws = w.reduce((a, b) => a + b, 0), out = {};
+  cs.forEach((c, i) => { out[c.key] = roundStake(bud * w[i] / ws); });
+  // 100원 단위 올림·내림으로 생긴 차액은 뱃금액이 가장 큰 조합에 얹어, 합계가 총벳금액과 정확히 같게 맞춘다
+  const diff = bud - Object.values(out).reduce((x, y) => x + y, 0);
+  if (diff) { const big = cs.reduce((m, c) => out[c.key] > out[m.key] ? c : m, cs[0]); out[big.key] += diff; }
+  return out;
+}
+// 조합 표 — 층(경기)마다 한 열, 뒤에 뱃배당·뱃금액·당첨금·수익금·수익률(앱의 이번주 벳 표와 같은 순서)
+function comboTable(L, st, editable){
+  if (!L.length) return '<div class="s2-empty">카드의 승/무/패 배당을 눌러 담으세요<br><small>한 경기에서 1칸만 고르면 <b style="color:var(--yel-fg)">축</b>, 2칸 이상 고르면 <b style="color:var(--blue-fg)">복수</b>(메인+보험)입니다</small></div>';
+  const cs = combosOf(L); const total = cs.reduce((a, c) => a + (st[c.key] || 0), 0);
+  const mkShort = l => l.sub.split(' · ').slice(-1)[0];
+  return `<table class="combos"><thead><tr><th>#</th>${L.map(l => `<th class="lg"><span class="tagx ${l.axis ? 'ax' : 'mu'}">${l.axis ? '축' : '복수'}</span> ${l.title}<small>${mkShort(l)}</small></th>`).join('')}<th>뱃배당</th><th>뱃금액</th><th>당첨금</th><th>수익금</th><th>수익률</th></tr></thead><tbody>
+  ${cs.map((c, n) => { const sk = st[c.key] || 0; const win = Math.floor(c.odds * sk);
+    return `<tr data-ck="${c.key}"><td>${n + 1}</td>${c.legs.map(x => `<td class="pc-${x.p.role}">${x.p.role === 'main' ? '메인 ' : x.p.role === 'ins' ? '보험 ' : ''}${x.p.lab} ${x.p.odds.toFixed(2)}</td>`).join('')}
+    <td class="od2">${c.odds.toFixed(1)}</td>
+    <td>${editable ? `<input class="st-in" data-k="${c.key}" inputmode="numeric" value="${sk ? fmt(sk) : ''}" placeholder="0">` : fmt(sk)}</td>
+    <td class="wn">${sk ? fmt(win) : '-'}</td><td class="pf ${win - total >= 0 ? 'pos' : 'neg'}">${sk ? fmt(win - total) : '-'}</td><td class="pf ${win - total >= 0 ? 'pos' : 'neg'}">${sk && total ? ((win / total - 1) * 100).toFixed(1) + '%' : '-'}</td></tr>`; }).join('')}
+  </tbody><tfoot><tr><td colspan="${L.length + 2}" style="text-align:right">뱃금액 합계</td><td class="ts">${fmt(total)}</td><td colspan="3"></td></tr></tfoot></table>`;
+}
+function refreshCalc(){   // 뱃금액을 치는 동안 표를 다시 그리지 않고 숫자만 갱신(입력 커서 유지)
+  const L = legsOf(); const sm = sumOf(L, stakes);
+  document.querySelectorAll('#combos tr[data-ck]').forEach(tr => {
+    const c = sm.cs.find(x => x.key === tr.dataset.ck); const sk = stakes[c.key] || 0; const win = Math.floor(c.odds * sk);
+    const tds = tr.querySelectorAll('td'); const n = tds.length;
+    tds[n - 3].textContent = sk ? fmt(win) : '-';
+    tds[n - 2].textContent = sk ? fmt(win - sm.stakeSum) : '-';
+    tds[n - 1].textContent = sk && sm.stakeSum ? ((win / sm.stakeSum - 1) * 100).toFixed(1) + '%' : '-';
+    [tds[n - 2], tds[n - 1]].forEach(t => { t.className = 'pf ' + (win - sm.stakeSum >= 0 ? 'pos' : 'neg'); });
+  });
+  const ts = document.querySelector('#combos .ts'); if (ts) ts.textContent = fmt(sm.stakeSum);
+  document.getElementById('stakeSum').textContent = fmt(sm.stakeSum);
+  document.getElementById('winRange').textContent = winText(sm);
+}
+const legRow = (l, x) => `<div class="pk leg${l.axis ? ' axis' : ''}"><span class="tagx ${l.axis ? 'ax' : 'mu'}">${l.axis ? '축' : '복수'}</span>
+  <div class="t">${l.title}<small>${l.sub}</small></div>
+  <div class="chips">${l.picks.map(p => `<span class="pc ${p.role === 'ax' ? 'axc' : p.role}">${p.role === 'main' ? '<small>메인</small>' : p.role === 'ins' ? '<small>보험</small>' : ''}${p.lab} ${p.odds.toFixed(2)}</span>`).join('')}</div>
+  ${x ? `<button class="x" data-rm="${l.id}">✕</button>` : '<span></span>'}</div>`;
+
+function favIdx(g){ const e=g.k[1]; return e[0]<e[2] ? 0 : 2; }   // 정배 칸(승=홈, 패=원정)
+const lineTxt = l => 'H ' + (l>0?'+':'') + l.toFixed(1);
+// m = 'k'(국배 승무패) 또는 'h0','h1',… (핸디 줄 번호) → [초기, 최신]
+function oddsOf(g, m){ return m==='k' ? g.k : g.h[+m.slice(1)].v; }
+function odCell(g, m, i){
+  const [ini0, cur0] = oddsOf(g, m); const cur = cur0[i], ini = ini0[i];
+  const fav = m==='k' ? favIdx(g)===i : false;
+  const dog = m==='k' ? (i!==1 && favIdx(g)!==i) : false;
+  const mv = cur>ini ? '<span class="mv up">▲</span>' : cur<ini ? '<span class="mv dn">▼</span>' : '';
+  const on = selHas(g.id, m, i);
+  const hit = g.res && g.res[m]===i;
+  return `<button class="od${fav?' fav':''}${dog?' dog':''}${on?' on':''}${hit?' hit':''}" data-g="${g.id}" data-m="${m}" data-i="${i}" ${g.res?'disabled style="cursor:default"':''}>
+    <small>${['승','무','패'][i]}</small><b>${cur.toFixed(2)}</b>${mv}</button>`;
+}
+function card(g){
+  const has = sel.has(g.id);
+  const sc = g.res ? `<span class="score"><span class="${g.res.hs>g.res.as?'win':''}">${g.res.hs}</span> : <span class="${g.res.as>g.res.hs?'win':''}">${g.res.as}</span></span>` : '<span class="vs">vs</span>';
+  const hrows = g.h.map((hl,n) => `<div class="mk"><span class="lab">${n===0?'핸디':'추가'}<i>${lineTxt(hl.l)}</i></span>${[0,1,2].map(i=>odCell(g,'h'+n,i)).join('')}</div>`).join('');
+  return `<div class="gc${has?' has-pick':''}">
+    <div class="gc-top"><span class="star">${'★'.repeat(g.star)}</span><b>${g.dt}</b><span>${g.lg}</span></div>
+    <div class="gc-teams"><span>${g.ht}</span>${sc}<span>${g.at}</span></div>
+    <div class="gc-pick">
+      <span class="lb">내픽</span><span class="pk-chip ${JUNG_PICKS.includes(g.pick) ? 'b' : 'r'}">${g.pick}</span>
+      ${g.p ? `<span class="lb">상세픽</span><span class="pk-chip ${({'핸승':'b','핸무':'g','무':'n','역':'r'})[g.p] || 'n'}">${g.p}</span>` : ''}
+      ${g.hit ? `<span class="lb">의견</span><span class="pk-chip ${g.hit === 'Pass' ? 'n' : 'y'}">${g.hit}</span>` : ''}
+    </div>
+    ${g.note ? `<div class="gc-note" title="${g.note}">${g.note}</div>` : ''}
+    <div class="mk"><span class="lab">국배</span>${[0,1,2].map(i=>odCell(g,'k',i)).join('')}</div>
+    ${hrows}
+  </div>`;
+}
+const dOf = g => g.dt.split(' ')[0];
+function renderDates(){
+  const days = [...new Set(G.map(dOf))].sort();
+  const cnt = d => G.filter(g => d==='ALL' || dOf(g)===d).length;
+  const picked = d => [...sel.keys()].filter(id => { const g=G.find(x=>x.id===id); return d==='ALL' || dOf(g)===d; }).length;
+  document.getElementById('dtabs').innerHTML = ['ALL', ...days].map(d =>
+    `<button data-d="${d}" class="${d===dateSel?'on':''}">${d==='ALL'?'전체':d}<small>${cnt(d)}경기${picked(d)?' · 담김 '+picked(d):''}</small></button>`).join('');
+}
+function renderBoard(){
+  renderDates();
+  let h = '<div class="grp main">메인<small>메벳</small></div><div class="grp side">사이드<small>사벳</small></div>';
+  BOX.forEach(b => { h += `<div class="sub-h ${b[3]}">${b[2]}<small id="n_${b[0]}"></small></div>`; });
+  BOX.forEach(b => {
+    const list = G.filter(g => g.box===b[0] && (dateSel==='ALL' || dOf(g)===dateSel));
+    h += `<div class="col">${list.length ? list.map(card).join('') : '<div class="empty">별표 경기 없음</div>'}</div>`;
+  });
+  document.getElementById('board').innerHTML = h;
+  BOX.forEach(b => { document.getElementById('n_'+b[0]).textContent = G.filter(g=>g.box===b[0] && (dateSel==='ALL' || dOf(g)===dateSel)).length + '경기'; });
+  document.getElementById('totalCnt').textContent = G.filter(g => dateSel==='ALL' || dOf(g)===dateSel).length;
+}
+function renderSlip(){
+  const L = legsOf(); const sm = sumOf(L, stakes);
+  document.getElementById('combos').innerHTML = comboTable(L, stakes, true);
+  document.getElementById('sCnt').textContent = L.length + ' 경기';
+  document.getElementById('sAx').textContent = L.length ? `(축 ${sm.axis} · 복수 ${sm.multi})` : '';
+  document.getElementById('sCombo').textContent = sm.n;
+  document.getElementById('stakeSum').textContent = fmt(sm.stakeSum);
+  document.getElementById('winRange').textContent = winText(sm);
+  document.getElementById('save').disabled = !L.length;
+  const eName = editing ? saved.find(x => x.id === editing).name : null;
+  document.getElementById('save').textContent = editing ? '수정 저장' : '벳 저장';
+  document.getElementById('slipTitle').textContent = editing ? `조합 — ${eName} 수정 중` : '조합';
+  document.getElementById('slipTitle').style.color = editing ? 'var(--yel-fg)' : '';
+  document.getElementById('cancelEdit').style.display = editing ? '' : 'none';
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.od'); const rm = e.target.closest('[data-rm]');
+  if (b && !b.disabled) { toggleOd(+b.dataset.g, b.dataset.m, +b.dataset.i); renderBoard(); renderSlip(); }
+  else if (rm) { sel.delete(+rm.dataset.rm); renderBoard(); renderSlip(); }
+});
+document.getElementById('clr').onclick = () => { sel.clear(); stakes = {}; renderBoard(); renderSlip(); };
+document.getElementById('applyB').onclick = () => { stakes = applyBudgetTo(legsOf(), budget); renderSlip(); };
+document.getElementById('budget').addEventListener('input', e => {
+  budget = Number(e.target.value.replace(/[^0-9]/g, '')) || 0; e.target.value = budget ? fmt(budget) : '';
+});
+document.getElementById('combos').addEventListener('input', e => {
+  const t = e.target.closest('.st-in'); if (!t) return;
+  const n = Number(t.value.replace(/[^0-9]/g, '')) || 0; stakes[t.dataset.k] = n; t.value = n ? fmt(n) : ''; refreshCalc();
+});
+// ── 저장된 벳(프로토 구매내역 방식) ──
+const saved = [];   // {id, name, ts, picks, prod, amt, status:'saved'|'reg', open}
+const bets = [];    // 배팅내역으로 등록된 벳
+let svSeq = 0;
+let editing = null;   // 수정 중인 저장 벳 id
+const pad = n => String(n).padStart(2,'0');
+function nowText(){ const d=new Date(); return `26.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function toast(t){ const e=document.createElement('div'); e.className='toast'; e.textContent=t; document.body.appendChild(e); setTimeout(()=>e.remove(),2200); }
+function saveSlip(){
+  const L = legsOf();
+  if (!L.length) return;
+  const snap = L.map(l => [l.id, l.entries.map(e => ({...e}))]);
+  const data = {legs: L, stakes: {...stakes}, budget, snap, ts: nowText()};
+  if (editing) {
+    const v = saved.find(x => x.id === editing);
+    Object.assign(v, data, {open: true});
+    toast(v.status === 'reg' ? '수정했습니다 — 배팅내역에도 반영됩니다' : '수정 내용을 저장했습니다');
+    editing = null;
+  } else {
+    svSeq += 1;
+    saved.unshift({id: svSeq, name: `이번주 벳 #${svSeq}`, status: 'saved', open: true, ...data});
+    toast('벳을 저장했습니다 — 조합은 그대로 남아 있습니다');
+  }
+  renderBoard(); renderSlip(); renderSaved(); renderBets();
+}
+function renderSaved(){
+  const el = document.getElementById('saved');
+  if (!saved.length) { el.innerHTML = '<div class="slip-empty" style="border:1px dashed var(--line2);border-radius:8px">아직 저장한 벳이 없습니다</div>'; return; }
+  el.innerHTML = saved.map(v => { const sm = sumOf(v.legs, v.stakes); return `<div class="sv">
+    <div class="sv-row" data-tg="${v.id}">
+      <input type="checkbox" onclick="event.stopPropagation()">
+      <div class="name">${v.name}<small>축 ${sm.axis} · 복수 ${sm.multi} · ${sm.n}조합</small></div>
+      <div>${v.ts}</div><div class="num">${v.legs.length}경기</div>
+      <div class="num">${winText(sm)}</div><div class="num">${fmt(sm.stakeSum)} 원</div>
+      <div><span class="st ${v.status}">${v.status === 'reg' ? '배팅내역 등록됨' : '저장됨'}</span></div>
+      <button class="sv-tg">${v.open ? '−' : '+'}</button>
+    </div>
+    ${v.open ? `<div class="sv-body"><div class="combo-wrap">${comboTable(v.legs, v.stakes, false)}</div>
+      <div class="sv-act">${v.status === 'reg' ? `<span class="st reg">배팅내역에 등록되었습니다</span><button class="btn sec" data-edit="${v.id}">수정</button>` : `<button class="btn sec" data-del="${v.id}">삭제</button><button class="btn sec" data-edit="${v.id}">수정</button><button class="btn pri" data-reg="${v.id}">벳 등록 → 배팅내역</button>`}</div>
+    </div>` : ''}
+  </div>`; }).join('');
+}
+function renderBets(){
+  const n = document.getElementById('betsN');
+  n.textContent = bets.length; n.style.display = bets.length ? '' : 'none';
+  document.getElementById('betsBox').innerHTML = bets.length ? `<table class="bets"><thead><tr><th>등록일시</th><th>벳 이름</th><th>경기수</th><th>조합</th><th>총뱃금액</th><th>당첨금 범위</th><th>결과</th></tr></thead><tbody>${bets.map(v => { const sm = sumOf(v.legs, v.stakes); return `<tr><td>${v.ts}</td><td class="l">${v.name}<br><small style="color:var(--mu)">${v.legs.map(l => (l.axis ? '[축] ' : '[복수] ') + l.title.split(' vs ')[0] + ' ' + l.picks.map(p => p.lab).join('+')).join(' · ')}</small></td><td>${v.legs.length}<br><small style="color:var(--mu)">축 ${sm.axis}·복수 ${sm.multi}</small></td><td>${sm.n}</td><td>${fmt(sm.stakeSum)} 원</td><td>${winText(sm)}</td><td><span class="st saved">결과 대기</span></td></tr>`; }).join('')}</tbody></table>`
+    : '<div class="slip-empty" style="border:1px dashed var(--line2);border-radius:8px">등록된 벳이 없습니다 — 이번주 픽에서 벳을 저장하고 등록하세요</div>';
+}
+function startEdit(id){
+  const v = saved.find(x => x.id === id);
+  sel.clear(); v.snap.forEach(([gid, arr]) => sel.set(gid, arr.map(e => ({...e}))));
+  stakes = {...v.stakes}; budget = v.budget; document.getElementById('budget').value = fmt(budget);
+  editing = id; dateSel = 'ALL';
+  renderBoard(); renderSlip();
+  document.getElementById('viewPick').scrollIntoView({behavior: 'smooth'});
+  toast(v.name + ' 내역을 카드와 이번주 벳에 불러왔습니다');
+}
+function cancelEdit(){ editing = null; sel.clear(); renderBoard(); renderSlip(); }
+document.getElementById('save').onclick = saveSlip;
+document.getElementById('cancelEdit').onclick = cancelEdit;
+document.addEventListener('click', e => {
+  const dt = e.target.closest('[data-d]');
+  if (dt) { dateSel = dt.dataset.d; renderBoard(); return; }
+  const ed = e.target.closest('[data-edit]');
+  if (ed) { startEdit(+ed.dataset.edit); return; }
+  const tg = e.target.closest('[data-tg]'), reg = e.target.closest('[data-reg]'), del = e.target.closest('[data-del]'), tab = e.target.closest('[data-tab]');
+  if (tg) { const v = saved.find(x=>x.id===+tg.dataset.tg); v.open = !v.open; renderSaved(); }
+  else if (reg) { const v = saved.find(x=>x.id===+reg.dataset.reg); v.status='reg'; v.open=false; bets.unshift(v); renderSaved(); renderBets(); toast('배팅내역에 등록했습니다'); }
+  else if (del) { const i = saved.findIndex(x=>x.id===+del.dataset.del); saved.splice(i,1); renderSaved(); }
+  else if (tab) {
+    document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on', b===tab));
+    document.getElementById('viewPick').hidden = tab.dataset.tab!=='pick';
+    document.getElementById('viewBets').hidden = tab.dataset.tab!=='bets';
+  }
+});
+// 처음 화면에 예시 벳 3개를 담아 둔다
+sel.set(1,[{m:'k',i:0}]); sel.set(3,[{m:'h1',i:0}]); sel.set(9,[{m:'k',i:1},{m:'h0',i:1}]); sel.set(2,[{m:'k',i:0},{m:'k',i:1}]);
+stakes = applyBudgetTo(legsOf(), budget);
+renderBoard(); renderSlip(); renderSaved(); renderBets();
+</script>
+</body>
+</html>

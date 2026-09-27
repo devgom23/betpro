@@ -179,6 +179,25 @@ def create_batch(username: str, scope: str, bets: list[dict], memo: str | None) 
         con.close()
 
 
+def replace_batch(username: str, scope: str, batch_id: str, bets: list[dict], memo: str | None) -> str:
+    """이미 등록한 묶음을 새 내용으로 바꾼다(이번주 픽 '저장된 벳'에서 수정 저장, 2026-09-27).
+    그 묶음의 벳이 하나라도 회차로 확정(settle_group_id)돼 있으면 바꾸지 않는다 — 회차총계가
+    이미 그 값으로 계산돼 있어서다. 옛 줄을 지우고 새 묶음으로 넣어 새 batch_id를 돌려준다."""
+    con = _connect(username)
+    try:
+        locked = con.execute(
+            "SELECT COUNT(*) FROM bet_slips WHERE scope=? AND batch_id=? AND settle_group_id IS NOT NULL",
+            (scope, batch_id),
+        ).fetchone()[0]
+        if locked:
+            raise ValueError("이미 회차로 확정된 벳이라 수정할 수 없습니다(베팅내역에서 확정을 풀 수 없음).")
+        con.execute("DELETE FROM bet_slips WHERE scope=? AND batch_id=?", (scope, batch_id))
+        con.commit()
+    finally:
+        con.close()
+    return create_batch(username, scope, bets, memo)
+
+
 def list_slips(username: str, scope: str) -> list[dict]:
     """슬립+다리 원본 데이터(등록된 값 그대로, 실제 RT/판정 없음)를 등록된 순서(id) 그대로 반환한다.
     회차는 더 이상 날짜로 자동 묶지 않고 settle_group_id(=연속된 값끼리)로 구간을 나눈다."""
