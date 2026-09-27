@@ -99,6 +99,7 @@ import same_odds as SAMEODDS  # noqa: E402
 import sample_dir as SAMPLEDIR  # noqa: E402
 import book_dir as BOOKDIR      # noqa: E402
 import triple_sample as TRIPLE  # noqa: E402
+import odds_lookup as ODDSLOOK  # noqa: E402
 import season_view as SEASONVIEW  # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
@@ -853,6 +854,52 @@ def triple_sample(code: str, S: str, R: str, HT: str, AT: str,
     if scope != PATHS.SCOPE_MASTER or code not in PATHS.VALID_LEAGUES:
         return {"ready": False, "reason": "공식 6대리그와 내 데이터 K1·K2에서만 표본을 냅니다"}
     return TRIPLE.query(PATHS.get_master_db(), code, S, R, HT, AT)
+
+
+def _lookup_sources(user: dict, leagues: str = "") -> list:
+    """배당 조회 대상 — 공식 6대리그 + 이 계정 내 데이터 리그. leagues(쉼표)를 주면 그 코드들만."""
+    want = {x for x in str(leagues or "").split(",") if x}
+    out = []
+    for scope in (PATHS.SCOPE_MASTER, PATHS.SCOPE_USER):
+        try:
+            db = _resolve_scope_db(scope, user)
+        except HTTPException:
+            continue
+        labels = _scope_league_labels(scope, user)
+        for code in _scope_league_codes(scope, user):
+            if not want or code in want:
+                out.append((db, scope, code, labels.get(code, code)))
+    return out
+
+
+@app.get("/api/odds_lookup/leagues")
+def odds_lookup_leagues(user: dict = Depends(get_current_user)):
+    """배당 조회 '어디서 찾을까' 칩 목록."""
+    return [{"code": c, "label": lab, "scope": sc} for _, sc, c, lab in _lookup_sources(user)]
+
+
+class OddsLookupBody(BaseModel):
+    odds: dict = {}
+    phase: str = "init"
+    tick: int = 2
+    seasons: int = 0
+    flip: bool = False
+    sort: str = "near"
+    leagues: list[str] = []
+
+
+@app.post("/api/odds_lookup")
+def odds_lookup(body: OddsLookupBody, user: dict = Depends(get_current_user)):
+    """통합DB '배당 조회' — 넣은 배당과 비슷한 과거 경기의 결과 분포(api/odds_lookup.py)."""
+    src = _lookup_sources(user, ",".join(body.leagues))
+    return _fast_json(ODDSLOOK.lookup(src, body.odds, body.phase, max(0, min(body.tick, 15)),
+                                      max(0, body.seasons), body.flip, body.sort))
+
+
+@app.get("/api/odds_lookup/games")
+def odds_lookup_games(q: str = "", user: dict = Depends(get_current_user)):
+    """배당 조회 '경기에서 불러오기' — 팀 이름으로 최근 경기 검색."""
+    return ODDSLOOK.search_games(_lookup_sources(user), q)
 
 
 @app.get("/api/schedule_context")

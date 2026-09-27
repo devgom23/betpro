@@ -1,0 +1,463 @@
+/* 통합DB '배당 조회'(2026-09-27). 색은 앱 공통 토큰만 쓴다. */
+.ol-box {
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.ol-box-h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  border-radius: 8px 8px 0 0;
+}
+
+.ol-box-h h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.ol-box-h small,
+.ol-hint,
+.ol-muted {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ol-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ol-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.2fr) minmax(280px, 1fr) minmax(240px, 0.9fr);
+  gap: 12px;
+  padding: 12px 14px 0;
+}
+
+.ol-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+}
+
+.ol-card h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ol-card h4 small {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.ol-ph {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0 0 2px 86px;
+  font-size: 10px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.ol-row {
+  display: grid;
+  grid-template-columns: 80px repeat(3, 1fr);
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.ol-row label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ol-kh {
+  width: 34px;
+  padding: 3px 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-surface);
+  color: var(--chip-yellow-fg);
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+}
+
+.ol-od,
+.ol-search,
+.ol-card select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-card select {
+  width: auto;
+}
+
+.ol-od {
+  font-weight: 700;
+  text-align: center;
+}
+
+.ol-od-wrap {
+  position: relative;
+  display: block;
+}
+
+.ol-od-wrap .ol-od {
+  padding-right: 22px;
+}
+
+.ol-od-x {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.ol-od-x:hover {
+  color: var(--chip-red-fg);
+}
+
+.ol-opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.ol-k {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ol-seg {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+
+.ol-seg button {
+  padding: 4px 10px;
+  border: 0;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ol-seg button.is-on {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.ol-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ol-chip {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ol-chip.is-on {
+  border-color: var(--accent);
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+  font-weight: 700;
+}
+
+.ol-games {
+  max-height: 170px;
+  margin-top: 6px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ol-games button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ol-games button:hover {
+  background: var(--row-hover);
+}
+
+.ol-games small {
+  color: var(--text-muted);
+}
+
+.ol-hint {
+  margin: 6px 0 0;
+}
+
+.ol-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.ol-btn {
+  padding: 7px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ol-btn.is-pri {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.ol-btn:disabled {
+  opacity: 0.5;
+}
+
+.ol-recent {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.ol-recent small {
+  color: var(--text-muted);
+}
+
+.ol-recent button {
+  padding: 2px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ol-error {
+  margin: 0 14px 12px;
+  color: var(--chip-red-fg);
+}
+
+.ol-empty {
+  padding: 24px 14px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.ol-sum {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 0.9fr;
+  gap: 14px;
+  padding: 12px 14px;
+}
+
+.ol-kpi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.ol-kpi small {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ol-kpi b {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-bar {
+  display: flex;
+  gap: 2px;
+  height: 26px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.ol-bar span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ol-b1 { background: var(--chip-blue-bg); color: var(--chip-blue-fg); }
+.ol-b2 { background: var(--chip-green-bg); color: var(--chip-green-fg); }
+.ol-b3 { background: var(--chip-gray-bg); color: var(--chip-gray-fg); }
+.ol-b4 { background: var(--chip-red-bg); color: var(--chip-red-fg); }
+
+.ol-t {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ol-t th {
+  position: sticky;
+  top: 0;
+  padding: 6px 8px;
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.ol-t td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-l {
+  text-align: left !important;
+}
+
+.ol-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px 8px;
+}
+
+.ol-tabs button {
+  padding: 4px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ol-tabs button.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.ol-tabs small {
+  margin-left: 6px;
+  color: var(--text-muted);
+}
+
+.ol-list-wrap {
+  max-height: 520px;
+  margin: 0 14px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ol-list tbody tr {
+  cursor: pointer;
+}
+
+.ol-list tbody tr:hover {
+  background: var(--row-hover);
+}
+
+.ol-win {
+  font-weight: 700;
+  color: var(--chip-red-fg);
+}
+
+.ol-same {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}
+
+.ol-near {
+  color: var(--warning-text);
+  font-weight: 700;
+}
+
+.ol-box > .ol-hint:last-child {
+  padding: 0 14px 12px;
+}
+
+.ol-manage > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.ol-manage > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ol-manage-body {
+  padding: 12px 14px;
+}

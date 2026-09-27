@@ -4,6 +4,12 @@ import LeagueTable from '../components/LeagueTable/LeagueTable'
 import RtSummaryBar from '../components/RtSummaryBar/RtSummaryBar'
 import FilterForm from '../components/FilterForm/FilterForm'
 import { buildQueryString, ODDS_KEYS } from '../utils/query'
+import OddsLookup from '../components/OddsLookup/OddsLookup'
+
+// 통합DB(2026-09-27 개편, 사용자 지정) — 이 페이지는 이제 '배당 조회'가 주인공이다.
+//   ① 조회 · ② 결과 = components/OddsLookup (6대리그가 아닌 경기도 배당만 넣으면 과거 결과를 본다)
+//   ③ 데이터·관리 = 예전에 맨 위에 있던 리그 현황·참고 링크·통합 및 예측 분석, 그리고 예전 전체 표 — 평소엔 접힘.
+//      예전 전체 표(130여 컬럼)는 펼쳤을 때만 불러온다(무거워서).
 
 // 클로드 코드와 함께 만든 웹페이지 자료(실측 리포트 등) 바로가기.
 // 새 자료가 생기면 여기 한 줄만 추가하면 된다 — 화면 어디에도 이 목록을 따로 저장하지 않는다.
@@ -42,6 +48,7 @@ export default function TotalDbPage({ scope }) {
   const [confirmAll, setConfirmAll] = useState(false)
   const [showAllExpander, setShowAllExpander] = useState(false)
   const [notice, setNotice] = useState('')
+  const [showTable, setShowTable] = useState(false)   // ③ 안 '예전 전체 표'를 펼쳤을 때만 불러온다
 
   useEffect(() => {
     api.get('/api/leagues').then(setLeagues).catch(() => setLeagues([]))
@@ -82,7 +89,7 @@ export default function TotalDbPage({ scope }) {
   }, [scope, league])
 
   useEffect(() => {
-    if (!query) return
+    if (!query || !showTable) return
     let cancelled = false
     setError('')
     api
@@ -96,7 +103,7 @@ export default function TotalDbPage({ scope }) {
     return () => {
       cancelled = true
     }
-  }, [scope, league, query, reloadKey])
+  }, [scope, league, query, reloadKey, showTable])
 
   function handleSearch(nextQuery) {
     setQuery(nextQuery)
@@ -152,8 +159,16 @@ export default function TotalDbPage({ scope }) {
 
   return (
     <div>
-      <h2 className="section-title">📈 통합DB (6대 리그 합산)</h2>
+      <h2 className="section-title">🔎 배당 조회 <small className="ol-muted">통합DB — 6대리그 + 내 데이터 리그</small></h2>
+      <OddsLookup />
 
+      <details className="ol-box ol-manage">
+        <summary className="ol-box-h">
+          <span className="ol-tag" style={{ background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' }}>③</span>
+          <h3>데이터 · 관리</h3>
+          <small>리그별 현황 · 참고 링크 · 통합 및 예측 분석 · 예전 전체 표 — 누르면 펼쳐집니다</small>
+        </summary>
+        <div className="ol-manage-body">
       <table className="dashboard-table" style={{ marginBottom: 16 }}>
         <thead>
           <tr>
@@ -248,6 +263,10 @@ export default function TotalDbPage({ scope }) {
         </div>
       )}
 
+          <details className="expander" onToggle={(e) => setShowTable(e.currentTarget.open)}>
+            <summary className="expander-toggle">▸ 예전 전체 표 보기 (리그·시즌·배당 필터 + 130여 컬럼 표)</summary>
+            {showTable && (
+              <>
       {!data || data.grand_total === 0 ? (
         <p className="loading-text">통합할 데이터가 없습니다.</p>
       ) : (
@@ -280,6 +299,11 @@ export default function TotalDbPage({ scope }) {
           />
         </>
       )}
+              </>
+            )}
+          </details>
+        </div>
+      </details>
     </div>
   )
 }

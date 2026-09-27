@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>배당 조회 목업</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #111a2c; --panel2: #0e1626; --card: #16213a; --line: #26324f; --line2: #33436a;
+    --tx: #e6ecf7; --mu: #8b98b5; --acc: #4d9fff;
+    --blue-bg: #1e3a6e; --blue-fg: #a9caff; --red-bg: #5a1f24; --red-fg: #ffabab;
+    --green-bg: #17402a; --green-fg: #93e2b0; --gray-bg: #2a3448; --gray-fg: #cbd5e1; --yel-bg: #4a3a0c; --yel-fg: #fde68a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--tx); font: 13px/1.45 'Malgun Gothic', system-ui, sans-serif; }
+  h1 { margin: 0; font-size: 18px; }
+  .sub { color: var(--mu); font-size: 12px; }
+  .note { margin: 8px 0 14px; padding: 8px 12px; border: 1px dashed var(--line2); border-radius: 8px; color: var(--mu); font-size: 12px; }
+  .note b { color: var(--yel-fg); }
+  .area-tag { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px; background: var(--acc); color: #04122a; font-size: 11px; font-weight: 800; }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); margin-bottom: 14px; }
+  .box-h { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--panel2); border-radius: 10px 10px 0 0; }
+  .box-h h2 { margin: 0; font-size: 14px; }
+  .box-b { padding: 12px 14px; }
+
+  /* ① 조회 영역 */
+  .q-grid { display: grid; grid-template-columns: minmax(300px, 1.2fr) minmax(280px, 1fr) minmax(240px, .9fr); gap: 14px; }
+  .q-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--card); }
+  .q-card h3 { margin: 0 0 8px; font-size: 12px; color: var(--mu); }
+  .odds-row { display: grid; grid-template-columns: 70px repeat(3, 1fr); gap: 6px; align-items: center; margin-bottom: 6px; }
+  .odds-row label { color: var(--mu); font-size: 12px; }
+  .odds-row label i { font-style: normal; color: var(--yel-fg); }
+  input.od, select, input.tx { width: 100%; padding: 6px 8px; border: 1px solid var(--line2); border-radius: 6px; background: var(--panel2); color: var(--tx); font: inherit; font-variant-numeric: tabular-nums; }
+  input.od { text-align: center; font-weight: 700; }
+  .ph { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; color: var(--mu); font-size: 10px; margin: 0 0 2px 76px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chk { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border: 1px solid var(--line2); border-radius: 999px; cursor: pointer; font-size: 12px; user-select: none; }
+  .chk.on { border-color: var(--acc); background: var(--blue-bg); color: var(--blue-fg); }
+  .row2 { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 8px; }
+  .row2 .k { color: var(--mu); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 6px; overflow: hidden; }
+  .seg button { padding: 4px 10px; border: 0; background: var(--panel2); color: var(--mu); font: inherit; cursor: pointer; }
+  .seg button.on { background: var(--acc); color: #04122a; font-weight: 700; }
+  .q-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .btn { padding: 8px 16px; border: 1px solid var(--line2); border-radius: 6px; background: var(--panel2); color: var(--tx); font: inherit; font-weight: 700; cursor: pointer; }
+  .btn.pri { border-color: var(--acc); background: var(--acc); color: #04122a; }
+  .recent { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .recent button { padding: 3px 9px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--mu); font-size: 11px; cursor: pointer; }
+  .load-list { margin-top: 6px; max-height: 150px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+  .load-list div { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 12px; }
+  .load-list div:hover { background: var(--panel2); }
+  .load-list small { color: var(--mu); }
+
+  /* ② 결과 */
+  .sum { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 14px; }
+  .kpi { display: flex; gap: 22px; flex-wrap: wrap; }
+  .kpi div small { display: block; color: var(--mu); font-size: 11px; }
+  .kpi div b { font-size: 20px; font-variant-numeric: tabular-nums; }
+  .bar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; margin-top: 10px; gap: 2px; }
+  .bar span { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; min-width: 30px; }
+  .b1 { background: var(--blue-bg); color: var(--blue-fg); } .b2 { background: var(--green-bg); color: var(--green-fg); }
+  .b3 { background: var(--gray-bg); color: var(--gray-fg); } .b4 { background: var(--red-bg); color: var(--red-fg); }
+  .legend { display: flex; gap: 12px; margin-top: 6px; font-size: 11px; color: var(--mu); }
+  table.t { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.t th { padding: 6px 8px; background: var(--panel2); color: var(--mu); border-bottom: 1px solid var(--line); text-align: center; }
+  table.t td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.t td.l { text-align: left; }
+  .pos { color: var(--red-fg); font-weight: 700; } .neg { color: var(--blue-fg); font-weight: 700; }
+  .rt { display: inline-block; min-width: 34px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .same { padding: 0 3px; border-radius: 3px; background: var(--yel-bg); color: var(--yel-fg); font-weight: 700; }
+  .near { color: #ffc48a; font-weight: 700; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .tabs button { padding: 4px 12px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--mu); font: inherit; font-size: 12px; cursor: pointer; }
+  .tabs button.on { background: var(--acc); border-color: var(--acc); color: #04122a; font-weight: 700; }
+
+  /* ③ 관리(접힘) */
+  details.box > summary { list-style: none; cursor: pointer; }
+  details.box > summary::-webkit-details-marker { display: none; }
+  details.box[open] > summary .arr { transform: rotate(90deg); }
+  .arr { display: inline-block; transition: transform .15s; }
+  .mini { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; }
+  .mini h3 { margin: 0 0 6px; font-size: 12px; color: var(--mu); }
+  .mini a { color: var(--acc); }
+</style>
+</head>
+<body>
+<h1>🔎 배당 조회 <span class="sub">(통합DB 목업)</span></h1>
+<div class="note">
+  <b>제안 구성</b> — 위에서부터 <b>① 조회</b>(내가 배당을 넣는 곳) → <b>② 결과</b>(그 배당의 과거 경기가 어떻게 났나) → <b>③ 데이터·관리</b>(지금 화면 위에 있던 리그 현황·참고 링크·재계산 — 평소엔 접힘).
+  숫자는 <b>예시</b>입니다. 조회 버튼·탭·접기를 눌러 보세요.
+</div>
+
+<!-- ① 조회 영역 -->
+<div class="box">
+  <div class="box-h"><span class="area-tag">①</span><h2>조회 — 알고 싶은 배당을 넣으세요</h2><span class="sub">6대리그가 아닌 경기도 배당만 있으면 됩니다</span></div>
+  <div class="box-b">
+    <div class="q-grid">
+      <div class="q-card">
+        <h3>배당 입력 (빈칸은 조건에서 빠집니다)</h3>
+        <div class="ph"><span>승(홈)</span><span>무</span><span>패(원정)</span></div>
+        <div class="odds-row"><label>국배</label><input class="od" id="kw" value="2.34"><input class="od" id="kd" value="2.85"><input class="od" id="kl" value="2.90"></div>
+        <div class="odds-row"><label>국핸디 <i>H -1.0</i></label><input class="od" value="4.75"><input class="od" value="3.60"><input class="od" value="1.52"></div>
+        <div class="odds-row"><label>해배</label><input class="od" placeholder="-"><input class="od" placeholder="-"><input class="od" placeholder="-"></div>
+        <div class="row2">
+          <span class="k">배당 시점</span>
+          <span class="seg" data-seg="phase"><button class="on">초기</button><button>최신(배변)</button></span>
+          <span class="k">비슷함 폭</span>
+          <select style="width:auto"><option>완전 일치(±0칸)</option><option>±1칸</option><option selected>±2칸</option><option>±3칸</option><option>±5칸</option></select>
+        </div>
+      </div>
+      <div class="q-card">
+        <h3>어디서 찾을까</h3>
+        <div class="chips" id="lgs">
+          <span class="chk on">EPL</span><span class="chk on">라리가</span><span class="chk on">세리에</span><span class="chk on">분데스</span><span class="chk on">에레디</span><span class="chk on">리그1</span>
+          <span class="chk on">K1</span><span class="chk on">K2</span>
+        </div>
+        <div class="row2">
+          <span class="k">시즌</span>
+          <select style="width:auto"><option>전체</option><option>최근 3시즌</option><option>최근 5시즌</option></select>
+          <span class="k">정배 방향</span>
+          <span class="seg"><button class="on">같은 쪽만</button><button>뒤집어서도</button></span>
+        </div>
+        <div class="row2"><span class="k" style="font-size:11px">'뒤집어서도' = 승·패 배당을 바꿔 원정 정배 경기까지 같이 찾기(표본을 두 배로)</span></div>
+      </div>
+      <div class="q-card">
+        <h3>경기에서 불러오기</h3>
+        <input class="tx" placeholder="팀 이름 검색 (예: 강원, 인천)" value="강원">
+        <div class="load-list">
+          <div data-fill="2.34,2.85,2.90"><span>강원 vs 인천 <small>K1 22R · 09-27</small></span><small>2.34/2.85/2.90</small></div>
+          <div data-fill="2.09,3.10,3.10"><span>강원 vs 제주 <small>K1 30R · 10-04</small></span><small>2.09/3.10/3.10</small></div>
+          <div data-fill="1.95,3.20,3.35"><span>강원 vs 전북 <small>K1 23R · 08-15</small></span><small>1.95/3.20/3.35</small></div>
+        </div>
+        <div class="sub" style="margin-top:6px">누르면 그 경기의 초기 배당이 왼쪽 칸에 채워집니다</div>
+      </div>
+    </div>
+    <div class="q-actions"><button class="btn pri" id="go">조회</button><button class="btn">초기화</button></div>
+    <div class="recent"><span class="sub">최근 조회</span><button>2.34 / 2.85 / 2.90</button><button>1.72 / 3.65 / 4.55</button><button>3.20 / 3.15 / 1.93</button></div>
+  </div>
+</div>
+
+<!-- ② 결과 영역 -->
+<div class="box">
+  <div class="box-h"><span class="area-tag">②</span><h2>결과 — 이 배당의 과거 경기</h2><span class="sub" id="cond">국배 2.34 / 2.85 / 2.90 · ±2칸 · 초기 · 8개 리그</span></div>
+  <div class="box-b">
+    <div class="sum">
+      <div>
+        <div class="kpi">
+          <div><small>찾은 경기</small><b>184</b></div>
+          <div><small>정 (핸승+핸무) 단통</small><b>47.83%</b></div>
+          <div><small>플 (무+역) 단통</small><b>52.17%</b></div>
+          <div><small>정무 당첨</small><b>77.72%</b></div>
+          <div><small>플핸무 당첨</small><b>77.17%</b></div>
+        </div>
+        <div class="bar"><span class="b1" style="flex:22.83">핸승 22.83%</span><span class="b2" style="flex:25.00">핸무 25.00%</span><span class="b3" style="flex:29.89">무 29.89%</span><span class="b4" style="flex:22.28">역 22.28%</span></div>
+        <div class="legend"><span>가장 적게 난 결과 = <b style="color:var(--red-fg)">역 22.28%</b> → 배제 후보 '역' = 정무</span></div>
+      </div>
+      <div>
+        <table class="t"><thead><tr><th>리그</th><th>경기</th><th>핸승</th><th>핸무</th><th>무</th><th>역</th></tr></thead><tbody>
+          <tr><td class="l">K1</td><td>31</td><td>7</td><td>8</td><td>10</td><td>6</td></tr>
+          <tr><td class="l">EPL</td><td>28</td><td>6</td><td>7</td><td>9</td><td>6</td></tr>
+          <tr><td class="l">리그1</td><td>35</td><td>9</td><td>8</td><td>11</td><td>7</td></tr>
+          <tr><td class="l">그 외 5개</td><td>90</td><td>20</td><td>23</td><td>25</td><td>22</td></tr>
+        </tbody></table>
+      </div>
+      <div>
+        <table class="t"><thead><tr><th>시즌</th><th>경기</th><th>정 단통</th><th>플 단통</th></tr></thead><tbody>
+          <tr><td>최근 3시즌</td><td>41</td><td>46.34%</td><td>53.66%</td></tr>
+          <tr><td>그 이전</td><td>143</td><td>48.25%</td><td>51.75%</td></tr>
+          <tr><td>같은 배당대 평소</td><td>—</td><td>48.10%</td><td>51.90%</td></tr>
+        </tbody></table>
+        <div class="sub" style="margin-top:6px">'같은 배당대 평소' = 정배배당 2.30~2.40 전체 평균(비교용)</div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px">
+      <div class="tabs"><button class="on">가까운 순</button><button>최신 순</button><button>결과별</button></div>
+      <table class="t">
+        <thead><tr><th>날짜</th><th>리그</th><th>경기</th><th>스코어</th><th>국배 승/무/패</th><th>국핸디</th><th>해배</th><th>결과</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="sub" style="margin-top:6px"><span class="same">같은 값</span> 노랑 · <span class="near">비슷한 값</span> 글자색 — 표본 섹션과 같은 표시. 줄을 누르면 그 경기 상세보기가 열립니다(실제 화면에서).</div>
+    </div>
+  </div>
+</div>
+
+<!-- ③ 데이터·관리 (접힘) -->
+<details class="box">
+  <summary class="box-h"><span class="arr">▸</span><span class="area-tag" style="background:var(--gray-bg);color:var(--gray-fg)">③</span><h2>데이터 · 관리</h2><span class="sub">리그별 현황 · 참고 링크 · 통합 및 예측 분석(재계산) — 지금 화면 위쪽에 있던 것들</span></summary>
+  <div class="box-b mini">
+    <div>
+      <h3>리그별 현황</h3>
+      <table class="t"><thead><tr><th>리그</th><th>경기수</th><th>시즌</th><th>결과보유</th><th>예정</th><th>국내배당</th></tr></thead><tbody>
+        <tr><td class="l">EPL</td><td>6,500</td><td>18</td><td>6,482</td><td>18</td><td>4,390</td></tr>
+        <tr><td class="l">라리가</td><td>6,511</td><td>18</td><td>6,489</td><td>22</td><td>4,301</td></tr>
+        <tr><td class="l">… 4개 리그</td><td colspan="5" class="l sub">생략</td></tr>
+      </tbody></table>
+    </div>
+    <div>
+      <h3>참고 링크</h3>
+      <div><a href="#">초강추 플핸 리포트</a> <span class="sub">09-11</span></div>
+      <div><a href="#">이번주 TOP20 백테스트</a> <span class="sub">09-11</span></div>
+      <div><a href="#">주말 TOP20 9/11~15</a> <span class="sub">09-10</span></div>
+    </div>
+    <div>
+      <h3>통합 및 예측 분석</h3>
+      <button class="btn pri">🔄 통합 및 예측 분석 실행</button>
+      <div class="sub" style="margin-top:6px">▸ 전체 재계산(초기 세팅용)은 지금처럼 한 번 더 접어 둠</div>
+    </div>
+  </div>
+</details>
+
+<script>
+// 예시 결과 행
+const LG = ['K1', 'EPL', '리그1', '라리가', '세리에', 'K2', '분데스', '에레디'];
+const TEAMS = [['울산','포항'],['아스널','풀럼'],['니스','렌'],['세비야','베티스'],['토리노','제노아'],['부천','충남아산'],['프라이부르','마인츠'],['위트레흐트','트벤테']];
+const RT = [['핸승','b1'],['핸무','b2'],['무','b3'],['역','b4']];
+const q = [2.34, 2.85, 2.90];
+function rand(seed){ let x = Math.sin(seed) * 10000; return x - Math.floor(x); }
+const rows = [];
+for (let i = 0; i < 14; i++) {
+  const d = [q[0] + Math.round((rand(i) - .5) * 4) / 100, q[1] + Math.round((rand(i + 50) - .5) * 20) / 100, q[2] + Math.round((rand(i + 99) - .5) * 4) / 100];
+  const hs = Math.floor(rand(i + 7) * 4), as = Math.floor(rand(i + 13) * 3);
+  const rt = hs - as >= 2 ? 0 : hs - as === 1 ? 1 : hs === as ? 2 : 3;
+  rows.push({dt: `2${3 - (i % 4)}.${String(3 + i % 9).padStart(2, '0')}.${String(10 + i).padStart(2, '0')}`, lg: LG[i % 8], t: TEAMS[i % 8], hs, as, d, rt});
+}
+const cell = (v, b) => { const x = Math.round(Math.abs(v - b) * 100); return x === 0 ? `<span class="same">${v.toFixed(2)}</span>` : x <= 2 ? `<span class="near">${v.toFixed(2)}</span>` : v.toFixed(2); };
+document.getElementById('rows').innerHTML = rows.map(r => `<tr><td>${r.dt}</td><td>${r.lg}</td><td class="l"><b>${r.t[0]}</b> vs <b>${r.t[1]}</b></td>
+  <td><span class="${r.hs > r.as ? 'pos' : ''}">${r.hs}</span> : <span class="${r.as > r.hs ? 'pos' : ''}">${r.as}</span></td>
+  <td>${r.d.map((v, i) => cell(v, q[i])).join(' / ')}</td><td>H -1.0</td><td class="sub">-</td>
+  <td><span class="rt ${RT[r.rt][1]}">${RT[r.rt][0]}</span></td></tr>`).join('');
+document.querySelectorAll('.chk').forEach(c => c.onclick = () => c.classList.toggle('on'));
+document.querySelectorAll('.seg, .tabs').forEach(g => g.querySelectorAll('button').forEach(b => b.onclick = () => { g.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on'); }));
+document.querySelectorAll('[data-fill]').forEach(el => el.onclick = () => { const [a, b, c] = el.dataset.fill.split(','); kw.value = a; kd.value = b; kl.value = c; });
+document.getElementById('go').onclick = () => { document.getElementById('cond').textContent = `국배 ${kw.value} / ${kd.value} / ${kl.value} · ±2칸 · 초기 · ${document.querySelectorAll('.chk.on').length}개 리그`; };
+</script>
+</body>
+</html>
