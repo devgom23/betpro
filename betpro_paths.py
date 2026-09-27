@@ -483,6 +483,12 @@ def ensure_predlog_db(username: str) -> str:
             # 연기 경기는 나중에 다시 열리면 리그 표의 RT가 1~4로 바뀌는데, 그때 정산이
             # 뒤집히지 않도록 처음 연기를 본 순간 여기에 굳혀 둔다(bet_slips.py VOID_RESULTS).
             con.execute("ALTER TABLE bet_slip_legs ADD COLUMN void_status TEXT")
+        if "snap" not in leg_cols:
+            # 회차로 묶인 벳 다리의 결과 스냅샷(JSON — 실제 결과·판정·스코어·화면 표시값,
+            # 2026-09-27 추가). 묶인 뒤엔 더 바뀔 게 없으니 한 번 굳혀 두고 다시 계산하지
+            # 않는다 — 베팅내역을 열 때마다 리그 표 전체를 읽던 게 느린 원인이었다(main.py
+            # _attach_leg_hits 참고).
+            con.execute("ALTER TABLE bet_slip_legs ADD COLUMN snap TEXT")
         con.execute(_SCHEMA_ARCHIVE_TAGS)
         # 아카이브 '배당' 태그(2026-09-14 추가) — 승/무/패 배당 자체에 정배방향/플핸방향
         # 태그를 달아 두면, 나중에 같은 배당 값이 나오는 경기에 뱃지로 뜬다. 팀·맞대결

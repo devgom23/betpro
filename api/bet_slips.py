@@ -84,6 +84,22 @@ def effective_odds(slip_odds: float | None, legs: list[dict]) -> float | None:
     return combo_odds(vals) if vals else 1.0
 
 
+def save_leg_snaps(username: str, snaps: list[tuple[int, str]]) -> None:
+    """회차로 묶인 벳 다리의 결과를 굳혀 둔다(bet_slip_legs.snap = JSON 문자열).
+    묶인 뒤엔 다시 계산하지 않으므로 한 번만 쓴다(이미 있으면 안 덮는다)."""
+    if not snaps:
+        return
+    con = _connect(username)
+    try:
+        con.executemany(
+            "UPDATE bet_slip_legs SET snap=? WHERE id=? AND snap IS NULL",
+            [(snap, leg_id) for leg_id, snap in snaps],
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
 def save_void_status(username: str, leg_status: list[tuple[int, str]]) -> None:
     """처음 적중특례를 본 다리에 그 사실을 굳혀 둔다(bet_slip_legs.void_status).
     연기 경기가 나중에 다시 열려 RT가 1~4로 바뀌어도 이 다리는 특례 그대로 남는다."""
@@ -215,7 +231,7 @@ def list_slips(username: str, scope: str) -> list[dict]:
         for s in slips:
             legs = con.execute(
                 """
-                SELECT id AS leg_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope, void_status
+                SELECT id AS leg_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope, void_status, snap
                 FROM bet_slip_legs WHERE slip_id=? ORDER BY leg_order
                 """,
                 (s["id"],),
@@ -245,7 +261,7 @@ def list_slips_all(username: str) -> list[dict]:
         for s in slips:
             legs = con.execute(
                 """
-                SELECT id AS leg_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope, void_status
+                SELECT id AS leg_id, code, S, R, No, HT, AT, pick_type, odds, leg_order, scope, void_status, snap
                 FROM bet_slip_legs WHERE slip_id=? ORDER BY leg_order
                 """,
                 (s["id"],),
