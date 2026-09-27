@@ -38,9 +38,12 @@ PER_COLUMN = 12
 MAX_TICK = 15        # 표본이 1건도 없을 때 폭을 넓히는 한계(칸) — 이보다 넓으면 '비슷한 배당'이라 하기 어렵다
 BUSY_WINDOW = 600   # 초 — 12사 배당 저장이 이보다 최근이면(백필 중) 만들어 둔 색인을 그대로 쓴다
 
-_CACHE = {"tok": None, "val": None}
+_CACHE: dict = {}   # (db, 리그들) → {"tok", "val"} — 공식 6대리그와 내 데이터 K1·K2가 따로 쓴다
+USER_CODES = ("ul_1", "ul_2")        # 내 데이터에서 표본을 내는 리그(K1·K2, 2026-09-27 사용자 지정)
+BOOKS_MIN_POOL = 300   # 이 리그에 12사 평균이 있는 결과 난 경기가 이만큼 쌓이면 12사 조건을 쓴다(그 전엔 국배만)
 _LOCK = threading.Lock()
-_LG_LABEL = {"EPL": "EPL", "LALIGA": "라리가", "SERIEA": "세리에A", "BUNDES": "분데스", "EREDIVISIE": "에레디", "LIGUE1": "리그1"}
+_LG_LABEL = {"EPL": "EPL", "LALIGA": "라리가", "SERIEA": "세리에A", "BUNDES": "분데스", "EREDIVISIE": "에레디", "LIGUE1": "리그1",
+             "ul_1": "K1", "ul_2": "K2"}
 
 
 def _mb_state(mb_path):
@@ -60,7 +63,7 @@ def _f(v):
     return None if v is None or (isinstance(v, float) and np.isnan(v)) else float(v)
 
 
-def _build(db, mb_path):
+def _build(db, mb_path, codes):
     """전 경기 배열 — 날짜·리그·12사 평균 3값·국배 3값·결과와 카드에 쓸 값."""
     con = sqlite3.connect(mb_path, timeout=30)
     try:
@@ -83,7 +86,7 @@ def _build(db, mb_path):
             avg_map[_key(*k)] = (a, int(n))
 
     frames = []
-    for code in PATHS.LEAGUES:
+    for code in codes:
         d = DATA.load_league_df(db, code)
         if d.empty:
             continue
@@ -110,19 +113,22 @@ def _build(db, mb_path):
             "days": days, "rt": G["RT"].to_numpy(float), "code": G["code"].to_numpy(), "n": len(G)}
 
 
-def _index(db):
-    mb_path = MB.db_path_for(PATHS.SCOPE_MASTER)
+def _index(db, codes=None, mb_path=None):
+    codes = tuple(codes or PATHS.LEAGUES)
+    mb_path = mb_path or MB.db_path_for(PATHS.SCOPE_MASTER)
     cnt, last = _mb_state(mb_path)
-    tok = (DATA.tables_token(db, tuple(PATHS.LEAGUES)), cnt, last)
+    tok = (DATA.tables_token(db, codes), cnt, last)
+    ck = (db, codes)
     with _LOCK:
-        if _CACHE["tok"] == tok:
-            return _CACHE["val"]
+        slot = _CACHE.setdefault(ck, {"tok": None, "val": None})
+        if slot["tok"] == tok:
+            return slot["val"]
         # 12사 배당을 명령 프롬프트 백필이 쓰는 중이면 만들어 둔 색인을 그대로 쓴다(리그 표가 그대로일 때만) —
         # 저장할 때마다 다시 만들면 서버가 그동안 느려진다(book_dir와 같은 사정).
-        if _CACHE["val"] is not None and _mb_busy(last) and _CACHE["tok"][0] == tok[0]:
-            return _CACHE["val"]
-        val = _build(db, mb_path)
-        _CACHE["tok"], _CACHE["val"] = tok, val
+        if slot["val"] is not None and _mb_busy(last) and slot["tok"][0] == tok[0]:
+            return slot["val"]
+        val = _build(db, mb_path, codes)
+        slot["tok"], slot["val"] = tok, val
         return val
 
 
@@ -138,7 +144,7 @@ def _card(ix, j):
     r = G.iloc[j]
     return {"dt": str(r["date"])[:10], "lg": _LG_LABEL.get(r["code"], r["code"]), "S": str(r["S"]), "R": str(r["R"]),
             "ht": r["HT"], "at": r["AT"], "hs": None if pd.isna(r["HS"]) else int(r["HS"]), "as_": None if pd.isna(r["AS"]) else int(r["AS"]),
-            "rt": int(r["RT"]), "A": [float(x) for x in ix["A"][j]], "K": [float(x) for x in ix["K"][j]],
+            "rt": int(r["RT"]), "A": [None if np.isnan(x) else float(x) for x in ix["A"][j]], "K": [float(x) for x in ix["K"][j]],
             "kh": _f(r["KH"]), "khw": _f(r["KHW"]), "khd": _f(r["KHD"]), "khl": _f(r["KHL"])}
 
 
@@ -158,29 +164,39 @@ def _pick(ix, qi, mask, prev=None):
     return {"n": int(len(idx)), "cnt": [int((rts == k).sum()) for k in (1, 2, 3, 4)], "cards": cards}
 
 
-def query(db, code, season, rnd, ht, at):
-    """이 경기의 위(같은 리그)·아래(다른 리그) 표본. 만들 수 없으면 {'ready': False, 'reason': ...}."""
-    ix = _index(db)
+def query(db, code, season, rnd, ht, at, codes=None, mb_path=None):
+    """이 경기의 위(같은 리그)·아래(다른 리그) 표본. 만들 수 없으면 {'ready': False, 'reason': ...}.
+    codes·mb_path를 주면 그 리그들·그 12사 파일로(내 데이터 K1·K2). 기본은 공식 6대리그."""
+    ix = _index(db, codes, mb_path)
     qi = ix["kmap"].get(_key(code, season, rnd, ht, at))
     if qi is None:
         return {"ready": False, "reason": "경기를 찾지 못했습니다"}
     A, K = ix["A"], ix["K"]
-    if np.isnan(A[qi]).any():
+    same = ix["code"] == ix["code"][qi]
+    done = np.isin(ix["rt"], (1, 2, 3, 4))
+    # 12사 조건을 쓸지 — 이 리그에 12사 평균이 있는 결과 난 경기가 충분할 때만(K리그는 12사 과거 배당이
+    # 아직 거의 없어 국배만으로 찾는다. 백필이 쌓이면 자동으로 12사 조건으로 바뀐다 — 2026-09-27).
+    use_books = bool(int((done & same & ~np.isnan(A).any(axis=1)).sum()) >= BOOKS_MIN_POOL)
+    if use_books and np.isnan(A[qi]).any():
         return {"ready": False, "reason": f"12사 평균을 낼 배당사가 {MIN_BOOKS}곳 미만이라 표본을 만들 수 없습니다"}
     if np.isnan(K[qi]).any():
         return {"ready": False, "reason": "국내 배당(국배)이 아직 없어 표본을 만들 수 없습니다"}
     day = ix["days"][qi]
     if np.isnan(day):
         return {"ready": False, "reason": "경기 날짜가 없어 표본을 만들 수 없습니다"}
-    pool = (np.isin(ix["rt"], (1, 2, 3, 4)) & ~np.isnan(A).any(axis=1) & ~np.isnan(K).any(axis=1)
-            & (ix["days"] < day))
+    pool = done & ~np.isnan(K).any(axis=1) & (ix["days"] < day)
+    if use_books:
+        pool &= ~np.isnan(A).any(axis=1)
     pool[qi] = False
 
-    # 경기마다 '승·패 네 값 중 가장 크게 벌어진 칸 수'를 한 번만 구해 두면(정수 칸), 폭을 몇 칸으로 하든 dd <= 폭 비교 한 번이다
-    dd = np.rint(np.maximum.reduce([np.abs(A[:, 0] - A[qi, 0]), np.abs(A[:, 2] - A[qi, 2]),
-                                    np.abs(K[:, 0] - K[qi, 0]), np.abs(K[:, 2] - K[qi, 2])]) * 100)
+    # 경기마다 '승·패 값 중 가장 크게 벌어진 칸 수'를 한 번만 구해 두면(정수 칸), 폭을 몇 칸으로 하든 dd <= 폭 비교 한 번이다
+    diffs = [np.abs(K[:, 0] - K[qi, 0]), np.abs(K[:, 2] - K[qi, 2])]
+    if use_books:
+        diffs += [np.abs(A[:, 0] - A[qi, 0]), np.abs(A[:, 2] - A[qi, 2])]
+    with np.errstate(invalid="ignore"):
+        dd = np.rint(np.maximum.reduce(diffs) * 100)
+    dd = np.where(np.isnan(dd), 1e9, dd)
 
-    same = ix["code"] == ix["code"][qi]
     r = ix["G"].iloc[qi]
 
     def widen(base, start):
@@ -205,7 +221,8 @@ def query(db, code, season, rnd, ht, at):
     same_res["next"] = nxt(pool & same, same_k)
     other_res["next"] = nxt(pool & ~same, other_k)
     return {"ready": True,
-            "game": {"A": [float(x) for x in A[qi]], "K": [float(x) for x in K[qi]], "n_books": int(ix["nb"][qi]),
+            "mode": "books" if use_books else "kr",
+            "game": {"A": [None if np.isnan(x) else float(x) for x in A[qi]], "K": [float(x) for x in K[qi]], "n_books": int(ix["nb"][qi]),
                      "kh": _f(r["KH"]), "khw": _f(r["KHW"]), "khd": _f(r["KHD"]), "khl": _f(r["KHL"]), "lg": _LG_LABEL.get(code, code)},
             "same": same_res, "other": other_res,
             "tol": {"same": same_k / 100, "other": other_k / 100},

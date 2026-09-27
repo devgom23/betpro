@@ -43,19 +43,22 @@ def scoreman_season(season: str) -> str:
     return f"{full(m.group(1))}-{full(m.group(2))}"
 
 
-def main(seasons):
+def main(seasons, user_codes=None):
+    """user_codes가 있으면 공식 6대리그 대신 내 데이터 리그(예 ul_1·ul_2 = K1·K2)를 받는다
+    (2026-09-27 — 상세보기 '표본'을 K리그에도 12사 조건으로 쓰려고). 저장은 그 계정의 multibook.db."""
     udb = PATHS.get_user_db(ADMIN)
-    mdb = PATHS.get_master_db()
-    out_path = MB.db_path_for(PATHS.SCOPE_MASTER)
+    scope = PATHS.SCOPE_USER if user_codes else PATHS.SCOPE_MASTER
+    mdb = udb if user_codes else PATHS.get_master_db()
+    out_path = MB.db_path_for(scope, ADMIN if user_codes else None)
     total_saved = total_skip = total_unmatched = 0
-    for code in PATHS.LEAGUES:
-        src = CRAWL.get_source(udb, PATHS.SCOPE_MASTER, code) or ""
+    for code in (user_codes or PATHS.LEAGUES):
+        src = CRAWL.get_source(udb, scope, code) or ""
         m = re.search(r"/league/(\d+)", src)
         if not m:
             log(f"{code}: 스코어맨 리그 주소 없음 — 건너뜀")
             continue
         league_id = int(m.group(1))
-        aliases = CRAWL.list_aliases(udb, PATHS.SCOPE_MASTER, code)
+        aliases = CRAWL.list_aliases(udb, scope, code)
         df = DATA.load_league_df(mdb, code)
         for season in seasons:
             sub = df[df["S"].astype(str).str.strip() == season]
@@ -74,7 +77,7 @@ def main(seasons):
             if not sched:
                 log(f"{code} {season}: ⚠ 일정 파일을 끝내 못 받음 — 이 시즌은 건너뜀(같은 명령을 다시 실행하면 이어서 받음)")
                 continue
-            mid_of = {(str(g["HT"]).strip(), str(g["AT"]).strip()): g["mid"] for g in sched}
+            sidx = SM.schedule_index(sched)
             done = MB.done_keys(out_path, code, season)
             todo, unmatched = [], []
             for _, r in sub.iterrows():
@@ -82,7 +85,8 @@ def main(seasons):
                 if _key(code, r["S"], r["R"], ht, at) in done:
                     total_skip += 1
                     continue
-                mid = mid_of.get((ht, at))
+                g = SM.find_game(sidx, ht, at, r["R"])
+                mid = g["mid"] if g else None
                 if mid:
                     todo.append((r["S"], r["R"], ht, at, mid))
                 else:
@@ -112,4 +116,9 @@ def main(seasons):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or ["24-25", "25-26", "26-27"])
+    # 내 데이터 리그:  python api\backfill_multibook.py --user ul_1,ul_2 2021 2022 2023 2024 2025 2026
+    args = sys.argv[1:]
+    if args[:1] == ["--user"] and len(args) >= 2:
+        main(args[2:] or ["2026"], user_codes=args[1].split(","))
+    else:
+        main(args or ["24-25", "25-26", "26-27"])

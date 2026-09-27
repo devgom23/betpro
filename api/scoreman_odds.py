@@ -27,6 +27,7 @@
   FH를 ±1 방향으로만 쓰므로 라인은 안 받고 배당만 쓴다. 방향(FH/EFH)은 저장 시점에
   승/패 배당 중 싼 쪽으로 정한다(main.py crawl_save와 같은 규칙).
 """
+import re
 import json
 import threading
 import time
@@ -78,6 +79,30 @@ def _get_json(url, referer, timeout=20, tries=3):
             last = e
             time.sleep(0.5 * (i + 1))
     raise OddsError(f"스코어맨에 연결하지 못했습니다: {last}")
+
+
+def schedule_index(sched: list) -> dict:
+    """시즌 일정 → {(홈, 원정): [경기, ...]}. find_game과 짝으로 쓴다."""
+    idx: dict = {}
+    for g in sched:
+        idx.setdefault((str(g.get("HT", "")).strip(), str(g.get("AT", "")).strip()), []).append(g)
+    return idx
+
+
+def find_game(idx: dict, ht, at, rnd=None):
+    """(홈, 원정)으로 경기를 찾는다. 같은 조합이 한 시즌에 둘 이상이면 라운드가 같은 쪽을 고른다.
+
+    ⚠ 2026-09-27 수정 — K리그는 3라운드 로빈이라 한 시즌에 같은 홈·원정 조합이 두 번 나온다
+    (강원 vs 인천: 22R 09-27 · 32R 10-18). 예전엔 {(홈,원정): 경기} 사전이라 뒤 경기(32R)가
+    앞 경기를 덮어써서, 22R 최신 해외배당이 배당 없는 32R을 보고 비어 버렸다(사용자 제보).
+    라운드가 같은 게 없으면 첫 경기를 쓴다(라운드 표기가 다른 리그 대비)."""
+    games = idx.get((str(ht).strip(), str(at).strip())) or []
+    if len(games) > 1 and rnd is not None:
+        want = re.sub(r"[Rr]$", "", str(rnd).strip())
+        for g in games:
+            if re.sub(r"[Rr]$", "", str(g.get("R", "")).strip()) == want:
+                return g
+    return games[0] if games else None
 
 
 def season_schedule(league_id, season) -> list:

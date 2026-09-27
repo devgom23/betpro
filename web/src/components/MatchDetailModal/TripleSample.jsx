@@ -119,10 +119,10 @@ function Card({ c, game, tol, trusted, onTrust, teams }) {
       </div>
       <table className="ts-card-table">
         <tbody>
-          <tr>
+          {c.A.some((v) => v !== null && v !== undefined) && <tr>
             <td>평균</td>
             {c.A.map((v, i) => <td key={i}>{i === 1 ? <DrawMark v={v} base={game.A[i]}><AvgCell v={v} base={game.A[i]} tol={tol} /></DrawMark> : <AvgCell v={v} base={game.A[i]} tol={tol} />}</td>)}
-          </tr>
+          </tr>}
           <tr>
             <td>국배</td>
             {c.K.map((v, i) => <td key={i}>{i === 1 ? <DrawMark v={v} base={game.K[i]}><OddsCell v={v} base={game.K[i]} tol={tol} /></DrawMark> : <OddsCell v={v} base={game.K[i]} tol={tol} />}</td>)}
@@ -230,7 +230,8 @@ export default function TripleSampleSection({ code, scope, row, noteSlot, sameNo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
 
-  if (scope !== 'master') return null          // 12사 배당은 공식 6대리그에만 있다
+  // 공식 6대리그 + 내 데이터 K1·K2(ul_1·ul_2, 2026-09-27). K리그는 12사 과거 배당이 쌓이기 전엔 국배만으로 찾는다(서버 mode='kr').
+  if (scope !== 'master' && !['ul_1', 'ul_2'].includes(code)) return null
   return (
     <section className="detail-section">
       <h3>
@@ -246,7 +247,8 @@ export default function TripleSampleSection({ code, scope, row, noteSlot, sameNo
         <>
           <div className="ts-ref">
             <b>이번 경기</b>
-            <span>12사 평균 <span className="ts-nums">{data.game.A.map((v, i) => <span key={i} className={i === 1 ? '' : 'ts-a-same'}>{f2(v)}</span>)}</span></span>
+            {data.mode === 'kr' && <span className="ts-kr-only" title="이 리그는 12사(스코어맨 12개 배당사) 과거 배당이 아직 충분히 쌓이지 않아, 국배 승·패만 비슷한 과거 경기를 찾았습니다. 12사 배당이 쌓이면 자동으로 12사 평균까지 맞춰 찾습니다.">국배만 비교</span>}
+            {data.game.A.some((v) => v !== null) && <span>12사 평균 <span className="ts-nums">{data.game.A.map((v, i) => <span key={i} className={i === 1 ? '' : 'ts-a-same'}>{f2(v)}</span>)}</span></span>}
             <span>국배 <span className="ts-nums">{data.game.K.map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
             <span>국핸디 ({khText(data.game.kh) || '-'}) <span className="ts-nums">{[data.game.khw, data.game.khd, data.game.khl].map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
           </div>

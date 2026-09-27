@@ -264,3 +264,13 @@
   color: var(--chip-yellow-fg);
   font-weight: 800;
 }
+
+/* K리그 등 12사 과거 배당이 없어 국배만으로 찾은 표본 표시 */
+.ts-kr-only {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  font-size: 11px;
+  font-weight: 700;
+}

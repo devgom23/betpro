@@ -824,12 +824,12 @@ def _queue_league_books(scope: str, user: dict, code: str, keys: list[tuple]) ->
         for season in sorted({str(k[0]).strip() for k in keys}):
             sched = CRAWL.apply_aliases(
                 SCOREMAN.season_schedule(league_id, _scoreman_season(season)), aliases)
-            mid_of = {(str(g.get("HT", "")).strip(), str(g.get("AT", "")).strip()): g.get("mid")
-                      for g in sched}
+            sidx = SCOREMAN.schedule_index(sched)
             for s, r, ht, at in keys:
                 if str(s).strip() != season:
                     continue
-                mid = mid_of.get((str(ht).strip(), str(at).strip()))
+                g = SCOREMAN.find_game(sidx, ht, at, r)
+                mid = g.get("mid") if g else None
                 if mid:
                     items.append((s, r, ht, at, mid))
         path = MBODDS.db_path_for(scope, user["username"] if scope == PATHS.SCOPE_USER else None)
@@ -845,8 +845,13 @@ def triple_sample(code: str, S: str, R: str, HT: str, AT: str,
     """상세보기 '표본' 섹션 — 12사 평균 승·패 + 국배 승·패가 둘 다 비슷한 과거 경기(위=같은 리그,
     아래=다른 리그 — 폭은 ±0칸부터 0건이면 1칸씩 넓힘). 계산·기준은 api/triple_sample.py. 공식 6대리그만(12사 배당이 거기만 있다)."""
     _check_league_for(code, scope, user)
+    if scope == PATHS.SCOPE_USER and code in TRIPLE.USER_CODES:
+        # 내 데이터 K1·K2(2026-09-27) — 그 계정 user.db와 그 계정 multibook.db로. 12사 과거 배당이
+        # 쌓이기 전에는 국배만으로 찾는다(triple_sample.query의 use_books).
+        return TRIPLE.query(_resolve_scope_db(scope, user), code, S, R, HT, AT,
+                            codes=TRIPLE.USER_CODES, mb_path=MBODDS.db_path_for(scope, user["username"]))
     if scope != PATHS.SCOPE_MASTER or code not in PATHS.VALID_LEAGUES:
-        return {"ready": False, "reason": "공식 6대리그에서만 표본을 냅니다"}
+        return {"ready": False, "reason": "공식 6대리그와 내 데이터 K1·K2에서만 표본을 냅니다"}
     return TRIPLE.query(PATHS.get_master_db(), code, S, R, HT, AT)
 
 
@@ -4413,13 +4418,11 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
             # 날짜는 매칭 키에 안 쓴다 — 스코어맨과 DB의 킥오프 시각이 리그 전체에 걸쳐
             # 한 시간씩 어긋나 있어(예: 스코어맨 23:30 ↔ DB 00:30), 자정을 넘나드는 경기는
             # 날짜까지 하루 바뀌어 팀명이 맞는데도 못 찾는 문제가 있었다. 한 시즌 안에서
-            # 같은 (홈,원정) 순서 조합은 리그전 특성상 한 번만 나오므로 팀명만으로 충분하다.
-            sidx = {}
-            for g in sched:
-                sidx[(str(g.get("HT", "")).strip(), str(g.get("AT", "")).strip())] = g
+            # 같은 (홈,원정) 조합이 두 번 나오는 리그(K리그 3라운드 로빈)는 라운드가 같은 쪽을 고른다(find_game).
+            sidx = SCOREMAN.schedule_index(sched)
             fou_items = []
             for i in idxs:
-                g = sidx.get((str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip()))
+                g = SCOREMAN.find_game(sidx, df.at[i, "HT"], df.at[i, "AT"], df.at[i, "R"])
                 if not g:
                     continue
                 book_items.append((df.at[i, "S"], df.at[i, "R"], df.at[i, "HT"], df.at[i, "AT"], g["mid"]))
