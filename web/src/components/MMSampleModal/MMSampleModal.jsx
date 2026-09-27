@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
+import { PICK_OPTIONS } from '../../utils/pickOptions'
+import { pickPatchBody } from '../../utils/pickSave'
 import RtBadge from '../RtBadge/RtBadge'
 import './MMSampleModal.css'
 
@@ -9,10 +11,27 @@ const f2 = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(2))
 // 표본 상세 팝업(2026-09-27 사용자 지정 — "표본상세를 볼 수 잇는 팝업을 만들어줘"). 기타경기
 // 목록의 '판정'·'표본' 칸이 어떤 과거 경기들을 보고 나온 숫자인지 — 그 과거 경기 목록을
 // 그대로 보여준다(api/misc_matches.py sample_detail, 표본 섹션과 같은 비슷함 폭 방식).
-export default function MMSampleModal({ s, r, ht, at, onClose }) {
+// 내픽(2026-09-27 사용자 지정 — "내픽 컬럼 선택하면 표본상세 팝업이 뜨고 거기서 내픽 선택할
+// 수 있게 해줘") — 저장은 다른 리그와 똑같이 /api/leagues/{code}/my_picks 하나를 그대로 쓴다
+// (web/src/utils/pickSave.js — LeagueTable·상세보기와 같은 함수).
+export default function MMSampleModal({ s, r, ht, at, no, code, scope, myPick, onPickSaved, onClose }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [pick, setPick] = useState(myPick || '')
+  const [pickError, setPickError] = useState('')
+
+  useEffect(() => { setPick(myPick || '') }, [myPick])
+
+  function handlePickChange(e) {
+    const next = e.target.value
+    setPick(next)
+    setPickError('')
+    const body = pickPatchBody(scope, { S: s, R: r, No: no ?? '', HT: ht, AT: at }, { pick: next })
+    api.post(`/api/leagues/${code}/my_picks`, body)
+      .then(() => onPickSaved?.(next || null))
+      .catch((err) => setPickError(err.message))
+  }
 
   useEffect(() => {
     let alive = true
@@ -46,6 +65,19 @@ export default function MMSampleModal({ s, r, ht, at, onClose }) {
           승무패)를 가진 6대리그+K1+K2 과거 경기들입니다. 이 목록에서 핸승·역 중 적은 쪽을
           빼고 판정을 냅니다.
         </p>
+
+        <div className="mm-sample-pick">
+          <label>
+            내픽{' '}
+            <select value={pick} onChange={handlePickChange}>
+              <option value="">(선택 안 함)</option>
+              {PICK_OPTIONS.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+          </label>
+          {pickError && <span className="mm-error"> 저장 실패 — {pickError}</span>}
+        </div>
 
         {loading && <p className="mm-empty">불러오는 중...</p>}
         {error && !loading && <p className="mm-error">{error}</p>}

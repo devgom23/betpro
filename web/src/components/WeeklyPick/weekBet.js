@@ -11,6 +11,7 @@
 //
 // 베팅내역 등록은 기존 /api/bet_slips 형식 그대로다 — 다리마다 pick_type(정·역·무·핸승·핸무·플핸,
 // 2핸승·2핸무·2플핸·3.5핸승·3.5플핸)으로 바꿔 보낸다(api/bet_slips.py judge_leg·kr_extra_odds.judge가 판정).
+import { bettingDayOf } from '../LeagueTable/columnGroups'
 import { homeIsFavNow } from '../../utils/extraOdds'
 
 export const LAB = ['승', '무', '패']
@@ -171,13 +172,27 @@ export function splitBudget(combos, budget) {
   return out
 }
 
-// 날짜 탭 — DT '26-09-27 (Sun)' → '09-27(일)'
+// 날짜 탭 — DT '26-09-27 (Sun)' → '09-27(일)'. 그룹은 달력 날짜가 아니라 '베팅일' 기준
+// (2026-09-27 사용자 지정 — "베팅 기준으로 하면... 전체 규칙 보면 금/토/일 나누는 규칙 보고
+// 그대로 적용해줘야돼" — 새벽 6시 이전 경기는 전날 그룹, LeagueTable의 bettingDayOf와 완전히
+// 같은 규칙). 기타경기(api/misc_matches.py)는 DT가 '26-09-27 (Sun)'이 아니라 와이즈토토
+// 원본 그대로 'YYYY-MM-DD HH:MM:SS'라 요일 약어가 없는데, bettingDayOf가 그 형식도 직접
+// 계산해 준다 — 두 리그 종류가 항상 같은 규칙으로 갈리게 여기서 새로 만들지 않고 그 함수를 그대로 쓴다.
 const DAY = { Mon: '월', Tue: '화', Wed: '수', Thu: '목', Fri: '금', Sat: '토', Sun: '일' }
-export function dayLabel(dt) {
-  const m = /^(\d{2})-(\d{2})-(\d{2})\s*\((\w{3})\)/.exec(String(dt || ''))
-  return m ? `${m[2]}-${m[3]}(${DAY[m[4]] || m[4]})` : String(dt || '').slice(0, 8)
+
+// row 전체(DT+TM)를 받는다 — 6시 이전 판정에 TM이 꼭 있어야 해서 dt 문자열 하나만으론
+// 정확히 계산할 수 없다(호출부는 WeeklyPickPage.jsx, dayKey(r)/dayLabel(r) 그대로 row를 넘긴다).
+function parseDayDT(row) {
+  const bd = bettingDayOf(row)
+  if (bd) {
+    const [, mo, d] = bd.key.split('-')
+    return { key: bd.key, label: `${mo}-${d}(${DAY[bd.weekday] || bd.weekday})` }
+  }
+  const s = String(row?.DT || '')
+  return { key: s.slice(0, 8), label: s.slice(0, 8) }
 }
-export const dayKey = (dt) => String(dt || '').slice(0, 8)
+export const dayLabel = (row) => parseDayDT(row).label
+export const dayKey = (row) => parseDayDT(row).key
 
 // 베팅내역 등록 형식(/api/bet_slips의 bets 한 줄)
 export function comboToBet(c, stake) {

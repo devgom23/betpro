@@ -104,9 +104,11 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
   const rowByKey = useMemo(() => new Map(rows.map((r) => [matchKey(r), r])), [rows])
   const marketsByKey = useMemo(() => new Map(rows.map((r) => [matchKey(r), cardMarkets(r, extraOdds.get(matchKey(r)))])), [rows, extraOdds])
 
-  const days = useMemo(() => [...new Set(rows.map((r) => dayKey(r.DT)))].sort(), [rows])
-  const dayText = useMemo(() => new Map(rows.map((r) => [dayKey(r.DT), dayLabel(r.DT)])), [rows])
-  const shown = rows.filter((r) => dateSel === 'ALL' || dayKey(r.DT) === dateSel)
+  // dayKey/dayLabel은 '베팅일' 기준(새벽 6시 이전은 전날 그룹)이라 DT뿐 아니라 TM도 있어야
+  // 정확히 계산된다 — row 전체를 넘긴다(2026-09-27 사용자 지정, LeagueTable의 bettingDayOf와 같은 규칙).
+  const days = useMemo(() => [...new Set(rows.map((r) => dayKey(r)))].sort(), [rows])
+  const dayText = useMemo(() => new Map(rows.map((r) => [dayKey(r), dayLabel(r)])), [rows])
+  const shown = rows.filter((r) => dateSel === 'ALL' || dayKey(r) === dateSel)
   const boxOf = (r) => {
     const side = pickSide(r.MY_PICK)
     return side ? `${mainSideOf(r)}${side}` : null
@@ -288,8 +290,8 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
         <>
           <div className="wk-dtabs">
             {['ALL', ...days].map((d) => {
-              const n = rows.filter((r) => d === 'ALL' || dayKey(r.DT) === d).length
-              const k = rows.filter((r) => (d === 'ALL' || dayKey(r.DT) === d) && sel.has(matchKey(r))).length
+              const n = rows.filter((r) => d === 'ALL' || dayKey(r) === d).length
+              const k = rows.filter((r) => (d === 'ALL' || dayKey(r) === d) && sel.has(matchKey(r))).length
               return (
                 <button key={d} type="button" className={d === dateSel ? 'is-on' : undefined} onClick={() => setDateSel(d)}>
                   {d === 'ALL' ? '전체' : dayText.get(d)}<small>{n}경기{k ? ` · 담김 ${k}` : ''}</small>
@@ -316,7 +318,7 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
                       row={r}
                       markets={marketsByKey.get(matchKey(r)) || []}
                       picked={sel.get(matchKey(r))}
-                      dayText={dayText.get(dayKey(r.DT))}
+                      dayText={dayText.get(dayKey(r))}
                       onToggle={(m, i) => toggle(matchKey(r), m, i)}
                       onOpen={() => setDetailRow(r)}
                       onHide={() => hideRow(r)}
@@ -336,7 +338,7 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
                     row={r}
                     markets={marketsByKey.get(matchKey(r)) || []}
                     picked={sel.get(matchKey(r))}
-                    dayText={dayText.get(dayKey(r.DT))}
+                    dayText={dayText.get(dayKey(r))}
                     onToggle={(m, i) => toggle(matchKey(r), m, i)}
                     onOpen={() => setDetailRow(r)}
                     onHide={() => hideRow(r)}
@@ -406,7 +408,11 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
               <div className="wk-sv-act">
                 {v.status === 'reg' && <span className="wk-st is-reg">베팅내역에 등록되었습니다</span>}
                 {v.status === 'reg' && onGoBetHistory && <button type="button" className="wk-btn" onClick={onGoBetHistory}>베팅내역 보기</button>}
-                {v.status !== 'reg' && <button type="button" className="wk-btn" onClick={() => removeSaved(v)}>삭제</button>}
+                {/* 2026-09-27 사용자 제보 — "저장된 벳 삭제 기능이 없네 수정만 있고". 등록된
+                    벳도 삭제가 빠져 있었다 — removeSaved는 서버의 베팅내역(bet_slips)을 안 건드리고
+                    이 화면의 '저장된 벳' 목록(로컬)에서만 지운다(자체 확인창에도 그렇게 써 있다),
+                    그래서 등록 여부와 상관없이 항상 보여줘도 안전하다. */}
+                <button type="button" className="wk-btn" onClick={() => removeSaved(v)}>삭제</button>
                 <button type="button" className="wk-btn" onClick={() => startEdit(v)}>수정</button>
                 {v.status !== 'reg' && <button type="button" className="wk-btn is-pri" disabled={busy} onClick={() => register(v)}>벳 등록 → 베팅내역</button>}
               </div>

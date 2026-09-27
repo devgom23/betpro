@@ -933,7 +933,7 @@ def misc_matches_list(user: dict = Depends(get_current_user)):
     26개 지표는 안 낸다(api/misc_matches.py 상단 설명 참고)."""
     udb = _user_db_of(user)
     code = MISC.ensure_league(udb)
-    return _fast_json(MISC.build_list(udb, code, PATHS.get_master_db(), udb, _misc_pool_codes(user)))
+    return _fast_json(MISC.build_list(udb, code, PATHS.get_master_db(), udb, _misc_pool_codes(user), user["username"]))
 
 
 @app.get("/api/misc_matches/sample")
@@ -2220,7 +2220,11 @@ class BetSlipLegBody(BaseModel):
     code: str
     S: Union[str, int, float]
     R: Union[str, int, float]
-    No: Union[str, int, float]
+    # 기타경기는 와이즈토토가 경기번호(No)를 안 줘서 항상 None이다(2026-09-27 사용자 제보 —
+    # "벳 등록을 하려고 했는데 에러 났어", 422: "No" 칸이 str/int/float 중 아무것도 아니라고
+    # 거부됨). bet_slips.py가 매칭 키를 만들 때 이미 my_picks.normalize()를 써서 None도
+    # ""로 정리하므로(같은 방식으로 별표·내픽도 처리), 여기서도 None을 받아 주면 된다.
+    No: Union[str, int, float, None] = None
     HT: Union[str, int, float]
     AT: Union[str, int, float]
     DT: str

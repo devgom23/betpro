@@ -25,6 +25,7 @@ import pandas as pd
 import betpro_paths as PATHS
 import data_access as DATA
 import kr_crawler as KRCRAWL
+import my_picks as MYPICKS
 import odds_lookup as ODDSLOOK
 import user_leagues as USERLG
 
@@ -46,6 +47,15 @@ def _num(v):
     return x if x > 1.0 else None
 
 
+def _tm_from_dt(dt: str):
+    """DT('2026-09-28 05:30:00', 와이즈토토 원본 그대로 — api/kr_crawler.py _to_row 참고)에서
+    시:분만 뽑아 'HHMM'으로 — TM 컬럼은 6대리그·K1·K2와 같은 자리(HHMM 4자리 문자열)라
+    이번주 픽의 timeText()가 그대로 읽는다. 2026-09-27 사용자 제보(날짜 뱃지가 '2026-09-'로
+    깨짐) — TM이 항상 비어 있어서 시간이 안 나온 것도 같은 원인의 다른 증상이라 같이 고친다."""
+    m = re.match(r"^\d{4}-\d{2}-\d{2}\s+(\d{2}):(\d{2})", str(dt or ""))
+    return f"{m.group(1)}{m.group(2)}" if m else None
+
+
 def ensure_league(udb: str) -> str:
     """'기타경기' 리그가 없으면 만들고 코드를 돌려준다."""
     for lg in USERLG.list_leagues(udb):
@@ -59,21 +69,38 @@ def ensure_league(udb: str) -> str:
 
 
 def _kh_and_fav(kw, kl):
-    """국배로 정배(홈 여부)만 정한다 — 핸디 부호(KH)는 와이즈토토가 안 주므로(K1/K2와 달리
-    이 경기들엔 국내 핸디가 원래 없다), 결과 판정도 국배 정배 기준 승무패로만 한다."""
+    """국배로 정배(홈 여부)만 정한다 — 핸디 부호(KH)는 와이즈토토가 안 주지만, 핸디 마켓
+    자체(KHW/KHD/KHL)는 준다(2026-09-27 정정 — 아래 _rt_from_score 참고)."""
     if kw is None or kl is None or kw == kl:
         return None
     return kw <= kl
 
 
-def _rt_from_score(hs, as_, fav_home):
-    """국배(승무패)만으로는 RT(핸승·핸무·무·역) 4단계를 낼 수 없다(핸디 기준점이 없어서) —
-    그래서 기타경기는 3단계(정배승/무/정배패)로만 결과를 매긴다. 판정(정무/플핸무)과 비교할 때는
-    정배승→핸승, 무→무, 정배패→역 자리로 맞춰 쓴다(핸무 칸은 항상 0건)."""
-    if hs is None or as_ is None or fav_home is None:
+def _rt_from_score(hs, as_, fav_home, has_handicap):
+    """실제 스코어로 RT(핸승·핸무·무·역)를 매긴다.
+
+    (2026-09-27 정정 — 사용자 제보: "아이티 vs 트리니다 3:2인데 왜 결과가 핸승이 핸무지".
+    예전 버전은 "국배(승무패)만으로는 핸디 기준점이 없어 4단계를 낼 수 없다"고 보고 그냥
+    승/무/패만으로 핸승·무·역을 매겼다(1점차 승리도 무조건 핸승) — 틀렸다. kr_crawler.py의
+    수집 범위 자체가 "±1 핸디만 담는다"(다른 라인은 추가배당으로 안 담음)라, KHW/KHD/KHL이
+    있는 경기는 실은 전부 '정배 -1' 핸디 마켓이 열려 있던 경기다(핸디는 원래 강한 쪽이 접어주는
+    것이므로 정배가 -1을 받는다고 보는 게 표준 관례). 그래서 그 -1을 반영해 4단계로 나눈다:
+      - 정배가 2점차 이상 이김 → 핸승(1)
+      - 정배가 정확히 1점차로 이김(핸디 그대로 적중) → 핸무(2)
+      - 실제로 비김 → 무(3)
+      - 정배가 진짜로 짐 → 역(4)
+    핸디 마켓 자체가 없던 경기(has_handicap=False, KHW가 비어 있음)는 몇 점차든 핸승·핸무를
+    가를 기준이 없어 RT를 아예 안 낸다(None — 화면엔 '핸디없음')."""
+    if hs is None or as_ is None or fav_home is None or not has_handicap:
         return None
-    diff = hs - as_ if fav_home else as_ - hs
-    return 1 if diff > 0 else (3 if diff == 0 else 4)   # RT 2(핸무)는 이 표본엔 없음
+    fav_diff = (hs - as_) if fav_home else (as_ - hs)
+    if fav_diff > 1:
+        return 1
+    if fav_diff == 1:
+        return 2
+    if fav_diff == 0:
+        return 3
+    return 4
 
 
 def collect(db: str, udb: str, code: str, excl: set) -> dict:
@@ -115,7 +142,7 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
                 new_rows.append({
                     "S": s, "R": r, "No": row.get("gno"), "LG": row.get("LG", ""),
                     "HT": row["HT"], "AT": row["AT"], "DT": row.get("date") or "",
-                    "TM": None, "HS": None, "AS": None, "RT": None,
+                    "TM": _tm_from_dt(row.get("date")), "HS": None, "AS": None, "RT": None,
                     "KW": _num(row.get("KW")), "KD": _num(row.get("KD")), "KL": _num(row.get("KL")),
                     "KH": None, "KHW": _num(row.get("KHW")), "KHD": _num(row.get("KHD")), "KHL": _num(row.get("KHL")),
                     "EKW": _num(row.get("EKW")), "EKD": _num(row.get("EKD")), "EKL": _num(row.get("EKL")),
@@ -131,7 +158,7 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
     for c in COLS:
         if c not in df.columns:
             df[c] = None if c not in ("HS", "AS", "RT", "KW", "KD", "KL", "KH", "KHW", "KHD", "KHL", "EKW", "EKD", "EKL", "EKHW", "EKHD", "EKHL") else pd.NA
-    filled = ekw_updated = 0
+    filled = ekw_updated = tm_filled = 0
     for i in df.index:
         key = (str(df.at[i, "S"]), str(df.at[i, "R"]), str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip())
         finished = pd.notna(df.at[i, "HS"])
@@ -152,17 +179,25 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
             row = odds_map.get(key)
             if row and row.get("date"):
                 df.at[i, "DT"] = row["date"]
+        # TM(시:분, 2026-09-27 — 이번주 픽 날짜 뱃지가 '2026-09-'로 깨지는 문제의 일부. DT는
+        # 있는데 TM이 비어 있던 기존 행도 여기서 같이 채운다.
+        if pd.isna(df.at[i, "TM"]) or not str(df.at[i, "TM"] or "").strip():
+            tm = _tm_from_dt(df.at[i, "DT"])
+            if tm:
+                df.at[i, "TM"] = tm
+                tm_filled += 1
         if not finished:
             sc = score_map.get(key)
             if sc:
                 fav = _kh_and_fav(_num(df.at[i, "KW"]), _num(df.at[i, "KL"]))
-                rt = _rt_from_score(sc["HS"], sc["AS"], fav)
+                has_hcap = _num(df.at[i, "KHW"]) is not None
+                rt = _rt_from_score(sc["HS"], sc["AS"], fav, has_hcap)
                 df.at[i, "HS"], df.at[i, "AS"] = sc["HS"], sc["AS"]
                 if rt is not None:
                     df.at[i, "RT"] = rt
                 filled += 1
 
-    if new_rows or filled or ekw_updated:
+    if new_rows or filled or ekw_updated or tm_filled:
         with DATA.table_write(db, code):
             con = sqlite3.connect(db)
             try:
@@ -172,6 +207,36 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
             PATHS.stamp_updated(db)
 
     return {"added": len(new_rows), "score_filled": filled, "odds_updated": ekw_updated, "rounds": len(rounds)}
+
+
+def recompute_rt(db: str, code: str) -> dict:
+    """이미 저장된 RT를 새 규칙(_rt_from_score, 2026-09-27 정정)으로 다시 계산해 덮어쓴다.
+    collect()는 '아직 결과 없는' 경기만 RT를 채우므로(위 루프의 `if not finished`), 규칙이
+    바뀌어도 이미 결과가 난 경기의 RT는 저절로 안 고쳐진다 — 한 번은 이 함수로 직접 돌려야 한다."""
+    df = DATA.load_league_df(db, code)
+    if df.empty:
+        return {"checked": 0, "changed": 0}
+    changed = 0
+    for i in df.index:
+        hs, as_ = df.at[i, "HS"], df.at[i, "AS"]
+        if pd.isna(hs) or pd.isna(as_):
+            continue
+        fav = _kh_and_fav(_num(df.at[i, "KW"]), _num(df.at[i, "KL"]))
+        has_hcap = _num(df.at[i, "KHW"]) is not None
+        rt = _rt_from_score(int(hs), int(as_), fav, has_hcap)
+        old = None if pd.isna(df.at[i, "RT"]) else int(df.at[i, "RT"])
+        if rt != old:
+            df.at[i, "RT"] = rt if rt is not None else pd.NA
+            changed += 1
+    if changed:
+        with DATA.table_write(db, code):
+            con = sqlite3.connect(db)
+            try:
+                df.to_sql(code, con, if_exists="replace", index=False)
+            finally:
+                con.close()
+            PATHS.stamp_updated(db)
+    return {"checked": int(df["HS"].notna().sum()), "changed": changed}
 
 
 def _widen_lookup(sources, q, cap=WIDEN_MAX):
@@ -195,14 +260,20 @@ def verdict_of(cnt):
     return "플핸무" if hs <= yk else "정무"
 
 
-def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple) -> dict:
+def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple, username: str) -> dict:
     """기타경기 목록 + 판정 + 적중 + 요약. 판정용 표본 풀은 6대리그(master) + K1·K2(user, 내
-    데이터에서 K1·K2로 등록된 코드) — '기타경기' 자신은 절대 포함하지 않는다."""
+    데이터에서 K1·K2로 등록된 코드) — '기타경기' 자신은 절대 포함하지 않는다.
+    별표·내픽(2026-09-27 사용자 지정 — "결과 컬럼 오른쪽으로 별표/내픽 컬럼 추가")은 다른
+    리그와 완전히 같은 저장소(my_picks, api/main.py _attach_my_picks와 같은 방식)를 쓴다 —
+    기타경기도 USERLG로 등록된 평범한 사용자 리그라 code+scope('user')가 그대로 키가 된다."""
     df = DATA.load_league_df(db, code)
     if df.empty:
         return {"rows": [], "summary": None, "code": code, "scope": "user"}
     sources = [(mdb, PATHS.SCOPE_MASTER, c, PATHS.LEAGUE_LABEL.get(c, c)) for c in PATHS.LEAGUES]
     sources += [(udb, PATHS.SCOPE_USER, c, lab) for c, lab in user_codes]
+
+    picks = MYPICKS.list_my_picks(username, code, PATHS.SCOPE_USER)
+    pick_by_key = {tuple(MYPICKS.normalize(v) for v in (p["S"], p["R"], p["No"], p["HT"], p["AT"])): p for p in picks}
 
     rows = []
     hit = miss = insure = pending = no_sample = no_odds = 0
@@ -213,9 +284,12 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple) -> dic
         res = _widen_lookup(sources, q) if kw is not None and kl is not None else {"ready": False}
         v = None
         if res.get("ready"):
-            v = {"pick": verdict_of(res["cnt"]), "n": res["n"], "pct": res["pct"], "tick": res["tick"],
-                 "weak": res["n"] < SAMPLE_WEAK}
+            # cnt = [핸승,핸무,무,역] 건수 그대로(2026-09-27 사용자 지정 — "3건(0 / 0 / 2 / 1)
+            # 이렇게 표시해줘") — 화면 표본 칸에 pct(비율) 대신 실제 건수 4칸을 보여준다.
+            v = {"pick": verdict_of(res["cnt"]), "n": res["n"], "cnt": res["cnt"], "pct": res["pct"],
+                 "tick": res["tick"], "weak": res["n"] < SAMPLE_WEAK}
         rt = None if pd.isna(r.get("RT")) else int(r["RT"])
+        finished = not pd.isna(r.get("HS"))
         outcome = None
         if v and rt is not None:
             rule = PICK_VERDICT_MAP[v["pick"]]
@@ -226,8 +300,13 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple) -> dic
                 miss += 1
             else:
                 insure += 1
-        elif v:
+        elif v and not finished:
             pending += 1
+        elif v:
+            # 판정(v)은 냈는데 경기가 이미 끝났고 RT가 없는 경우 — 이 경기에 핸디 마켓
+            # (KHW~)이 아예 없어서 채점을 못 하는 것(2026-09-27, _rt_from_score 정정과 같이
+            # 생긴 경우). '결과 예정'이 아니라 표본없음과 같은 통(판정은 있는데 못 채점)에 넣는다.
+            no_sample += 1
         # 판정 자체를 못 낸 경우(2026-09-27 사용자 제보 — "총 163인데 합이 133건" — 요약에서
         # 이 경우들이 빠져 있었다). 국배(KW·KL)가 있는데도 못 냈으면 표본없음, 국배 자체가
         # 없으면(프로토가 배당을 안 줌) 배당없음 — 화면 판정·적중결과 칸과 같은 기준.
@@ -235,10 +314,17 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple) -> dic
             no_sample += 1
         else:
             no_odds += 1
+        no = r.get("No")
+        pkey = tuple(MYPICKS.normalize(x) for x in (r["S"], r["R"], no, r["HT"], r["AT"]))
+        p = pick_by_key.get(pkey)
         rows.append({
-            "S": str(r["S"]), "R": str(r["R"]), "LG": r.get("LG") or "", "HT": r["HT"], "AT": r["AT"],
+            "S": str(r["S"]), "R": str(r["R"]), "No": None if pd.isna(no) else no,
+            "LG": r.get("LG") or "", "HT": r["HT"], "AT": r["AT"],
             "DT": r.get("DT"), "HS": None if pd.isna(r.get("HS")) else int(r["HS"]),
             "AS": None if pd.isna(r.get("AS")) else int(r["AS"]), "RT": rt,
+            # 별표·내픽(2026-09-27 — "결과 컬럼 오른쪽으로 별표/내픽 컬럼 추가"). 값·저장은
+            # 다른 리그와 똑같이 /api/leagues/{code}/my_picks를 그대로 쓴다.
+            "starred": int(p["starred"]) if p else 0, "myPick": p["pick"] if p else None,
             "KW": kw, "KD": kd, "KL": kl,
             "EKW": _num(r.get("EKW")), "EKD": _num(r.get("EKD")), "EKL": _num(r.get("EKL")),
             # 국핸디(2026-09-27 사용자 제보 — "왜 핸디 배당은 안 보여줘": 값은 이미 받아 저장하고 있었는데

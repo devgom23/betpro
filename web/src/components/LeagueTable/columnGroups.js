@@ -603,6 +603,8 @@ const WEEKDAY_PREV = { Sun: 'Sat', Mon: 'Sun', Tue: 'Mon', Wed: 'Tue', Thu: 'Wed
 
 const WEEKDAY_KO = { Sun: '일', Mon: '월', Tue: '화', Wed: '수', Thu: '목', Fri: '금', Sat: '토' }
 
+const EN_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']   // Date.getDay() 인덱스 순서
+
 // 그 경기가 속한 '베팅일'(날짜 + 요일). 색상만 필요한 bettingDayStyle과 달리, 요일별로
 // 구간을 나눠 보여주는 화면(이번주 리스트)에서 묶음 키·제목으로 쓰려고 따로 둔다.
 // 날짜는 실제 날짜 계산으로, 요일은 bettingDayStyle과 똑같은 표(WEEKDAY_PREV)로 옮겨
@@ -610,14 +612,26 @@ const WEEKDAY_KO = { Sun: '일', Mon: '월', Tue: '화', Wed: '수', Thu: '목',
 export function bettingDayOf(row) {
   if (!row || !row.DT) return null
   const s = String(row.DT)
-  const m = /(\d{2})-(\d{2})-(\d{2})\s*\(([A-Za-z]{3})\)/.exec(s)
-  if (!m) return null
-  const [, yy, mm, dd, wd] = m
+  let yy, mm, dd, wd
+  let m = /(\d{2})-(\d{2})-(\d{2})\s*\(([A-Za-z]{3})\)/.exec(s)
+  if (m) {
+    ;[, yy, mm, dd, wd] = m
+    yy = 2000 + Number(yy)
+  } else {
+    // 기타경기(api/misc_matches.py)는 와이즈토토 원본 그대로 'YYYY-MM-DD HH:MM:SS'를 쓴다
+    // (2026-09-27 사용자 지정 — "전체 규칙 보면 금/토/일 나누는 규칙 보고 그대로 적용해줘야돼").
+    // 요일 약어가 없어 날짜로 직접 계산한다.
+    m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+    if (!m) return null
+    ;[, yy, mm, dd] = m
+    yy = Number(yy)
+    wd = EN_WD[new Date(yy, Number(mm) - 1, Number(dd)).getDay()]
+  }
   const tm = toNum(row.TM)
   const hour = tm === null ? null : Math.floor(tm / 100)
   const early = hour !== null && hour < 6
 
-  const d = new Date(2000 + Number(yy), Number(mm) - 1, Number(dd))
+  const d = new Date(yy, Number(mm) - 1, Number(dd))
   if (early) d.setDate(d.getDate() - 1)
   const weekday = early ? (WEEKDAY_PREV[wd] || wd) : wd
 
