@@ -2339,6 +2339,100 @@ def _attach_leg_hits(slips: list[dict], user: dict) -> None:
     BETSLIPS.save_void_status(user["username"], new_voids)
 
 
+def _build_view_index(df: pd.DataFrame) -> dict:
+    """리그 df → {(S,R,No,HT,AT): (HS, AS, KH, 핸디 기준 홈 정배 여부, TM)}. 베팅내역 화면이 다리마다
+    '승/무/패 중 어느 칸을 골랐고 실제로 어느 칸이 나왔나'를 그리는 데 쓴다(_attach_leg_views)."""
+    idx: dict = {}
+    if df.empty or not {"S", "R", "No", "HT", "AT"}.issubset(df.columns):
+        return idx
+
+    def num(c):
+        return (pd.to_numeric(df[c], errors="coerce") if c in df.columns
+                else pd.Series(np.nan, index=df.index, dtype="float64"))
+
+    kh, kw, kl = num("KH"), num("KW"), num("KL")
+    hs, as_ = num("HS"), num("AS")
+    tm = df["TM"] if "TM" in df.columns else pd.Series(None, index=df.index)
+    cols = ["S", "R", "No", "HT", "AT"]
+    for i, (s, r, no, ht, at) in enumerate(df[cols].itertuples(index=False, name=None)):
+        h = kh.iat[i]
+        if not pd.isna(h) and h != 0:
+            fav = bool(h < 0)
+        elif not pd.isna(kw.iat[i]) and not pd.isna(kl.iat[i]):
+            fav = bool(kw.iat[i] <= kl.iat[i])
+        else:
+            fav = None
+        idx[_my_pick_key(s, r, no, ht, at)] = (
+            None if pd.isna(hs.iat[i]) else int(hs.iat[i]),
+            None if pd.isna(as_.iat[i]) else int(as_.iat[i]),
+            None if pd.isna(h) else float(h), fav,
+            None if tm.iat[i] is None or (isinstance(tm.iat[i], float) and pd.isna(tm.iat[i])) else str(tm.iat[i]),
+        )
+    return idx
+
+
+def _attach_leg_views(slips: list[dict], user: dict) -> None:
+    """베팅내역 화면용 — 다리마다 시장(market: 'W'=승무패 / 'H'=핸디 / 'U'=언더오버)·기준점(line)·
+    고른 칸(pos 0=홈 승/언더 · 1=무 · 2=원정 승/오버)·실제로 나온 칸(res)·스코어·경기 시각을 붙인다.
+    픽 종류(정·역·핸승·플핸…)는 정배 기준이라 화면의 '승/무/패' 자리로 바꾸려면 홈이 정배인지가 필요하다 —
+    판정(RT)과 같은 기준(국내 핸디 부호)을 쓴다. 판정 자체(hit)는 _attach_leg_hits 그대로다."""
+    idx_cache: dict = {}
+
+    def view_for(leg: dict):
+        scopes = [leg["scope"]] if leg.get("scope") else [PATHS.SCOPE_MASTER, PATHS.SCOPE_USER]
+        key = _my_pick_key(leg["S"], leg["R"], leg["No"], leg["HT"], leg["AT"])
+        for sc in scopes:
+            try:
+                db = _resolve_scope_db(sc, user)
+            except HTTPException:
+                continue
+            ck = (sc, leg["code"])
+            if ck not in idx_cache:
+                idx_cache[ck] = (db, DATA.cached_derive(
+                    db, f"view_index:{leg['code']}",
+                    lambda db=db: _build_view_index(DATA.load_league_df(db, leg["code"])), tables=(leg["code"],)))
+            db, idx = idx_cache[ck]
+            if key in idx:
+                return db, idx[key]
+        return None, None
+
+    def side(d):
+        return None if d is None else (0 if d > 0 else 1 if d == 0 else 2)
+
+    for slip in slips:
+        for leg in slip["legs"]:
+            db, v = view_for(leg)
+            hs, as_, kh, fav, tm = v if v else (None, None, None, None, None)
+            leg["hs"], leg["as_"], leg["tm"] = hs, as_, tm
+            diff = None if hs is None or as_ is None else hs - as_
+            pt = leg["pick_type"]
+            market, line, pos, res = "W", None, None, None
+            xp = KXODDS.parse_pick(pt)
+            if pt in ("정", "역", "무"):
+                pos = 1 if pt == "무" else (None if fav is None else (0 if (pt == "정") == fav else 2))
+                res = side(diff)
+            elif pt in ("핸승", "핸무", "플핸"):
+                market, line = "H", kh
+                pos = 1 if pt == "핸무" else (None if fav is None else (0 if (pt == "핸승") == fav else 2))
+                res = side(None if diff is None or kh is None else diff + kh)
+            elif xp and xp[0] == "U":
+                market, line = "U", xp[1]
+                pos = 0 if xp[2] == "언더" else 2
+                res = None if diff is None else (0 if hs + as_ < xp[1] else 2)
+            elif xp and xp[0] == "H":
+                market = "H"
+                handi = None
+                if db:
+                    lines = KXODDS.lookup(_kx_index(db), leg["code"], leg["S"], leg["R"], leg["HT"], leg["AT"])
+                    handi = KXODDS.pick_handi_line(lines, xp[1], fav)
+                line = float(handi["line"]) if handi else (None if fav is None else (-xp[1] if fav else xp[1]))
+                if line is not None:
+                    fh = line < 0
+                    pos = 1 if xp[2] == "핸무" else (0 if (xp[2] == "핸승") == fh else 2)
+                    res = side(None if diff is None else diff + line)
+            leg["market"], leg["line"], leg["pos"], leg["res"] = market, line, pos, res
+
+
 @app.get("/api/bet_slips")
 def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_current_user)):
     """베팅내역 표 데이터. 등록 묶음(batch) → 조합 순으로 묶어 소계를 내고, 등록된 순서 그대로
@@ -2346,6 +2440,7 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
     눌러야 그 구간(settle_group_id)에 회차총계가 붙는다 — 그 전까지는 소계만 있는 미확정 상태다."""
     slips = BETSLIPS.list_slips(user["username"], scope)
     _attach_leg_hits(slips, user)
+    _attach_leg_views(slips, user)
 
     max_legs = max((len(s["legs"]) for s in slips), default=0)
 
