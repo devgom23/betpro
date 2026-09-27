@@ -35,7 +35,10 @@ function gridTemplate(roundCount) {
   return `${RT_COL}px ${SUM_COL}px repeat(${roundCount}, ${ROUND_COL}px)`
 }
 
-export default function SeasonStats({ code, scope, season, round }) {
+// hide1and3(2026-09-27, 기타경기 전용) — ①·③은 '같은 라운드가 매 시즌 반복된다'는 전제로
+// 만든 표라, 라운드가 그날그날의 프로토 회차 번호일 뿐인 기타경기에는 뜻이 없다(사용자 지정).
+// 기본값은 false라 기존 호출(6대리그·K1·K2)은 전부 그대로 ①②③ 다 보여준다.
+export default function SeasonStats({ code, scope, season, round, hide1and3 = false }) {
   const [data, setData] = useState(null)
   // 판정(시스템)·내 예측 적중 요약 — '시즌 지표'라는 이름대로 이번 라운드가 아니라
   // 시즌 전체 기준이어야 한다(2026-09-12 사용자 지정). 위 season_stats API는 라운드별
@@ -181,7 +184,10 @@ export default function SeasonStats({ code, scope, season, round }) {
           · 똥배 <strong>{ddong.total}</strong> /{' '}
           <span className="ss-bar-sago">똥사 {ddongSago} ({ddongSagoPct}%)</span>
         </span>
-        {focus.size > 0 && (
+        {/* ①(라운드별 똥배 격자)이 없으면 '어느 값이 이번 라운드와 같은 똥배인지'도 뜻이 없어
+            같이 뺀다(2026-09-27 사용자 지정: "ss-bar 이번라운드 똥배 배당률 나열되는거 삭제") —
+            기타경기 전용, hide1and3=false인 기존 6대리그·K1·K2는 그대로 나온다. */}
+        {!hide1and3 && focus.size > 0 && (
           <span className="ss-bar-focus">
             이번 라운드 똥배:{' '}
             {[...focus].map((v) => (
@@ -189,18 +195,26 @@ export default function SeasonStats({ code, scope, season, round }) {
             ))}
           </span>
         )}
-        <span className="league-summary-divider" aria-hidden="true" />
-        <span className="league-summary-pick-group">
-          <span className="league-summary-pick-label">판정</span>
-          <PickSummaryBar summary={seasonSummary.system} />
-        </span>
-        <span className="league-summary-divider" aria-hidden="true" />
-        <PickSummaryBar summary={seasonSummary.pick} />
+        {/* '판정'·내픽 적중 뱃지(2026-09-27 삭제 — 사용자 지정: "ss-bar에 판정 선택 판정 이 뱃지
+            삭제해줘"). 기타경기는 내픽·시스템판정 둘 다 추적하지 않아 항상 0건(0.0%)으로만 나와
+            의미 없는 뱃지였다 — 기타경기 전용(hide1and3)으로만 뺀다. 6대리그·K1·K2는 그대로 나온다. */}
+        {!hide1and3 && (
+          <>
+            <span className="league-summary-divider" aria-hidden="true" />
+            <span className="league-summary-pick-group">
+              <span className="league-summary-pick-label">판정</span>
+              <PickSummaryBar summary={seasonSummary.system} />
+            </span>
+            <span className="league-summary-divider" aria-hidden="true" />
+            <PickSummaryBar summary={seasonSummary.pick} />
+          </>
+        )}
       </div>
 
       {open && (
         <div className="ss-body">
           {/* ① 똥배 격자 — 결과별로 라운드마다 어떤 배당이 나왔는지 */}
+          {!hide1and3 && (
           <div className="ss-block">
             <div className="ss-title">
               <button className="ss-fold ss-fold-sub" onClick={() => setDdongOpen((v) => !v)}>
@@ -251,6 +265,7 @@ export default function SeasonStats({ code, scope, season, round }) {
             </div>
             )}
           </div>
+          )}
 
           {/* ② 결과 격자 — 그 시즌 전 경기의 라운드별 결과 개수 */}
           <div className="ss-block">
@@ -318,6 +333,7 @@ export default function SeasonStats({ code, scope, season, round }) {
           </div>
 
           {/* ③ 라운드 이력 — 같은 라운드를 과거 시즌까지(최근 시즌부터) */}
+          {!hide1and3 && (
           <div className="ss-block">
             <div className="ss-title">
               <button className="ss-fold ss-fold-sub" onClick={() => setHistoryOpen((v) => !v)}>
@@ -378,6 +394,7 @@ export default function SeasonStats({ code, scope, season, round }) {
               </div>
             )}
           </div>
+          )}
         </div>
       )}
     </div>

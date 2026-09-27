@@ -100,6 +100,7 @@ import sample_dir as SAMPLEDIR  # noqa: E402
 import book_dir as BOOKDIR      # noqa: E402
 import triple_sample as TRIPLE  # noqa: E402
 import odds_lookup as ODDSLOOK  # noqa: E402
+import misc_matches as MISC    # noqa: E402
 import season_view as SEASONVIEW  # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
@@ -900,6 +901,61 @@ def odds_lookup(body: OddsLookupBody, user: dict = Depends(get_current_user)):
 def odds_lookup_games(q: str = "", user: dict = Depends(get_current_user)):
     """배당 조회 '경기에서 불러오기' — 팀 이름으로 최근 경기 검색."""
     return ODDSLOOK.search_games(_lookup_sources(user), q)
+
+
+def _misc_exclude_names(user: dict) -> set:
+    """'기타경기' 수집에서 뺄 리그명 — 6대리그 + 이 계정의 K1·K2(내 데이터에 그 이름으로
+    등록된 리그)가 와이즈토토에 뜨는 이름 전부(저장된 리그명 + 자동 추정값)."""
+    mdb = PATHS.get_master_db()
+    udb = _user_db_of(user)
+    names = set()
+    for code in PATHS.LEAGUES:
+        label = _l_value(mdb, PATHS.SCOPE_MASTER, code)
+        names.add(CRAWL.get_league_name(udb, PATHS.SCOPE_MASTER, code) or "")
+        names.add(KR_LEAGUE_NAME_GUESS.get(label, ""))
+    for lg in USERLG.list_leagues(udb):
+        if lg["label"] in ("K1", "K2"):
+            names.add(CRAWL.get_league_name(udb, PATHS.SCOPE_USER, lg["code"]) or "")
+    names |= {"K리그1", "K리그2"}
+    names.discard("")
+    return names
+
+
+def _misc_pool_codes(user: dict) -> tuple:
+    """'기타경기' 판정의 표본 풀 — 이 계정의 K1·K2(라벨이 정확히 K1/K2인 내 데이터 리그)."""
+    udb = _user_db_of(user)
+    return tuple((lg["code"], lg["label"]) for lg in USERLG.list_leagues(udb) if lg["label"] in ("K1", "K2"))
+
+
+@app.get("/api/misc_matches")
+def misc_matches_list(user: dict = Depends(get_current_user)):
+    """'기타경기' — 6대리그·K1·K2를 뺀 나머지 축구 경기 목록 + 국배 기준 판정(정무/플핸무) + 적중.
+    26개 지표는 안 낸다(api/misc_matches.py 상단 설명 참고)."""
+    udb = _user_db_of(user)
+    code = MISC.ensure_league(udb)
+    return _fast_json(MISC.build_list(udb, code, PATHS.get_master_db(), udb, _misc_pool_codes(user)))
+
+
+@app.get("/api/misc_matches/sample")
+def misc_matches_sample(s: str, r: str, ht: str, at: str, user: dict = Depends(get_current_user)):
+    """'표본 상세' 팝업 — 목록 한 줄의 판정을 만든 과거 경기 목록 그대로."""
+    udb = _user_db_of(user)
+    code = MISC.ensure_league(udb)
+    return _fast_json(MISC.sample_detail(udb, code, PATHS.get_master_db(), udb, _misc_pool_codes(user), s, r, ht, at))
+
+
+@app.post("/api/misc_matches/collect")
+def misc_matches_collect(user: dict = Depends(get_current_user)):
+    """'새 회차 가져오기' — 오늘부터 10일 안 프로토 회차를 훑어 새 경기를 담고 결과를 채운다."""
+    if not PATHS.can_write(PATHS.SCOPE_USER, user.get("role")):
+        raise HTTPException(status_code=403, detail="이 스코프에는 쓰기 권한이 없습니다.")
+    udb = _user_db_of(user)
+    code = MISC.ensure_league(udb)
+    try:
+        res = MISC.collect(udb, udb, code, _misc_exclude_names(user))
+    except KRCRAWL.CrawlError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return res
 
 
 @app.get("/api/schedule_context")

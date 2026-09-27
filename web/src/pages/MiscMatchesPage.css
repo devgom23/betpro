@@ -1,0 +1,252 @@
+/* 기타경기(2026-09-27). 색은 앱 공통 토큰만 쓴다. */
+.mm-page {
+  padding: 16px;
+}
+
+.mm-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.mm-title {
+  margin: 0;
+}
+
+.mm-desc {
+  margin: 8px 0 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mm-btn {
+  padding: 7px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mm-btn.is-pri {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.mm-btn:disabled {
+  opacity: 0.5;
+}
+
+.mm-notice {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.mm-error {
+  color: var(--chip-red-fg);
+}
+
+.mm-empty {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.mm-sumnum {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.mm-sumnum.is-active {
+  color: var(--accent);
+  text-decoration-thickness: 2px;
+}
+
+.mm-sumnum.mm-pos.is-active {
+  color: var(--chip-yellow-fg);
+}
+
+.mm-sumnum.mm-neg.is-active {
+  color: var(--chip-red-fg);
+}
+
+.mm-search {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.mm-search .mm-k {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mm-search select {
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.mm-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.mm-summary small {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.mm-summary b {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 필터 해제(2026-09-27) — 서머리 영역 오른쪽에 붙는다. */
+.mm-summary-clear {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+/* 표본 칸(2026-09-27) — 눌러서 표본 상세 팝업을 연다. mm-sumnum과 같은 밑줄 스타일. */
+.mm-sample-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.mm-sample-btn:hover {
+  color: var(--accent);
+}
+
+.mm-pos {
+  color: var(--chip-yellow-fg);
+}
+
+.mm-neg {
+  color: var(--chip-red-fg);
+}
+
+.mm-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.mm-t {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.mm-t th {
+  padding: 6px 8px;
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.mm-t td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.mm-l {
+  text-align: left !important;
+}
+
+.mm-muted {
+  color: var(--text-muted);
+}
+
+.mm-win {
+  font-weight: 700;
+  color: var(--chip-red-fg);
+}
+
+.mm-moved {
+  color: var(--warning-text);
+  font-weight: 700;
+}
+
+.mm-chip {
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mm-chip.is-blue {
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+}
+
+.mm-ddong {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--chip-purple-bg, var(--chip-gray-bg));
+  color: var(--chip-purple-fg, var(--chip-gray-fg));
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mm-ddong.is-sa {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+}
+
+.mm-chip.is-red {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+}
+
+.mm-weak {
+  color: var(--warning-text);
+  font-weight: 700;
+}
+
+.mm-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}

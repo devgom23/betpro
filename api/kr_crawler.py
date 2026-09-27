@@ -395,6 +395,14 @@ def _to_row(rec):
     h2 = rec["H2"] or ["", "", ""]
     return {
         "HT": rec["HT"], "AT": rec["AT"],
+        # 경기 일시(와이즈토토 onclick의 세 번째 값 그대로) — misc_matches.py '기타경기'가 DT로
+        # 저장한다(2026-09-27 사용자 제보: "회차 다음에 경기일시 정도는 표기해줘"인데 이 값 자체를
+        # _to_row가 안 돌려주고 있어서 늘 빈칸이었다). 6대리그처럼 별도 엑셀/결과입력 화면이 있는
+        # 리그는 이 값을 안 쓰고 업로드한 DT를 그대로 쓰므로, 여기 추가해도 기존 흐름엔 영향 없다.
+        "date": rec.get("date", ""),
+        # 와이즈토토에 뜬 원래 리그명 — target_league=""(전체)로 받을 때만 쓸모 있다
+        # (misc_matches.py '기타경기'가 어느 리그였는지 화면에 보여주려고 2026-09-27 추가).
+        "LG": rec.get("league", ""),
         # 국배 기준 경기 순번용 원본값 — 리그 표가 아니라 kr_game_no 테이블로 간다.
         # gyear는 이 경기를 읽어 온 프로토 회차의 연도(아래 fetch_* 가 채운다).
         "_gno": rec.get("gno"), "_gyear": rec.get("gyear"),
@@ -503,6 +511,75 @@ def fetch_by_dates(target_league: str, d0: datetime, d1: datetime) -> dict:
         "changed_cnt": changed,
         "rows": rows,
     }
+
+
+def rounds_in_range(d0: datetime, d1: datetime) -> list:
+    """날짜 범위를 덮는 (연도, 회차) 목록 — fetch_by_dates의 회차 찾기 부분만 뗀 것.
+    misc_matches.py가 회차 하나를 여러 번(배당·결과) 다시 읽어야 해서 따로 뺐다."""
+    years = sorted({d0.year, d1.year})
+    rounds = []
+    for y in years:
+        lo = d0 if d0.year == y else datetime(y, 1, 1)
+        hi = d1 if d1.year == y else datetime(y, 12, 31)
+        for rnd in find_rounds_for_dates(y, lo, hi):
+            rounds.append((y, rnd))
+    return rounds
+
+
+def fetch_round_all_leagues(year, rnd, exclude: set | None = None) -> list:
+    """그 회차의 '전체' 리그(exclude에 있는 이름만 뺀 나머지) 경기를 한 번에 읽는다.
+    misc_matches.py('기타경기' — 6대리그·K1·K2를 뺀 모든 축구 경기 모으기, 2026-09-27)가 쓴다.
+    _parse_round(html, "")는 target_league가 비면 회차의 모든 리그를 담는다(기존 백필과 같은 경로)."""
+    html = fetch_round_html(year, rnd)
+    if not html:
+        return []
+    got = _parse_round(html, "")
+    exclude = exclude or set()
+    rows = []
+    for rec in got.values():
+        if rec["league"] in exclude:
+            continue
+        row = _to_row(rec)
+        row["_gyear"] = _int_or_none(year)
+        rows.append(row)
+    return rows
+
+
+def fetch_round_all_results(year, rnd) -> dict:
+    """그 회차의 전체 리그에서 끝난 경기 스코어 — {(리그, 홈팀, 원정팀): {HS, AS}}.
+    _parse_round_results(html, "")도 target_league가 비면 전체 리그를 준다. 팀명만으로는
+    나라가 다른 리그끼리 겹칠 수 있어 리그명까지 키에 넣는다(기존 fetch_results류는
+    한 리그만 다뤄서 이 걱정이 없었다)."""
+    html = fetch_round_html(year, rnd)
+    if not html:
+        return {}
+    soup = BeautifulSoup(html, "html.parser")
+    out = {}
+    for u in soup.select("div.gameinfo ul"):
+        a4 = u.select_one("li.a4")
+        if not a4:
+            continue
+        league = a4.get_text(strip=True)
+        hm_el = u.select_one("li.hm")
+        if hm_el is None or hm_el.get_text(strip=True):
+            continue
+        result_el = next((li for li in u.find_all("li", recursive=False) if not li.get("class")), None)
+        if not result_el or result_el.get_text(strip=True) not in _FINISHED_RESULTS:
+            continue
+        a6 = u.select_one("li.a6")
+        a8 = u.select_one("li.a8")
+        if not a6 or not a8:
+            continue
+        m6 = re.match(r"^(.*?)\s*(\d+)$", a6.get_text(strip=True))
+        m8 = re.match(r"^(\d+)\s*(.*)$", a8.get_text(strip=True))
+        if not m6 or not m8:
+            continue
+        ht, hs = m6.group(1).strip(), m6.group(2)
+        as_, at = m8.group(1), m8.group(2).strip()
+        if not ht or not at:
+            continue
+        out[(league, ht, at)] = {"HS": int(hs), "AS": int(as_)}
+    return out
 
 
 # 일반 승무패 줄의 '결과' 칸(클래스 없는 li)에 나오는, 완전히 끝난 경기만 뜻하는 값.

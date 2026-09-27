@@ -1,0 +1,26 @@
+/* 표본 상세 팝업(2026-09-27). .modal-backdrop·.modal-card·.modal-close·.modal-title·.modal-meta는
+   공통 스타일(예: LeagueTable.css)을 그대로 쓴다 — mm-* 계열은 MiscMatchesPage.css를 그대로 쓴다
+   (이 팝업은 기타경기 화면에서만 뜨므로 이미 로드돼 있다, KrCrawlModal이 detail-table을 쓰는 것과 같은 방식). */
+.mm-sample-card {
+  width: min(880px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+}
+
+.mm-sample-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: center;
+  margin: 10px 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  font-size: 13px;
+}
+
+.mm-sample-wrap {
+  max-height: 55vh;
+  overflow-y: auto;
+}

@@ -5,6 +5,11 @@ import { useFontSize } from '../context/FontSizeContext'
 import { api } from '../api/client'
 import LeaguePage from './LeaguePage'
 import TotalDbPage from './TotalDbPage'
+import MiscMatchesPage from './MiscMatchesPage'
+
+// api/misc_matches.py LEAGUE_LABEL과 반드시 같아야 한다 — '내 데이터'에 이 이름으로 자동
+// 등록되는 리그 탭을 표준 LeaguePage(26개 지표) 대신 MiscMatchesPage로 바꿔치기하는 기준.
+const MISC_LEAGUE_LABEL = '기타경기'
 import HeadToHeadPage from './HeadToHeadPage'
 import AdminMasterPage from './AdminMasterPage'
 import AdminAccountsPage from './AdminAccountsPage'
@@ -238,8 +243,16 @@ export default function MainPage() {
           </div>
         )}
         {/* 목록이 확정되고, 열린 탭이 그 스코프에 실제로 있는 리그일 때만 그린다.
-            (스코프 전환 도중 이전 스코프의 리그 코드로 조회가 나가는 걸 막는다) */}
-        {ready && leagues.some((lg) => lg.code === activeTab) && (
+            (스코프 전환 도중 이전 스코프의 리그 코드로 조회가 나가는 걸 막는다)
+            '기타경기'는 내 데이터에 자동 등록되는 평범한 리그이지만(api/misc_matches.py
+            ensure_league), 26개 지표를 안 내는 전용 화면(MiscMatchesPage)으로 대신 보여준다
+            — 사용자 제보(2026-09-27): "내데이터 > 기타경기로 들어갔는데 보통 리그표(26개
+            지표)만 나오고 내가 만든 화면이 안 보인다"는 게 바로 이 분기를 안 탄 버그였다. */}
+        {ready && isUser && leagues.find((lg) => lg.code === activeTab)?.label === MISC_LEAGUE_LABEL && (
+          <MiscMatchesPage />
+        )}
+        {ready && leagues.some((lg) => lg.code === activeTab)
+          && !(isUser && leagues.find((lg) => lg.code === activeTab)?.label === MISC_LEAGUE_LABEL) && (
           <LeaguePage key={`${scope}:${activeTab}`} code={activeTab} scope={scope} />
         )}
         </>}
