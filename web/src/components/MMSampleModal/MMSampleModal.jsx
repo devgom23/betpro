@@ -61,9 +61,15 @@ export default function MMSampleModal({ s, r, ht, at, no, code, scope, myPick, o
         <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
         <h2 className="modal-title">🔍 표본 상세</h2>
         <p className="modal-meta">
-          <strong>{ht}</strong> vs <strong>{at}</strong> ({s} {r}) — 이 경기와 비슷한 국배(국내
-          승무패)를 가진 6대리그+K1+K2 과거 경기들입니다. 이 목록에서 핸승·역 중 적은 쪽을
-          빼고 판정을 냅니다.
+          <strong>{ht}</strong> vs <strong>{at}</strong> ({s} {r}) — 이 경기와 비슷한{' '}
+          {data?.viaHandi ? '국핸디(국내 핸디 승/무/패)' : '국배(국내 승무패)'}를 가진
+          6대리그+K1+K2 과거 경기들입니다. 이 목록에서 핸승·역 중 적은 쪽을 빼고 판정을 냅니다.
+          {data?.viaHandi && (
+            <><br /><span className="mm-weak">
+              이 경기는 국배(승무패) 자체가 없어(정배가 워낙 강해 프로토가 안 엶) 국핸디로
+              대신 찾았습니다.
+            </span></>
+          )}
         </p>
 
         <div className="mm-sample-pick">
@@ -89,7 +95,11 @@ export default function MMSampleModal({ s, r, ht, at, no, code, scope, myPick, o
                 판정 <span className={`mm-chip ${data.pick === '정무' ? 'is-blue' : 'is-red'}`}>{data.pick}</span>
               </span>
               <span className="mm-muted">
-                국배 {f2(data.q.KW)} / {f2(data.q.KD)} / {f2(data.q.KL)} · ±{data.tick}칸에서 찾음 ·{' '}
+                {data.viaHandi ? '국핸디' : '국배'}{' '}
+                {data.viaHandi
+                  ? `${f2(data.q.KHW)} / ${f2(data.q.KHD)} / ${f2(data.q.KHL)}`
+                  : `${f2(data.q.KW)} / ${f2(data.q.KD)} / ${f2(data.q.KL)}`}
+                {' '}· ±{data.tick}칸에서 찾음 ·{' '}
                 <strong>{data.n}건</strong>{data.weak && <span className="mm-weak"> 표본적음(30건 미만)</span>}
               </span>
               <span className="mm-muted">

@@ -346,15 +346,27 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple, userna
     hit = miss = insure = pending = no_sample = no_odds = 0
     for _, r in df.sort_values(["S", "R"], ascending=False).iterrows():
         kw, kd, kl = _num(r.get("KW")), _num(r.get("KD")), _num(r.get("KL"))
+        khw, khd, khl = _num(r.get("KHW")), _num(r.get("KHD")), _num(r.get("KHL"))
         is_ddong = bool((kw is not None and kw <= DDONG_MAX) or (kl is not None and kl <= DDONG_MAX))
-        q = {"KW": kw, "KD": kd, "KL": kl}
-        res = _widen_lookup(sources, q) if kw is not None and kl is not None else {"ready": False}
+        # 판정(비슷한 과거 경기 찾기)도 국핸디 기반으로 낼 수 있게(2026-09-28 사용자 지정 —
+        # "판정도 국핸디 기반으로 낼 수 있게 해줘", 위 결과(RT)를 국핸디로 낸 것과 같은 경기들:
+        # 정배가 워낙 강해 프로토가 국배(승무패) 자체를 안 연 경우). 국배가 있으면 그대로 국배로
+        # 찾고, 없으면 국핸디(KHW/KHD/KHL)로 찾는다 — odds_lookup.lookup은 이미 이 칸들도
+        # 매칭 기준으로 받는다(표본 섹션과 같은 함수).
+        via_handi = kw is None or kl is None
+        if not via_handi:
+            q = {"KW": kw, "KD": kd, "KL": kl}
+        elif khw is not None and khl is not None:
+            q = {"KHW": khw, "KHD": khd, "KHL": khl}
+        else:
+            q = None
+        res = _widen_lookup(sources, q) if q else {"ready": False}
         v = None
         if res.get("ready"):
             # cnt = [핸승,핸무,무,역] 건수 그대로(2026-09-27 사용자 지정 — "3건(0 / 0 / 2 / 1)
             # 이렇게 표시해줘") — 화면 표본 칸에 pct(비율) 대신 실제 건수 4칸을 보여준다.
             v = {"pick": verdict_of(res["cnt"]), "n": res["n"], "cnt": res["cnt"], "pct": res["pct"],
-                 "tick": res["tick"], "weak": res["n"] < SAMPLE_WEAK}
+                 "tick": res["tick"], "weak": res["n"] < SAMPLE_WEAK, "viaHandi": via_handi and q is not None}
         rt = None if pd.isna(r.get("RT")) else int(r["RT"])
         finished = not pd.isna(r.get("HS"))
         outcome = None
@@ -375,9 +387,10 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple, userna
             # 생긴 경우). '결과 예정'이 아니라 표본없음과 같은 통(판정은 있는데 못 채점)에 넣는다.
             no_sample += 1
         # 판정 자체를 못 낸 경우(2026-09-27 사용자 제보 — "총 163인데 합이 133건" — 요약에서
-        # 이 경우들이 빠져 있었다). 국배(KW·KL)가 있는데도 못 냈으면 표본없음, 국배 자체가
-        # 없으면(프로토가 배당을 안 줌) 배당없음 — 화면 판정·적중결과 칸과 같은 기준.
-        elif kw is not None and kl is not None:
+        # 이 경우들이 빠져 있었다). 국배(KW·KL)나 국핸디(KHW·KHL) 중 하나라도 있는데(=q가
+        # 있었는데) 비슷한 과거 경기를 못 찾은 것이면 표본없음, 둘 다 아예 없으면(프로토가
+        # 배당 자체를 안 줌) 배당없음 — 화면 판정·적중결과 칸과 같은 기준.
+        elif q is not None:
             no_sample += 1
         else:
             no_odds += 1
@@ -425,14 +438,22 @@ def sample_detail(db: str, code: str, mdb: str, udb: str, user_codes: tuple, s: 
         return {"ready": False, "reason": "경기를 찾지 못했습니다"}
     row = m.iloc[0]
     kw, kd, kl = _num(row.get("KW")), _num(row.get("KD")), _num(row.get("KL"))
-    if kw is None or kl is None:
-        return {"ready": False, "reason": "이 경기는 국배가 없어 표본을 찾을 수 없습니다"}
+    khw, khd, khl = _num(row.get("KHW")), _num(row.get("KHD")), _num(row.get("KHL"))
+    # 국배가 없으면 국핸디로(2026-09-28 — "판정도 국핸디 기반으로 낼 수 있게 해줘"), build_list와 같은 규칙.
+    via_handi = kw is None or kl is None
+    if not via_handi:
+        q = {"KW": kw, "KD": kd, "KL": kl}
+    elif khw is not None and khl is not None:
+        q = {"KHW": khw, "KHD": khd, "KHL": khl}
+    else:
+        return {"ready": False, "reason": "이 경기는 국배·국핸디가 모두 없어 표본을 찾을 수 없습니다"}
     sources = [(mdb, PATHS.SCOPE_MASTER, c, PATHS.LEAGUE_LABEL.get(c, c)) for c in PATHS.LEAGUES]
     sources += [(udb, PATHS.SCOPE_USER, c, lab) for c, lab in user_codes]
-    res = _widen_lookup(sources, {"KW": kw, "KD": kd, "KL": kl})
+    res = _widen_lookup(sources, q)
     if not res.get("ready"):
         return {"ready": False, "reason": "비슷한 과거 경기를 하나도 찾지 못했습니다"}
     res["pick"] = verdict_of(res["cnt"])
     res["weak"] = res["n"] < SAMPLE_WEAK
-    res["q"] = {"KW": kw, "KD": kd, "KL": kl}
+    res["viaHandi"] = via_handi
+    res["q"] = q
     return res

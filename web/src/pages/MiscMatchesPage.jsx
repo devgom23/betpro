@@ -153,16 +153,21 @@ export default function MiscMatchesPage() {
     return true
   }), [data.rows, roundSel, lgSel])
 
-  // api/misc_matches.py build_list와 정확히 같은 기준으로 나눈다. 국배가 있는데 판정을 못 낸
-  // 건 표본없음, 국배 자체가 없는 건 배당없음. 판정(v)은 있는데 경기가 이미 끝났고 RT가 없는
-  // 건(2026-09-27 — 핸디 마켓 자체가 없어 채점 불가, _rt_from_score 정정과 같이 생기는 경우)도
-  // '결과 예정'이 아니라 표본없음 통에 넣는다 — 진짜 예정 경기와 섞이면 안 된다.
+  // 판정을 낼 기준(국배 또는 국핸디)이 하나라도 있는지 — api/misc_matches.py build_list의
+  // q 판단과 같다(2026-09-28 — "판정도 국핸디 기반으로 낼 수 있게 해줘": 국배 자체가 없는
+  // 경기도 국핸디로 대신 찾는다).
+  const hasOddsBasis = (r) => (r.KW !== null && r.KL !== null) || (r.KHW !== null && r.KHL !== null)
+
+  // api/misc_matches.py build_list와 정확히 같은 기준으로 나눈다. 판정 기준(국배·국핸디)이
+  // 있는데 판정을 못 낸 건 표본없음, 둘 다 아예 없는 건 배당없음. 판정(v)은 있는데 경기가 이미
+  // 끝났고 RT가 없는 건(2026-09-27 — 핸디 마켓 자체가 없어 채점 불가, _rt_from_score 정정과
+  // 같이 생기는 경우)도 '결과 예정'이 아니라 표본없음 통에 넣는다 — 진짜 예정 경기와 섞이면 안 된다.
   const resultOf = (r) => {
     if (r.outcome === '적중') return 'hit'
     if (r.outcome === '미적') return 'miss'
     if (r.outcome === '보험') return 'insure'
     if (r.verdict) return r.HS === null ? 'pending' : 'no_sample'
-    return r.KW !== null && r.KL !== null ? 'no_sample' : 'no_odds'
+    return hasOddsBasis(r) ? 'no_sample' : 'no_odds'
   }
 
   // mm-summary 숫자 — scoped(지금 고른 회차·리그) 안에서 이 화면이 직접 센다(백엔드 summary는
@@ -412,21 +417,23 @@ export default function MiscMatchesPage() {
                         </button>
                       ) : '-'}
                     </td>
-                    {/* 국배(KW/KL)가 있는데도 v가 없으면 '비슷한 배당의 과거 경기를 못 찾은 것'(표본없음) —
-                        국배 자체가 없는 것(배당없음)과 원인이 다르다(2026-09-27 사용자 제보: 한국M vs
-                        베트남M — KW 1.08 · KL 18.5처럼 배당은 있지만 너무 극단적이라 ±10칸 안에서도
-                        비슷한 과거 경기가 하나도 없었다). */}
+                    {/* 판정 기준(국배 또는 국핸디)이 있는데도 v가 없으면 '비슷한 과거 경기를 못 찾은 것'
+                        (표본없음) — 둘 다 아예 없는 것(배당없음)과 원인이 다르다(2026-09-27 사용자
+                        제보: 한국M vs 베트남M — KW 1.08 · KL 18.5처럼 배당은 있지만 너무 극단적이라
+                        ±10칸 안에서도 비슷한 과거 경기가 하나도 없었다). */}
                     <td>
                       {v ? (
-                        <span className={`mm-chip ${v.pick === '정무' ? 'is-blue' : 'is-red'}`}>{v.pick}</span>
-                      ) : <span className="mm-muted">{r.KW !== null && r.KL !== null ? '표본없음' : '국배 없음'}</span>}
+                        <span className={`mm-chip ${v.pick === '정무' ? 'is-blue' : 'is-red'}`} title={v.viaHandi ? '국핸디 기반 판정(국배 없음)' : undefined}>
+                          {v.pick}{v.viaHandi && '*'}
+                        </span>
+                      ) : <span className="mm-muted">{hasOddsBasis(r) ? '표본없음' : '국배 없음'}</span>}
                     </td>
                     <td>
                       {r.outcome ? <span className="mm-badge" style={OUTCOME_BADGE[r.outcome]}>{r.outcome}</span>
                         : v && r.HS === null ? <RtBadge label="예정" />
                         : v
                           ? <span className="mm-muted" title="판정은 냈지만 이 경기에 핸디 마켓이 없어(결과 칸의 '핸디없음' 참고) 채점을 못 합니다.">핸디없음</span>
-                          : r.KW !== null && r.KL !== null
+                          : hasOddsBasis(r)
                             ? <span className="mm-muted" title="배당은 있지만 비슷한 과거 경기(±10칸 안)를 하나도 못 찾아 판정을 못 냈습니다.">표본없음</span>
                             : <span className="mm-muted" title="프로토가 이 경기에 배당 자체를 안 줍니다 — 결과를 기다리는 게 아니라 애초에 판정을 못 냅니다.">배당없음</span>}
                     </td>
