@@ -392,10 +392,13 @@ export default function BetHistoryPage({ scope }) {
                   <div className={`bh-batch-row${res.label === '적중' ? ' is-hit' : ''}${checked && !locked ? ' is-sel' : ''}`}>
                     <input type="checkbox" disabled={locked} checked={!locked && checked} onChange={() => toggleIds(ids, !checked)} aria-label="이 묶음 선택" />
                     {/* '이번주 벳' 라벨 삭제(2026-09-28 사용자 지정) — 경기명만 그 스타일(굵게)로
-                        남기고 크기만 14px로. */}
-                    <span className="bh-batch-name">
+                        남기고 크기만 14px로. 경기명도 눌러서 접고 펼 수 있게(2026-09-28 사용자
+                        지정 — "강원vs인천 외 2경기를 클릭해도 아코디언이 접었다 펼쳤다 하게") —
+                        메모칸을 넣으며 토글 버튼(.bh-batch-main) 밖으로 뺐던 자리라 같은 토글을
+                        따로 걸어 준다. */}
+                    <button type="button" className="bh-batch-name" onClick={() => toggleSet(setOpenBatches, batch.batch_id)}>
                       {first ? `${first.HT} vs ${first.AT}${matchCount > 1 ? ` 외 ${matchCount - 1}경기` : ''}` : ''}
-                    </span>
+                    </button>
                     {/* 반성 메모(2026-09-28 사용자 지정 스샷 그대로) — 이름과 오른쪽 통계 사이
                         남는 폭을 다 채운다. 토글 버튼(.bh-batch-main) 밖에 둬서, 입력칸을 눌러도
                         묶음이 접히지 않는다. 높이·테두리는 상세보기 팝업과 같은 .rich-memo 그대로. */}

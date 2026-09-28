@@ -483,6 +483,19 @@
   min-width: 0;
   font-weight: 700;
   font-size: 14px;
+  /* <button>으로 바뀌면서(2026-09-28, 클릭 토글용) 기본 버튼 모양을 지운다 — 예전 <span>과
+     똑같이 보이게. */
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.bh-batch-name:hover {
+  color: var(--accent);
 }
 
 /* 반성 메모(2026-09-28 사용자 지정, 스샷 제공) — 이름과 통계 사이 남는 폭을 전부 채운다.

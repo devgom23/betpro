@@ -2138,7 +2138,9 @@ class HideItem(BaseModel):
     scope: str
     S: Union[str, int, float]
     R: Union[str, int, float]
-    No: Union[str, int, float]
+    # 기타경기는 와이즈토토가 경기번호(No)를 안 줘서 항상 None이다(2026-09-28 사용자 제보 —
+    # "이번주픽에서 삭제할려고 하는데 에러가 나네". BetSlipLegBody.No와 같은 원인·같은 수정).
+    No: Union[str, int, float, None] = None
     HT: Union[str, int, float]
     AT: Union[str, int, float]
 
