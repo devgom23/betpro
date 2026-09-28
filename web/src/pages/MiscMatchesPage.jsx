@@ -59,6 +59,51 @@ function kickoff(dt) {
   return m ? `${m[2]}.${m[3]} ${m[4]}:${m[5]}` : (dt || '-')
 }
 
+// (초)판정/(배)판정·(초)표본/(배)표본 네 칸이 공유하는 규칙(2026-09-28 사용자 지정 —
+// "판정을 초기와 배변 이렇게 2개로... 컬럼은 판정을 둘로 나눠서 (초)판정 (배)판정으로...
+// 표본도 (초)표본 (배)표본... 배변 배당이 없으면 그냥 -"). 그 시점 배당(국배·국핸디) 자체가
+// 없으면(hasBasis=false) '-', 배당은 있는데 비슷한 과거 경기를 못 찾았으면 '표본없음'.
+function PhaseEmpty({ hasBasis }) {
+  return <span className="mm-muted">{hasBasis ? '표본없음' : '-'}</span>
+}
+
+// graded=true면 적중결과 채점에 실제로 쓰인 쪽이라 노란 테두리로 강조한다(사용자 지정:
+// "적중결과는 배변으로 배변이 없으면 초기로").
+function VerdictChip({ v, hasBasis, phaseText, graded, onClick }) {
+  if (!v) return <PhaseEmpty hasBasis={hasBasis} />
+  return (
+    <button
+      type="button"
+      className={`mm-vchip${graded ? ' is-graded' : ''}`}
+      onClick={onClick}
+      title={`${phaseText} 판정 · ${v.n}건${v.viaHandi ? ' · 국핸디 기반' : ''}`
+        + (graded ? ' · 적중결과는 이 판정으로 냄' : '') + ' — 눌러서 표본 보기'}
+    >
+      <span className={`mm-chip ${v.pick === '정무' ? 'is-blue' : 'is-red'}`}>{v.pick}{v.viaHandi && '*'}</span>
+    </button>
+  )
+}
+
+// 표본 칸(2026-09-27 사용자 지정 — "3건[스페이스] 뱃지로 1/0/2/0 이렇게") — 뱃지 색은 판정과
+// 같은 기준(핸승·역 건수 비교)으로, 핸승이 많으면 파랑(정무 쪽)·역이 많으면 빨강(플핸무 쪽)·
+// 같으면 회색. 둘 차이가 3건 이상이면 테두리 강조. 이제 (초)표본/(배)표본으로 나눠서 쓴다.
+function SampleChip({ v, hasBasis, phaseText, onClick }) {
+  if (!v) return <PhaseEmpty hasBasis={hasBasis} />
+  return (
+    <button type="button" className="mm-sample-btn" onClick={onClick} title={`눌러서 ${phaseText} 표본 목록 보기`}>
+      <span className="mm-sample-num">{v.n}건</span>{' '}
+      <span className={[
+        'mm-cnt-badge',
+        v.cnt[0] === v.cnt[3] ? '' : v.cnt[0] > v.cnt[3] ? 'is-blue' : 'is-red',
+        Math.abs(v.cnt[0] - v.cnt[3]) >= 3 ? 'is-strong' : '',
+      ].filter(Boolean).join(' ')}
+      >
+        {v.cnt.join('/')}
+      </span>
+    </button>
+  )
+}
+
 // mm-summary 숫자 — 밑줄 그어 누를 수 있게(사용자 지정: 누르면 그 결과만 걸러 본다).
 // 다시 누르면 풀린다(active일 때 진한 색으로 '지금 이걸로 걸렀다'는 표시).
 function SumNum({ active, className, onClick, children }) {
@@ -329,7 +374,7 @@ export default function MiscMatchesPage() {
               <tr>
                 <th>회차</th><th>경기일시</th><th>리그</th><th>경기</th><th>스코어</th><th>결과</th>
                 <th>별표</th><th>내픽</th>
-                <th>표본</th><th>판정</th><th>적중결과</th><th>똥배</th>
+                <th>(초)표본</th><th>(초)판정</th><th>(배)표본</th><th>(배)판정</th><th>적중결과</th><th>똥배</th>
                 <th>국배 승/무/패 (초기)</th><th>배변(최신)</th><th>국핸디 (초기)</th><th>배변(최신)</th>
               </tr>
             </thead>
@@ -384,49 +429,44 @@ export default function MiscMatchesPage() {
                     <td>
                       <button
                         type="button" className="mm-sample-btn"
-                        onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT })}
+                        onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT, phase: r.verdictPhase || 'final' })}
                         title="눌러서 표본 상세에서 내픽을 고를 수 있습니다"
                       >
                         {r.myPick || <span className="mm-muted">-</span>}
                       </button>
                     </td>
-                    {/* 표본·판정·적중결과는 결과 오른쪽으로(2026-09-27 사용자 지정) */}
+                    {/* (초)표본/(초)판정/(배)표본/(배)판정·적중결과는 결과 오른쪽으로(2026-09-27
+                        사용자 지정, 2026-09-28 초기·배변 2칸으로 나눔 — "판정을 초기와 배변 이렇게
+                        2개로... 컬럼은 판정을 둘로 나눠서 (초)판정 (배)판정으로... 표본도 (초)표본
+                        (배)표본... 배변 배당이 없으면 그냥 -"). 배당이 움직이면 판정 자체가 바뀔 수
+                        있어서(예: 아이티 vs 트리니다 — 초기 플핸무 → 배변 정무) 둘 다 따로 보여준다.
+                        적중결과는 배변 우선으로 채점하므로(r.verdictPhase) 그쪽 판정 칩에 노란
+                        테두리를 준다. */}
                     <td>
-                      {v ? (
-                        // '표본적음' 태그는 뺐다(2026-09-27 사용자 지정) — 대신 건수 뒤에 한 칸
-                        // 띄우고 [핸승/핸무/무/역] 4칸 실제 건수를 뱃지로 붙인다(사용자 지정:
-                        // "3건[스페이스] 뱃지로 1/0/2/0 이렇게"). 뱃지 색은 판정과 같은 기준
-                        // (핸승·역 건수 비교, verdict_of와 동일)으로 — 핸승이 많으면 파랑(정무 쪽),
-                        // 역이 많으면 빨강(플핸무 쪽), 같으면 회색(사용자 지정: "동점이면 회색").
-                        // 둘 차이가 3건 이상이면 테두리 강조(사용자 지정: "차이가 3이상 나면
-                        // 뱃지 보더에 하이라이트").
-                        <button
-                          type="button" className="mm-sample-btn"
-                          onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT })}
-                          title="눌러서 표본 목록 보기"
-                        >
-                          <span className="mm-sample-num">{v.n}건</span>{' '}
-                          <span className={[
-                            'mm-cnt-badge',
-                            v.cnt[0] === v.cnt[3] ? '' : v.cnt[0] > v.cnt[3] ? 'is-blue' : 'is-red',
-                            Math.abs(v.cnt[0] - v.cnt[3]) >= 3 ? 'is-strong' : '',
-                          ].filter(Boolean).join(' ')}
-                          >
-                            {v.cnt.join('/')}
-                          </span>
-                        </button>
-                      ) : '-'}
+                      <SampleChip
+                        v={r.verdictInit} hasBasis={r.KW !== null || r.KHW !== null} phaseText="초기"
+                        onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT, phase: 'init' })}
+                      />
                     </td>
-                    {/* 판정 기준(국배 또는 국핸디)이 있는데도 v가 없으면 '비슷한 과거 경기를 못 찾은 것'
-                        (표본없음) — 둘 다 아예 없는 것(배당없음)과 원인이 다르다(2026-09-27 사용자
-                        제보: 한국M vs 베트남M — KW 1.08 · KL 18.5처럼 배당은 있지만 너무 극단적이라
-                        ±10칸 안에서도 비슷한 과거 경기가 하나도 없었다). */}
                     <td>
-                      {v ? (
-                        <span className={`mm-chip ${v.pick === '정무' ? 'is-blue' : 'is-red'}`} title={v.viaHandi ? '국핸디 기반 판정(국배 없음)' : undefined}>
-                          {v.pick}{v.viaHandi && '*'}
-                        </span>
-                      ) : <span className="mm-muted">{hasOddsBasis(r) ? '표본없음' : '국배 없음'}</span>}
+                      <VerdictChip
+                        v={r.verdictInit} hasBasis={r.KW !== null || r.KHW !== null}
+                        phaseText="초기" graded={r.verdictPhase === 'init'}
+                        onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT, phase: 'init' })}
+                      />
+                    </td>
+                    <td>
+                      <SampleChip
+                        v={r.verdictFinal} hasBasis={r.EKW !== null || r.EKHW !== null} phaseText="배변"
+                        onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT, phase: 'final' })}
+                      />
+                    </td>
+                    <td>
+                      <VerdictChip
+                        v={r.verdictFinal} hasBasis={r.EKW !== null || r.EKHW !== null}
+                        phaseText="배변" graded={r.verdictPhase === 'final'}
+                        onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT, phase: 'final' })}
+                      />
                     </td>
                     <td>
                       {r.outcome ? <span className="mm-badge" style={OUTCOME_BADGE[r.outcome]}>{r.outcome}</span>
@@ -469,7 +509,7 @@ export default function MiscMatchesPage() {
 
       {sampleSel && (
         <MMSampleModal
-          s={sampleSel.s} r={sampleSel.r} ht={sampleSel.ht} at={sampleSel.at}
+          s={sampleSel.s} r={sampleSel.r} ht={sampleSel.ht} at={sampleSel.at} phase={sampleSel.phase}
           no={sampleRow?.No} code={data.code} scope={data.scope} myPick={sampleRow?.myPick}
           onPickSaved={(next) => patchRowLocal({ S: sampleSel.s, R: sampleSel.r, HT: sampleSel.ht, AT: sampleSel.at }, { myPick: next })}
           onClose={() => setSampleSel(null)}

@@ -14,7 +14,7 @@ const f2 = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(2))
 // 내픽(2026-09-27 사용자 지정 — "내픽 컬럼 선택하면 표본상세 팝업이 뜨고 거기서 내픽 선택할
 // 수 있게 해줘") — 저장은 다른 리그와 똑같이 /api/leagues/{code}/my_picks 하나를 그대로 쓴다
 // (web/src/utils/pickSave.js — LeagueTable·상세보기와 같은 함수).
-export default function MMSampleModal({ s, r, ht, at, no, code, scope, myPick, onPickSaved, onClose }) {
+export default function MMSampleModal({ s, r, ht, at, no, code, scope, myPick, phase, onPickSaved, onClose }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -37,7 +37,7 @@ export default function MMSampleModal({ s, r, ht, at, no, code, scope, myPick, o
     let alive = true
     setLoading(true)
     setError('')
-    const q = new URLSearchParams({ s, r, ht, at })
+    const q = new URLSearchParams({ s, r, ht, at, phase: phase || 'final' })
     api.get(`/api/misc_matches/sample?${q.toString()}`)
       .then((res) => {
         if (!alive) return
@@ -47,7 +47,7 @@ export default function MMSampleModal({ s, r, ht, at, no, code, scope, myPick, o
       .catch((err) => alive && setError(err.message))
       .finally(() => alive && setLoading(false))
     return () => { alive = false }
-  }, [s, r, ht, at])
+  }, [s, r, ht, at, phase])
 
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose() }
@@ -59,7 +59,7 @@ export default function MMSampleModal({ s, r, ht, at, no, code, scope, myPick, o
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card mm-sample-card" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
-        <h2 className="modal-title">🔍 표본 상세</h2>
+        <h2 className="modal-title">🔍 표본 상세 — {(data?.phase ?? phase) === 'init' ? '초기' : '배변'} 판정</h2>
         <p className="modal-meta">
           <strong>{ht}</strong> vs <strong>{at}</strong> ({s} {r}) — 이 경기와 비슷한{' '}
           {data?.viaHandi ? '국핸디(국내 핸디 승/무/패)' : '국배(국내 승무패)'}를 가진
@@ -92,7 +92,8 @@ export default function MMSampleModal({ s, r, ht, at, no, code, scope, myPick, o
           <>
             <div className="mm-sample-head">
               <span>
-                판정 <span className={`mm-chip ${data.pick === '정무' ? 'is-blue' : 'is-red'}`}>{data.pick}</span>
+                {data.phase === 'init' ? '초기' : '배변'} 판정{' '}
+                <span className={`mm-chip ${data.pick === '정무' ? 'is-blue' : 'is-red'}`}>{data.pick}</span>
               </span>
               <span className="mm-muted">
                 {data.viaHandi ? '국핸디' : '국배'}{' '}

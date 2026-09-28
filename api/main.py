@@ -938,11 +938,14 @@ def misc_matches_list(user: dict = Depends(get_current_user)):
 
 
 @app.get("/api/misc_matches/sample")
-def misc_matches_sample(s: str, r: str, ht: str, at: str, user: dict = Depends(get_current_user)):
-    """'표본 상세' 팝업 — 목록 한 줄의 판정을 만든 과거 경기 목록 그대로."""
+def misc_matches_sample(s: str, r: str, ht: str, at: str, phase: str = "final",
+                        user: dict = Depends(get_current_user)):
+    """'표본 상세' 팝업 — 목록 한 줄의 판정을 만든 과거 경기 목록 그대로. phase: 'init'(초기)
+    또는 'final'(배변, 기본) — 2026-09-28 "판정을 초기와 배변 이렇게 2개로"."""
     udb = _user_db_of(user)
     code = MISC.ensure_league(udb)
-    return _fast_json(MISC.sample_detail(udb, code, PATHS.get_master_db(), udb, _misc_pool_codes(user), s, r, ht, at))
+    return _fast_json(MISC.sample_detail(udb, code, PATHS.get_master_db(), udb, _misc_pool_codes(user),
+                                         s, r, ht, at, phase))
 
 
 @app.post("/api/misc_matches/collect")

@@ -342,31 +342,43 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple, userna
     picks = MYPICKS.list_my_picks(username, code, PATHS.SCOPE_USER)
     pick_by_key = {tuple(MYPICKS.normalize(v) for v in (p["S"], p["R"], p["No"], p["HT"], p["AT"])): p for p in picks}
 
-    rows = []
-    hit = miss = insure = pending = no_sample = no_odds = 0
-    for _, r in df.sort_values(["S", "R"], ascending=False).iterrows():
-        kw, kd, kl = _num(r.get("KW")), _num(r.get("KD")), _num(r.get("KL"))
-        khw, khd, khl = _num(r.get("KHW")), _num(r.get("KHD")), _num(r.get("KHL"))
-        is_ddong = bool((kw is not None and kw <= DDONG_MAX) or (kl is not None and kl <= DDONG_MAX))
-        # 판정(비슷한 과거 경기 찾기)도 국핸디 기반으로 낼 수 있게(2026-09-28 사용자 지정 —
-        # "판정도 국핸디 기반으로 낼 수 있게 해줘", 위 결과(RT)를 국핸디로 낸 것과 같은 경기들:
-        # 정배가 워낙 강해 프로토가 국배(승무패) 자체를 안 연 경우). 국배가 있으면 그대로 국배로
-        # 찾고, 없으면 국핸디(KHW/KHD/KHL)로 찾는다 — odds_lookup.lookup은 이미 이 칸들도
-        # 매칭 기준으로 받는다(표본 섹션과 같은 함수).
+    def make_verdict(kw, kd, kl, khw, khd, khl):
+        """국배가 있으면 국배로, 없으면 국핸디로 비슷한 과거 경기를 찾아 판정 하나를 만든다
+        (2026-09-28 — "판정도 국핸디 기반으로 낼 수 있게 해줘"). 초기·배변 둘 다 이 함수로
+        각자 따로 만든다(아래 make_verdict 호출부, 2026-09-28 — "판정을 초기와 배변 이렇게
+        2개로 넣어줘" — CLAUDE.md 4-1 "그 시점에 등록된 배당 전부로 매번 다시 만든다"와 같은
+        원칙). 반환값이 None이면 q 자체가 없었다는 뜻(호출부에서 표본없음/배당없음을 가른다)."""
         via_handi = kw is None or kl is None
         if not via_handi:
             q = {"KW": kw, "KD": kd, "KL": kl}
         elif khw is not None and khl is not None:
             q = {"KHW": khw, "KHD": khd, "KHL": khl}
         else:
-            q = None
-        res = _widen_lookup(sources, q) if q else {"ready": False}
-        v = None
-        if res.get("ready"):
-            # cnt = [핸승,핸무,무,역] 건수 그대로(2026-09-27 사용자 지정 — "3건(0 / 0 / 2 / 1)
-            # 이렇게 표시해줘") — 화면 표본 칸에 pct(비율) 대신 실제 건수 4칸을 보여준다.
-            v = {"pick": verdict_of(res["cnt"]), "n": res["n"], "cnt": res["cnt"], "pct": res["pct"],
-                 "tick": res["tick"], "weak": res["n"] < SAMPLE_WEAK, "viaHandi": via_handi and q is not None}
+            return None, None
+        res = _widen_lookup(sources, q)
+        if not res.get("ready"):
+            return None, q
+        # cnt = [핸승,핸무,무,역] 건수 그대로(2026-09-27 — "3건(0 / 0 / 2 / 1) 이렇게 표시해줘")
+        # — 화면 표본 칸에 pct(비율) 대신 실제 건수 4칸을 보여준다.
+        v = {"pick": verdict_of(res["cnt"]), "n": res["n"], "cnt": res["cnt"], "pct": res["pct"],
+             "tick": res["tick"], "weak": res["n"] < SAMPLE_WEAK, "viaHandi": via_handi}
+        return v, q
+
+    rows = []
+    hit = miss = insure = pending = no_sample = no_odds = 0
+    for _, r in df.sort_values(["S", "R"], ascending=False).iterrows():
+        kw, kd, kl = _num(r.get("KW")), _num(r.get("KD")), _num(r.get("KL"))
+        khw, khd, khl = _num(r.get("KHW")), _num(r.get("KHD")), _num(r.get("KHL"))
+        ekw, ekd, ekl = _num(r.get("EKW")), _num(r.get("EKD")), _num(r.get("EKL"))
+        ekhw, ekhd, ekhl = _num(r.get("EKHW")), _num(r.get("EKHD")), _num(r.get("EKHL"))
+        is_ddong = bool((kw is not None and kw <= DDONG_MAX) or (kl is not None and kl <= DDONG_MAX))
+        v_init, q_init = make_verdict(kw, kd, kl, khw, khd, khl)
+        v_final, q_final = make_verdict(ekw, ekd, ekl, ekhw, ekhd, ekhl)
+        # 적중결과(등급)는 배변 판정을 우선 쓰고, 없으면(못 냈으면) 초기 판정으로(2026-09-28
+        # 사용자 지정 — "적중결과는 배변으로 배변이 없으면 초기로 해주면 되"). CLAUDE.md 4-1과
+        # 같은 이유 — 배변이 갱신됐으면 그게 가장 최근 정보라 그걸로 채점한다.
+        v = v_final or v_init
+        q = q_final or q_init
         rt = None if pd.isna(r.get("RT")) else int(r["RT"])
         finished = not pd.isna(r.get("HS"))
         outcome = None
@@ -406,18 +418,25 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple, userna
             # 다른 리그와 똑같이 /api/leagues/{code}/my_picks를 그대로 쓴다.
             "starred": int(p["starred"]) if p else 0, "myPick": p["pick"] if p else None,
             "KW": kw, "KD": kd, "KL": kl,
-            "EKW": _num(r.get("EKW")), "EKD": _num(r.get("EKD")), "EKL": _num(r.get("EKL")),
+            "EKW": ekw, "EKD": ekd, "EKL": ekl,
             # 국핸디(2026-09-27 사용자 제보 — "왜 핸디 배당은 안 보여줘": 값은 이미 받아 저장하고 있었는데
             # 화면·응답 어디에도 안 내보내고 있었다). 기준점(KH)은 와이즈토토가 어느 팀 것인지 안 줘서
             # 항상 비어 있다(_to_row 주석) — 저장 시점에도 안 채우므로 여기서도 못 채운다.
-            "KHW": _num(r.get("KHW")), "KHD": _num(r.get("KHD")), "KHL": _num(r.get("KHL")),
-            "EKHW": _num(r.get("EKHW")), "EKHD": _num(r.get("EKHD")), "EKHL": _num(r.get("EKHL")),
+            "KHW": khw, "KHD": khd, "KHL": khl,
+            "EKHW": ekhw, "EKHD": ekhd, "EKHL": ekhl,
             # 똥배·똥사(2026-09-27 사용자 지정 — "국배 승무패 초기 컬럼 왼쪽 앞에 표시").
             # 기준은 앱 전체와 같다(api/main.py DDONG_MAX): 국배(초기 KW/KL) 중 낮은 쪽이 1.49 이하면 똥배,
             # 그중 결과가 무·역(정배가 완전히 무너짐)이면 똥사 — 결과가 아직 없으면 똥사는 판단 보류(None).
             "ddong": is_ddong,
             "ddongsa": None if (rt is None or not is_ddong) else (rt in (3, 4)),
-            "verdict": v, "outcome": outcome,
+            # 판정 2개(2026-09-28 사용자 지정 — "판정을 초기와 배변 이렇게 2개로 넣어줘 적중결과는
+            # 배변으로 배변이 없으면 초기로"). verdict는 적중결과 채점에 실제로 쓰인 쪽(배변 우선)
+            # 그대로 유지 — 표본 칸·표본상세 팝업이 지금까지 이 필드 하나로 동작하던 걸 그대로 쓴다.
+            # verdictPhase는 표본 칸을 눌렀을 때 팝업이 초기/배변 어느 쪽을 다시 찾아야 하는지
+            # 알려준다(sample_detail의 phase와 같은 값).
+            "verdict": v, "verdictInit": v_init, "verdictFinal": v_final,
+            "verdictPhase": "final" if v_final else ("init" if v_init else None),
+            "outcome": outcome,
         })
     decided = hit + miss  # 보험(insure)은 적중도 미적도 아니라 적중률 분모에서 그대로 뺀다(예전과 동일)
     graded = decided + insure  # "결과 난 경기" = 적중·미적·보험 전부(모두 경기가 끝나 outcome이 확정됨)
@@ -427,18 +446,26 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple, userna
     return {"rows": rows, "summary": summary, "code": code, "scope": "user"}
 
 
-def sample_detail(db: str, code: str, mdb: str, udb: str, user_codes: tuple, s: str, r: str, ht: str, at: str) -> dict:
+def sample_detail(db: str, code: str, mdb: str, udb: str, user_codes: tuple, s: str, r: str, ht: str, at: str,
+                   phase: str = "final") -> dict:
     """'표본 상세' 팝업(2026-09-27 사용자 지정 — "표본상세를 볼 수 잇는 팝업을 만들어줘"). 목록 한
     줄의 판정이 어떤 과거 경기들로 나왔는지 — build_list와 완전히 같은 방식(같은 비슷함 폭)으로
-    다시 찾아, 이번엔 ODDSLOOK.lookup의 rows(매칭된 과거 경기 목록 그대로)까지 돌려준다."""
+    다시 찾아, 이번엔 ODDSLOOK.lookup의 rows(매칭된 과거 경기 목록 그대로)까지 돌려준다.
+    phase='init'이면 초기(KW~) 판정, 'final'(기본)이면 배변(EKW~) 판정 — 2026-09-28 사용자
+    지정 "판정을 초기와 배변 이렇게 2개로" — 화면에서 어느 쪽 칩을 눌렀는지에 맞춘다."""
     df = DATA.load_league_df(db, code)
     m = df[(df["S"].astype(str) == s) & (df["R"].astype(str) == r)
            & (df["HT"].astype(str).str.strip() == ht) & (df["AT"].astype(str).str.strip() == at)]
     if m.empty:
         return {"ready": False, "reason": "경기를 찾지 못했습니다"}
     row = m.iloc[0]
-    kw, kd, kl = _num(row.get("KW")), _num(row.get("KD")), _num(row.get("KL"))
-    khw, khd, khl = _num(row.get("KHW")), _num(row.get("KHD")), _num(row.get("KHL"))
+    if phase == "init":
+        kw, kd, kl = _num(row.get("KW")), _num(row.get("KD")), _num(row.get("KL"))
+        khw, khd, khl = _num(row.get("KHW")), _num(row.get("KHD")), _num(row.get("KHL"))
+    else:
+        phase = "final"
+        kw, kd, kl = _num(row.get("EKW")), _num(row.get("EKD")), _num(row.get("EKL"))
+        khw, khd, khl = _num(row.get("EKHW")), _num(row.get("EKHD")), _num(row.get("EKHL"))
     # 국배가 없으면 국핸디로(2026-09-28 — "판정도 국핸디 기반으로 낼 수 있게 해줘"), build_list와 같은 규칙.
     via_handi = kw is None or kl is None
     if not via_handi:
@@ -446,7 +473,8 @@ def sample_detail(db: str, code: str, mdb: str, udb: str, user_codes: tuple, s: 
     elif khw is not None and khl is not None:
         q = {"KHW": khw, "KHD": khd, "KHL": khl}
     else:
-        return {"ready": False, "reason": "이 경기는 국배·국핸디가 모두 없어 표본을 찾을 수 없습니다"}
+        label = "배변" if phase == "final" else "초기"
+        return {"ready": False, "reason": f"이 경기는 {label} 국배·국핸디가 모두 없어 표본을 찾을 수 없습니다"}
     sources = [(mdb, PATHS.SCOPE_MASTER, c, PATHS.LEAGUE_LABEL.get(c, c)) for c in PATHS.LEAGUES]
     sources += [(udb, PATHS.SCOPE_USER, c, lab) for c, lab in user_codes]
     res = _widen_lookup(sources, q)
@@ -455,5 +483,6 @@ def sample_detail(db: str, code: str, mdb: str, udb: str, user_codes: tuple, s: 
     res["pick"] = verdict_of(res["cnt"])
     res["weak"] = res["n"] < SAMPLE_WEAK
     res["viaHandi"] = via_handi
+    res["phase"] = phase
     res["q"] = q
     return res
