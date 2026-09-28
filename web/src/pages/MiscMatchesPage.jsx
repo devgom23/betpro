@@ -67,17 +67,17 @@ function PhaseEmpty({ hasBasis }) {
   return <span className="mm-muted">{hasBasis ? '표본없음' : '-'}</span>
 }
 
-// graded=true면 적중결과 채점에 실제로 쓰인 쪽이라 노란 테두리로 강조한다(사용자 지정:
-// "적중결과는 배변으로 배변이 없으면 초기로").
-function VerdictChip({ v, hasBasis, phaseText, graded, onClick }) {
+// 적중결과 채점에 어느 쪽이 쓰였는지 보여주려고 테두리로 강조했었는데, 표본 칸 뱃지의 강조
+// (핸승·역 차이 3건 이상)와 색·의미가 헷갈린다고 해서 뺐다(2026-09-28 사용자 지정 — "판정에
+// 하이라이트 넣는거는 삭제해줘").
+function VerdictChip({ v, hasBasis, phaseText, onClick }) {
   if (!v) return <PhaseEmpty hasBasis={hasBasis} />
   return (
     <button
       type="button"
-      className={`mm-vchip${graded ? ' is-graded' : ''}`}
+      className="mm-vchip"
       onClick={onClick}
-      title={`${phaseText} 판정 · ${v.n}건${v.viaHandi ? ' · 국핸디 기반' : ''}`
-        + (graded ? ' · 적중결과는 이 판정으로 냄' : '') + ' — 눌러서 표본 보기'}
+      title={`${phaseText} 판정 · ${v.n}건${v.viaHandi ? ' · 국핸디 기반' : ''} — 눌러서 표본 보기`}
     >
       <span className={`mm-chip ${v.pick === '정무' ? 'is-blue' : 'is-red'}`}>{v.pick}{v.viaHandi && '*'}</span>
     </button>
@@ -456,7 +456,7 @@ export default function MiscMatchesPage() {
                     <td>
                       <VerdictChip
                         v={r.verdictInit} hasBasis={r.KW !== null || r.KHW !== null}
-                        phaseText="초기" graded={r.verdictPhase === 'init'}
+                        phaseText="초기"
                         onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT, phase: 'init' })}
                       />
                     </td>
@@ -469,7 +469,7 @@ export default function MiscMatchesPage() {
                     <td>
                       <VerdictChip
                         v={r.verdictFinal} hasBasis={finalMoved}
-                        phaseText="배변" graded={r.verdictPhase === 'final'}
+                        phaseText="배변"
                         onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT, phase: 'final' })}
                       />
                     </td>

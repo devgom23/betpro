@@ -312,19 +312,14 @@
 
 /* (초)판정/(배)판정 칩(2026-09-28 사용자 지정 — "판정을 초기와 배변 이렇게 2개로... 컬럼은
    판정을 둘로 나눠서 (초)판정 (배)판정으로"). 컬럼 자체가 나뉘어 .mm-t td의 기본 가운데 정렬을
-   그대로 쓴다. */
+   그대로 쓴다. 적중결과 채점에 쓰인 쪽을 테두리로 강조했었는데, 표본 뱃지 강조(핸승·역 차이
+   3건 이상)와 헷갈린다고 해서 뺐다(2026-09-28 사용자 지정 — "판정에 하이라이트 넣는거는
+   삭제해줘"). */
 .mm-vchip {
   display: inline-flex;
   align-items: center;
   padding: 0;
-  border: 1.5px solid transparent;
-  border-radius: 4px;
+  border: 0;
   background: none;
   cursor: pointer;
-}
-
-/* 적중결과 채점에 실제로 쓰인 쪽(사용자 지정: "적중결과는 배변으로 배변이 없으면 초기로") —
-   mm-cnt-badge.is-strong과 같은 노란 테두리로 '이게 기준이다'를 표시한다. */
-.mm-vchip.is-graded {
-  border-color: var(--chip-yellow-fg);
 }
