@@ -222,7 +222,11 @@ export default function MainPage() {
         {view === 'week_list' && <WeekListPage />}
         {view === 'week_top20' && <WeekTopPage />}
         {view === 'weekly' && <WeeklyPickPage onGoBetHistory={() => setView('bet_history')} />}
-        {view === 'bet_history' && <BetHistoryPage scope={scope} />}
+        {/* 베팅내역은 공식/내 데이터와 상관없는 독립 탭이다 — 등록(이번주 픽)이 항상 'master'로만
+            저장하므로 여기서도 항상 'master'를 연다. 예전엔 직전 탭의 scope를 물려받아 내 데이터에서
+            넘어오면 빈 'user' 장부가 열렸다(2026-09-28 사용자 제보 — "내 데이터탭에서 베팅내역을
+            클릭하면 느리고 공식데이터 탭에서 클릭하면 빠르네"). */}
+        {view === 'bet_history' && <BetHistoryPage scope="master" />}
         {view === 'archive' && <ArchivePage />}
         {view === 'leagues' && <>
         {!isUser && activeTab === 'season' && <SeasonAnalysisPage />}

@@ -2573,6 +2573,19 @@ def _build_view_index(df: pd.DataFrame) -> dict:
     return idx
 
 
+class BatchMemoBody(BaseModel):
+    batch_id: str
+    memo: Optional[str] = None
+
+
+@app.post("/api/bet_slips/batch_memo")
+def set_batch_memo(body: BatchMemoBody, user: dict = Depends(get_current_user)):
+    """베팅내역 '이번주 벳' 줄 인풋박스 — 등록 후에도 자유롭게 반성을 적고 고친다
+    (2026-09-28 사용자 지정). batch_id는 이 계정 db 안에서만 유일하므로 scope는 안 받는다."""
+    BETSLIPS.update_batch_memo(user["username"], body.batch_id, (body.memo or "").strip() or None)
+    return {"ok": True}
+
+
 @app.get("/api/bet_slips")
 def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_current_user)):
     """베팅내역 표 데이터. 등록 묶음(batch) → 조합 순으로 묶어 소계를 내고, 등록된 순서 그대로
@@ -2599,7 +2612,9 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
         for slip in sec["slips"]:
             batch = next((b for b in batches if b["batch_id"] == slip["batch_id"]), None)
             if batch is None:
-                batch = {"batch_id": slip["batch_id"], "created_dt": slip["created_dt"], "slips": []}
+                # memo(2026-09-28) — 묶음의 반성 메모, 베팅내역 화면 '이번주 벳' 줄 인풋박스가 쓴다.
+                batch = {"batch_id": slip["batch_id"], "created_dt": slip["created_dt"],
+                         "memo": slip.get("memo"), "slips": []}
                 batches.append(batch)
             batch["slips"].append(slip)
         for batch in batches:

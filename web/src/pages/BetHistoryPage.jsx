@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { RichMemoInput } from '../components/RichMemo/RichMemo'
 import { LEAGUE_LABELS } from '../utils/format'
 import './BetHistoryPage.css'
 
@@ -291,6 +292,24 @@ export default function BetHistoryPage({ scope }) {
     }
   }
 
+  // '이번주 벳' 줄 반성 메모(2026-09-28 사용자 지정, 스샷 제공) — 저장은 상세보기와 같은 방식
+  // (RichMemoInput onCommit)이고, 전체 재조회 없이 그 묶음 값만 화면에서 먼저 바꿔 보여준다.
+  async function saveBatchMemo(batchId, memo) {
+    const value = memo || null
+    setData((prev) => ({
+      ...prev,
+      sections: prev.sections.map((sec) => ({
+        ...sec,
+        batches: sec.batches.map((b) => (b.batch_id === batchId ? { ...b, memo: value } : b)),
+      })),
+    }))
+    try {
+      await api.post('/api/bet_slips/batch_memo', { batch_id: batchId, memo: value })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function handleLockSelected() {
     if (selected.size === 0) return
     if (!window.confirm(`선택한 벳 ${selected.size}개를 하나의 회차로 확정합니다. 확정되면 더 이상 선택 삭제·재설정을 할 수 없어요. 계속할까요?`)) return
@@ -331,8 +350,10 @@ export default function BetHistoryPage({ scope }) {
         const isOpen = !locked || openRounds.has(sec.group_id)
         const secIds = locked ? [] : sec.batches.flatMap((b) => b.slips.map((s) => s.id))
         const allSel = secIds.length > 0 && secIds.every((id) => selected.has(id))
-        // 최신 등록이 위로 오게 묶음 순서를 뒤집어 보여준다(프로토 구매내역처럼).
-        const batches = [...sec.batches].reverse()
+        // 베팅일 과거순 — 오래된 등록이 위(2026-09-28 사용자 지정: "베팅일 과거순으로 위에서
+        // 정렬되게"). 예전엔 최신이 위로 오게 뒤집었다. created_dt는 'YYYY-MM-DD HH:MM:SS'라
+        // 글자 비교가 곧 시간 비교다.
+        const batches = [...sec.batches].sort((a, b) => (a.created_dt || '').localeCompare(b.created_dt || ''))
         return (
           <section key={sec.group_id ?? `pending-${si}`} className={`bh-sec${locked ? ' is-locked' : ''}`}>
             <div className="bh-sec-head">
@@ -370,12 +391,23 @@ export default function BetHistoryPage({ scope }) {
                 <Fragment key={batch.batch_id}>
                   <div className={`bh-batch-row${res.label === '적중' ? ' is-hit' : ''}${checked && !locked ? ' is-sel' : ''}`}>
                     <input type="checkbox" disabled={locked} checked={!locked && checked} onChange={() => toggleIds(ids, !checked)} aria-label="이 묶음 선택" />
+                    {/* '이번주 벳' 라벨 삭제(2026-09-28 사용자 지정) — 경기명만 그 스타일(굵게)로
+                        남기고 크기만 14px로. */}
+                    <span className="bh-batch-name">
+                      {first ? `${first.HT} vs ${first.AT}${matchCount > 1 ? ` 외 ${matchCount - 1}경기` : ''}` : ''}
+                    </span>
+                    {/* 반성 메모(2026-09-28 사용자 지정 스샷 그대로) — 이름과 오른쪽 통계 사이
+                        남는 폭을 다 채운다. 토글 버튼(.bh-batch-main) 밖에 둬서, 입력칸을 눌러도
+                        묶음이 접히지 않는다. 높이·테두리는 상세보기 팝업과 같은 .rich-memo 그대로. */}
+                    <RichMemoInput
+                      className="bh-batch-memo"
+                      value={batch.memo || ''}
+                      placeholder="베팅반성 작성"
+                      onCommit={(v) => saveBatchMemo(batch.batch_id, v)}
+                    />
                     <button type="button" className="bh-batch-main" onClick={() => toggleSet(setOpenBatches, batch.batch_id)}>
-                      <span className="bh-batch-name">
-                        이번주 벳 <small>{first ? `${first.HT} vs ${first.AT}${matchCount > 1 ? ` 외 ${matchCount - 1}경기` : ''}` : ''}</small>
-                      </span>
-                      <span className="bh-muted">{String(batch.created_dt || '').slice(2, 16).replace(/-/g, '.')}</span>
-                      <span className="bh-muted bh-mono">{String(batch.batch_id).toUpperCase().replace(/(.{4})(?=.)/g, '$1-')}</span>
+                      <span className="bh-muted bh-right">{String(batch.created_dt || '').slice(2, 16).replace(/-/g, '.')}</span>
+                      <span className="bh-muted bh-mono bh-right">{String(batch.batch_id).toUpperCase().replace(/(.{4})(?=.)/g, '$1-')}</span>
                       <span className="bh-right">{matchCount}경기 · {batch.slips.length}조합</span>
                       <span className="bh-right bh-strong">{num(batch.subtotal.stake)}</span>
                       <span className="bh-right">{num(batch.subtotal.hit_amount)}</span>

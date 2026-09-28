@@ -214,6 +214,18 @@ def replace_batch(username: str, scope: str, batch_id: str, bets: list[dict], me
     return create_batch(username, scope, bets, memo)
 
 
+def update_batch_memo(username: str, batch_id: str, memo: str | None) -> None:
+    """등록 묶음(batch_id) 전체의 메모(2026-09-28 사용자 지정 — 베팅내역 화면에서 '이번주 벳'
+    줄에 바로 반성을 적는 인풋박스)를 갱신한다. 한 묶음의 여러 조합 행이 전부 같은 memo 값을
+    쓰므로(create_batch가 등록 시 그렇게 저장) 전부 같이 바꾼다."""
+    con = _connect(username)
+    try:
+        con.execute("UPDATE bet_slips SET memo=? WHERE batch_id=?", (memo, batch_id))
+        con.commit()
+    finally:
+        con.close()
+
+
 def list_slips(username: str, scope: str) -> list[dict]:
     """슬립+다리 원본 데이터(등록된 값 그대로, 실제 RT/판정 없음)를 등록된 순서(id) 그대로 반환한다.
     회차는 더 이상 날짜로 자동 묶지 않고 settle_group_id(=연속된 값끼리)로 구간을 나눈다."""

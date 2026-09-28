@@ -457,9 +457,11 @@
 
 .bh-batch-main {
   display: grid;
-  flex: 1;
-  grid-template-columns: minmax(200px, 1.6fr) 110px 150px 110px 90px 90px 90px 110px 24px;
-  gap: 8px;
+  flex: none;
+  grid-template-columns: 84px 100px 80px 70px 90px 90px 110px 24px;
+  /* 메모칸 오른쪽 통계 영역(날짜~플러스아이콘) 간격(2026-09-28 사용자 지정 — "각각 20정도씩
+     줘서 오른쪽 정렬로"). */
+  gap: 20px;
   align-items: center;
   padding: 8px 0;
   border: 0;
@@ -476,13 +478,18 @@
 }
 
 .bh-batch-name {
+  flex: none;
+  width: 240px;
+  min-width: 0;
   font-weight: 700;
+  font-size: 14px;
 }
 
-.bh-batch-name small {
-  display: block;
-  font-weight: 400;
-  color: var(--text-muted);
+/* 반성 메모(2026-09-28 사용자 지정, 스샷 제공) — 이름과 통계 사이 남는 폭을 전부 채운다.
+   높이·테두리는 상세보기 팝업의 .rich-memo 기본값 그대로(RichMemo.css) — 여기선 폭만 지정. */
+.bh-batch-memo {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .bh-mono {
