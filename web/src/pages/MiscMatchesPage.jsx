@@ -334,8 +334,13 @@ export default function MiscMatchesPage() {
                 // 국핸디 칸은 자기 숫자(KHW/KHL)가 아니라 같은 시점 국배(KW/KL)로 정배를 정한다
                 // (2026-09-27 — "국핸디도 승무패처럼 색상 넣어줘"). 배변은 최신 국배가 있으면
                 // 그걸로, 없으면(안 움직였으면) 초기 국배 그대로 — 국핸디 배변 칸도 같은 규칙.
-                const favInit = favSide(r.KW, r.KL)
-                const favFinal = favSide(r.EKW ?? r.KW, r.EKL ?? r.KL)
+                // 국배(KW/KL) 자체가 없는 경기(2026-09-28 사용자 지정 — "초 승무패 배당은
+                // 안주고 핸디 배당만 주는 경기가 있네... 국핸디 기반으로 배당이 낮은쪽이
+                // 정배" — 정배가 워낙 강해 프로토가 승무패 자체를 안 여는 경우, 예: 일본W
+                // vs 필리핀W)는 국핸디(KHW/KHL)로 대신 정배를 정한다 — api/misc_matches.py
+                // _kh_and_fav와 같은 규칙.
+                const favInit = favSide(r.KW, r.KL) ?? favSide(r.KHW, r.KHL)
+                const favFinal = favSide(r.EKW ?? r.KW, r.EKL ?? r.KL) ?? favSide(r.EKHW ?? r.KHW, r.EKHL ?? r.KHL)
                 // 정역반전(2026-09-28 사용자 지정) — 초기·배변에서 정배 팀 자체가 바뀐 경기만.
                 const flipTitle = favInit !== null && favFinal !== null && favInit !== favFinal
                   ? `정역반전 — 초기 정배 ${favInit ? r.HT : r.AT} → 배변 정배 ${favFinal ? r.HT : r.AT}`

@@ -87,12 +87,19 @@ def ensure_league(udb: str) -> str:
 # — 여기서 main을 import하면 main → misc_matches → main으로 순환 import가 된다).
 
 
-def _kh_and_fav(kw, kl):
-    """국배로 정배(홈 여부)만 정한다 — 핸디 부호(KH)는 와이즈토토가 안 주지만, 핸디 마켓
-    자체(KHW/KHD/KHL)는 준다(2026-09-27 정정 — 아래 _rt_from_score 참고)."""
-    if kw is None or kl is None or kw == kl:
-        return None
-    return kw <= kl
+def _kh_and_fav(kw, kl, khw=None, khl=None):
+    """국배(KW/KL)로 정배(홈 여부)를 정한다 — 핸디 부호(KH)는 와이즈토토가 안 주지만, 핸디
+    마켓 자체(KHW/KHD/KHL)는 준다(2026-09-27 정정 — 아래 _rt_from_score 참고).
+
+    국배(KW/KL) 자체가 없는 경기도 있다(2026-09-28 사용자 제보 — "초 승무패 배당은 안주고
+    핸디 배당만 주는 경기가 있네... 워낙 정배 팀이 쎄서 아예 안 주는 거야... 국핸디 기반으로
+    배당이 낮은쪽이 정배". 실측 — 일본W vs 필리핀W: KW 없음, KHW 2.07 < KHL 2.15 → 일본W
+    정배, 4:0으로 핸승). 국배가 없으면 국핸디(KHW/KHL)로 대신 정배를 정한다."""
+    if kw is not None and kl is not None and kw != kl:
+        return kw <= kl
+    if khw is not None and khl is not None and khw != khl:
+        return khw <= khl
+    return None
 
 
 def _rt_from_score(hs, as_, fav_home, has_handicap):
@@ -246,7 +253,8 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
         if not finished:
             sc = score_map.get(key)
             if sc:
-                fav = _kh_and_fav(_num(df.at[i, "KW"]), _num(df.at[i, "KL"]))
+                fav = _kh_and_fav(_num(df.at[i, "KW"]), _num(df.at[i, "KL"]),
+                                  _num(df.at[i, "KHW"]), _num(df.at[i, "KHL"]))
                 has_hcap = _num(df.at[i, "KHW"]) is not None
                 rt = _rt_from_score(sc["HS"], sc["AS"], fav, has_hcap)
                 df.at[i, "HS"], df.at[i, "AS"] = sc["HS"], sc["AS"]
@@ -279,7 +287,8 @@ def recompute_rt(db: str, code: str) -> dict:
         hs, as_ = df.at[i, "HS"], df.at[i, "AS"]
         if pd.isna(hs) or pd.isna(as_):
             continue
-        fav = _kh_and_fav(_num(df.at[i, "KW"]), _num(df.at[i, "KL"]))
+        fav = _kh_and_fav(_num(df.at[i, "KW"]), _num(df.at[i, "KL"]),
+                          _num(df.at[i, "KHW"]), _num(df.at[i, "KHL"]))
         has_hcap = _num(df.at[i, "KHW"]) is not None
         rt = _rt_from_score(int(hs), int(as_), fav, has_hcap)
         old = None if pd.isna(df.at[i, "RT"]) else int(df.at[i, "RT"])
