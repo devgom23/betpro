@@ -109,22 +109,29 @@ export default function MMSampleModal({ s, r, ht, at, no, code, scope, myPick, p
             </div>
 
             <div className="mm-wrap mm-sample-wrap">
+              {/* 컬럼 순서·구성(2026-09-28 사용자 지정 — "시즌회차 일시 경기 점수 결과
+                  국배승/무/패 이렇게 표현해줘 지금 점수가 없어") — 점수는 이긴 팀 쪽만
+                  빨강(기타경기 목록의 스코어 칸과 같은 mm-win 스타일, "이긴팀 점수 빨강색"). */}
               <table className="mm-t">
                 <thead>
                   <tr>
-                    <th>리그</th><th>시즌/회차</th><th>경기</th><th>일시</th>
-                    <th>국배 승/무/패</th><th>결과</th>
+                    <th>시즌/회차</th><th>일시</th><th>경기</th><th>점수</th><th>결과</th>
+                    <th>국배 승/무/패</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.rows.map((row, i) => (
                     <tr key={i}>
-                      <td className="mm-muted">{row.lg}</td>
                       <td className="mm-muted">{row.S} {row.R}</td>
-                      <td className="mm-l"><b>{row.HT}</b> <span className="mm-muted">vs</span> <b>{row.AT}</b></td>
                       <td className="mm-muted">{row.DT}</td>
-                      <td>{f2(row.K[0])} / {f2(row.K[1])} / {f2(row.K[2])}</td>
+                      <td className="mm-l"><b>{row.HT}</b> <span className="mm-muted">vs</span> <b>{row.AT}</b></td>
+                      <td>
+                        <span className={row.HS > row.AS ? 'mm-win' : undefined}>{Math.trunc(row.HS)}</span>
+                        {' : '}
+                        <span className={row.AS > row.HS ? 'mm-win' : undefined}>{Math.trunc(row.AS)}</span>
+                      </td>
                       <td><RtBadge label={RT_TEXT[row.RT]} /></td>
+                      <td>{f2(row.K[0])} / {f2(row.K[1])} / {f2(row.K[2])}</td>
                     </tr>
                   ))}
                 </tbody>
