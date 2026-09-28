@@ -71,17 +71,22 @@ function PhaseEmpty({ hasBasis }) {
 // — "판정에 하이라이트 넣는거는 삭제해줘"). 대신 '판정이 바뀌어서 적중한 경우'만 흰 테두리로
 // 강조한다(같은 날 — "초기하고 결과가 바껴서 적중된거는... 흰색 하이라이트를... 초기에
 // 정무였다 플핸무로 변경되었는데 적중된 케이스만 해당") — flipHit prop, (배)판정 칸에만 쓴다.
+// 테두리는 버튼이 아니라 알약 모양 칩(mm-chip) 자체에 준다(2026-09-28 사용자 지정 — "보더
+// 하이라이트를 필처럼 모양에 맞게... 표본과 같은 스타일에 보더색만 흰색으로") — 표본 뱃지
+// (mm-cnt-badge.is-strong)와 똑같이 알약 모양을 그대로 따라가는 테두리가 된다.
 function VerdictChip({ v, hasBasis, phaseText, flipHit, onClick }) {
   if (!v) return <PhaseEmpty hasBasis={hasBasis} />
   return (
     <button
       type="button"
-      className={`mm-vchip${flipHit ? ' is-flip-hit' : ''}`}
+      className="mm-vchip"
       onClick={onClick}
       title={`${phaseText} 판정 · ${v.n}건${v.viaHandi ? ' · 국핸디 기반' : ''}`
         + (flipHit ? ' · 초기 판정에서 바뀌어 적중' : '') + ' — 눌러서 표본 보기'}
     >
-      <span className={`mm-chip ${v.pick === '정무' ? 'is-blue' : 'is-red'}`}>{v.pick}{v.viaHandi && '*'}</span>
+      <span className={`mm-chip ${v.pick === '정무' ? 'is-blue' : 'is-red'}${flipHit ? ' is-flip-hit' : ''}`}>
+        {v.pick}{v.viaHandi && '*'}
+      </span>
     </button>
   )
 }
