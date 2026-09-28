@@ -491,7 +491,7 @@ export default function MiscMatchesPage() {
                         : v
                           ? <span className="mm-muted" title="판정은 냈지만 이 경기에 핸디 마켓이 없어(결과 칸의 '핸디없음' 참고) 채점을 못 합니다.">핸디없음</span>
                           : hasOddsBasis(r)
-                            ? <span className="mm-muted" title="배당은 있지만 비슷한 과거 경기(±10칸 안)를 하나도 못 찾아 판정을 못 냈습니다.">표본없음</span>
+                            ? <span className="mm-muted" title="배당은 있지만 비슷한 과거 경기(±2칸 안)를 하나도 못 찾아 판정을 못 냈습니다.">표본없음</span>
                             : <span className="mm-muted" title="프로토가 이 경기에 배당 자체를 안 줍니다 — 결과를 기다리는 게 아니라 애초에 판정을 못 냅니다.">배당없음</span>}
                     </td>
                     <td>

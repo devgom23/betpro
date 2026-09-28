@@ -32,7 +32,8 @@ import user_leagues as USERLG
 LEAGUE_LABEL = "기타경기"
 DDONG_MAX = 1.49   # api/main.py·data_access.py DDONG_MAX와 같은 값 — 국배(KW/KL) 중 낮은 쪽이 이하면 똥배
 COLLECT_DAYS = 10          # '새 회차 가져오기'가 오늘부터 앞으로 훑는 날수
-WIDEN_MAX = 10              # 비슷함 폭을 넓히는 한계(칸)
+WIDEN_MAX = 2               # 비슷함 폭을 넓히는 한계(칸, 2026-09-28 사용자 지정 — "그냥 +-2칸
+                             # 까지만 움직여줘 +-3칸까지 가면 너무 많이 간거 같아". 예전엔 10)
 SAMPLE_WEAK = 30            # 이보다 표본이 적으면 '표본적음' 표시(codebase 관례 SAMPLE_RELIABLE_N과 동일)
 COLS = ["S", "R", "No", "LG", "HT", "AT", "DT", "TM", "HS", "AS", "RT",
         "KW", "KD", "KL", "KH", "KHW", "KHD", "KHL",
