@@ -319,7 +319,15 @@
   display: inline-flex;
   align-items: center;
   padding: 0;
-  border: 0;
+  border: 1.5px solid transparent;
+  border-radius: 4px;
   background: none;
   cursor: pointer;
+}
+
+/* 초기 판정에서 바뀌어(예: 정무 → 플핸무) 적중한 경우만 흰 테두리(2026-09-28 사용자 지정 —
+   "초기하고 결과가 바껴서 적중된거는... 흰색 하이라이트를... 적중된 케이스만 해당"). 표본
+   뱃지 강조(mm-cnt-badge.is-strong, 노란색)와 안 겹치게 다른 색을 쓴다. */
+.mm-vchip.is-flip-hit {
+  border-color: #fff;
 }

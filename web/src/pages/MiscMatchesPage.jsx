@@ -67,17 +67,19 @@ function PhaseEmpty({ hasBasis }) {
   return <span className="mm-muted">{hasBasis ? '표본없음' : '-'}</span>
 }
 
-// 적중결과 채점에 어느 쪽이 쓰였는지 보여주려고 테두리로 강조했었는데, 표본 칸 뱃지의 강조
-// (핸승·역 차이 3건 이상)와 색·의미가 헷갈린다고 해서 뺐다(2026-09-28 사용자 지정 — "판정에
-// 하이라이트 넣는거는 삭제해줘").
-function VerdictChip({ v, hasBasis, phaseText, onClick }) {
+// 어느 쪽이 채점에 쓰였는지 보여주려던 노란 테두리는 표본 뱃지 강조와 헷갈려서 뺐다(2026-09-28
+// — "판정에 하이라이트 넣는거는 삭제해줘"). 대신 '판정이 바뀌어서 적중한 경우'만 흰 테두리로
+// 강조한다(같은 날 — "초기하고 결과가 바껴서 적중된거는... 흰색 하이라이트를... 초기에
+// 정무였다 플핸무로 변경되었는데 적중된 케이스만 해당") — flipHit prop, (배)판정 칸에만 쓴다.
+function VerdictChip({ v, hasBasis, phaseText, flipHit, onClick }) {
   if (!v) return <PhaseEmpty hasBasis={hasBasis} />
   return (
     <button
       type="button"
-      className="mm-vchip"
+      className={`mm-vchip${flipHit ? ' is-flip-hit' : ''}`}
       onClick={onClick}
-      title={`${phaseText} 판정 · ${v.n}건${v.viaHandi ? ' · 국핸디 기반' : ''} — 눌러서 표본 보기`}
+      title={`${phaseText} 판정 · ${v.n}건${v.viaHandi ? ' · 국핸디 기반' : ''}`
+        + (flipHit ? ' · 초기 판정에서 바뀌어 적중' : '') + ' — 눌러서 표본 보기'}
     >
       <span className={`mm-chip ${v.pick === '정무' ? 'is-blue' : 'is-red'}`}>{v.pick}{v.viaHandi && '*'}</span>
     </button>
@@ -400,6 +402,11 @@ export default function MiscMatchesPage() {
                 // 처리해줘"). api/misc_matches.py build_list의 moved와 같은 기준.
                 const finalMoved = (r.EKW !== null && (r.EKW !== r.KW || r.EKD !== r.KD || r.EKL !== r.KL))
                   || (r.EKHW !== null && (r.EKHW !== r.KHW || r.EKHD !== r.KHD || r.EKHL !== r.KHL))
+                // 판정이 바뀌어서(초기 ≠ 배변) 적중한 경우만 흰 테두리(2026-09-28 사용자 지정 —
+                // "초기에 정무였다 플핸무로 변경되었는데 적중된 케이스만"). 적중결과는 배변
+                // 우선으로 채점하므로(verdictPhase) 배변이 실제로 채점에 쓰였을 때만 해당된다.
+                const flipHit = r.verdictPhase === 'final' && r.verdictInit && r.verdictFinal
+                  && r.verdictInit.pick !== r.verdictFinal.pick && r.outcome === '적중'
                 return (
                   <tr key={i}>
                     <td className="mm-muted">{r.S} {r.R}</td>
@@ -469,7 +476,7 @@ export default function MiscMatchesPage() {
                     <td>
                       <VerdictChip
                         v={r.verdictFinal} hasBasis={finalMoved}
-                        phaseText="배변"
+                        phaseText="배변" flipHit={flipHit}
                         onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT, phase: 'final' })}
                       />
                     </td>
