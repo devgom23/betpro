@@ -101,7 +101,10 @@ export default function MiscMatchesPage() {
     setError('')
     try {
       const res = await api.post('/api/misc_matches/collect', {})
-      setNotice(`새 경기 ${res.added}건 · 배변 갱신 ${res.odds_updated}건 · 결과 채움 ${res.score_filled}건 (회차 ${res.rounds}개 확인${res.reason ? ` · ${res.reason}` : ''})`)
+      // 초기배당 채움(2026-09-28 사용자 제보 — "초기배당을 안가져오고 최신 배당만 가져오네")
+      // — 프로토가 먼저 담아 둔 뒤에야 배당을 여는 미래 회차(115·116회차 등)라 처음엔 못 채웠던
+      // 국배 초기를, 배당이 열린 지금 회차정보를 다시 가져오면서 채운 건수.
+      setNotice(`새 경기 ${res.added}건 · 초기배당 채움 ${res.init_odds_filled}건 · 배변 갱신 ${res.odds_updated}건 · 결과 채움 ${res.score_filled}건 (회차 ${res.rounds}개 확인${res.reason ? ` · ${res.reason}` : ''})`)
       await load()
     } catch (err) {
       setError(err.message)

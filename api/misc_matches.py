@@ -158,7 +158,7 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
     for c in COLS:
         if c not in df.columns:
             df[c] = None if c not in ("HS", "AS", "RT", "KW", "KD", "KL", "KH", "KHW", "KHD", "KHL", "EKW", "EKD", "EKL", "EKHW", "EKHD", "EKHL") else pd.NA
-    filled = ekw_updated = tm_filled = 0
+    filled = ekw_updated = tm_filled = kw_filled = 0
     for i in df.index:
         key = (str(df.at[i, "S"]), str(df.at[i, "R"]), str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip())
         finished = pd.notna(df.at[i, "HS"])
@@ -173,6 +173,20 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
                     df.at[i, "EKW"], df.at[i, "EKD"], df.at[i, "EKL"] = ek, _num(row.get("EKD")), _num(row.get("EKL"))
                     df.at[i, "EKHW"], df.at[i, "EKHD"], df.at[i, "EKHL"] = _num(row.get("EKHW")), _num(row.get("EKHD")), _num(row.get("EKHL"))
                     ekw_updated += 1
+        # 국배 초기(KW/KD/KL)도 처음 담을 땐 프로토가 아직 배당을 안 열어 비어 있을 수 있다
+        # (2026-09-28 사용자 제보 — "회차정보 가져오기 했는데 초기배당을 안가져오고 최신 배당만
+        # 가져오네" — 115·116회차처럼 미래 회차를 먼저 담아 둔 뒤, 나중에 배당이 열려도 KW는
+        # 처음 담을 때 한 번만 쓰고 다시는 안 채우고 있었다). 지금 읽은 값에 초기가 있으면 이번이
+        # 이 경기의 첫 관측이니 그걸 초기로 채운다 — DT를 채우는 것과 같은 방식.
+        if pd.isna(df.at[i, "KW"]):
+            row = odds_map.get(key)
+            if row is not None:
+                kw = _num(row.get("KW"))
+                if kw is not None:
+                    df.at[i, "KW"], df.at[i, "KD"], df.at[i, "KL"] = kw, _num(row.get("KD")), _num(row.get("KL"))
+                    df.at[i, "KHW"], df.at[i, "KHD"], df.at[i, "KHL"] = (
+                        _num(row.get("KHW")), _num(row.get("KHD")), _num(row.get("KHL")))
+                    kw_filled += 1
         # 경기일시(DT)도 예전엔 _to_row가 안 내려줘서 빈칸이었다 — 지금 읽은 값이 있고 아직
         # 비어 있으면 채운다(2026-09-27 — "회차 다음에 경기일시 정도는 표기해줘").
         if not str(df.at[i, "DT"] or "").strip():
@@ -197,7 +211,7 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
                     df.at[i, "RT"] = rt
                 filled += 1
 
-    if new_rows or filled or ekw_updated or tm_filled:
+    if new_rows or filled or ekw_updated or tm_filled or kw_filled:
         with DATA.table_write(db, code):
             con = sqlite3.connect(db)
             try:
@@ -206,7 +220,8 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
                 con.close()
             PATHS.stamp_updated(db)
 
-    return {"added": len(new_rows), "score_filled": filled, "odds_updated": ekw_updated, "rounds": len(rounds)}
+    return {"added": len(new_rows), "score_filled": filled, "odds_updated": ekw_updated,
+            "init_odds_filled": kw_filled, "rounds": len(rounds)}
 
 
 def recompute_rt(db: str, code: str) -> dict:
