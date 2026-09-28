@@ -104,7 +104,10 @@ export default function MiscMatchesPage() {
       // 초기배당 채움(2026-09-28 사용자 제보 — "초기배당을 안가져오고 최신 배당만 가져오네")
       // — 프로토가 먼저 담아 둔 뒤에야 배당을 여는 미래 회차(115·116회차 등)라 처음엔 못 채웠던
       // 국배 초기를, 배당이 열린 지금 회차정보를 다시 가져오면서 채운 건수.
-      setNotice(`새 경기 ${res.added}건 · 초기배당 채움 ${res.init_odds_filled}건 · 배변 갱신 ${res.odds_updated}건 · 결과 채움 ${res.score_filled}건 (회차 ${res.rounds}개 확인${res.reason ? ` · ${res.reason}` : ''})`)
+      // 핸디 채움(2026-09-28 — "+2핸디라고 해도 일단 가져오고 우리쪽에는 그냥 +-1로 만들어
+      // 버려") — ±1 핸디가 없는 경기(대부분 배당 차이가 아주 큰 경기)는 프로토가 대신 연
+      // ±2·±3.5 같은 다른 핸디 줄 중 ±1에 가장 가까운 것을 국핸디 칸에 채운다.
+      setNotice(`새 경기 ${res.added}건 · 초기배당 채움 ${res.init_odds_filled}건 · 핸디 채움 ${res.handi_filled}건 · 배변 갱신 ${res.odds_updated}건 · 결과 채움 ${res.score_filled}건 (회차 ${res.rounds}개 확인${res.reason ? ` · ${res.reason}` : ''})`)
       await load()
     } catch (err) {
       setError(err.message)

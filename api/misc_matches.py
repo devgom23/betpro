@@ -47,6 +47,25 @@ def _num(v):
     return x if x > 1.0 else None
 
 
+def _best_extra_handi(row: dict):
+    """±1 핸디(KHW/KHD/KHL)가 없는 경기에서 그다음으로 쓸 핸디 줄 — 2026-09-28 사용자 지정:
+    "핸디가 +2는 정보를 안 가져오는거 같은데... +2핸디라고 해도 일단 가져오고 우리쪽에는
+    그냥 +-1로 만들어 버려". kr_crawler.py가 ±1 아닌 핸디 줄(±2·±3.5 등)은 _extra에 담아
+    두고 있었는데(추가배당용), 기타경기는 지금까지 그걸 안 쓰고 있었다 — 실측(2026-09-28,
+    115·116회차)으로 보면 ±1이 없는 경기 중 상당수가 이 _extra에 다른 핸디 줄을 갖고 있다
+    (예: 산마리노 vs 알바니아는 ±1이 없고 +2/+3/+4.5만 있음).
+    여러 줄이 있으면 ±1에 가장 가까운(=절댓값이 가장 작은) 줄을 쓴다 — 그래도 실제 핸디는
+    ±1이 아니므로, 이 값으로 낸 RT(_rt_from_score, '정배 -1' 가정)는 그 경기만큼은 부정확할
+    수 있다는 걸 감수한 근사다(정확한 판정보다 '핸디없음'으로 아예 비는 것보다는 낫다는 판단).
+    반환: (K1,KX,K2,EK1,EKX,EK2) 초기·최종 핸디 승/무/패, 없으면 전부 None."""
+    extra_h = [e for e in row.get("_extra", []) if e.get("market") == "H"]
+    if not extra_h:
+        return (None,) * 6
+    best = min(extra_h, key=lambda e: abs(e["line"]))
+    return (best.get("K1"), best.get("KX"), best.get("K2"),
+            best.get("EK1"), best.get("EKX"), best.get("EK2"))
+
+
 def _tm_from_dt(dt: str):
     """DT('2026-09-28 05:30:00', 와이즈토토 원본 그대로 — api/kr_crawler.py _to_row 참고)에서
     시:분만 뽑아 'HHMM'으로 — TM 컬럼은 6대리그·K1·K2와 같은 자리(HHMM 4자리 문자열)라
@@ -139,14 +158,20 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
             key = (s, r, str(row["HT"]).strip(), str(row["AT"]).strip())
             odds_map[key] = row
             if key not in have:
+                khw, khd, khl = _num(row.get("KHW")), _num(row.get("KHD")), _num(row.get("KHL"))
+                ekhw, ekhd, ekhl = _num(row.get("EKHW")), _num(row.get("EKHD")), _num(row.get("EKHL"))
+                if khw is None:
+                    k1, kx, k2, ek1, ekx, ek2 = _best_extra_handi(row)
+                    khw, khd, khl = _num(k1), _num(kx), _num(k2)
+                    ekhw, ekhd, ekhl = _num(ek1), _num(ekx), _num(ek2)
                 new_rows.append({
                     "S": s, "R": r, "No": row.get("gno"), "LG": row.get("LG", ""),
                     "HT": row["HT"], "AT": row["AT"], "DT": row.get("date") or "",
                     "TM": _tm_from_dt(row.get("date")), "HS": None, "AS": None, "RT": None,
                     "KW": _num(row.get("KW")), "KD": _num(row.get("KD")), "KL": _num(row.get("KL")),
-                    "KH": None, "KHW": _num(row.get("KHW")), "KHD": _num(row.get("KHD")), "KHL": _num(row.get("KHL")),
+                    "KH": None, "KHW": khw, "KHD": khd, "KHL": khl,
                     "EKW": _num(row.get("EKW")), "EKD": _num(row.get("EKD")), "EKL": _num(row.get("EKL")),
-                    "EKHW": _num(row.get("EKHW")), "EKHD": _num(row.get("EKHD")), "EKHL": _num(row.get("EKHL")),
+                    "EKHW": ekhw, "EKHD": ekhd, "EKHL": ekhl,
                 })
                 have.add(key)
         for (lg, ht, at), sc in KRCRAWL.fetch_round_all_results(y, rnd).items():
@@ -158,35 +183,53 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
     for c in COLS:
         if c not in df.columns:
             df[c] = None if c not in ("HS", "AS", "RT", "KW", "KD", "KL", "KH", "KHW", "KHD", "KHL", "EKW", "EKD", "EKL", "EKHW", "EKHD", "EKHL") else pd.NA
-    filled = ekw_updated = tm_filled = kw_filled = 0
+    filled = ekw_updated = tm_filled = kw_filled = khw_filled = 0
     for i in df.index:
         key = (str(df.at[i, "S"]), str(df.at[i, "R"]), str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip())
         finished = pd.notna(df.at[i, "HS"])
+        row = odds_map.get(key)
         # 배변(EKW)은 결과가 안 난 경기는 매번 새로 맞추고, 이미 끝난 경기는 '아직 한 번도 못 받은
         # 것만' 채운다(2026-09-27 — "이전 경기도 최종 배당 불러오게 해줘"). 끝난 경기의 배변은
         # 더 안 움직이므로 이미 있으면 덮어쓰지 않는다.
-        if not finished or pd.isna(df.at[i, "EKW"]):
-            row = odds_map.get(key)
-            if row is not None:
-                ek = _num(row.get("EKW"))
-                if ek is not None:
-                    df.at[i, "EKW"], df.at[i, "EKD"], df.at[i, "EKL"] = ek, _num(row.get("EKD")), _num(row.get("EKL"))
-                    df.at[i, "EKHW"], df.at[i, "EKHD"], df.at[i, "EKHL"] = _num(row.get("EKHW")), _num(row.get("EKHD")), _num(row.get("EKHL"))
-                    ekw_updated += 1
+        if row is not None and (not finished or pd.isna(df.at[i, "EKW"])):
+            ek = _num(row.get("EKW"))
+            if ek is not None:
+                df.at[i, "EKW"], df.at[i, "EKD"], df.at[i, "EKL"] = ek, _num(row.get("EKD")), _num(row.get("EKL"))
+                ekw_updated += 1
         # 국배 초기(KW/KD/KL)도 처음 담을 땐 프로토가 아직 배당을 안 열어 비어 있을 수 있다
         # (2026-09-28 사용자 제보 — "회차정보 가져오기 했는데 초기배당을 안가져오고 최신 배당만
         # 가져오네" — 115·116회차처럼 미래 회차를 먼저 담아 둔 뒤, 나중에 배당이 열려도 KW는
         # 처음 담을 때 한 번만 쓰고 다시는 안 채우고 있었다). 지금 읽은 값에 초기가 있으면 이번이
         # 이 경기의 첫 관측이니 그걸 초기로 채운다 — DT를 채우는 것과 같은 방식.
-        if pd.isna(df.at[i, "KW"]):
-            row = odds_map.get(key)
-            if row is not None:
-                kw = _num(row.get("KW"))
-                if kw is not None:
-                    df.at[i, "KW"], df.at[i, "KD"], df.at[i, "KL"] = kw, _num(row.get("KD")), _num(row.get("KL"))
-                    df.at[i, "KHW"], df.at[i, "KHD"], df.at[i, "KHL"] = (
-                        _num(row.get("KHW")), _num(row.get("KHD")), _num(row.get("KHL")))
-                    kw_filled += 1
+        if row is not None and pd.isna(df.at[i, "KW"]):
+            kw = _num(row.get("KW"))
+            if kw is not None:
+                df.at[i, "KW"], df.at[i, "KD"], df.at[i, "KL"] = kw, _num(row.get("KD")), _num(row.get("KL"))
+                kw_filled += 1
+        # 국핸디 초기(KHW/KHD/KHL) — KW와 따로 채운다. 국배(KW)가 먼저 붙고 핸디는 나중에(또는
+        # 영영 ±1이 안) 열리는 경기가 있어서 "KW가 비었을 때만"으로는 못 잡는다(2026-09-28 실측 —
+        # 산마리노 vs 알바니아는 KW=27.00/KL=1.01로 이미 있는데 KHW는 계속 비어 있었다).
+        # ±1(KHW)이 없으면 그다음으로 가까운 핸디 줄을 우리 쪽에서 ±1인 셈 치고 쓴다(사용자
+        # 지정 — "+2핸디라고 해도 일단 가져오고 우리쪽에는 그냥 +-1로 만들어 버려"). ⚠ 이 경기의
+        # RT(_rt_from_score)는 '정배 -1'을 가정하므로, 실제 줄이 ±1이 아니면 그 경기만큼은
+        # 핸승/핸무 경계가 부정확할 수 있다 — '핸디없음'으로 비우는 것보다 낫다는 절충이다.
+        if row is not None and pd.isna(df.at[i, "KHW"]):
+            khw, khd, khl = _num(row.get("KHW")), _num(row.get("KHD")), _num(row.get("KHL"))
+            if khw is None:
+                k1, kx, k2, _, _, _ = _best_extra_handi(row)
+                khw, khd, khl = _num(k1), _num(kx), _num(k2)
+            if khw is not None:
+                df.at[i, "KHW"], df.at[i, "KHD"], df.at[i, "KHL"] = khw, khd, khl
+                khw_filled += 1
+        # 국핸디 최신(EKHW) — EKW와 같은 시점에(끝난 경기는 한 번만) 채우되, 위와 같은 이유로
+        # KHW와 별개 조건으로 본다. ±1이 없으면 그다음 핸디 줄의 '최종' 값을 쓴다.
+        if row is not None and (not finished or pd.isna(df.at[i, "EKHW"])):
+            ekhw, ekhd, ekhl = _num(row.get("EKHW")), _num(row.get("EKHD")), _num(row.get("EKHL"))
+            if ekhw is None:
+                _, _, _, ek1, ekx, ek2 = _best_extra_handi(row)
+                ekhw, ekhd, ekhl = _num(ek1), _num(ekx), _num(ek2)
+            if ekhw is not None:
+                df.at[i, "EKHW"], df.at[i, "EKHD"], df.at[i, "EKHL"] = ekhw, ekhd, ekhl
         # 경기일시(DT)도 예전엔 _to_row가 안 내려줘서 빈칸이었다 — 지금 읽은 값이 있고 아직
         # 비어 있으면 채운다(2026-09-27 — "회차 다음에 경기일시 정도는 표기해줘").
         if not str(df.at[i, "DT"] or "").strip():
@@ -211,7 +254,7 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
                     df.at[i, "RT"] = rt
                 filled += 1
 
-    if new_rows or filled or ekw_updated or tm_filled or kw_filled:
+    if new_rows or filled or ekw_updated or tm_filled or kw_filled or khw_filled:
         with DATA.table_write(db, code):
             con = sqlite3.connect(db)
             try:
@@ -221,7 +264,7 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
             PATHS.stamp_updated(db)
 
     return {"added": len(new_rows), "score_filled": filled, "odds_updated": ekw_updated,
-            "init_odds_filled": kw_filled, "rounds": len(rounds)}
+            "init_odds_filled": kw_filled, "handi_filled": khw_filled, "rounds": len(rounds)}
 
 
 def recompute_rt(db: str, code: str) -> dict:
