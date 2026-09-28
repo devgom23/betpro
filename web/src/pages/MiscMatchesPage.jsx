@@ -395,6 +395,11 @@ export default function MiscMatchesPage() {
                 const flipTitle = favInit !== null && favFinal !== null && favInit !== favFinal
                   ? `정역반전 — 초기 정배 ${favInit ? r.HT : r.AT} → 배변 정배 ${favFinal ? r.HT : r.AT}`
                   : null
+                // (배)표본/(배)판정의 hasBasis — EKW/EKHW가 있냐가 아니라 실제로 초기와 달라졌냐로
+                // 본다(2026-09-28 사용자 지정 — "배변 된게 없는 경기는 (배)표본 (배)판정은 모두 -
+                // 처리해줘"). api/misc_matches.py build_list의 moved와 같은 기준.
+                const finalMoved = (r.EKW !== null && (r.EKW !== r.KW || r.EKD !== r.KD || r.EKL !== r.KL))
+                  || (r.EKHW !== null && (r.EKHW !== r.KHW || r.EKHD !== r.KHD || r.EKHL !== r.KHL))
                 return (
                   <tr key={i}>
                     <td className="mm-muted">{r.S} {r.R}</td>
@@ -457,13 +462,13 @@ export default function MiscMatchesPage() {
                     </td>
                     <td>
                       <SampleChip
-                        v={r.verdictFinal} hasBasis={r.EKW !== null || r.EKHW !== null} phaseText="배변"
+                        v={r.verdictFinal} hasBasis={finalMoved} phaseText="배변"
                         onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT, phase: 'final' })}
                       />
                     </td>
                     <td>
                       <VerdictChip
-                        v={r.verdictFinal} hasBasis={r.EKW !== null || r.EKHW !== null}
+                        v={r.verdictFinal} hasBasis={finalMoved}
                         phaseText="배변" graded={r.verdictPhase === 'final'}
                         onClick={() => setSampleSel({ s: r.S, r: r.R, ht: r.HT, at: r.AT, phase: 'final' })}
                       />

@@ -372,8 +372,13 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple, userna
         ekw, ekd, ekl = _num(r.get("EKW")), _num(r.get("EKD")), _num(r.get("EKL"))
         ekhw, ekhd, ekhl = _num(r.get("EKHW")), _num(r.get("EKHD")), _num(r.get("EKHL"))
         is_ddong = bool((kw is not None and kw <= DDONG_MAX) or (kl is not None and kl <= DDONG_MAX))
+        # 배변이 실제로 없었으면(=초기와 완전히 같으면) 배변 판정을 아예 안 낸다(2026-09-28
+        # 사용자 지정 — "배변 된게 없는 경기는 (배)표본 (배)판정은 모두 - 처리해줘"). 국배·국핸디
+        # 둘 중 하나라도 움직였으면 배변으로 친다.
+        moved = ((ekw is not None and (ekw != kw or ekd != kd or ekl != kl))
+                 or (ekhw is not None and (ekhw != khw or ekhd != khd or ekhl != khl)))
         v_init, q_init = make_verdict(kw, kd, kl, khw, khd, khl)
-        v_final, q_final = make_verdict(ekw, ekd, ekl, ekhw, ekhd, ekhl)
+        v_final, q_final = make_verdict(ekw, ekd, ekl, ekhw, ekhd, ekhl) if moved else (None, None)
         # 적중결과(등급)는 배변 판정을 우선 쓰고, 없으면(못 냈으면) 초기 판정으로(2026-09-28
         # 사용자 지정 — "적중결과는 배변으로 배변이 없으면 초기로 해주면 되"). CLAUDE.md 4-1과
         # 같은 이유 — 배변이 갱신됐으면 그게 가장 최근 정보라 그걸로 채점한다.
