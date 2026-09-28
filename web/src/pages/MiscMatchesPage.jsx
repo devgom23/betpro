@@ -15,6 +15,8 @@ const OUTCOME_BADGE = {
   적중: { background: 'var(--chip-yellow-bg)', color: 'var(--chip-yellow-fg)' },
   미적: { background: 'var(--chip-red-bg)', color: 'var(--chip-red-fg)' },
   보험: { background: 'var(--chip-teal-bg)', color: 'var(--chip-teal-fg)' },
+  // 취소(2026-09-28) — RtBadge의 '취소' 라벨과 같은 회색(RT_CHIP.취소).
+  취소: { background: 'var(--chip-gray-bg)', color: 'var(--chip-gray-fg)' },
 }
 const f2 = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(2))
 
@@ -52,7 +54,9 @@ function OddsWDL({ w, d, l, favIsW, flipTitle }) {
 }
 // RT는 CLAUDE.md 도메인 용어 그대로 핸승/핸무/무/역(1~4) — 기타경기는 국내 핸디가 없어
 // RT2(핸무)는 절대 안 나오지만, 이름은 앱 전체와 똑같이 맞춘다(사용자 지정: "결과는 핸승/핸무/무/역이지").
-const RT_TEXT = { 1: '핸승', 2: '핸무', 3: '무', 4: '역' }
+// 5=취소(2026-09-28 사용자 지정 — "결과에 취소라고 되어있으면 우리도 취소라고 표시해줘")는
+// api/main.py RT_LABELS와 같은 값 — RtBadge가 '취소' 라벨용 회색 스타일을 이미 갖고 있다.
+const RT_TEXT = { 1: '핸승', 2: '핸무', 3: '무', 4: '역', 5: '취소' }
 // DT = 'YYYY-MM-DD HH:MM:SS'(와이즈토토 원본 그대로, api/kr_crawler.py _to_row 참고) → '09.27 09:00'
 function kickoff(dt) {
   const m = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/.exec(dt || '')
@@ -218,6 +222,9 @@ export default function MiscMatchesPage() {
     if (r.outcome === '적중') return 'hit'
     if (r.outcome === '미적') return 'miss'
     if (r.outcome === '보험') return 'insure'
+    // 취소(2026-09-28) — 스코어가 없어(r.HS===null) 그대로 두면 '결과 예정'과 섞인다.
+    // outcome이 이미 백엔드에서 '취소'로 확정되어 있으니 먼저 걸러낸다.
+    if (r.outcome === '취소') return 'cancelled'
     if (r.verdict) return r.HS === null ? 'pending' : 'no_sample'
     return hasOddsBasis(r) ? 'no_sample' : 'no_odds'
   }
@@ -225,7 +232,7 @@ export default function MiscMatchesPage() {
   // mm-summary 숫자 — scoped(지금 고른 회차·리그) 안에서 이 화면이 직접 센다(백엔드 summary는
   // 항상 전체 163건 기준이라 더 이상 안 쓴다).
   const s = useMemo(() => {
-    let hit = 0, miss = 0, insure = 0, pending = 0, noSample = 0, noOdds = 0
+    let hit = 0, miss = 0, insure = 0, pending = 0, noSample = 0, noOdds = 0, cancelled = 0
     scoped.forEach((r) => {
       const k = resultOf(r)
       if (k === 'hit') hit += 1
@@ -233,12 +240,13 @@ export default function MiscMatchesPage() {
       else if (k === 'insure') insure += 1
       else if (k === 'pending') pending += 1
       else if (k === 'no_sample') noSample += 1
+      else if (k === 'cancelled') cancelled += 1
       else noOdds += 1
     })
     const decided = hit + miss
     return {
       total: scoped.length, graded: decided + insure, hit, miss, insure, pending,
-      no_sample: noSample, no_odds: noOdds,
+      no_sample: noSample, no_odds: noOdds, cancelled,
       rate: decided ? Math.round((hit / decided) * 10000) / 100 : null,
     }
   }, [scoped])
@@ -256,7 +264,9 @@ export default function MiscMatchesPage() {
   // 지금 진행 중인 회차가 뜬다(전에는 기본이 '전체'라 표가 116회차부터 나열돼 헷갈렸다).
   useEffect(() => {
     if (autoRoundDone || !data.rows.length) return
-    const pending = [...new Set(data.rows.filter((r) => r.HS === null).map((r) => `${r.S} ${r.R}`))]
+    // 취소된 경기는 스코어(HS)가 영영 안 나오므로 빼야 한다 — 안 빼면 그 회차가 계속
+    // '진행 중'으로 보여 기본 선택이 안 넘어간다(2026-09-28, 취소 표시와 짝).
+    const pending = [...new Set(data.rows.filter((r) => r.HS === null && r.RT == null).map((r) => `${r.S} ${r.R}`))]
     const numOf = (x) => Number((/(\d+)회차/.exec(x) || [])[1] || 0)
     pending.sort((a, b) => numOf(a) - numOf(b))
     setRoundSel(pending[0] || 'ALL')
@@ -355,13 +365,21 @@ export default function MiscMatchesPage() {
               {s.no_odds.toLocaleString()}
             </SumNum>
           </div>
+          <div>
+            {/* 취소(2026-09-28 사용자 지정 — "결과에 취소라고 되어있으면 우리도 취소라고 표시해줘").
+                와이즈토토가 그 경기를 아예 취소 처리한 경우 — 적중·미적·보험 어디에도 안 들어간다. */}
+            <small>취소</small>
+            <SumNum active={resultFilter === 'cancelled'} onClick={() => setResultFilter((f) => (f === 'cancelled' ? 'ALL' : 'cancelled'))}>
+              {s.cancelled.toLocaleString()}
+            </SumNum>
+          </div>
           <div><small>적중률(예정 제외)</small><b>{s.rate === null ? '-' : `${s.rate}%`}</b></div>
           {/* 필터 해제 버튼(2026-09-27 사용자 지정 — "필터 해제 버튼은 서머리 영역에 위치시켜줘") */}
           {resultFilter !== 'ALL' && (
             <div className="mm-summary-clear">
               <small className="mm-muted">{shown.length.toLocaleString()} / {s.total.toLocaleString()}건 표시 중</small>
               <button type="button" className="mm-btn" onClick={() => setResultFilter('ALL')}>
-                {{ graded: '결과 난 경기', hit: '적중', miss: '미적', insure: '보험', pending: '결과 예정', no_sample: '표본없음', no_odds: '배당없음' }[resultFilter]} 필터 해제
+                {{ graded: '결과 난 경기', hit: '적중', miss: '미적', insure: '보험', pending: '결과 예정', no_sample: '표본없음', no_odds: '배당없음', cancelled: '취소' }[resultFilter]} 필터 해제
               </button>
             </div>
           )}
@@ -420,9 +438,11 @@ export default function MiscMatchesPage() {
                     <td className="mm-l"><b>{r.HT}</b> <span className="mm-muted">vs</span> <b>{r.AT}</b></td>
                     {/* 스코어·결과는 경기 오른쪽으로(2026-09-27 사용자 지정) */}
                     <td>
-                      {r.HS === null ? <span className="mm-muted">예정</span> : (
-                        <><span className={r.HS > r.AS ? 'mm-win' : undefined}>{r.HS}</span> : <span className={r.AS > r.HS ? 'mm-win' : undefined}>{r.AS}</span></>
-                      )}
+                      {r.HS === null
+                        ? <span className="mm-muted">{r.RT === 5 ? '취소' : '예정'}</span>
+                        : (
+                          <><span className={r.HS > r.AS ? 'mm-win' : undefined}>{r.HS}</span> : <span className={r.AS > r.HS ? 'mm-win' : undefined}>{r.AS}</span></>
+                        )}
                     </td>
                     {/* 2026-09-27 정정 — 사용자 제보: "3:2인데 왜 결과가 핸무가 아니라 핸승이지"
                         (아이티 vs 트리니다). 예전엔 핸디 마켓(국핸디 KHW~) 유무와 상관없이 그냥

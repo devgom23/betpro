@@ -549,7 +549,13 @@ def fetch_round_all_results(year, rnd) -> dict:
     """그 회차의 전체 리그에서 끝난 경기 스코어 — {(리그, 홈팀, 원정팀): {HS, AS}}.
     _parse_round_results(html, "")도 target_league가 비면 전체 리그를 준다. 팀명만으로는
     나라가 다른 리그끼리 겹칠 수 있어 리그명까지 키에 넣는다(기존 fetch_results류는
-    한 리그만 다뤄서 이 걱정이 없었다)."""
+    한 리그만 다뤄서 이 걱정이 없었다).
+
+    취소된 경기(2026-09-28 사용자 제보 — "뉴욕레드/세인시티 와이즈토토 보면 취소라고
+    되어 있을거야... 우리도 취소라고 표시해줘")는 스코어가 없어(HS/AS 칸에 숫자가 아예
+    안 나옴) 위 finished 분기로는 못 잡는다 — 결과 칸이 '취소'면 스코어 없이 따로 담아
+    돌려준다({"HS": None, "AS": None, "cancelled": True}). 호출부(misc_matches.collect)가
+    이걸 보고 RT=5(취소, api/main.py RT_LABELS와 같은 값)로만 표시한다."""
     html = fetch_round_html(year, rnd)
     if not html:
         return {}
@@ -564,11 +570,21 @@ def fetch_round_all_results(year, rnd) -> dict:
         if hm_el is None or hm_el.get_text(strip=True):
             continue
         result_el = next((li for li in u.find_all("li", recursive=False) if not li.get("class")), None)
-        if not result_el or result_el.get_text(strip=True) not in _FINISHED_RESULTS:
-            continue
+        result_text = result_el.get_text(strip=True) if result_el else ""
         a6 = u.select_one("li.a6")
         a8 = u.select_one("li.a8")
         if not a6 or not a8:
+            continue
+        if result_text in _CANCELLED_RESULTS:
+            m6 = re.match(r"^(.*?)\s*(\d+)$", a6.get_text(strip=True))
+            m8 = re.match(r"^(\d+)\s*(.*)$", a8.get_text(strip=True))
+            ht = m6.group(1).strip() if m6 else a6.get_text(strip=True)
+            at = m8.group(2).strip() if m8 else a8.get_text(strip=True)
+            if not ht or not at:
+                continue
+            out[(league, ht, at)] = {"HS": None, "AS": None, "cancelled": True}
+            continue
+        if result_text not in _FINISHED_RESULTS:
             continue
         m6 = re.match(r"^(.*?)\s*(\d+)$", a6.get_text(strip=True))
         m8 = re.match(r"^(\d+)\s*(.*)$", a8.get_text(strip=True))
@@ -588,6 +604,8 @@ def fetch_round_all_results(year, rnd) -> dict:
 # 결과 칸이 "4'"처럼 경과 시간으로 표시됨)의 도중 스코어를 최종 스코어로 잘못
 # 가져온 적이 있다 — 그래서 숫자 유무가 아니라 이 화이트리스트로만 종료를 판정한다.
 _FINISHED_RESULTS = {"홈승", "홈패", "무승부"}
+# 기타경기(misc_matches.py)가 '취소'를 잡을 때 쓴다 — 위 fetch_round_all_results 참고.
+_CANCELLED_RESULTS = {"취소"}
 
 
 def _parse_round_results(html, target_league):

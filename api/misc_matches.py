@@ -194,7 +194,9 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
     filled = ekw_updated = tm_filled = kw_filled = khw_filled = 0
     for i in df.index:
         key = (str(df.at[i, "S"]), str(df.at[i, "R"]), str(df.at[i, "HT"]).strip(), str(df.at[i, "AT"]).strip())
-        finished = pd.notna(df.at[i, "HS"])
+        # 취소된 경기(RT=5)는 스코어가 영영 안 나오므로 HS로만 판단하면 매번 다시 훑게 된다
+        # (2026-09-28 — 아래 취소 처리와 짝). RT가 이미 5면 끝난 것으로 친다.
+        finished = pd.notna(df.at[i, "HS"]) or (pd.notna(df.at[i, "RT"]) and int(df.at[i, "RT"]) == 5)
         row = odds_map.get(key)
         # 배변(EKW)은 결과가 안 난 경기는 매번 새로 맞추고, 이미 끝난 경기는 '아직 한 번도 못 받은
         # 것만' 채운다(2026-09-27 — "이전 경기도 최종 배당 불러오게 해줘"). 끝난 경기의 배변은
@@ -254,13 +256,19 @@ def collect(db: str, udb: str, code: str, excl: set) -> dict:
         if not finished:
             sc = score_map.get(key)
             if sc:
-                fav = _kh_and_fav(_num(df.at[i, "KW"]), _num(df.at[i, "KL"]),
-                                  _num(df.at[i, "KHW"]), _num(df.at[i, "KHL"]))
-                has_hcap = _num(df.at[i, "KHW"]) is not None
-                rt = _rt_from_score(sc["HS"], sc["AS"], fav, has_hcap)
-                df.at[i, "HS"], df.at[i, "AS"] = sc["HS"], sc["AS"]
-                if rt is not None:
-                    df.at[i, "RT"] = rt
+                # 취소(2026-09-28 사용자 제보 — "뉴욕레드/세인시티 와이즈토토 보면 취소라고
+                # 되어 있을거야... 우리도 취소라고 표시해줘"). 스코어가 없으니 HS/AS는 그대로
+                # 비워 두고, RT만 5(취소 — api/main.py RT_LABELS와 같은 값)로 남긴다.
+                if sc.get("cancelled"):
+                    df.at[i, "RT"] = 5
+                else:
+                    fav = _kh_and_fav(_num(df.at[i, "KW"]), _num(df.at[i, "KL"]),
+                                      _num(df.at[i, "KHW"]), _num(df.at[i, "KHL"]))
+                    has_hcap = _num(df.at[i, "KHW"]) is not None
+                    rt = _rt_from_score(sc["HS"], sc["AS"], fav, has_hcap)
+                    df.at[i, "HS"], df.at[i, "AS"] = sc["HS"], sc["AS"]
+                    if rt is not None:
+                        df.at[i, "RT"] = rt
                 filled += 1
 
     if new_rows or filled or ekw_updated or tm_filled or kw_filled or khw_filled:
@@ -366,7 +374,7 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple, userna
         return v, q
 
     rows = []
-    hit = miss = insure = pending = no_sample = no_odds = 0
+    hit = miss = insure = pending = no_sample = no_odds = cancelled = 0
     for _, r in df.sort_values(["S", "R"], ascending=False).iterrows():
         kw, kd, kl = _num(r.get("KW")), _num(r.get("KD")), _num(r.get("KL"))
         khw, khd, khl = _num(r.get("KHW")), _num(r.get("KHD")), _num(r.get("KHL"))
@@ -386,9 +394,15 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple, userna
         v = v_final or v_init
         q = q_final or q_init
         rt = None if pd.isna(r.get("RT")) else int(r["RT"])
-        finished = not pd.isna(r.get("HS"))
+        # 취소(2026-09-28 사용자 지정 — "결과에 취소라고 되어있으면 우리도 취소라고 표시해줘").
+        # RT=5는 스코어 없이 '경기 자체가 안 열렸다'는 뜻이라 정무/플핸무 채점 대상이 아니다
+        # — hit/miss/insure 어디에도 안 넣고 별도 통으로 뺀다.
+        finished = not pd.isna(r.get("HS")) or rt == 5
         outcome = None
-        if v and rt is not None:
+        if rt == 5:
+            outcome = "취소"
+            cancelled += 1
+        elif v and rt is not None:
             rule = PICK_VERDICT_MAP[v["pick"]]
             outcome = "적중" if rt in rule["hit"] else ("보험" if rt in rule["insure"] else "미적")
             if outcome == "적중":
@@ -447,7 +461,7 @@ def build_list(db: str, code: str, mdb: str, udb: str, user_codes: tuple, userna
     decided = hit + miss  # 보험(insure)은 적중도 미적도 아니라 적중률 분모에서 그대로 뺀다(예전과 동일)
     graded = decided + insure  # "결과 난 경기" = 적중·미적·보험 전부(모두 경기가 끝나 outcome이 확정됨)
     summary = {"total": len(rows), "graded": graded, "hit": hit, "miss": miss, "insure": insure,
-              "pending": pending, "no_sample": no_sample, "no_odds": no_odds,
+              "pending": pending, "no_sample": no_sample, "no_odds": no_odds, "cancelled": cancelled,
               "rate": round(hit / decided * 100, 2) if decided else None}
     return {"rows": rows, "summary": summary, "code": code, "scope": "user"}
 
