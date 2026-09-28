@@ -31,7 +31,12 @@ function favSide(w, l) {
 // 배변(최신) 칸의 '움직였다' 표시는 굵게 대신, 셀 자체를 보이거나 '-'로 가리는 걸로 바꿨다
 // (2026-09-27 — "배변 되면 텍스트만 표시 해주고 배변이 안되면 - 해줘"). 안 움직인 경기는
 // 초기 칸과 똑같은 숫자를 또 보여줄 필요가 없어서다 — 호출하는 쪽(아래 표)에서 판단해 넘긴다.
-function OddsWDL({ w, d, l, favIsW }) {
+// flipTitle: 정역반전(초기·배변에서 정배 팀이 바뀜) 툴팁 — 있으면 ⇄를 붙인다(2026-09-28
+// 사용자 지정 — "배변이 되면서 정역이 변경이 된 경기네... 12개사 판정에 사용했던" — 상세보기
+// '12개 배당사' 표에서 회사 정배가 우리 정배와 반대일 때 쓰던 것과 같은 표시(mb-flip, ⇄)를
+// 그대로 가져왔다. 예: 중국 vs 뉴질랜드 — 초기 KW 2.39<KL 2.55(중국 정배) → 배변 EKW
+// 3.00>EKL 2.07(뉴질랜드 정배로 역전).
+function OddsWDL({ w, d, l, favIsW, flipTitle }) {
   if (w === null && l === null) return <span className="mm-muted">-</span>
   const cls = (isFav) => (isFav === true ? 'mm-fav-txt' : isFav === false ? 'mm-dog-txt' : undefined)
   return (
@@ -41,6 +46,7 @@ function OddsWDL({ w, d, l, favIsW }) {
       <span>{f2(d)}</span>
       {' / '}
       <span className={cls(favIsW === null ? null : !favIsW)}>{f2(l)}</span>
+      {flipTitle && <span className="mb-flip" title={flipTitle}>⇄</span>}
     </>
   )
 }
@@ -324,6 +330,10 @@ export default function MiscMatchesPage() {
                 // 그걸로, 없으면(안 움직였으면) 초기 국배 그대로 — 국핸디 배변 칸도 같은 규칙.
                 const favInit = favSide(r.KW, r.KL)
                 const favFinal = favSide(r.EKW ?? r.KW, r.EKL ?? r.KL)
+                // 정역반전(2026-09-28 사용자 지정) — 초기·배변에서 정배 팀 자체가 바뀐 경기만.
+                const flipTitle = favInit !== null && favFinal !== null && favInit !== favFinal
+                  ? `정역반전 — 초기 정배 ${favInit ? r.HT : r.AT} → 배변 정배 ${favFinal ? r.HT : r.AT}`
+                  : null
                 return (
                   <tr key={i}>
                     <td className="mm-muted">{r.S} {r.R}</td>
@@ -422,13 +432,13 @@ export default function MiscMatchesPage() {
                         "배변 되면 텍스트만 표시 해주고 배변이 안되면 - 해줘"). */}
                     <td>
                       {r.EKW !== null && (r.EKW !== r.KW || r.EKD !== r.KD || r.EKL !== r.KL)
-                        ? <OddsWDL w={r.EKW} d={r.EKD} l={r.EKL} favIsW={favFinal} />
+                        ? <OddsWDL w={r.EKW} d={r.EKD} l={r.EKL} favIsW={favFinal} flipTitle={flipTitle} />
                         : <span className="mm-muted">-</span>}
                     </td>
                     <td>{r.KHW === null ? <span className="mm-muted">-</span> : <OddsWDL w={r.KHW} d={r.KHD} l={r.KHL} favIsW={favInit} />}</td>
                     <td>
                       {r.EKHW !== null && (r.EKHW !== r.KHW || r.EKHD !== r.KHD || r.EKHL !== r.KHL)
-                        ? <OddsWDL w={r.EKHW} d={r.EKHD} l={r.EKHL} favIsW={favFinal} />
+                        ? <OddsWDL w={r.EKHW} d={r.EKHD} l={r.EKHL} favIsW={favFinal} flipTitle={flipTitle} />
                         : <span className="mm-muted">-</span>}
                     </td>
                   </tr>

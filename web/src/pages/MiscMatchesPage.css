@@ -299,3 +299,13 @@
 .mm-cnt-badge.is-strong {
   border-color: var(--chip-yellow-fg);
 }
+
+/* 정역반전 표시(2026-09-28 사용자 지정 — "배변(최신) 이중화살표 넣어줘야지 12개사 판정에
+   사용했던"). 상세보기 '12개 배당사' 표에서 회사 정배가 우리 정배와 반대일 때 쓰던 것과
+   똑같은 표시(MatchDetailModal.css .mb-flip, ⇄) — 색·굵기까지 그대로 맞춘다. */
+.mb-flip {
+  margin-left: 2px;
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+  cursor: help;
+}
