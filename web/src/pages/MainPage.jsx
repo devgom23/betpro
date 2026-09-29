@@ -48,7 +48,8 @@ export default function MainPage() {
   // 목록과 그것이 어느 스코프의 것인지를 함께 담는다 — 스코프를 바꾼 직후 이전 스코프의
   // 리그 목록으로 탭을 잘못 고르는(예: 내 데이터에서 EPL을 여는) 상황을 막기 위함.
   const [leagueState, setLeagueState] = useState({ scope: null, list: [] })
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('betpro_activeTab') || 'EPL')
+  // 기본 탭 = 시즌분석(2026-09-29 사용자 지정 — "시즌분석이 벳프로 디폴트 페이지로 해줘").
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('betpro_activeTab') || 'season')
   // 상단 네비 4개 중 무엇을 보고 있는지. 'leagues'일 때만 리그 탭 줄이 보인다.
   const [view, setView] = useState(() => localStorage.getItem('betpro_view') || 'leagues')
   const [showLeagueModal, setShowLeagueModal] = useState(false)
@@ -89,11 +90,18 @@ export default function MainPage() {
   return (
     <div className="main-page">
       <header className="top-bar">
-        <div className="top-bar-brand">
+        {/* 로고 클릭 → 기본 페이지(시즌분석)로(2026-09-29 사용자 지정 — "최상단 로고 클릭하면
+            디폴트 페이지로 가게 해줘"). activeTab 기본값('season', 위 useState)과 같은 값. */}
+        <button
+          type="button"
+          className="top-bar-brand"
+          onClick={() => { setScope('master'); setView('leagues'); setActiveTab('season') }}
+          title="기본 화면(시즌분석)으로"
+        >
           <img className="app-logo" src="/logo.png" alt="BET PRO W" />
           <span className="app-name">BET PRO W</span>
           <span className="app-version-chip">v3.1</span>
-        </div>
+        </button>
 
         <div className="scope-toggle">
           <button

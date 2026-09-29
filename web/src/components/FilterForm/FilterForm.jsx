@@ -49,7 +49,7 @@ function makeDefaultDraft(latest) {
   }
 }
 
-export default function FilterForm({ filters, leagueKey, onSearch, teams = [] }) {
+export default function FilterForm({ filters, leagueKey, query, onSearch, teams = [] }) {
   const [draft, setDraft] = useState(() => makeDefaultDraft(filters?.latest))
   const [warning, setWarning] = useState('')
 
@@ -62,6 +62,19 @@ export default function FilterForm({ filters, leagueKey, onSearch, teams = [] })
     setWarning('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leagueKey])
+
+  // 라운드 바로가기(표 아래 회차 숫자)를 누르면 표는 그 라운드로 바로 조회되는데, 이 폼의
+  // 드롭다운은 안 바뀌어 있었다(2026-09-29 사용자 제보 — "이걸 클릭하고 검색바의 조회를
+  // 클릭하면 시즌및라운드에 있는 라운드로 다시 돌아가"). 조회 조건(query)의 시즌·라운드가
+  // 이 폼 밖에서(라운드 바로가기로) 바뀌면 드롭다운도 따라가게 한다 — 이미 같으면(이 폼 자신이
+  // 낸 조회면) 손대지 않는다.
+  useEffect(() => {
+    if (!query) return
+    setDraft((prev) => (prev.season === query.season && prev.round === query.round
+      ? prev
+      : { ...prev, season: query.season, round: query.round }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query?.season, query?.round])
 
   // 팀 목록이 바뀌면(시즌 변경 등) 더는 목록에 없는 선택은 지운다.
   useEffect(() => {

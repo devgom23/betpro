@@ -476,6 +476,7 @@ export default function LeaguePage({ code, scope }) {
       <FilterForm
         filters={filters}
         leagueKey={`${code}:${scope}`}
+        query={query}
         onSearch={handleSearch}
         teams={teams}
       />
