@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import MatchDetailModal from '../components/MatchDetailModal/MatchDetailModal'
+import MMSampleModal from '../components/MMSampleModal/MMSampleModal'
 import WeekCard from '../components/WeeklyPick/WeekCard'
 import LadderTable, { MAX_ROWS } from '../components/WeeklyPick/LadderTable'
 import {
@@ -17,6 +18,11 @@ import './WeeklyPickPage.css'
 // 지금 짜는 조합·저장된 벳은 이 브라우저(localStorage)에 남는다 — 새로고침해도 그대로.
 const SEL_KEY = 'betpro_week_sel_v2'
 const SAVED_KEY = 'betpro_week_saved_v2'
+// api/misc_matches.py LEAGUE_LABEL · MainPage.jsx MISC_LEAGUE_LABEL과 반드시 같아야 한다 —
+// 기타경기는 26개 지표가 없어 상세보기도 6대리그용(MatchDetailModal) 대신 기타경기 전용
+// 간단 팝업(MMSampleModal)을 열어야 한다(2026-09-29 사용자 지정 — "지금은 6대리그
+// 상세보기 팝업이 호출되 이거 수정해줘").
+const MISC_LEAGUE_LABEL = '기타경기'
 
 function loadJson(key, fallback) {
   try {
@@ -422,7 +428,15 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
       ))}
 
       {notice && <div className="wk-toast">{notice}</div>}
-      {detailRow && (
+      {detailRow && detailRow.L_LABEL === MISC_LEAGUE_LABEL && (
+        <MMSampleModal
+          s={detailRow.S} r={detailRow.R} ht={detailRow.HT} at={detailRow.AT} no={detailRow.No}
+          code={detailRow.L} scope={detailRow.scope} myPick={detailRow.MY_PICK} phase="final"
+          onPickSaved={() => load()}
+          onClose={() => { setDetailRow(null); load() }}
+        />
+      )}
+      {detailRow && detailRow.L_LABEL !== MISC_LEAGUE_LABEL && (
         <MatchDetailModal
           code={detailRow.L}
           scope={detailRow.scope}

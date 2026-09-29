@@ -97,13 +97,25 @@ export function resolveSel(row, markets, sel) {
 }
 
 // 결과가 나온 경기에서 그 칸이 맞았는가(카드 ✔ 표시용).
+// 핸디 기준점(KH)은 기타경기에선 와이즈토토가 안 줘서 항상 비어 있다(api/misc_matches.py
+// _to_row 주석과 같은 원인) — 그대로 두면 0으로 계산돼 핸디 줄이 국배와 똑같이(핸무·역을
+// 못 갈라) 체크됐다(2026-09-29 사용자 제보 — "아르메니/몬테네그 2:3으로 몬테네그가 핸무로
+// 이겼는데 핸디는 무쪽에 체크가 되어야 하는데 안 맞아"). KH가 없으면 homeFavOf와 같은
+// 기준(국배 KW/KL 비교)으로 정배를 가려 '정배 -1'로 대신한다(misc_matches.py _rt_from_score와
+// 같은 가정 — 기타경기는 ±1 핸디만 쓴다).
 export function cellHit(row, m, line, i) {
   const hs = num(row?.HS)
   const as = num(row?.AS)
   if (hs === null || as === null) return false
   let d = hs - as
-  if (m === 'h') d += num(row?.KH) ?? 0
-  else if (m !== 'k') d += line
+  if (m === 'h') {
+    let kh = num(row?.KH)
+    if (kh === null || kh === 0) {
+      const fav = homeFavOf(row)
+      kh = fav === true ? -1 : fav === false ? 1 : 0
+    }
+    d += kh
+  } else if (m !== 'k') d += line
   const res = d > 0 ? 0 : d === 0 ? 1 : 2
   return res === i
 }
