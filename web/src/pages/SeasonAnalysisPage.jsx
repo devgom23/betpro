@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
+import { RichMemoInput } from '../components/RichMemo/RichMemo'
 import './SeasonAnalysisPage.css'
 
 // 시즌분석 — 6대리그 라운드를 프로토 회차에 놓은 시즌 표 + 회차별 '주간 라운드 지표'
@@ -73,12 +74,14 @@ function SeasonTable({ data, sel, onSelect, seasons, season, onSeason }) {
     return (
       <tr key={L.code}>
         <td className="lg">{L.label}</td>
-        {cells}
+        {/* 시즌 누계를 리그 칸 오른쪽으로(2026-09-29 사용자 지정) — 예전엔 표 맨 끝(오른쪽 끝)이었다. */}
         <td className="sum-col">
+          {/* 2줄로(2026-09-29 사용자 지정 — "22/28 (44.0%) 이렇게 2줄로") */}
           <span className={pct === null ? 'gray' : pct > 50 ? 'blue' : pct < 50 ? 'red' : 'gray'}>
-            {sj} / {sp}{pct === null ? '' : ` (${pct.toFixed(1)}%)`}
+            {sj} / {sp}<br />{pct === null ? '' : `(${pct.toFixed(1)}%)`}
           </span>
         </td>
+        {cells}
       </tr>
     )
   })
@@ -99,15 +102,27 @@ function SeasonTable({ data, sel, onSelect, seasons, season, onSeason }) {
           {seasons.map((s) => <option key={s} value={s}>{s} 시즌</option>)}
         </select>
         전체 스케줄
-        <span className="note">6대리그 라운드를 프로토 회차(금~화 주말 / 수~목 평일)에 놓은 표 · 칸 = 라운드 (정/플) · 열 제목을 누르면 아래에 그 회차 지표</span>
+        {/* 설명글 삭제, 그 자리(전체 스케줄 옆, 한 줄)에 범례를 대신(2026-09-29 사용자 지정 —
+            "삭제하고... 이 내용이 삭제된 데에 표기되도록 해줘" · "한줄로 해줘야지" ·
+            "전체스케줄 옆에 위치") — 예전엔 표 아래 별도 줄(.sa-legend)이었다. */}
+        <span className="sa-legend">
+          <span><i className="sw sw-jung" />정(핸승+핸무)이 더 많음</span>
+          <span><i className="sw sw-pl" />플(무+역)이 더 많음</span>
+          <span><i className="sw sw-even" />같음</span>
+          <span className="mid">평일 = 수~목 주중 라운드</span>
+          <span>빗금 = 휴식기(A매치)</span>
+          <span>흐린 글씨 = 아직 경기 전</span>
+          <span><i className="sw sw-moved" />연기 경기가 있는 라운드(마우스를 올리면 경기·날짜)</span>
+        </span>
       </h2>
       <div className="sa-scroll">
         <table className="sa-season-table">
           <thead>
             <tr>
               <th className="lg" rowSpan={3}>리그</th>
-              {months.map((m, i) => <th key={i} className="mon" colSpan={m.n}>{m.m}월</th>)}
+              {/* 시즌 누계를 리그 칸 오른쪽으로(2026-09-29 사용자 지정) — 예전엔 표 맨 끝이었다. */}
               <th className="sum-col" rowSpan={3}>시즌 누계<small>정 / 플 (정%)</small></th>
+              {months.map((m, i) => <th key={i} className="mon" colSpan={m.n}>{m.m}월</th>)}
             </tr>
             <tr>
               {cols.map((c, i) => (
@@ -126,33 +141,25 @@ function SeasonTable({ data, sel, onSelect, seasons, season, onSeason }) {
             {rows}
             <tr className="total">
               <td className="lg">합계</td>
-              {totalCells}
               <td className="sum-col">
                 <span className={tpct === null ? 'gray' : tpct > 50 ? 'blue' : 'red'}>
-                  {tj} / {tp}{tpct === null ? '' : ` (${tpct.toFixed(1)}%)`}
+                  {tj} / {tp}<br />{tpct === null ? '' : `(${tpct.toFixed(1)}%)`}
                 </span>
               </td>
+              {totalCells}
             </tr>
           </tbody>
         </table>
-      </div>
-      <div className="sa-legend">
-        <span><i className="sw sw-jung" />정(핸승+핸무)이 더 많음</span>
-        <span><i className="sw sw-pl" />플(무+역)이 더 많음</span>
-        <span><i className="sw sw-even" />같음</span>
-        <span className="mid">평일 = 수~목 주중 라운드</span>
-        <span>빗금 = 휴식기(A매치)</span>
-        <span>흐린 글씨 = 아직 경기 전</span>
-        <span><i className="sw sw-moved" />연기 경기가 있는 라운드(마우스를 올리면 경기·날짜)</span>
       </div>
     </section>
   )
 }
 
+// 한 줄로(2026-09-29 사용자 지정 — "이번 회차 메모를 주간라운드 지표 바로 위로 위치해줘 ·
+// 한줄로 해줘") — 제목과 입력칸을 같은 줄에 두는 앱 전체 메모 칸 관례(RichMemoInput)를 그대로 쓴다.
 function WeekMemo({ season, wk, value, onSaved }) {
-  const [text, setText] = useState(value || '')
   const [state, setState] = useState('')
-  const save = async () => {
+  async function save(text) {
     if ((text || '') === (value || '')) return
     setState('저장 중…')
     try {
@@ -165,14 +172,16 @@ function WeekMemo({ season, wk, value, onSaved }) {
   }
   return (
     <div className="sa-card">
-      <h3>이번 회차 메모 <span className="note">{state || '칸을 벗어나면 저장됩니다'}</span></h3>
-      <textarea
-        className="sa-memo"
-        value={text}
-        onChange={(e) => { setText(e.target.value); setState('') }}
-        onBlur={save}
-        placeholder="예) 휴식기 이전 금·토·일 전부 역배가 많이 나온 3일 연속 / 플핸데이"
-      />
+      <h3>
+        이번 회차 메모
+        <RichMemoInput
+          className="sa-memo"
+          value={value || ''}
+          placeholder="예) 휴식기 이전 금·토·일 전부 역배가 많이 나온 3일 연속 / 플핸데이"
+          onCommit={save}
+        />
+        <span className="note">{state}</span>
+      </h3>
     </div>
   )
 }
@@ -206,11 +215,14 @@ function WeekPanel({ data, col, season, note, onNoteSaved }) {
 
   return (
     <section className="sa-section">
+      {/* 주간 라운드 지표 바로 위로(2026-09-29 사용자 지정 — "이번 회차 메모를 주간라운드
+          지표 바로 위로 위치해줘") — 예전엔 이 섹션 맨 아래에 있었다. */}
+      <WeekMemo key={`${season}:${col.key}`} season={season} wk={col.key} value={note} onSaved={onNoteSaved} />
+      {/* 정/플 요약 칩을 제목 줄에(2026-09-29 사용자 지정 — "정25 플32 플핸회차 이거 한줄로") —
+          예전엔 h2 아래 별도 줄(.sa-kpi)이었다. */}
       <h2>
         주간 라운드 지표 — {col.label}
         <span className="note">{md(col.from)} ~ {md(col.to)} · {gl.length}경기 (결과 {done.length})</span>
-      </h2>
-      <div className="sa-kpi">
         {done.length ? (
           <>
             <span className="chip blue">정 {j}</span>
@@ -218,7 +230,7 @@ function WeekPanel({ data, col, season, note, onNoteSaved }) {
             <span className={`chip ${j > p ? 'blue' : p > j ? 'red' : 'gray'}`}>{j > p ? '정배 회차' : p > j ? '플핸 회차' : '반반'}</span>
           </>
         ) : <span className="chip gray">아직 경기 전 — 일정만 표시</span>}
-      </div>
+      </h2>
 
       <div className="sa-grid2">
         <div className="sa-card">
@@ -302,11 +314,21 @@ function WeekPanel({ data, col, season, note, onNoteSaved }) {
                       <td className={w === '토' ? 'blue' : w === '일' ? 'red' : ''}>{w}요일</td>
                       {data.leagues.map((L) => (
                         <td key={L.code} className="dd-cell">
-                          {dayG.filter((g) => g.lg === L.code).map((g) => (
-                            <span key={`${g.ht}-${g.at}`} className={`dd ${g.rt ? (g.rt <= 2 ? 'j' : 'p') : ''}`} title={`${labelOf[g.lg]} ${g.r}R ${g.ht} vs ${g.at}`}>
-                              {g.rank}똥 <b>{g.fav}</b> {g.favOdds.toFixed(2)}<small>{g.rt ? RT_TEXT[g.rt] : '예정'}</small>
-                            </span>
-                          ))}
+                          {dayG.filter((g) => g.lg === L.code).map((g) => {
+                            // 상대팀·점수 추가(2026-09-29 사용자 지정 — "1.27 맨시티 선덜랜드
+                            // 점수 핸승 이렇게 변경"). 점수는 정배 기준으로(정배팀:상대팀) 맞춘다.
+                            const isFavHome = g.ht === g.fav
+                            const opp = isFavHome ? g.at : g.ht
+                            const favScore = isFavHome ? g.hs : g.as
+                            const oppScore = isFavHome ? g.as : g.hs
+                            return (
+                              <span key={`${g.ht}-${g.at}`} className={`dd ${g.rt ? (g.rt <= 2 ? 'j' : 'p') : ''}`} title={`${labelOf[g.lg]} ${g.r}R ${g.ht} vs ${g.at}`}>
+                                {g.favOdds.toFixed(2)} <b>{g.fav}</b> {opp}
+                                {g.hs != null && ` ${favScore}:${oppScore}`}
+                                <small className={g.rt ? RT_CLS[g.rt - 1] : 'gray'}>{g.rt ? RT_TEXT[g.rt] : '예정'}</small>
+                              </span>
+                            )
+                          })}
                         </td>
                       ))}
                       <td>
@@ -345,8 +367,6 @@ function WeekPanel({ data, col, season, note, onNoteSaved }) {
           </ul>
         </div>
       )}
-
-      <WeekMemo key={`${season}:${col.key}`} season={season} wk={col.key} value={note} onSaved={onNoteSaved} />
     </section>
   )
 }

@@ -1311,7 +1311,7 @@ def save_season_note(code: str, body: SeasonNoteBody, user: dict = Depends(get_c
 
 
 # 상세보기 표본 박스 7개 제목 옆 메모(2026-09-15) — 경기 하나 × 표본 박스 하나에 1개.
-SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl", "same_odds", "books", "triple", "triple_same", "triple_other")   # same_odds = 회차 동배당 · books = 12개 배당사 메모(2026-09-24) · triple = 12사 평균·국배 표본 메모(2026-09-26)
+SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl", "same_odds", "books", "triple", "triple_same", "triple_other", "team_flow", "schedule")   # same_odds = 회차 동배당 · books = 12개 배당사 메모(2026-09-24) · triple = 12사 평균·국배 표본 메모(2026-09-26) · team_flow = 팀 흐름 메모 · schedule = 앞뒤 일정 메모(2026-09-29)
 
 
 class SampleNoteBody(BaseModel):

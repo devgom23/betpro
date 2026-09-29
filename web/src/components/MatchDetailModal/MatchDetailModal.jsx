@@ -2732,7 +2732,7 @@ function scheduleDaysText(days) {
 
 const SCHEDULE_RESULT_CLASS = { 승: 'win', 무: 'draw', 패: 'loss' }
 
-function ScheduleContextSection({ ctx }) {
+function ScheduleContextSection({ ctx, note, onSaveNote }) {
   if (!ctx) return null
   // '팀' 칸 — 예전엔 실제 팀명(헤타페/말라가)을 적었는데, 폭을 줄이려고 이 경기의
   // 홈/원정 소속만 남긴다(2026-09-23 사용자 지정 — 옆의 '같은 회차 동배당 결과'에
@@ -2749,7 +2749,9 @@ function ScheduleContextSection({ ctx }) {
     <section className="detail-section schedule-ctx-section">
       <h3>
         앞뒤 일정
-        <span className="detail-section-note">두 팀의 바로 앞뒤 경기(리그·컵 포함), 리그 상대 옆 괄호는 그 라운드 직전 순위</span>
+        {/* 설명글 삭제(2026-09-29 사용자 지정 — "앞뒤 일정 뒤에 메모 인풋 박스 넣어주고
+            설명글은 삭제 처리") — 그 자리에 이 표에 대한 의견 메모칸을 넣는다. */}
+        {onSaveNote && <SampleNoteInput value={note} onSave={onSaveNote} placeholder="앞뒤 일정에 대한 의견" />}
       </h3>
       <div className="schedule-ctx-wrap">
         <table className="detail-table schedule-ctx-table">
@@ -3401,6 +3403,16 @@ function SeasonRecordLegend({ onClose }) {
         <p className="help-legend-note">
           참고용 표입니다 — &apos;종합픽&apos; 확률 계산에는 넣지 않고 화면에만 보여줍니다.
           시즌 초반엔 표본이 금방 말라(경기 수 자체가 적어) 믿고 보기 어렵습니다.
+        </p>
+
+        {/* 예전엔 '팀 흐름' 제목 옆에 한 줄로 있던 설명(2026-09-29 사용자 지정 — "홈경기 이거는
+            팝업에 넣어줘") — 시즌전적뿐 아니라 팀 흐름 표 전체에 걸친 표시라 여기 맨 뒤에 둔다. */}
+        <p className="help-legend-title">⑧ 표에서 쓰는 그 밖의 표시</p>
+        <p className="help-legend-note">
+          <span className="recent-home-swatch" /> 최근10경기 칸의 이 색은 그 경기가{' '}
+          <b>홈경기</b>였다는 표시입니다. 팀 이름 옆 괄호(전체 순위/기대점수)는 그 팀의
+          이번 시즌 <b>전체 순위</b>와 <b>전체 기준 기대점수</b>이고, &apos;리그 최다
+          기록&apos; 칸은 <b>이 경기 직전까지</b> 그 리그에서 나온 기록입니다.
         </p>
       </div>
     </div>
@@ -5415,18 +5427,26 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             배당 바로 아래). 시즌전적·연속기록·최근10 날짜는 pick_ai 응답이 오면 채워진다. */}
         <section className="detail-section">
           <h3>
-            팀 흐름
+            {/* '팀 흐름' 글자 자체를 링크로(2026-09-29 사용자 지정 — "시즌전적에 링크 걸지
+                말고 팀흐름에 링크 걸고 시즌전적 단어는 삭제"). 팝업은 그대로 시즌전적 정의. */}
             <button
               type="button"
               className="help-btn"
               onClick={() => setShowSeasonLegend(true)}
               title="시즌전적이 정확히 무엇을 세는 표인지 보기"
             >
-              시즌전적 <span className="help-mark">?</span>
+              팀 흐름 <span className="help-mark">?</span>
             </button>
-            <span className="detail-section-note">
-              <span className="recent-home-swatch" /> 홈경기, 팀 옆 괄호는 전체 순위/기대점수, 최다 기록은 경기 직전까지 그 리그 기준
-            </span>
+            {/* 팀 흐름 메모(2026-09-29 사용자 지정 — "팀흐름 바로 옆에 메모 인풋 박스 넣어주고
+                지금 있는 홈경기 이거는 팝업에 넣어줘"). 설명글(홈경기 스와치·팀 옆 괄호·최다
+                기록 기준)은 위 '?' 팝업(시즌전적 정의)에 옮겼다(SeasonRecordLegend ⑧). */}
+            {sampleNotes !== undefined && (
+              <SampleNoteInput
+                value={sampleNotes?.team_flow?.memo}
+                onSave={(memo) => saveSampleNote('team_flow', { memo: memo || null })}
+                placeholder="팀 흐름에 대한 의견"
+              />
+            )}
             {pickError && <span className="detail-section-note">{pickError}</span>}
           </h3>
           <TeamFlowTable
@@ -5444,7 +5464,11 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             오른쪽에 '같은 회차 동배당 결과'를 나란히 둔다(2026-09-23 사용자 지정) —
             한쪽이 없으면 남은 쪽이 폭을 다 쓴다(schedule-ctx-row는 auto-fit 그리드). */}
         <div className="schedule-ctx-row">
-          <ScheduleContextSection ctx={scheduleCtx} />
+          <ScheduleContextSection
+            ctx={scheduleCtx}
+            note={sampleNotes?.schedule?.memo}
+            onSaveNote={(memo) => saveSampleNote('schedule', { memo: memo || null })}
+          />
           <SameOddsSection
             sameOdds={sameOdds}
             note={sampleNotes?.same_odds?.memo}

@@ -199,7 +199,11 @@ def build(season: str, db=None) -> dict:
         out_games[f"{lg}|{r}"] = [
             {"ht": g["ht"], "at": g["at"], "d": str(g["d"]),
              "wd": WD[(g["d"] - timedelta(days=1) if g["hour"] < 12 else g["d"]).weekday()],
-             "rt": g["rt"], "fav": g["fav"], "favOdds": g["favOdds"]}
+             "rt": g["rt"], "fav": g["fav"], "favOdds": g["favOdds"],
+             # 똥배 표 칸에 점수도 같이 보여주려고 추가(2026-09-29 사용자 지정 —
+             # "1.27 맨시티 선덜랜드 점수 핸승 이렇게 변경해줘"). build()가 이미 만들어 둔
+             # hs/as를 여기서 빼고 있었을 뿐이다.
+             "hs": g["hs"], "as": g["as"]}
             for g in sorted(gl, key=lambda x: (x["d"], x["hour"]))]
     return {"season": season,
             "leagues": [{"code": c, "label": LEAGUE_LABEL.get(c, c)} for c in PATHS.LEAGUES],
