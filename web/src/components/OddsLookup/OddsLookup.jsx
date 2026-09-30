@@ -1,5 +1,5 @@
 // 통합DB '배당 조회'(2026-09-27 사용자 지정 — 목업 web/public/mockups/totaldb_mock.html).
-// ① 조회: 국배·국핸디·해배(빈칸은 조건 제외) · 시점 · 폭 · 리그 · 시즌 · 뒤집기, 경기에서 불러오기, 최근 조회
+// ① 조회: 국배·국핸디·해배·해배 평균(12사 평균, 빈칸은 조건 제외) · 시점 · 폭(0~15칸) · 리그 · 시즌 · 뒤집기, 경기에서 불러오기, 최근 조회
 // ② 결과: 찾은 경기 수·정/플 단통·정무/플핸무 당첨·결과 막대, 리그별·시즌별, 경기 목록(줄 누르면 상세보기)
 // 계산은 서버 api/odds_lookup.py.
 import { useEffect, useState } from 'react'
@@ -12,7 +12,10 @@ const FIELDS = [
   ['국배', ['KW', 'KD', 'KL']],
   ['국핸디', ['KHW', 'KHD', 'KHL']],
   ['해배', ['FW', 'FD', 'FL']],
+  // 해배 평균(2026-09-30 사용자 지정) — 스코어맨 12개 배당사 승·무·패 평균(6곳 이상). 12사 자료가 있는 경기만 걸린다.
+  ['해배 평균', ['AW', 'AD', 'AL']],
 ]
+const FIELD_HINT = { '해배 평균': '12개 배당사 평균(6곳 이상 자료가 있는 경기만)' }
 const RT_LABEL = { 1: '핸승', 2: '핸무', 3: '무', 4: '역' }
 const RECENT_KEY = 'betpro_odds_lookup_recent'
 const f2 = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(2))
@@ -23,7 +26,16 @@ function loadRecent() {
   try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') } catch { return [] }
 }
 
+// 채운 칸을 전부 보여 준다 — 해배 평균만 넣은 조회도 '최근 조회'에 남고 서로 구분되게(국배만 보던 예전 방식은
+// 해배 평균만 넣으면 빈 글자가 돼 저장이 안 됐다).
 function oddsText(o) {
+  const parts = FIELDS
+    .filter(([, ks]) => ks.some((k) => o[k]))
+    .map(([lab, ks]) => `${lab === '국배' ? '' : `${lab} `}${ks.map((k) => o[k] || '-').join('/')}`)
+  return parts.join(' · ')
+}
+// 국배 승/무/패 — 화면 곳곳(불러오기 목록 등)에서 쓰던 짧은 표기
+function kText(o) {
   return ['KW', 'KD', 'KL'].map((k) => o[k] || '-').join(' / ')
 }
 
@@ -83,7 +95,7 @@ export default function OddsLookup() {
       if (!r.ready) { setError(r.reason); setRes(null); return }
       setRes({ ...r, q: o, cond: { phase, tick, seasons, flip, n: picked ? picked.size : allLeagues.length } })
       const key = oddsText(o)
-      if (key.replace(/[-/ ]/g, '')) {
+      if (key) {
         const next = [{ o, kh: k }, ...recent.filter((x) => oddsText(x.o) !== key)].slice(0, 6)
         setRecent(next)
         try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)) } catch { /* 저장 불가 */ }
@@ -128,7 +140,7 @@ export default function OddsLookup() {
             <div className="ol-ph"><span>승(홈)</span><span>무</span><span>패(원정)</span></div>
             {FIELDS.map(([lab, ks]) => (
               <div className="ol-row" key={lab}>
-                <label>
+                <label title={FIELD_HINT[lab]}>
                   {lab}
                   {lab === '국핸디' && (
                     <input className="ol-kh" value={kh} placeholder="H" title="핸디 기준점(홈 기준, 예 -1)" onChange={(e) => setKh(e.target.value.replace(/[^0-9.+-]/g, ''))} />
@@ -154,7 +166,7 @@ export default function OddsLookup() {
               </span>
               <span className="ol-k">비슷함 폭</span>
               <select value={tick} onChange={(e) => setTick(Number(e.target.value))}>
-                {[0, 1, 2, 3, 5, 8].map((t) => <option key={t} value={t}>{t === 0 ? '완전 일치(±0칸)' : `±${t}칸`}</option>)}
+                {Array.from({ length: 16 }, (_, t) => t).map((t) => <option key={t} value={t}>{t === 0 ? '완전 일치(±0칸)' : `±${t}칸`}</option>)}
               </select>
             </div>
           </div>
@@ -189,7 +201,7 @@ export default function OddsLookup() {
                 {games.map((g, i) => (
                   <button type="button" key={i} onClick={() => fillFrom(g)}>
                     <span>{g.HT} vs {g.AT} <small>{g.lg} {g.R} · {String(g.DT).slice(3, 8)}</small></span>
-                    <small>{['KW', 'KD', 'KL'].map((k) => f2((phase === 'final' ? g.final : g.init)[k])).join('/')}</small>
+                    <small>{['KW', 'KD', 'KL'].map((k) => f2((phase === 'final' ? g.final : g.init)[k])).join('/')}{(phase === 'final' ? g.final : g.init).AW != null && <> · 평균 {['AW', 'AD', 'AL'].map((k) => f2((phase === 'final' ? g.final : g.init)[k])).join('/')}</>}</small>
                   </button>
                 ))}
               </div>
@@ -201,7 +213,7 @@ export default function OddsLookup() {
           <button type="button" className="ol-btn is-pri" disabled={busy} onClick={() => run()}>{busy ? '조회 중...' : '조회'}</button>
           <button type="button" className="ol-btn" onClick={() => { setOdds(blankOdds()); setKh(''); setRes(null); setError('') }}>초기화</button>
           {recent.length > 0 && <span className="ol-recent"><small>최근 조회</small>{recent.map((x, i) => (
-            <button type="button" key={i} onClick={() => { setOdds(x.o); setKh(x.kh || ''); run(sort, x.o, x.kh || '') }}>{oddsText(x.o)}</button>
+            <button type="button" key={i} onClick={() => { const o = { ...blankOdds(), ...x.o }; setOdds(o); setKh(x.kh || ''); run(sort, o, x.kh || '') }}>{oddsText(x.o)}</button>
           ))}</span>}
         </div>
         {error && <p className="ol-error">{error}</p>}
@@ -213,8 +225,9 @@ export default function OddsLookup() {
           <div className="ol-box-h">
             <span className="ol-tag">②</span><h3>결과 — 이 배당의 과거 경기</h3>
             <small>
-              국배 {oddsText(q)}{q.KHW || q.KHD || q.KHL ? ` · 국핸디 ${['KHW', 'KHD', 'KHL'].map((k) => q[k] || '-').join('/')}` : ''}
-              {q.FW || q.FD || q.FL ? ` · 해배 ${['FW', 'FD', 'FL'].map((k) => q[k] || '-').join('/')}` : ''}
+              {q.KW || q.KD || q.KL ? `국배 ${kText(q)}` : ''}{q.KHW || q.KHD || q.KHL ? ` · 국핸디 ${['KHW', 'KHD', 'KHL'].map((k) => q[k] || '-').join('/')}` : ''}
+              {q.FW || q.FD || q.FL ? `${q.KW || q.KD || q.KL || q.KHW || q.KHD || q.KHL ? ' · ' : ''}해배 ${['FW', 'FD', 'FL'].map((k) => q[k] || '-').join('/')}` : ''}
+              {q.AW || q.AD || q.AL ? `${q.KW || q.KD || q.KL || q.KHW || q.KHD || q.KHL || q.FW || q.FD || q.FL ? ' · ' : ''}해배 평균 ${['AW', 'AD', 'AL'].map((k) => q[k] || '-').join('/')}` : ''}
               {' · '}{res.cond.tick === 0 ? '완전 일치' : `±${res.cond.tick}칸`} · {res.cond.phase === 'final' ? '최신' : '초기'} · {res.cond.n}개 리그{res.cond.flip ? ' · 뒤집기 포함' : ''}
             </small>
           </div>
@@ -268,7 +281,7 @@ export default function OddsLookup() {
               </div>
               <div className="ol-list-wrap">
                 <table className="ol-t ol-list">
-                  <thead><tr><th>날짜</th><th>리그</th><th>경기</th><th>스코어</th><th>국배 승/무/패</th><th>국핸디</th><th>해배 승/무/패</th><th>결과</th></tr></thead>
+                  <thead><tr><th>날짜</th><th>리그</th><th>경기</th><th>스코어</th><th>국배 승/무/패</th><th>국핸디</th><th>해배 승/무/패</th><th>해배 평균 승/무/패</th><th>결과</th></tr></thead>
                   <tbody>
                     {res.rows.map((r, i) => (
                       <tr key={i} onClick={() => setDetail(r)}>
@@ -281,6 +294,7 @@ export default function OddsLookup() {
                         <td>{r.K.map((v, j) => <span key={j}>{j > 0 && ' / '}<Cmp v={v} q={q[['KW', 'KD', 'KL'][j]]} /></span>)}</td>
                         <td>{r.KH !== null && <small className="ol-muted">H{r.KH > 0 ? '+' : ''}{r.KH} </small>}{r.KHx.map((v, j) => <span key={j}>{j > 0 && ' / '}<Cmp v={v} q={q[['KHW', 'KHD', 'KHL'][j]]} /></span>)}</td>
                         <td>{r.F.map((v, j) => <span key={j}>{j > 0 && ' / '}<Cmp v={v} q={q[['FW', 'FD', 'FL'][j]]} /></span>)}</td>
+                        <td>{r.A.map((v, j) => <span key={j}>{j > 0 && ' / '}<Cmp v={v} q={q[['AW', 'AD', 'AL'][j]]} /></span>)}</td>
                         <td><RtBadge label={RT_LABEL[r.RT]} /></td>
                       </tr>
                     ))}
