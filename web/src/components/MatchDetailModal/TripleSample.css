@@ -60,7 +60,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px 10px;
-  align-items: baseline;
+  align-items: center;      /* 제목·탭·메모칸 세로 가운데(2026-09-30 사용자 지정) */
   padding: 6px 0;
   border-top: 2px solid var(--border);
   font-size: 12px;
@@ -68,7 +68,8 @@
   color: var(--text-primary);
 }
 
-.ts-band-head small {
+/* 탭 하나뿐인 표본 라벨(small.ts-tab)은 탭과 같은 12px·색을 써야 해서 이 규칙에서 뺀다 */
+.ts-band-head small:not(.ts-tab) {
   font-size: 11px;
   font-weight: 400;
   color: var(--text-muted);
@@ -187,22 +188,42 @@
   gap: 4px;
 }
 
+/* 탭(2026-09-30 사용자 지정) — 색은 '±N칸' 글자에만(±0~1칸 노랑 · ±2~4칸 초록 · ±5칸 이상 빨강),
+   탭 배경은 글자가 잘 보이는 기본 배경, 선택된 탭은 테두리 색만 바뀐다(안 선택된 탭은 은은한
+   테두리라 선택해도 크기가 안 밀린다). '표본'은 보통 굵기, 건수(예: 1건 (0/1/0/0))는 굵게(b). */
 .ts-tab {
-  padding: 2px 8px;
-  border: 1px solid var(--border);
+  padding: 3px 9px;
+  border: 1.5px solid var(--border);
   border-radius: 6px;
-  background: none;
-  font-size: 11px;
-  color: var(--text-muted);
+  background: var(--bg-input);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
   cursor: pointer;
+}
+
+.ts-tab b {
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .ts-tab.is-on {
   border-color: var(--accent);
-  background: var(--bg-input);
-  font-weight: 700;
   color: var(--text-primary);
 }
+
+.ts-tab-static {
+  display: inline-block;
+  cursor: default;
+}
+
+.ts-k {
+  font-weight: 700;
+}
+
+.ts-k-yellow { color: var(--chip-yellow-fg); }
+.ts-k-green { color: var(--chip-green-fg); }
+.ts-k-red { color: var(--chip-red-fg); }
 
 /* 넓힌 폭 탭에서, 더 좁은 폭(앞 탭) 표본에도 있던 경기 — 테두리 강조 */
 .ts-card.ts-prev {
@@ -221,24 +242,38 @@
   font-weight: 700;
 }
 
-/* 신뢰 체크 — 날짜 옆 체크박스, 체크하면 '신뢰' 글자만 초록 굵게(카드 배경은 그대로) */
-.ts-trust-lab {
+/* 신뢰·비신뢰 체크 — 날짜 옆 체크박스 둘, 체크하면 그 글자만 굵게(신뢰=초록, 비신뢰=빨강,
+   카드 배경은 그대로). 둘은 동시에 체크되지 않는다(2026-09-30 사용자 지정). */
+.ts-trust-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  margin-left: 6px;
+}
+
+.ts-trust-lab,
+.ts-distrust-lab {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-right: auto;
-  margin-left: 6px;
   font-size: 11px;
   color: var(--text-muted);
   cursor: pointer;
 }
 
-.ts-card-top .ts-trust-lab input {
+.ts-card-top .ts-trust-lab input,
+.ts-card-top .ts-distrust-lab input {
   margin: 0;
 }
 
 .ts-card.ts-trust .ts-trust-lab {
   color: var(--chip-green-fg);
+  font-weight: 700;
+}
+
+.ts-card.ts-distrust .ts-distrust-lab {
+  color: var(--chip-red-fg);
   font-weight: 700;
 }
 

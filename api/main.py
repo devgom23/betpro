@@ -1369,6 +1369,40 @@ def save_sample_note(code: str, body: SampleNoteBody, user: dict = Depends(get_c
     return {"ok": True}
 
 
+# 표본 카드 신뢰/비신뢰 체크(2026-09-30 사용자 지정 — DB 저장). 경기 하나 × 카드 하나에 1개.
+SAMPLE_CARD_MARKS = ("trust", "distrust")
+
+
+class SampleCardMarkBody(BaseModel):
+    scope: str = PATHS.SCOPE_MASTER
+    S: Union[str, int, float]
+    R: Union[str, int, float]
+    No: Union[str, int, float, None] = None
+    HT: str
+    AT: str
+    card_key: str
+    mark: Optional[str] = None   # 'trust' / 'distrust' / 비면 체크 해제
+
+
+@app.get("/api/leagues/{code}/sample_card_marks")
+def get_sample_card_marks(code: str, scope: str = PATHS.SCOPE_MASTER, season: str = "", round: str = "",   # noqa: A002
+                          no: str = "", ht: str = "", at: str = "", user: dict = Depends(get_current_user)):
+    _check_league_for(code, scope, user)
+    return {"marks": MYPICKS.list_sample_card_marks(user["username"], code, scope, season, round, no, ht, at)}
+
+
+@app.post("/api/leagues/{code}/sample_card_marks")
+def save_sample_card_mark(code: str, body: SampleCardMarkBody, user: dict = Depends(get_current_user)):
+    _check_league_for(code, body.scope, user)
+    if body.mark and body.mark not in SAMPLE_CARD_MARKS:
+        raise HTTPException(status_code=400, detail=f"알 수 없는 표시: {body.mark}")
+    if not body.card_key.strip():
+        raise HTTPException(status_code=400, detail="카드 키가 비어 있습니다.")
+    MYPICKS.set_sample_card_mark(user["username"], code, body.scope, body.S, body.R, body.No,
+                                 body.HT, body.AT, body.card_key, body.mark or None)
+    return {"ok": True}
+
+
 @app.get("/api/same_odds")
 def same_odds_rounds(rounds: str = "", user: dict = Depends(get_current_user)):
     """회차별 동배당 묶음(국배 기준, 6대리그). rounds=회차키(금요일 YYYY-MM-DD) 쉼표 구분.

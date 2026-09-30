@@ -215,6 +215,11 @@ const RISK_MOVE_COLS = ['WIN_RISK', 'WIN_RISK_F',
 /** 초기 → 최종으로 확률 지표가 움직인 방향. 1=올랐다, -1=내렸다, 0=그대로/값없음. */
 export function riskMoveDir(row, colKey) {
   if (!row || !RISK_MOVE_COLS.includes(colKey)) return 0
+  // 그 확률이 나오는 시장(배당)이 안 움직였으면 화살표를 안 붙인다(2026-09-30 사용자 제보 —
+  // "세리에 6라운드 배변이 없는 행에 아래위 화살표가 있어"). 그 칸은 riskUnmoved 규칙으로
+  // 이미 '-'로 비워지는데, 27개 지표는 초기(업로드 때)와 최종(지금 표본으로 재계산)의 표본
+  // 풀이 달라 배당이 그대로여도 값이 조금 달라질 수 있어 화살표만 따로 떴다.
+  if (riskUnmoved(row, colKey)) return 0
   const a = Number(row[colKey])
   const b = Number(row[FINAL_FIELD[colKey]])
   const blank = (v) => v == null || v === ''

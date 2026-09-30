@@ -258,6 +258,69 @@ def upsert_sample_note(username: str, code: str, scope: str, s: str, r: str, no:
         con.close()
 
 
+def _ensure_sample_card_marks(con) -> None:
+    """상세보기 '표본' 카드의 신뢰/비신뢰 체크(2026-09-30 사용자 지정 — "신뢰/비신뢰는 DB에
+    저장") — 경기 하나 × 표본 카드 하나에 1개. card_key는 화면의 카드 고유키('리그|시즌|라운드|
+    홈|원정')를 그대로 쓴다. 예전엔 브라우저(localStorage)에만 남아 다른 기기·브라우저와 공유가
+    안 되고 나중에 '신뢰한 카드가 실제로 더 맞았나'를 잴 수도 없었다(그래서 DB로 옮겼다).
+    mark: 'trust'(신뢰) 또는 'distrust'(비신뢰) — 둘은 한 카드에 동시에 걸리지 않는다."""
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sample_card_marks (
+            code TEXT NOT NULL, scope TEXT NOT NULL,
+            S TEXT NOT NULL, R TEXT NOT NULL, No TEXT NOT NULL, HT TEXT NOT NULL, AT TEXT NOT NULL,
+            card_key TEXT NOT NULL,
+            mark TEXT NOT NULL,
+            updated_dt TEXT,
+            PRIMARY KEY (code, scope, S, R, No, HT, AT, card_key)
+        )
+        """
+    )
+
+
+def list_sample_card_marks(username: str, code: str, scope: str,
+                           s: str, r: str, no: str, ht: str, at: str) -> dict:
+    """그 경기에서 내가 체크한 표본 카드 전부 — {card_key: 'trust' | 'distrust'}."""
+    con = _connect(username)
+    try:
+        _ensure_sample_card_marks(con)
+        rows = con.execute(
+            "SELECT card_key, mark FROM sample_card_marks "
+            "WHERE code=? AND scope=? AND S=? AND R=? AND No=? AND HT=? AND AT=?",
+            (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at)),
+        ).fetchall()
+        return {row["card_key"]: row["mark"] for row in rows}
+    finally:
+        con.close()
+
+
+def set_sample_card_mark(username: str, code: str, scope: str, s: str, r: str, no: str,
+                         ht: str, at: str, card_key: str, mark) -> None:
+    """mark가 'trust'/'distrust'면 저장(있으면 덮어쓰기 — 신뢰↔비신뢰 전환), 비어 있으면 그 카드의 체크를 지운다."""
+    con = _connect(username)
+    try:
+        _ensure_sample_card_marks(con)
+        key = (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at), card_key)
+        if mark:
+            con.execute(
+                """
+                INSERT INTO sample_card_marks (code, scope, S, R, No, HT, AT, card_key, mark, updated_dt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(code, scope, S, R, No, HT, AT, card_key)
+                DO UPDATE SET mark = excluded.mark, updated_dt = excluded.updated_dt
+                """,
+                (*key, mark),
+            )
+        else:
+            con.execute(
+                "DELETE FROM sample_card_marks WHERE code=? AND scope=? AND S=? AND R=? AND No=? AND HT=? AND AT=? AND card_key=?",
+                key,
+            )
+        con.commit()
+    finally:
+        con.close()
+
+
 def _ensure_season_week_notes(con) -> None:
     """시즌분석 회차 메모 — 시즌 × 회차(회차 첫날 'YYYY-MM-DD')에 1개(2026-09-24 사용자 지정).
     엑셀에 손으로 적던 관찰(플핸데이, 단통방 대세론 등)을 회차마다 남긴다.

@@ -816,10 +816,12 @@
   max-height: none;
 }
 
+/* 제목 줄은 세로 가운데 정렬(2026-09-30 사용자 지정 — 메모 입력칸이 있는 줄에서 제목·칩이 위로
+   쏠려 보임: 글자 밑줄(baseline) 기준이라 30px 메모칸보다 7px 위에 붙었다). */
 .modal-col h3,
 .detail-section h3 {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
   gap: 10px;
   font-size: 13px;
