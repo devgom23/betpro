@@ -32,6 +32,7 @@ export default function HeadToHeadPage({ scope }) {
   const [teamB, setTeamB] = useState('')
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  const [loaded, setLoaded] = useState(false)   // 팀 목록 응답을 받았는지(빈 목록과 '아직 로딩 중'을 구분)
 
   useEffect(() => {
     let cancelled = false
@@ -39,6 +40,7 @@ export default function HeadToHeadPage({ scope }) {
       .get(`/api/teams?scope=${scope}`)
       .then((res) => {
         if (cancelled) return
+        setLoaded(true)
         setTeams(res.teams)
         setTeamA(res.teams[0] ?? '')
         setTeamB(res.teams[1] ?? res.teams[0] ?? '')
@@ -78,7 +80,13 @@ export default function HeadToHeadPage({ scope }) {
   }, [data, teamA, teamB])
 
   if (error) return <p className="error-text">{error}</p>
-  if (!teams.length) return <p className="loading-text">불러오는 중...</p>
+  if (!teams.length) {
+    // 상대전적은 6대리그 합본 기준이라, 6대리그 표가 없는 내 데이터에서는 팀이 비어 있다(2026-09-30
+    // 오른쪽 탭을 내 데이터에서도 보이게 하면서 추가 — 안내 없이 '불러오는 중'만 계속 뜨던 문제).
+    return loaded
+      ? <p className="loading-text">이 데이터에는 상대전적을 볼 경기가 없습니다 — 상대전적은 공식 6대리그 데이터 기준입니다.</p>
+      : <p className="loading-text">불러오는 중...</p>
+  }
 
   return (
     <div>

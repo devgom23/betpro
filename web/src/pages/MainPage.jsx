@@ -24,7 +24,10 @@ import CupCollectButton from '../components/CupCollectButton/CupCollectButton'
 import './MainPage.css'
 
 // 공식 데이터에만 있는 탭들. 내 데이터는 "내가 만든 리그"만 쓰므로 여기 탭은 띄우지 않는다.
-const MASTER_ONLY_TABS = ['season', 'total', 'h2h', 'admin_master', 'admin_accounts']
+// 시즌분석은 공식 데이터에서만. 오른쪽 영역(통합DB·상대전적·마스터관리·계정관리)은 공식/내 데이터
+// 어느 쪽을 보고 있어도 항상 나온다(2026-09-30 사용자 지정 — "언제나 나오게, 오른쪽 영역 전체").
+const MASTER_ONLY_TABS = ['season']
+const ALWAYS_TABS = ['total', 'h2h', 'admin_master', 'admin_accounts']
 
 function formatDateTime(date) {
   if (!date) return '-'
@@ -81,6 +84,7 @@ export default function MainPage() {
   useEffect(() => {
     if (!ready) return
     setActiveTab((cur) => {
+      if (ALWAYS_TABS.includes(cur)) return cur
       if (!isUser && MASTER_ONLY_TABS.includes(cur)) return cur
       if (leagues.some((lg) => lg.code === cur)) return cur
       return leagues[0]?.code ?? ''
@@ -193,36 +197,34 @@ export default function MainPage() {
             </button>
           )}
         </div>
-        {!isUser && (
-          <div className="tab-bar-admin">
-            {user.role === 'admin' && <CupCollectButton />}
-            <button
-              className={activeTab === 'total' ? 'active' : ''}
-              onClick={() => setActiveTab('total')}
-            >
-              통합DB
-            </button>
-            <button className={activeTab === 'h2h' ? 'active' : ''} onClick={() => setActiveTab('h2h')}>
-              상대전적
-            </button>
-            {user.role === 'admin' && (
-              <>
-                <button
-                  className={activeTab === 'admin_master' ? 'active' : ''}
-                  onClick={() => setActiveTab('admin_master')}
-                >
-                  마스터관리
-                </button>
-                <button
-                  className={activeTab === 'admin_accounts' ? 'active' : ''}
-                  onClick={() => setActiveTab('admin_accounts')}
-                >
-                  계정관리
-                </button>
-              </>
-            )}
-          </div>
-        )}
+        <div className="tab-bar-admin">
+          {user.role === 'admin' && <CupCollectButton />}
+          <button
+            className={activeTab === 'total' ? 'active' : ''}
+            onClick={() => setActiveTab('total')}
+          >
+            통합DB
+          </button>
+          <button className={activeTab === 'h2h' ? 'active' : ''} onClick={() => setActiveTab('h2h')}>
+            상대전적
+          </button>
+          {user.role === 'admin' && (
+            <>
+              <button
+                className={activeTab === 'admin_master' ? 'active' : ''}
+                onClick={() => setActiveTab('admin_master')}
+              >
+                마스터관리
+              </button>
+              <button
+                className={activeTab === 'admin_accounts' ? 'active' : ''}
+                onClick={() => setActiveTab('admin_accounts')}
+              >
+                계정관리
+              </button>
+            </>
+          )}
+        </div>
       </nav>
       )}
 
@@ -238,10 +240,10 @@ export default function MainPage() {
         {view === 'archive' && <ArchivePage />}
         {view === 'leagues' && <>
         {!isUser && activeTab === 'season' && <SeasonAnalysisPage />}
-        {!isUser && activeTab === 'total' && <TotalDbPage scope={scope} />}
-        {!isUser && activeTab === 'h2h' && <HeadToHeadPage scope={scope} />}
-        {!isUser && activeTab === 'admin_master' && user.role === 'admin' && <AdminMasterPage />}
-        {!isUser && activeTab === 'admin_accounts' && user.role === 'admin' && <AdminAccountsPage />}
+        {activeTab === 'total' && <TotalDbPage key={scope} scope={scope} />}
+        {activeTab === 'h2h' && <HeadToHeadPage key={scope} scope={scope} />}
+        {activeTab === 'admin_master' && user.role === 'admin' && <AdminMasterPage />}
+        {activeTab === 'admin_accounts' && user.role === 'admin' && <AdminAccountsPage />}
         {isUser && ready && leagues.length === 0 && (
           <div className="no-league-guide">
             <p className="no-league-title">🗂 아직 만든 리그가 없습니다</p>
