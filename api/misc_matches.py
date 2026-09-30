@@ -18,6 +18,7 @@ CLAUDE.md의 '절대 건드리면 안 되는 것' 근처에 얼씬거리지 않�
 """
 import re
 import sqlite3
+import threading
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -288,7 +289,8 @@ def recompute_rt(db: str, code: str) -> dict:
     """이미 저장된 RT를 새 규칙(_rt_from_score, 2026-09-27 정정)으로 다시 계산해 덮어쓴다.
     collect()는 '아직 결과 없는' 경기만 RT를 채우므로(위 루프의 `if not finished`), 규칙이
     바뀌어도 이미 결과가 난 경기의 RT는 저절로 안 고쳐진다 — 한 번은 이 함수로 직접 돌려야 한다."""
-    df = DATA.load_league_df(db, code)
+    # 캐시된 표는 절대 고치지 않는다(CLAUDE.md 3장) — 아래에서 RT를 고친다(2026-09-30 3차 점검).
+    df = DATA.load_league_df(db, code).copy()
     if df.empty:
         return {"checked": 0, "changed": 0}
     changed = 0
@@ -315,15 +317,39 @@ def recompute_rt(db: str, code: str) -> dict:
     return {"checked": int(df["HS"].notna().sum()), "changed": changed}
 
 
+# 판정 표본 기억(2026-09-30 3차 점검) — 같은 배당 조건(q)·같은 표본 풀이면 답이 같은데, 예전엔 목록을
+# 열 때마다 줄마다 다시 찾아 한 번에 401번 조회했다(실측 웜 1.8초). 색인(G)이 새로 만들어지면(리그 저장·
+# 기타경기 결과 수집 등) 기억을 통째로 비운다 — G를 붙잡아 두고 'is'로 같은 색인인지 본다.
+_MEMO_LOCK = threading.Lock()
+_MEMO = {"G": None, "map": {}}
+MEMO_MAX = 50000
+
+
 def _widen_lookup(sources, q, cap=WIDEN_MAX):
     """±0칸부터 표본이 1건 나올 때까지 넓힌다(표본 섹션과 같은 방식) — odds_lookup.lookup은
-    고정 tick만 받으므로 여기서 감싼다."""
+    고정 tick만 받으므로 여기서 감싼다. 해배 평균은 안 쓰므로 그 칸 없는 색인으로 찾는다.
+    돌려주는 값은 사본이다 — 부르는 쪽(sample_detail)이 칸을 더 붙여도 기억한 값은 안 바뀐다."""
+    G = ODDSLOOK._index(sources, with_avg=False)
+    key = (tuple((d, c) for d, _, c, _ in sources), tuple(sorted(q.items())), cap)
+    with _MEMO_LOCK:
+        if _MEMO["G"] is not G:
+            _MEMO["G"], _MEMO["map"] = G, {}
+        hit = _MEMO["map"].get(key)
+    if hit is not None:
+        return dict(hit)
+    res = {"ready": False, "n": 0, "tick": cap}
     for t in range(0, cap + 1):
-        r = ODDSLOOK.lookup(sources, q, "init", t, 0, False, "near")
+        r = ODDSLOOK.lookup(sources, q, "init", t, 0, False, "near", with_avg=False)
         if r.get("ready") and r["n"] > 0:
             r["tick"] = t
-            return r
-    return {"ready": False, "n": 0, "tick": cap}
+            res = r
+            break
+    with _MEMO_LOCK:
+        if _MEMO["G"] is G:
+            if len(_MEMO["map"]) >= MEMO_MAX:
+                _MEMO["map"] = {}
+            _MEMO["map"][key] = res
+    return dict(res)
 
 
 PICK_VERDICT_MAP = {"정무": {"hit": (1, 2), "insure": (3,)}, "플핸무": {"hit": (3, 4), "insure": (2,)}}

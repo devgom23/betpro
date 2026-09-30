@@ -255,14 +255,12 @@ BUSY_WINDOW = 600   # 초 — mb_odds 마지막 저장이 이보다 최근이면
 
 
 def _writing_now(mb_path) -> bool:
+    # 마지막 저장 시각은 MB.mb_state(5초 기억)에서 받는다 — 예전엔 리그 표·상세보기 요청마다 43만 줄에
+    # MAX를 직접 물어 요청당 0.13~0.145초를 썼다(2026-09-30 3차 점검 실측: 리그 표 0.17초 중 0.145초).
     try:
-        con = sqlite3.connect(mb_path, timeout=30)
-        try:
-            last = con.execute("SELECT MAX(updated_dt) FROM mb_odds").fetchone()[0]
-        finally:
-            con.close()
+        last = (MB.mb_state(mb_path) or (0, None))[1]
         return bool(last) and (datetime.now() - datetime.strptime(last, "%Y-%m-%d %H:%M:%S")).total_seconds() < BUSY_WINDOW
-    except (sqlite3.Error, ValueError, TypeError):
+    except (ValueError, TypeError):
         return False
 
 

@@ -75,6 +75,7 @@ def _book_avgs(mb_path):
 
 
 def _build(sources):
+    """리그 기본 색인 — 해배 평균 칸은 없다(_attach_avgs가 따로 붙인다)."""
     frames = []
     for db, scope, code, label in sources:
         d = DATA.load_league_df(db, code)
@@ -90,7 +91,19 @@ def _build(sources):
     G = pd.concat(frames, ignore_index=True)
     for c in COLS + ["HS", "AS", "RT"]:
         G[c] = pd.to_numeric(G[c], errors="coerce") if c in G.columns else np.nan
-    # 해배 평균(12사) — 12사 배당 파일이 있는 경기만 채워진다(없는 경기는 조건에 안 맞는 것으로 본다)
+    # 시즌 순번(리그 안에서) — 최근 N시즌 거르기용
+    G["s_rank"] = 0
+    for code, sub in G.groupby("code"):
+        order = {s: i for i, s in enumerate(sorted(sub["S"].astype(str).unique(), reverse=True))}
+        G.loc[sub.index, "s_rank"] = sub["S"].astype(str).map(order)
+    G["date"] = pd.to_datetime("20" + G["DT"].astype(str).str[:8], format="%Y-%m-%d", errors="coerce")
+    return G
+
+
+def _attach_avgs(base):
+    """기본 색인 사본에 해배 평균(12사) 칸을 붙인다 — 12사 배당 파일이 있는 경기만 채워진다(없는 경기는
+    조건에 안 맞는 것으로 본다). 12사 33만 줄을 읽어 첫 한 번은 수 초 걸린다."""
+    G = base.copy()
     A = np.full((len(G), 3), np.nan)
     EA = np.full((len(G), 3), np.nan)
     keys = [_key(c, s, r, h, a) for c, s, r, h, a in zip(G["code"], G["S"], G["R"], G["HT"], G["AT"])]
@@ -107,13 +120,6 @@ def _build(sources):
                     EA[i] = v["L"]
     G[["AW", "AD", "AL"]] = A
     G[["EAW", "EAD", "EAL"]] = EA
-    G = G.drop(columns=["_mb"])
-    # 시즌 순번(리그 안에서) — 최근 N시즌 거르기용
-    G["s_rank"] = 0
-    for code, sub in G.groupby("code"):
-        order = {s: i for i, s in enumerate(sorted(sub["S"].astype(str).unique(), reverse=True))}
-        G.loc[sub.index, "s_rank"] = sub["S"].astype(str).map(order)
-    G["date"] = pd.to_datetime("20" + G["DT"].astype(str).str[:8], format="%Y-%m-%d", errors="coerce")
     return G
 
 
@@ -124,22 +130,33 @@ def _mb_busy(last):
         return False
 
 
-def _index(sources):
+def _index(sources, with_avg=True):
+    """색인 두 벌 — with_avg=False(기타경기 판정)는 리그 자료만, True(통합DB 배당 조회)는 해배 평균까지.
+    둘을 나눈 이유(2026-09-30 3차 점검): 기타경기는 해배 평균을 안 쓰는데도 12사 33만 줄을 읽느라 첫
+    조회가 7초 늘었고, 12사 백필이 저장될 때마다 기타경기 색인까지 다시 만들어졌다."""
     ltok = tuple((db, code, DATA.tables_token(db, (code,))) for db, _, code, _ in sources)
-    # 12사 배당(해배 평균)이 새로 쌓이면 색인도 다시 만든다 — 파일이 없으면(내 데이터에 12사가 없는 계정) 건드리지 않는다.
-    mbs = tuple((p, MB.mb_state(p)) for p in sorted({_mb_path(db) for db, _, _, _ in sources}) if os.path.exists(p))
-    tok = (ltok, mbs)
     key = tuple((db, code) for db, _, code, _ in sources)
     with _LOCK:
-        hit = _CACHE.get(key)
+        hit = _CACHE.get((key, False))
+        if hit and hit[0] == ltok:
+            base = hit[1]
+        else:
+            base = _build(sources)
+            _CACHE[(key, False)] = (ltok, base)
+        if not with_avg or base is None:
+            return base
+        # 12사 배당(해배 평균)이 새로 쌓이면 다시 붙인다 — 파일이 없으면(내 데이터에 12사가 없는 계정) 건드리지 않는다.
+        mbs = tuple((p, MB.mb_state(p)) for p in sorted({_mb_path(db) for db, _, _, _ in sources}) if os.path.exists(p))
+        tok = (ltok, mbs)
+        hit = _CACHE.get((key, True))
         if hit and hit[0] == tok:
             return hit[1]
         # 12사 배당을 백필이 저장하는 중이면(리그 표는 그대로) 만들어 둔 색인을 그대로 쓴다 — 저장할 때마다
         # 다시 만들면 서버가 그동안 느려진다(triple_sample·book_dir와 같은 사정).
         if hit and hit[0][0] == ltok and any(_mb_busy((st or (0, None))[1]) for _, st in mbs):
             return hit[1]
-        G = _build(sources)
-        _CACHE[key] = (tok, G)
+        G = _attach_avgs(base)
+        _CACHE[(key, True)] = (tok, G)
         return G
 
 
@@ -180,8 +197,9 @@ def _match(G, q, phase, tick, flip):
     return m, used
 
 
-def lookup(sources, q, phase="init", tick=2, seasons=0, flip=False, sort="near"):
-    G = _index(sources)
+def lookup(sources, q, phase="init", tick=2, seasons=0, flip=False, sort="near", with_avg=True):
+    """with_avg=False면 해배 평균 없는 색인을 쓴다 — 결과 rows의 'A'는 전부 빈 값(기타경기 판정용)."""
+    G = _index(sources, with_avg)
     if G is None:
         return {"ready": False, "reason": "조회할 리그 데이터가 없습니다"}
     q = {k: _num(v) for k, v in q.items() if k != "KH"} | {"KH": None if q.get("KH") in (None, "") else float(q["KH"])}

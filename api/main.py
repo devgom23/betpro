@@ -284,11 +284,16 @@ def leagues(scope: str = PATHS.SCOPE_MASTER,
 def dashboard(scope: str = PATHS.SCOPE_MASTER,
               user: dict = Depends(get_current_user)):
     db = _resolve_scope_db(scope, user)
+    # 리그별 현황(경기수·시즌·결과·예정·국배)은 DB가 바뀔 때만 다시 센다 — 예전엔 열 때마다 리그 표마다
+    # COUNT를 돌려 0.2초씩 썼다(2026-09-30 3차 점검). tables=None → 그 DB 어느 표가 바뀌어도 풀린다.
+    rows, total_rows, updated_at = DATA.cached_derive(
+        db, "dashboard",
+        lambda: (PATHS.league_dashboard(db), PATHS.db_total_rows(db), PATHS.get_meta(db, "updated_at")))
     return {
         "scope": scope,
-        "rows": PATHS.league_dashboard(db),
-        "total_rows": PATHS.db_total_rows(db),
-        "updated_at": PATHS.get_meta(db, "updated_at"),
+        "rows": rows,
+        "total_rows": total_rows,
+        "updated_at": updated_at,
         "can_write": PATHS.can_write(scope, user.get("role")),
     }
 
@@ -1552,9 +1557,15 @@ def _direction_samples(db, code, scope, league_df, total_pool, season_cache, row
         db, "sample_prep:league:" + code, lambda: engine._prep_db(league_df), tables=(code,))
     if _is_user_scope(scope):
         total_cache = league_cache
+        card_cols = DATA.cached_derive(
+            db, "sample_cards:league:" + code, lambda: _card_pool_cols(total_pool), tables=(code,))
     else:
         total_cache = DATA.cached_derive(
             db, "sample_prep:total", lambda: engine._prep_db(total_pool), tables=tuple(PATHS.LEAGUES))
+        card_cols = DATA.cached_derive(
+            db, "sample_cards:total", lambda: _card_pool_cols(total_pool), tables=tuple(PATHS.LEAGUES))
+    # 카드 14묶음이 모두 같은 '이 경기 자신' 표시를 쓰므로 요청당 한 번만 만든다
+    card_pre = dict(card_cols, self_mask=_card_self_mask(total_pool, card_cols, code, season, round, no))
 
     def entry(side, ind, total_ind, mirrored, kind, fav_code):
         src = mirror if mirrored else row_dict
@@ -1568,7 +1579,7 @@ def _direction_samples(db, code, scope, league_df, total_pool, season_cache, row
             "side": side, "mirrored": mirrored, "kind": kind, "fav_code": fav_code,
             "total": total, "league": league,
             "season": engine.get_samples_fast(season_cache, ind, src),
-            "cards": _season_sample_match_cards(total_pool, code, season, round, no, kind, fav_code, src),
+            "cards": _season_sample_match_cards(total_pool, code, season, round, no, kind, fav_code, src, card_pre),
             "odds": {k: _json_num(src.get(k)) for k in _SAMPLE_ODDS_KEYS},
         }
 
@@ -1604,7 +1615,35 @@ def _direction_samples(db, code, scope, league_df, total_pool, season_cache, row
     return out
 
 
-def _season_sample_match_cards(pool, code, season, round, no, kind, fav_code, row):  # noqa: A002
+_CARD_ODDS_COLS = ("KW", "KL", "KD", "KHW", "KHD", "KHL", "FW", "FD", "FL")
+
+
+def _card_pool_cols(pool):
+    """표본 카드용 — 풀(6대리그 전체 3.6만 경기)의 배당 9칸을 숫자·소수 둘째 자리로 바꾼 것과 결과 있는
+    경기 표시. 경기와 무관해 리그 표가 바뀔 때만 다시 만든다(2026-09-30 3차 점검 — 예전엔 상세보기를 열
+    때마다 카드 14묶음이 각자 이걸 새로 만들어 season_sample 0.55초 중 대부분을 썼다).
+    ⚠ 캐시에 들어가는 값이다 — 받는 쪽은 비교·골라내기만 하고 고치지 않는다."""
+    def _round2(colname):
+        if colname not in pool.columns:
+            return pd.Series(np.nan, index=pool.index)
+        return pd.to_numeric(pool[colname], errors="coerce").round(2)
+    out = {c: _round2(c) for c in _CARD_ODDS_COLS}
+    out["rt_known"] = pd.to_numeric(pool["RT"], errors="coerce").isin([1, 2, 3, 4])
+    out["S"] = pool["S"].astype(str)
+    out["R"] = pool["R"].astype(str)
+    out["No"] = pd.to_numeric(pool["No"], errors="coerce")
+    return out
+
+
+def _card_self_mask(pool, cols, code, season, round, no):  # noqa: A002
+    """풀에서 '이 경기 자신' — 카드에서 뺀다."""
+    m = (cols["S"] == str(season)) & (cols["R"] == str(round)) & (cols["No"] == no)
+    if "Source_League" in pool.columns:
+        m &= pool["Source_League"] == code
+    return m
+
+
+def _season_sample_match_cards(pool, code, season, round, no, kind, fav_code, row, pre=None):  # noqa: A002
     """'정배·플핸 시즌표'·'승+패 시즌표' 옆 카드 목록용 — season_sample이 표본 '건수'만
     셀 때 쓰는 engine.get_samples_fast의 매칭 조건을 여기서 그대로 다시 적어(행 단위
     불리언 마스크), 실제로 어느 경기들이 그 건수에 들어갔는지 최신순 5건만 뽑는다.
@@ -1626,14 +1665,13 @@ def _season_sample_match_cards(pool, code, season, round, no, kind, fav_code, ro
             return None
         return f if f > 0 else None
 
-    def _round2(colname):
-        if colname not in pool.columns:
-            return pd.Series(np.nan, index=pool.index)
-        return pd.to_numeric(pool[colname], errors="coerce").round(2)
-
-    cKW, cKL, cKD = _round2("KW"), _round2("KL"), _round2("KD")
-    cKHW, cKHD, cKHL = _round2("KHW"), _round2("KHD"), _round2("KHL")
-    cFW, cFD, cFL = _round2("FW"), _round2("FD"), _round2("FL")
+    # pre = _direction_samples가 캐시에서 넘긴 사전 계산(_card_pool_cols + self_mask). 없으면 여기서 만든다.
+    if pre is None:
+        pre = _card_pool_cols(pool)
+        pre = dict(pre, self_mask=_card_self_mask(pool, pre, code, season, round, no))
+    cKW, cKL, cKD = pre["KW"], pre["KL"], pre["KD"]
+    cKHW, cKHD, cKHL = pre["KHW"], pre["KHD"], pre["KHL"]
+    cFW, cFD, cFL = pre["FW"], pre["FD"], pre["FL"]
 
     # 정배 카드가 '완전 동일 배당'(정배 쪽 하나만 요구하는 표본 조건과 달리 6칸 전부가
     # 이 경기와 같은 경우)인지 나중에 가려내려고 둔다 — kind가 'fav'가 아니면 전부 None.
@@ -1685,23 +1723,10 @@ def _season_sample_match_cards(pool, code, season, round, no, kind, fav_code, ro
             return {"total": 0, "matches": []}
         cond = (cFW == fw) & (cFD == fd) & (cFL == fl)
 
-    if "Source_League" in pool.columns:
-        self_mask = (
-            (pool["Source_League"] == code)
-            & (pool["S"].astype(str) == str(season))
-            & (pool["R"].astype(str) == str(round))
-            & (pd.to_numeric(pool["No"], errors="coerce") == no)
-        )
-    else:
-        self_mask = (
-            (pool["S"].astype(str) == str(season))
-            & (pool["R"].astype(str) == str(round))
-            & (pd.to_numeric(pool["No"], errors="coerce") == no)
-        )
-
+    self_mask = pre["self_mask"]
     # 위 시즌표 숫자(핸승/핸무/무/역 합)는 RT가 있는 경기만 센다(engine.get_samples_fast가
     # cRT[m]==1~4로만 카운트) — 카드 건수도 여기 맞춰 RT 없는(아직 안 치러진) 경기는 뺀다.
-    rt_known = pd.to_numeric(pool["RT"], errors="coerce").isin([1, 2, 3, 4])
+    rt_known = pre["rt_known"]
     sub = pool[cond.fillna(False) & ~self_mask & rt_known]
     total = len(sub)
     if total == 0:
@@ -4498,7 +4523,9 @@ def refresh_final_odds(code: str, body: RefreshFinalOddsBody, user: dict = Depen
         raise HTTPException(status_code=400,
                             detail="최신배당 불러오기는 시즌·라운드를 하나씩 골라야 합니다(전체 불가).")
 
-    df = DATA.load_league_df(db, code)
+    # 캐시된 표는 절대 고치지 않는다(CLAUDE.md 3장) — 아래에서 칸을 붙이고 최신배당을 채운다. 사본 없이 고치면
+    # 수집이 중간에 실패해 저장을 못 할 때 DB와 다른 값이 화면에 남는다(2026-09-30 3차 점검).
+    df = DATA.load_league_df(db, code).copy()
     if df.empty or not {"S", "R", "HT", "AT", "DT"}.issubset(df.columns):
         raise HTTPException(status_code=400, detail="이 리그에 저장된 경기가 없습니다.")
 
@@ -4920,7 +4947,9 @@ def edit_rows_save(code: str, body: EditRowsBody, user: dict = Depends(get_curre
                                     detail=f"{field}는 0 이상이어야 합니다: {val!r}")
 
     db = _resolve_scope_db(body.scope, user)
-    df = DATA.load_league_df(db, code)
+    # 캐시된 표는 절대 고치지 않는다(CLAUDE.md 3장) — 아래에서 칸 형식을 바꾸고 값을 넣는다. 사본 없이 고치면
+    # 저장 전 검사에서 멈출 때 바뀐 값이 캐시에 남는다(2026-09-30 3차 점검).
+    df = DATA.load_league_df(db, code).copy()
     if df.empty:
         raise HTTPException(status_code=404, detail="데이터가 없습니다.")
     # 입력 대상 칸을 전부 숫자 컬럼으로 강제한다 — 한 번도 값이 안 들어간 컬럼은 전부 NULL이라

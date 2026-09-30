@@ -408,9 +408,17 @@ def ensure_master_db() -> str:
     return p
 
 
+# 이 프로세스에서 스키마 보장을 이미 마친 predlog 경로 — 내픽·별표를 읽는 요청마다 CREATE TABLE·
+# PRAGMA table_info·ALTER 검사를 새로 하던 것(상세보기 한 번에 13회)을 파일당 한 번으로 줄인다
+# (2026-09-30 3차 점검). 파일이 지워지면(계정 정리 등) exists 검사에 걸려 다시 만든다.
+_PREDLOG_READY = set()
+
+
 def ensure_predlog_db(username: str) -> str:
     """개인 예측로그 DB 존재 + 스키마 보장."""
     p = get_predlog_db(username)
+    if p in _PREDLOG_READY and os.path.exists(p):
+        return p
     os.makedirs(os.path.dirname(p), exist_ok=True)
     con = sqlite3.connect(p)
     try:
@@ -502,6 +510,7 @@ def ensure_predlog_db(username: str) -> str:
         con.commit()
     finally:
         con.close()
+    _PREDLOG_READY.add(p)
     return p
 
 

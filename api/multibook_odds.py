@@ -33,18 +33,40 @@ CREATE TABLE IF NOT EXISTS "{TABLE}" (
 """
 
 
-_STATE_MEMO = {}   # 경로 → (확인 시각, (줄 수, 마지막 저장 시각))
-STATE_TTL = 5      # 초
+_STATE_MEMO = {}   # 경로 → (확인 시각, 파일 서명, (줄 수, 마지막 저장 시각))
+STATE_TTL = 5      # 초 — 파일 서명을 못 읽을 때만 쓰는 예전 방식의 재사용 시간
+STATE_MAX_AGE = 60  # 초 — 파일 서명이 그대로여도 이보다 오래되면 한 번은 다시 센다(안전망)
+
+
+def _file_sig(path):
+    """DB 본파일과 WAL 파일의 (수정 시각, 크기) — 둘 다 그대로면 그 사이 아무도 이 파일에 안 썼다."""
+    sig = []
+    for f in (path, path + "-wal"):
+        try:
+            st = os.stat(f)
+            sig.append((st.st_mtime_ns, st.st_size))
+        except OSError:
+            sig.append(None)
+    return tuple(sig)
 
 
 def mb_state(mb_path: str):
     """12사 배당 표(mb_odds)의 (줄 수, 마지막 저장 시각) — 없으면 None.
-    이 표는 33만 줄이라 COUNT/MAX가 100ms쯤 걸리는데, 상세보기를 열 때마다 두 곳(표본·배당사별 방향)이
-    '다시 만들 때가 됐나' 확인하느라 매번 물었다(2026-09-26 실측: 표본 조회 114ms 중 106ms). 5초 안에는 앞선 답을 재사용한다."""
+    이 표는 43만 줄이라 COUNT/MAX에 0.15~0.49초가 걸린다(MAX(updated_dt)가 대부분, 2026-09-30 실측).
+    예전엔 5초만 기억해서, 5초 넘게 쉬었다 상세보기를 열면 거의 매번 이 값을 다시 셌다(화면에서 첫 열람
+    0.46초 · 곧바로 다시 열면 0.06초). 이제는 파일(본파일+WAL)의 수정 시각·크기가 그대로면 앞선 답을 쓴다.
+    ⚠ 파일 시각은 '다시 세 볼까'를 정하는 문턱일 뿐이고, 바뀌었는지는 여전히 표 내용(줄 수·저장 시각)으로
+    판정한다 — 우리 계산 결과(book_dir의 mb_dir)가 같은 파일에 써도 한 번 다시 세고 끝난다(내용이 같으니
+    다시 계산하지 않는다). 시각 자체를 판정 기준으로 쓰던 예전 무한 재계산 사고(book_dir._token 주석)와 다르다."""
     now = time.time()
+    sig = _file_sig(mb_path)   # 세기 전에 잡는다 — 세는 사이에 누가 쓰면 다음 확인에서 다시 센다
     hit = _STATE_MEMO.get(mb_path)
-    if hit and now - hit[0] < STATE_TTL:
-        return hit[1]
+    if hit:
+        checked, old_sig, val = hit
+        if sig[0] is not None and old_sig == sig and now - checked < STATE_MAX_AGE:
+            return val
+        if sig[0] is None and now - checked < STATE_TTL:
+            return val
     try:
         con = sqlite3.connect(mb_path, timeout=30)
         try:
@@ -53,7 +75,7 @@ def mb_state(mb_path: str):
             con.close()
     except sqlite3.Error:
         val = None
-    _STATE_MEMO[mb_path] = (now, val)
+    _STATE_MEMO[mb_path] = (now, sig, val)
     return val
 
 
