@@ -258,6 +258,47 @@ def upsert_sample_note(username: str, code: str, scope: str, s: str, r: str, no:
         con.close()
 
 
+def sync_auto_sample_notes(username: str, scope: str, notes: dict, prefix: str) -> int:
+    """표본 의견 칸에 자동 글(벳프의견)을 맞춘다 — api/sample_dir.py sync_notes가 부른다(2026-10-01).
+    notes: {(code, S, R, No, HT, AT): {kind: 글}} — 키는 이미 normalize된 값.
+    쓰는 칸: 메모가 비었거나 prefix로 시작하는 칸 중 방향(direction)을 직접 고르지 않은 칸, 글이 바뀐 것만.
+    사용자가 직접 다른 글로 바꾼 칸·방향을 직접 고른 칸은 그대로 둔다. 바꾼 칸 수를 돌려준다."""
+    if not notes:
+        return 0
+    con = _connect(username)
+    try:
+        _ensure_sample_notes(con)
+        have = {}
+        for row in con.execute("SELECT code, S, R, No, HT, AT, kind, memo, direction FROM sample_notes "
+                               "WHERE scope=?", (scope,)):
+            have[(row["code"], row["S"], row["R"], row["No"], row["HT"], row["AT"], row["kind"])] = \
+                (row["memo"], row["direction"])
+        data = []
+        for key, by_kind in notes.items():
+            for kind, text in by_kind.items():
+                memo, direction = have.get((*key, kind), (None, None))
+                if direction:
+                    continue                                        # 방향을 직접 고른 칸
+                if memo and memo.strip() and not memo.startswith(prefix):
+                    continue                                        # 직접 쓴 다른 글
+                if memo == text:
+                    continue                                        # 이미 같은 글
+                code, s, r, no, ht, at = key
+                data.append((code, scope, s, r, no, ht, at, kind, text))
+        if data:
+            con.executemany(
+                """
+                INSERT INTO sample_notes (code, scope, S, R, No, HT, AT, kind, memo, updated_dt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(code, scope, S, R, No, HT, AT, kind)
+                DO UPDATE SET memo = excluded.memo, updated_dt = excluded.updated_dt
+                """, data)
+            con.commit()
+        return len(data)
+    finally:
+        con.close()
+
+
 def _ensure_sample_card_marks(con) -> None:
     """상세보기 '표본' 카드의 신뢰/비신뢰 체크(2026-09-30 사용자 지정 — "신뢰/비신뢰는 DB에
     저장") — 경기 하나 × 표본 카드 하나에 1개. card_key는 화면의 카드 고유키('리그|시즌|라운드|

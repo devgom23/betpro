@@ -138,18 +138,78 @@ def total_cache(db):
         tables=tuple(PATHS.LEAGUES))
 
 
-def live_judgment(row_dict: dict, cache) -> dict:
-    """결과 없는 경기용 — 화면 표본 표 숫자 그대로 판정. {kind: (라벨, t)}."""
+def live_judgment(row_dict: dict, cache, detail: dict | None = None) -> dict:
+    """결과 없는 경기용 — 화면 표본 표 숫자 그대로 판정. {kind: (라벨, t)}.
+    detail을 주면 {kind: (위 줄 t, 아래 줄 t)}를 채워 준다(벳프의견 글의 '엇갈림' 설명용)."""
     specs = section_specs(row_dict)
     mir = mirror_row(row_dict)
     out = {}
     for kind in KINDS:
         if kind not in specs:
             out[kind] = ("표본없음", None)
+            if detail is not None:
+                detail[kind] = (None, None)
             continue
         self_ind, mir_ind = specs[kind]
-        out[kind] = judge(stored_counts(row_dict, self_ind),
-                          engine.get_samples_fast(cache, mir_ind, mir))
+        sv, mv = stored_counts(row_dict, self_ind), engine.get_samples_fast(cache, mir_ind, mir)
+        out[kind] = judge(sv, mv)
+        if detail is not None:
+            detail[kind] = (flow_t(sv), flow_t(mv))
+    return out
+
+
+# ── 벳프의견 — 표본 의견 칸에 판정 이유를 자동으로 적는다(2026-10-01 사용자 지정) ──────────
+# "판정의 이유를 바로 이해할 수 있게 30자 내외로 · 각 선택값별로 · 이번 라운드부터 · 칸에 글이 있으면
+#  지우고 써줘 · '벳프의견 : 블라블라'". 결정(사용자 선택):
+#   ① 자동 갱신 — 배당이 새로 등록돼 판정이 다시 계산될 때마다 글도 다시 쓴다(CLAUDE.md 4-1).
+#   ② 이 머리말로 시작하는 칸만 덮어쓴다 — 사용자가 직접 다른 글로 바꾼 칸은 건드리지 않는다.
+#   ③ 결과가 들어온 경기는 더 안 쓴다(그때 글로 고정) · 방향을 직접 고른 칸은 자동 글을 쓰지 않는다.
+# 대상: 결과 없는 공식 6대리그 경기 × 관리자 계정(admin)의 표본 의견(my_picks.sample_notes).
+NOTE_PREFIX = "벳프의견 : "
+
+
+def _num_txt(t) -> str:
+    return f"{t:.2f}".replace("-", "−")
+
+
+def note_text(label: str, t, self_t=None, mirror_t=None) -> str:
+    """판정 라벨 → 사람이 바로 읽는 이유 한 줄(기준 수치는 위 BLUE_T 등과 같은 값)."""
+    if label == "표본없음" or t is None:
+        return NOTE_PREFIX + "표본이 0건이라 판단할 수 없음"
+    if label == "엇갈림":
+        # 소수 둘째 자리에서 0.00으로 보이는 값은 '정배 쪽(0.00)'이 어색해 '평균'이라 쓴다
+        side = lambda v: "평균" if abs(v) < 0.005 else ("정배" if v > 0 else "플핸")   # noqa: E731
+        part = lambda v: "평균(0.00)" if abs(v) < 0.005 else f"{side(v)} 쪽({_num_txt(v)})"   # noqa: E731
+        return NOTE_PREFIX + f"위 줄은 {part(self_t)}, 아래 줄은 {part(mirror_t)}으로 갈려 방향 없음"
+    if label == "블루":
+        return NOTE_PREFIX + f"정배 쪽 쏠림이 강함 (t {_num_txt(t)}, 블루 기준 {_num_txt(BLUE_T)}↑)"
+    if label == "약블루":
+        return NOTE_PREFIX + f"정배 쪽이지만 쏠림이 약함 (t {_num_txt(t)}, 블루 기준 {_num_txt(BLUE_T)}에 모자람)"
+    if label == "몰라":
+        if t >= 0:
+            return NOTE_PREFIX + f"정배 쪽이지만 {_num_txt(t)}로 약블루 기준({UNKNOWN_HI:g})에 모자람"
+        return NOTE_PREFIX + f"플핸 쪽이지만 {_num_txt(t)}로 약레드 기준({_num_txt(UNKNOWN_LO)})에 못 미침"
+    if label == "약레드":
+        return NOTE_PREFIX + f"플핸 쪽이지만 쏠림이 약함 (t {_num_txt(t)}, 레드 기준 {_num_txt(RED_T)}에 모자람)"
+    return NOTE_PREFIX + f"플핸 쪽 쏠림이 강함 (t {_num_txt(t)}, 레드 기준 {_num_txt(RED_T)}↓)"
+
+
+def _note_users() -> list:
+    """벳프의견을 적을 계정 — 관리자(admin) 계정 중 개인 폴더가 있는 것."""
+    try:
+        import betpro_auth as AUTH
+        admins = {u["username"] for u in AUTH.list_users(PATHS.get_auth_db()) if u.get("role") == "admin"}
+    except Exception:  # noqa: BLE001 — 계정 DB를 못 읽으면 이번엔 건너뛴다(판정 저장은 그대로)
+        return []
+    return [u for u in PATHS.list_usernames() if u in admins]
+
+
+def sync_notes(notes: dict, users=None) -> dict:
+    """notes: {(code,S,R,No,HT,AT): {kind: 글}} → 각 계정의 표본 의견 칸에 반영. {계정: 바꾼 칸 수}."""
+    from my_picks import sync_auto_sample_notes
+    out = {}
+    for u in (users if users is not None else _note_users()):
+        out[u] = sync_auto_sample_notes(u, PATHS.SCOPE_MASTER, notes, NOTE_PREFIX)
     return out
 
 
@@ -305,11 +365,13 @@ def refresh(db=None) -> dict:
     cache = None
     asof = None
     items = []
+    notes = {}        # 결과 없는 경기의 벳프의견 글(아래 sync_notes)
     n_live = n_lock = n_asof = 0
     for code in PATHS.LEAGUES:
         df = DATA.load_league_df(db, code)
         if df.empty:
             continue
+        latest_s = max(df["S"].astype(str)) if "S" in df.columns else None
         for r in df.to_dict("records"):
             key = _key(code, r)
             finished = _pos(r.get("RT")) in (1.0, 2.0, 3.0, 4.0)
@@ -328,13 +390,24 @@ def refresh(db=None) -> dict:
                 continue
             if cache is None:
                 cache = total_cache(db)
-            vals = live_judgment(r, cache)
+            detail = {}
+            vals = live_judgment(r, cache, detail)
+            # 벳프의견은 '아직 안 치른 이번 시즌 경기'만 — 결과 칸이 비어 있어야 한다. 취소(5)·연기(6)로
+            # 결과가 적힌 경기(19-20 코로나 중단 시즌 등)는 판정 계산에선 '결과 없음'으로 남지만 글은 안 쓴다
+            # (2026-10-01 — 처음엔 이 구분이 없어 19-20 시즌 175경기에 글이 들어갔다, 되돌림).
+            if latest_s and str(r.get("S")) == latest_s and pd.isna(r.get("RT")):
+                notes[key] = {k: note_text(lab, t, *detail.get(k, (None, None))) for k, (lab, t) in vals.items()}
             if not old or old[1] != {k: (lab, None if t is None else round(float(t), 4))
                                      for k, (lab, t) in vals.items()}:
                 items.append((key, vals, 0, "live"))
                 n_live += 1
     _upsert(db, items)
-    return {"live": n_live, "locked": n_lock, "asof": n_asof}
+    # 판정이 안 바뀌었어도 매번 맞춰 본다 — 첫 실행·사용자가 칸을 비운 경우도 채운다(바뀐 칸만 쓴다).
+    try:
+        written = sync_notes(notes)
+    except Exception as e:  # noqa: BLE001 — 의견 글 실패가 시스템 판정 저장을 막지 않게
+        written = {"error": f"{type(e).__name__}: {e}"}
+    return {"live": n_live, "locked": n_lock, "asof": n_asof, "notes": written}
 
 
 # ── 뒤에서 자동으로 돌리기(axis_stats.py와 같은 꼴) ──────────────────────────
