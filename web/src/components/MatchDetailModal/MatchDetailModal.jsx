@@ -5188,6 +5188,22 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
   // 요소가 아니라 전체 modal-columns 크기 변화를 관찰한다.
   const sampleSectionRef = useRef(null)
   const cardRef = useRef(null)   // 스샷저장이 통째로 찍을 상세보기 카드
+
+  // 오른쪽 위 버튼(아카이브·스샷저장·✕)을 아래 내용 격자의 오른쪽 끝에 맞춘다(2026-10-01 사용자 지정).
+  // 내용은 안쪽 스크롤 영역(.detail-modal-scroll) 안에 있어 스크롤바가 생기면 그 폭만큼 왼쪽으로 밀리는데,
+  // 위 버튼은 스크롤 영역 밖이라 그걸 몰라 ✕가 내용보다 튀어나왔다. 스크롤바 폭을 재서 CSS 변수
+  // (--detail-sbw)로 넘기고 CSS가 그만큼 안쪽으로 당긴다. 스크롤바가 생기고 사라질 때(내용 길이가 바뀔 때)
+  // 영역의 안쪽 폭이 바뀌므로 ResizeObserver로 따라간다.
+  useEffect(() => {
+    const card = cardRef.current
+    const scroller = card?.querySelector('.detail-modal-scroll')
+    if (!card || !scroller) return undefined
+    const sync = () => card.style.setProperty('--detail-sbw', `${scroller.offsetWidth - scroller.clientWidth}px`)
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(scroller)
+    return () => ro.disconnect()
+  }, [])
   const shootingRef = useRef(false)
   const h2hSectionRef = useRef(null)
   const columnsRef = useRef(null)
