@@ -5412,61 +5412,35 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
 
         {/* 표본 — 12개 배당사 바로 아래(2026-09-26 사용자 지정). 12사 평균·국배 승·패가 비슷한 과거 경기를
             결과별 4칸으로. 산출 방법은 제목 옆 ? 도움말, 제목 옆 입력칸은 같은 표본 메모(kind='triple'). */}
+        {/* 표본 — 초기·배변 한 번에 보기(2026-10-04 사용자 지정 A안 — 예전엔 '초기 표본'·'배변 표본' 두 섹션).
+            의견칸은 제목 옆(triple) · 같은 리그(triple_same) · 통합(triple_other) 각 1개 — 예전 '표본' 칸의 저장 종류 그대로.
+            (예전 배변 전용 칸 triple_f · triple_f_same · triple_f_other는 화면에서 뺐다 — 거기 쓴 글은 DB에 남아 있다.) */}
         <TripleSampleSection
           code={code}
           scope={scope}
           row={row}
-          noteSlot={sampleNotes !== undefined ? (
-            <SampleNoteInput
+          noteSlots={sampleNotes !== undefined ? {
+            // 제목 옆 의견칸도 하나만(2026-10-04 사용자 지정) — 예전 '표본' 칸(triple) 그대로. 배변 쪽 칸(triple_f)은 화면에서만
+            // 뺐다 — 거기 이미 쓴 글은 DB에 그대로 남아 있다(사라진 게 아님).
+            title: (
+              <SampleNoteInput
               value={sampleNotes?.triple?.memo}
               onSave={(memo) => saveSampleNote('triple', { memo: memo || null })}
               placeholder="우선순위 1. 같은리그 2. 최신순 3. 일치순"
             />
-          ) : null}
-          sameNoteSlot={sampleNotes !== undefined ? (
-            <SampleNoteInput
+            ),
+            // 같은 리그·통합 영역 의견칸은 하나씩(2026-10-04 사용자 지정) — 초기·배변 공통, 기존 저장 종류(triple_same · triple_other) 그대로.
+            same: <SampleNoteInput
               value={sampleNotes?.triple_same?.memo}
               onSave={(memo) => saveSampleNote('triple_same', { memo: memo || null })}
-              placeholder="같은 리그 표본 의견"
-            />
-          ) : null}
-          otherNoteSlot={sampleNotes !== undefined ? (
-            <SampleNoteInput
+              placeholder="표본의견"
+            />,
+            other: <SampleNoteInput
               value={sampleNotes?.triple_other?.memo}
               onSave={(memo) => saveSampleNote('triple_other', { memo: memo || null })}
-              placeholder="통합 표본 의견"
-            />
-          ) : null}
-        />
-
-        {/* 배변 표본 — 초기 표본 바로 아래(2026-10-04 사용자 지정). 같은 컴포넌트에 phase만 다르다.
-            메모는 초기 표본과 따로 저장한다(sample_notes kind = triple_f · triple_f_same · triple_f_other). */}
-        <TripleSampleSection
-          code={code}
-          scope={scope}
-          row={row}
-          phase="final"
-          noteSlot={sampleNotes !== undefined ? (
-            <SampleNoteInput
-              value={sampleNotes?.triple_f?.memo}
-              onSave={(memo) => saveSampleNote('triple_f', { memo: memo || null })}
-              placeholder="배변 표본에 대한 의견"
-            />
-          ) : null}
-          sameNoteSlot={sampleNotes !== undefined ? (
-            <SampleNoteInput
-              value={sampleNotes?.triple_f_same?.memo}
-              onSave={(memo) => saveSampleNote('triple_f_same', { memo: memo || null })}
-              placeholder="같은 리그 배변 표본 의견"
-            />
-          ) : null}
-          otherNoteSlot={sampleNotes !== undefined ? (
-            <SampleNoteInput
-              value={sampleNotes?.triple_f_other?.memo}
-              onSave={(memo) => saveSampleNote('triple_f_other', { memo: memo || null })}
-              placeholder="통합 배변 표본 의견"
-            />
-          ) : null}
+              placeholder="표본의견"
+            />,
+          } : null}
         />
 
         {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,

@@ -329,3 +329,127 @@
   font-size: 11px;
   font-weight: 700;
 }
+
+/* ── 초기·배변 한 번에 보기(A안, 2026-10-04) ── 초기 = 보라 · 배변 = 주황(카드 위 꼬리표와 왼쪽 띠) */
+.ts-title-sub {
+  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.ts-note-slot {
+  display: contents;
+}
+
+.ts-sum {
+  width: 100%;
+  margin: 10px 0 8px;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ts-sum th,
+.ts-sum td {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.ts-sum th {
+  background: var(--bg-surface-2);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.ts-sum td.l {
+  text-align: left;
+}
+
+.ts-sum tr.ts-sum-total td {
+  background: var(--bg-surface-2);
+}
+
+.ts-cmp-up {
+  color: var(--chip-red-fg);
+}
+
+.ts-cmp-down {
+  color: var(--chip-blue-fg);
+}
+
+.ts-view-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ts-view-seg {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+
+.ts-view-seg button {
+  padding: 4px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ts-view-seg button.is-on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ts-phase-tabs {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.ts-cmp-tag {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ts-phase-init .ts-cmp-tag,
+.ts-cmp-init .ts-cmp-tag,
+.ts-cmp-tag.ts-cmp-init-c {
+  color: var(--chip-purple-fg);
+}
+
+.ts-phase-final .ts-cmp-tag,
+.ts-cmp-final .ts-cmp-tag,
+.ts-cmp-tag.ts-cmp-final-c {
+  color: var(--warning-text);
+}
+
+.ts-cmp-item {
+  display: grid;
+  gap: 2px;
+}
+
+.ts-cmp-init .ts-card {
+  box-shadow: inset 3px 0 0 var(--chip-purple-fg);
+}
+
+.ts-cmp-final .ts-card {
+  box-shadow: inset 3px 0 0 var(--warning-text);
+}
+
+/* 이번 경기 줄 — 한 줄 고정(2026-10-04 사용자 지정 "한 줄로"). 넘치면 줄바꿈 대신 이 줄만 가로 스크롤 */
+.ts-ref.ts-ref-line {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  white-space: nowrap;
+}
