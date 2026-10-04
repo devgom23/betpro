@@ -849,6 +849,7 @@ def _queue_league_books(scope: str, user: dict, code: str, keys: list[tuple]) ->
 @app.get("/api/triple_sample")
 def triple_sample(code: str, S: str, R: str, HT: str, AT: str,
                   scope: str = PATHS.SCOPE_MASTER,
+                  phase: str = "init",
                   user: dict = Depends(get_current_user)):
     """상세보기 '표본' 섹션 — 12사 평균 승·패 + 국배 승·패가 둘 다 비슷한 과거 경기(위=같은 리그,
     아래=다른 리그 — 폭은 ±0칸부터 0건이면 1칸씩 넓힘). 계산·기준은 api/triple_sample.py. 공식 6대리그만(12사 배당이 거기만 있다)."""
@@ -857,10 +858,10 @@ def triple_sample(code: str, S: str, R: str, HT: str, AT: str,
         # 내 데이터 K1·K2(2026-09-27) — 그 계정 user.db와 그 계정 multibook.db로. 12사 과거 배당이
         # 쌓이기 전에는 국배만으로 찾는다(triple_sample.query의 use_books).
         return TRIPLE.query(_resolve_scope_db(scope, user), code, S, R, HT, AT,
-                            codes=TRIPLE.USER_CODES, mb_path=MBODDS.db_path_for(scope, user["username"]))
+                            codes=TRIPLE.USER_CODES, mb_path=MBODDS.db_path_for(scope, user["username"]), phase=phase)
     if scope != PATHS.SCOPE_MASTER or code not in PATHS.VALID_LEAGUES:
         return {"ready": False, "reason": "공식 6대리그와 내 데이터 K1·K2에서만 표본을 냅니다"}
-    return TRIPLE.query(PATHS.get_master_db(), code, S, R, HT, AT)
+    return TRIPLE.query(PATHS.get_master_db(), code, S, R, HT, AT, phase=phase)
 
 
 def _lookup_sources(user: dict, leagues: str = "") -> list:
@@ -1316,7 +1317,7 @@ def save_season_note(code: str, body: SeasonNoteBody, user: dict = Depends(get_c
 
 
 # 상세보기 표본 박스 7개 제목 옆 메모(2026-09-15) — 경기 하나 × 표본 박스 하나에 1개.
-SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl", "same_odds", "books", "triple", "triple_same", "triple_other", "team_flow", "schedule")   # same_odds = 회차 동배당 · books = 12개 배당사 메모(2026-09-24) · triple = 12사 평균·국배 표본 메모(2026-09-26) · team_flow = 팀 흐름 메모 · schedule = 앞뒤 일정 메모(2026-09-29)
+SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl", "same_odds", "books", "triple", "triple_same", "triple_other", "triple_f", "triple_f_same", "triple_f_other", "team_flow", "schedule")   # triple_f* = 배변 표본 메모(2026-10-04) · same_odds = 회차 동배당 · books = 12개 배당사 메모(2026-09-24) · triple = 12사 평균·국배 표본 메모(2026-09-26) · team_flow = 팀 흐름 메모 · schedule = 앞뒤 일정 메모(2026-09-29)
 
 
 class SampleNoteBody(BaseModel):

@@ -3,7 +3,10 @@ import { api } from '../../api/client'
 import RtBadge from '../RtBadge/RtBadge'
 import './TripleSample.css'
 
-// 상세보기 '표본' 섹션 — 12개 배당사 섹션 바로 아래(2026-09-26 사용자 지정).
+// 상세보기 '초기 표본' · '배변 표본' 섹션 — 12개 배당사 섹션 바로 아래(2026-09-26 사용자 지정).
+// 같은 컴포넌트를 phase로 두 번 쓴다(2026-10-04 사용자 지정 — "현재 표본을 초기 표본이라 하고 그 아래에 배변표본"):
+//   phase='init'  초기 표본 — 12사 초기 평균 + 국배 초기(예전 '표본')
+//   phase='final' 배변 표본 — 12사 마감 평균 + 국배 최신(배변). 서버 /api/triple_sample?phase=final
 // 12사 평균 승·패 + 국배 승·패가 둘 다 비슷한 과거 경기를 결과(핸승·핸무·무·역)별 4칸으로 보여준다.
 //   위   = 같은 리그 / 아래 = 통합(다른 리그만). 폭은 둘 다 ±0칸(완전 일치)에서 시작해 0건이면 1건 나올 때까지 1칸씩 넓히고, 제목에 쓴 폭(±N칸)을 적는다. 계산·기준은 서버 api/triple_sample.py.
 // 카드 = 경기일 · 팀 이름(스코어) · 12사 평균 · 국배 · 국핸디.
@@ -25,6 +28,17 @@ function ticksApart(v, ref) {
 }
 const f2 = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(2))
 const khText = (v) => (v === null || v === undefined ? '' : `${v > 0 ? '+' : ''}${v}`)
+
+// 배변 표본의 '이번 경기' 줄 — 배변 값 옆에 초기 대비 변화량을 붙인다(2026-10-04 사용자 지정 — "1.71(0.4▼) 이런 식으로
+// 평균·국배·국핸디 모두"). 초기보다 오르면 빨강 ▲, 내리면(=돈이 몰린 쪽) 파랑 ▼ — 배당 표·리그 표와 같은 규칙.
+// 안 움직였으면 흐린 '(0.0 ■)'(2026-10-04 사용자 지정 — "(0.0 ■) 이렇게"). 변화량은 사용자 예시(0.4▼)대로 소수 한 자리 —
+// 0.05 미만의 작은 변화는 '(0.0▼)'로 보이니 정확한 값은 마우스를 올리면 나오는 툴팁(초기 → 배변)에서 본다.
+function MoveMark({ v, v0 }) {
+  if (v === null || v === undefined || v0 === null || v0 === undefined) return null
+  const d = Math.round((v - v0) * 100)
+  if (d === 0) return <span className="ts-mv same" title={`초기 ${f2(v0)}와 같음`}>(0.0 ■)</span>
+  return <span className={`ts-mv ${d > 0 ? 'up' : 'down'}`} title={`초기 ${f2(v0)} → 배변 ${f2(v)}`}>({(Math.abs(d) / 100).toFixed(1)}{d > 0 ? '▲' : '▼'})</span>
+}
 
 // 아주 비슷한 값(밑줄) — 폭을 넓혀 찾은 표본은 값이 멀어지니 그중에서도 특히 가까운 값을 따로 표시한다.
 // 쓴 폭 1~4칸이면 1칸 이내, 5칸 이상이면 2칸 이내(2026-09-26 사용자 지정). 완전 일치(0칸)는 비슷한 값이 없다.
@@ -96,7 +110,7 @@ function DrawMark({ v, base, children }) {
 // 카드 하나의 고유키 — 신뢰 체크를 기억할 때 쓴다(같은 경기는 기본/넓힘 탭이 달라도 같은 카드).
 const cardKey = (c) => `${c.lg}|${c.S}|${c.R}|${c.ht}|${c.at}`
 
-function Card({ c, game, tol, trusted, distrusted, onTrust, onDistrust, teams }) {
+function Card({ c, ck, game, tol, trusted, distrusted, onTrust, onDistrust, teams, avgLabel }) {
   const sameH = c.kh !== null && game.kh !== null && c.kh === game.kh
   const hRef = [game.khw, game.khd, game.khl]
   const hVals = [c.khw, c.khd, c.khl]
@@ -107,11 +121,11 @@ function Card({ c, game, tol, trusted, distrusted, onTrust, onDistrust, teams })
         {/* 신뢰·비신뢰(2026-09-30 사용자 지정 — "[체크] 신뢰 [체크]비신뢰") — 둘은 동시에 체크되지 않는다. */}
         <span className="ts-trust-wrap">
           <label className="ts-trust-lab" title="이 표본을 신뢰하면 체크">
-            <input type="checkbox" checked={!!trusted} onChange={() => onTrust(cardKey(c))} />
+            <input type="checkbox" checked={!!trusted} onChange={() => onTrust(ck)} />
             신뢰
           </label>
           <label className="ts-distrust-lab" title="이 표본을 믿지 않으면 체크">
-            <input type="checkbox" checked={!!distrusted} onChange={() => onDistrust(cardKey(c))} />
+            <input type="checkbox" checked={!!distrusted} onChange={() => onDistrust(ck)} />
             비신뢰
           </label>
         </span>
@@ -127,7 +141,7 @@ function Card({ c, game, tol, trusted, distrusted, onTrust, onDistrust, teams })
       <table className="ts-card-table">
         <tbody>
           {c.A.some((v) => v !== null && v !== undefined) && <tr>
-            <td>평균</td>
+            <td>{avgLabel}</td>
             {c.A.map((v, i) => <td key={i}>{i === 1 ? <DrawMark v={v} base={game.A[i]}><AvgCell v={v} base={game.A[i]} tol={tol} /></DrawMark> : <AvgCell v={v} base={game.A[i]} tol={tol} />}</td>)}
           </tr>}
           <tr>
@@ -147,8 +161,8 @@ function Card({ c, game, tol, trusted, distrusted, onTrust, onDistrust, teams })
 // 결과별 건수 — (핸승/핸무/무/역) 순서
 const cntText = (a) => `(${a.cnt.join('/')})`
 // 이 탭 표본 중 내가 '신뢰'로 체크한 카드 수 — 체크한 게 있을 때만 (신뢰ㆍN건)을 붙인다.
-const trustText = (a, trusted) => {
-  const n = Object.values(a.cards).reduce((sum, list) => sum + list.filter((c) => trusted.has(cardKey(c))).length, 0)
+const trustText = (a, trusted, keyOf) => {
+  const n = Object.values(a.cards).reduce((sum, list) => sum + list.filter((c) => trusted.has(keyOf(c))).length, 0)
   return n ? ` (신뢰ㆍ${n}건)` : ''
 }
 
@@ -157,12 +171,12 @@ const trustText = (a, trusted) => {
 // (실측(32,591경기)으로는 폭과 적중이 무관해 '믿을 만함'을 뜻하는 색이 아니다 — 폭을 눈으로 구분하는 표시일 뿐.)
 const tabTone = (k) => (k <= 1 ? 'yellow' : k <= 4 ? 'green' : 'red')
 // '표본'은 보통 굵기, '1건(0/1/0/0)'은 굵게.
-function TabText({ k, a, trusted }) {
+function TabText({ k, a, trusted, keyOf }) {
   // 색은 '±N칸' 글자에만(탭 배경은 글자가 잘 보이는 기본색) — 표본이 0건이면 색을 안 넣는다.
-  return <><span className={`ts-k${a.n > 0 ? ` ts-k-${tabTone(k)}` : ''}`}>±{k}칸</span> · 표본 <b>{a.n}건 {cntText(a)}</b>{trustText(a, trusted)}</>
+  return <><span className={`ts-k${a.n > 0 ? ` ts-k-${tabTone(k)}` : ''}`}>±{k}칸</span> · 표본 <b>{a.n}건 {cntText(a)}</b>{trustText(a, trusted, keyOf)}</>
 }
 
-function Band({ title, area: base, game, tol: baseTol, trusted, distrusted, onTrust, onDistrust, noteSlot, teams }) {
+function Band({ title, area: base, game, tol: baseTol, trusted, distrusted, onTrust, onDistrust, noteSlot, teams, keyOf, avgLabel }) {
   // 표본 탭(2026-09-26) — 쓴 폭 표본과, 표본이 실제로 늘어나는 더 넓은 폭 표본을 탭으로 나란히 둔다.
   const [wide, setWide] = useState(false)
   const nx = base.next
@@ -178,16 +192,16 @@ function Band({ title, area: base, game, tol: baseTol, trusted, distrusted, onTr
         {nx ? (
           <span className="ts-tabs" role="tablist">
             <button type="button" role="tab" aria-selected={!on} className={`ts-tab${on ? '' : ' is-on'}`} onClick={() => setWide(false)}>
-              <TabText k={kb} a={base} trusted={trusted} />
+              <TabText k={kb} a={base} trusted={trusted} keyOf={keyOf} />
             </button>
             <button type="button" role="tab" aria-selected={on} className={`ts-tab${on ? ' is-on' : ''}`} onClick={() => setWide(true)}
               title="표본이 더 늘어나는 폭까지 넓힌 표본">
-              <TabText k={kn} a={nx.area} trusted={trusted} />
+              <TabText k={kn} a={nx.area} trusted={trusted} keyOf={keyOf} />
             </button>
           </span>
         ) : (
           <small className="ts-tab ts-tab-static">
-            <TabText k={kb} a={base} trusted={trusted} />
+            <TabText k={kb} a={base} trusted={trusted} keyOf={keyOf} />
           </small>
         )}
         {noteSlot}
@@ -202,7 +216,7 @@ function Band({ title, area: base, game, tol: baseTol, trusted, distrusted, onTr
                 <span>{area.cnt[k - 1]}건{area.cnt[k - 1] > cards.length ? ` 중 ${cards.length}` : ''}</span>
               </div>
               <div className="ts-cards">
-                {cards.length ? cards.map((c, i) => <Card key={i} c={c} game={game} tol={tol} trusted={trusted.has(cardKey(c))} distrusted={distrusted.has(cardKey(c))} onTrust={onTrust} onDistrust={onDistrust} teams={teams} />) : <div className="ts-empty">—</div>}
+                {cards.length ? cards.map((c, i) => <Card key={i} c={c} ck={keyOf(c)} game={game} tol={tol} trusted={trusted.has(keyOf(c))} distrusted={distrusted.has(keyOf(c))} onTrust={onTrust} onDistrust={onDistrust} teams={teams} avgLabel={avgLabel} />) : <div className="ts-empty">—</div>}
               </div>
             </div>
           )
@@ -213,9 +227,17 @@ function Band({ title, area: base, game, tol: baseTol, trusted, distrusted, onTr
 }
 
 // noteSlot — 제목 옆 의견 입력칸(상위에서 SampleNoteInput을 만들어 넘긴다: 다른 섹션 메모와 같은 저장 경로)
-export default function TripleSampleSection({ code, scope, row, noteSlot, sameNoteSlot, otherNoteSlot }) {
+export default function TripleSampleSection({ code, scope, row, noteSlot, sameNoteSlot, otherNoteSlot, phase = 'init' }) {
+  const final = phase === 'final'
+  // 신뢰/비신뢰 카드키 — 같은 과거 경기가 초기 표본·배변 표본에 둘 다 나올 수 있어, 배변 쪽은 'f:'를 앞에 붙여
+  // 두 표본의 체크가 서로 섞이지 않게 한다(서버는 키 문자열을 그대로 저장한다).
+  const keyOf = (c) => (final ? 'f:' : '') + cardKey(c)
   const [data, setData] = useState(undefined)   // undefined 불러오는 중 · null 실패
   const [help, setHelp] = useState(false)
+  // 접기/펼치기(2026-10-04 사용자 지정 — "초기표본 배변 표본 모두 접기 펼치기") — 12개 배당사 섹션과 같은 ▾/▸ 버튼.
+  // 기본은 펼침. 접으면 같은 리그·통합 표본 영역만 숨고, 제목 줄(제목·의견칸)과 '이번 경기' 줄(12사 평균·국배·국핸디)은
+  // 그대로 보인다(2026-10-04 사용자 지정 — "표본이 접혔을 때 이번 경기 평균·국배·국핸디는 보여주게").
+  const [folded, setFolded] = useState(false)
   // 신뢰/비신뢰 체크 — 이 경기에서 내가 믿는/믿지 않는 표본 카드들. 서버 DB에 저장한다(2026-09-30 사용자 지정 —
   // 예전엔 브라우저 localStorage라 다른 기기와 공유가 안 되고 나중에 '신뢰한 카드가 실제로 더 맞았나'도 못 쟀다).
   // marks = {카드키: 'trust' | 'distrust'} — 한 카드에는 둘 중 하나만 걸린다.
@@ -234,8 +256,8 @@ export default function TripleSampleSection({ code, scope, row, noteSlot, sameNo
         const q = new URLSearchParams({ scope, season: String(row.S ?? ''), round: String(row.R ?? ''), no: String(row.No ?? ''), ht: String(row.HT ?? ''), at: String(row.AT ?? '') })
         const res = await api.get(`${markUrl}?${q.toString()}`)
         const next = { ...(res.marks || {}) }
-        // 예전에 이 브라우저(localStorage)에만 남겨 둔 신뢰/비신뢰가 있으면 DB로 옮기고 브라우저 것은 지운다.
-        const legacyKeys = [[`ts-trust:${code}|${scope}|${row.S}|${row.R}|${row.HT}|${row.AT}`, 'trust'],
+        // 예전에 이 브라우저(localStorage)에만 남겨 둔 신뢰/비신뢰가 있으면 DB로 옮기고 브라우저 것은 지운다(초기 표본만 — 배변 표본은 새로 생긴 것).
+        const legacyKeys = final ? [] : [[`ts-trust:${code}|${scope}|${row.S}|${row.R}|${row.HT}|${row.AT}`, 'trust'],
           [`ts-distrust:${code}|${scope}|${row.S}|${row.R}|${row.HT}|${row.AT}`, 'distrust']]
         const moved = []
         for (const [lk, mk] of legacyKeys) {
@@ -270,21 +292,30 @@ export default function TripleSampleSection({ code, scope, row, noteSlot, sameNo
   useEffect(() => {
     let alive = true
     setData(undefined)
-    const params = new URLSearchParams({ code, scope, S: String(row.S ?? ''), R: String(row.R ?? ''), HT: String(row.HT ?? ''), AT: String(row.AT ?? '') })
+    const params = new URLSearchParams({ code, scope, S: String(row.S ?? ''), R: String(row.R ?? ''), HT: String(row.HT ?? ''), AT: String(row.AT ?? ''), phase })
     api.get(`/api/triple_sample?${params.toString()}`)
       .then((res) => alive && setData(res))
       .catch(() => alive && setData(null))
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
+  }, [key, phase])
 
   // 공식 6대리그 + 내 데이터 K1·K2(ul_1·ul_2, 2026-09-27). K리그는 12사 과거 배당이 쌓이기 전엔 국배만으로 찾는다(서버 mode='kr').
   if (scope !== 'master' && !['ul_1', 'ul_2'].includes(code)) return null
   return (
     <section className="detail-section">
       <h3>
-        <button type="button" className="help-btn" onClick={() => setHelp(true)} title="표본을 어떻게 산출했는지 보기">
-          표본 <span className="help-mark">?</span>
+        <button
+          type="button"
+          className="sample-fold-btn"
+          onClick={() => setFolded((f) => !f)}
+          title={folded ? '펼치기' : '접기'}
+          aria-expanded={!folded}
+        >
+          {folded ? '▸' : '▾'}
+        </button>
+        <button type="button" className="help-btn" onClick={() => setHelp(true)} title={final ? '배변 표본을 어떻게 산출했는지 보기' : '초기 표본을 어떻게 산출했는지 보기'}>
+          {final ? '배변 표본' : '초기 표본'} <span className="help-mark">?</span>
         </button>
         {noteSlot}
       </h3>
@@ -294,23 +325,23 @@ export default function TripleSampleSection({ code, scope, row, noteSlot, sameNo
       {data && data.ready && (
         <>
           <div className="ts-ref">
-            <b>이번 경기</b>
+            <b>{final ? '이번 경기 (배변)' : '이번 경기'}</b>
             {data.mode === 'kr' && <span className="ts-kr-only" title="이 리그는 12사(스코어맨 12개 배당사) 과거 배당이 아직 충분히 쌓이지 않아, 국배 승·패만 비슷한 과거 경기를 찾았습니다. 12사 배당이 쌓이면 자동으로 12사 평균까지 맞춰 찾습니다.">국배만 비교</span>}
-            {data.game.A.some((v) => v !== null) && <span>12사 평균 <span className="ts-nums">{data.game.A.map((v, i) => <span key={i} className={i === 1 ? '' : 'ts-a-same'}>{f2(v)}</span>)}</span></span>}
-            <span>국배 <span className="ts-nums">{data.game.K.map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
-            <span>국핸디 ({khText(data.game.kh) || '-'}) <span className="ts-nums">{[data.game.khw, data.game.khd, data.game.khl].map((v, i) => <span key={i} className="ts-same">{f2(v)}</span>)}</span></span>
+            {data.game.A.some((v) => v !== null) && <span>{final ? '12사 마감 평균' : '12사 평균'} <span className="ts-nums">{data.game.A.map((v, i) => <span key={i}><span className={i === 1 ? '' : 'ts-a-same'}>{f2(v)}</span>{final && <MoveMark v={v} v0={data.game.init?.A?.[i]} />}</span>)}</span></span>}
+            <span>{final ? '국배 배변' : '국배'} <span className="ts-nums">{data.game.K.map((v, i) => <span key={i}><span className="ts-same">{f2(v)}</span>{final && <MoveMark v={v} v0={data.game.init?.K?.[i]} />}</span>)}</span></span>
+            <span>{final ? '국핸디 배변' : '국핸디'} ({khText(data.game.kh) || '-'}) <span className="ts-nums">{[data.game.khw, data.game.khd, data.game.khl].map((v, i) => <span key={i}><span className="ts-same">{f2(v)}</span>{final && data.game.init?.kh === data.game.kh && <MoveMark v={v} v0={[data.game.init?.khw, data.game.init?.khd, data.game.init?.khl][i]} />}</span>)}</span></span>
           </div>
-          <Band title={`같은 리그 (${data.game.lg})`} area={data.same} game={data.game} tol={data.tol.same} trusted={trusted} distrusted={distrusted} onTrust={toggleTrust} onDistrust={toggleDistrust} noteSlot={sameNoteSlot} teams={teams} />
-          <Band title="통합 (다른 리그)" area={data.other} game={data.game} tol={data.tol.other} trusted={trusted} distrusted={distrusted} onTrust={toggleTrust} onDistrust={toggleDistrust} noteSlot={otherNoteSlot} teams={teams} />
+          {!folded && <Band title={`같은 리그 (${data.game.lg})`} area={data.same} game={data.game} tol={data.tol.same} trusted={trusted} distrusted={distrusted} onTrust={toggleTrust} onDistrust={toggleDistrust} noteSlot={sameNoteSlot} teams={teams} keyOf={keyOf} avgLabel={final ? '마감' : '평균'} />}
+          {!folded && <Band title="통합 (다른 리그)" area={data.other} game={data.game} tol={data.tol.other} trusted={trusted} distrusted={distrusted} onTrust={toggleTrust} onDistrust={toggleDistrust} noteSlot={otherNoteSlot} teams={teams} keyOf={keyOf} avgLabel={final ? '마감' : '평균'} />}
         </>
       )}
-      {help && <TripleSampleLegend onClose={() => setHelp(false)} />}
+      {help && <TripleSampleLegend onClose={() => setHelp(false)} final={final} />}
     </section>
   )
 }
 
 // 표본 도움말 — 산출 방법·읽는 법. 새 용어(칸·호가 단위)는 쓰기 전에 뜻을 풀었다.
-function TripleSampleLegend({ onClose }) {
+function TripleSampleLegend({ onClose, final }) {
   useEffect(() => {
     function onKey(e) {
       if (e.key !== 'Escape') return
@@ -325,9 +356,16 @@ function TripleSampleLegend({ onClose }) {
     <div className="modal-backdrop help-legend-back" onClick={onClose}>
       <div className="modal-card help-legend-card" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
-        <h2 className="modal-title">🧩 표본 — 어떻게 산출했나</h2>
+        <h2 className="modal-title">🧩 {final ? '배변 표본' : '초기 표본'} — 어떻게 산출했나</h2>
 
         <p className="help-legend-title">① 무엇을 보여주나</p>
+        {final && (
+          <p className="help-legend-note">
+            <b>배변 표본</b>은 <b>초기 표본과 계산 방식은 똑같고, 기준 배당만 다릅니다.</b> 초기 표본이 처음 나온 배당(초기)으로 비슷한 경기를 찾는다면,
+            배변 표본은 <b>배당이 움직인 뒤의 배당(마감·최신)</b>으로 찾습니다. 과거 경기도 <b>배변 값이 있는 경기만</b> 후보가 됩니다
+            (결과가 난 경기의 약 94%). 이번 경기에 <b>국내 배당 배변이 아직 없으면</b> 만들지 않고, 리그 화면의 &apos;최신배당 불러오기&apos;로 채우면 만들어집니다.
+          </p>
+        )}
         <p className="help-legend-note">
           이 경기와 <b>배당 모양이 비슷했던 과거 경기</b>를 찾아 결과(핸승·핸무·무·역)별로 나눠 보여줍니다.
           기준은 <b>12개 배당사 평균의 승·패</b>와 <b>국내 배당(국배)의 승·패</b> 두 가지이고, <b>넷이 모두</b> 폭 안에
@@ -384,8 +422,18 @@ function TripleSampleLegend({ onClose }) {
 
         <p className="help-legend-title">③ 12사 평균 · 국배는 어떤 값인가</p>
         <p className="help-legend-note">
-          <b>12사 평균</b> = 스코어맨 12개 배당사의 <b>초기 배당</b> 평균(6곳 이상이 낸 경기만)을 소수 둘째 자리로
-          반올림한 값으로, 위 12개 배당사 표의 &quot;12사 평균 초기&quot; 칸과 같습니다. <b>국배</b> = 국내 초기 배당입니다.
+          {final ? (
+            <>
+              <b>12사 마감 평균</b> = 스코어맨 12개 배당사의 <b>마감 배당</b> 평균(6곳 이상이 낸 경기만)을 소수 둘째 자리로
+              반올림한 값으로, 위 12개 배당사 표의 &quot;12사 평균 마감&quot; 칸과 같습니다. <b>국배 배변</b> = 국내 최신 배당(배변)입니다.
+              카드의 &apos;마감&apos; 줄이 12사 마감 평균입니다.
+            </>
+          ) : (
+            <>
+              <b>12사 평균</b> = 스코어맨 12개 배당사의 <b>초기 배당</b> 평균(6곳 이상이 낸 경기만)을 소수 둘째 자리로
+              반올림한 값으로, 위 12개 배당사 표의 &quot;12사 평균 초기&quot; 칸과 같습니다. <b>국배</b> = 국내 초기 배당입니다.
+            </>
+          )}
           국배는 12사 평균보다 보통 5~8% 낮게 매겨지고 경기마다 ±5% 안팎 흔들립니다(국내 마진과 자체 호가).
         </p>
 

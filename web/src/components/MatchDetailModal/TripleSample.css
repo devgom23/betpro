@@ -25,6 +25,26 @@
   gap: 4px;
 }
 
+/* 배변 표본 '이번 경기' 줄의 초기 대비 변화(0.04▼) — 오르면 빨강 ▲, 내리면 파랑 ▼(배당 표와 같은 규칙) */
+.ts-mv {
+  margin-left: 1px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ts-mv.up {
+  color: var(--chip-red-fg);
+}
+
+.ts-mv.down {
+  color: var(--chip-blue-fg);
+}
+
+.ts-mv.same {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 /* 같은 값 = 노랑 배경 / 1~2칸 차이 = 글자색만 / 12사 평균 같은 값 = 파랑 밑줄 */
 .ts-same {
   padding: 0 3px;

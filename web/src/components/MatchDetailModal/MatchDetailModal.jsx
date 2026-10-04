@@ -5439,6 +5439,36 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           ) : null}
         />
 
+        {/* 배변 표본 — 초기 표본 바로 아래(2026-10-04 사용자 지정). 같은 컴포넌트에 phase만 다르다.
+            메모는 초기 표본과 따로 저장한다(sample_notes kind = triple_f · triple_f_same · triple_f_other). */}
+        <TripleSampleSection
+          code={code}
+          scope={scope}
+          row={row}
+          phase="final"
+          noteSlot={sampleNotes !== undefined ? (
+            <SampleNoteInput
+              value={sampleNotes?.triple_f?.memo}
+              onSave={(memo) => saveSampleNote('triple_f', { memo: memo || null })}
+              placeholder="배변 표본에 대한 의견"
+            />
+          ) : null}
+          sameNoteSlot={sampleNotes !== undefined ? (
+            <SampleNoteInput
+              value={sampleNotes?.triple_f_same?.memo}
+              onSave={(memo) => saveSampleNote('triple_f_same', { memo: memo || null })}
+              placeholder="같은 리그 배변 표본 의견"
+            />
+          ) : null}
+          otherNoteSlot={sampleNotes !== undefined ? (
+            <SampleNoteInput
+              value={sampleNotes?.triple_f_other?.memo}
+              onSave={(memo) => saveSampleNote('triple_f_other', { memo: memo || null })}
+              placeholder="통합 배변 표본 의견"
+            />
+          ) : null}
+        />
+
         {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,
             배당 바로 아래). 시즌전적·연속기록·최근10 날짜는 pick_ai 응답이 오면 채워진다. */}
         <section className="detail-section">
