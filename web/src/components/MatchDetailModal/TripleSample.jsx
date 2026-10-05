@@ -9,22 +9,11 @@ import './TripleSample.css'
 // 12사 평균 승·패 + 국배 승·패가 둘 다 비슷한 과거 경기를 결과(핸승·핸무·무·역)별 4칸으로 보여준다.
 //   위   = 같은 리그 / 아래 = 통합(다른 리그만). 폭은 둘 다 ±0칸(완전 일치)에서 시작해 0건이면 1건 나올 때까지 1칸씩 넓히고, 제목에 쓴 폭(±N칸)을 적는다. 계산·기준은 서버 api/triple_sample.py.
 // 카드 = 경기일 · 팀 이름(스코어) · 12사 평균 · 국배 · 국핸디.
-//   이번 경기와 국배·국핸디가 '같은 값'이면 노랑 배경, 1~2칸 차이면 글자색만(배지처럼 안 보이게),
-//   12사 평균이 같은 값이면 파랑 밑줄.
+//   배당 값 색은 12사·국배·국핸디 승·무·패 모두 같은 네 단계(같은 값 노랑 배경 · 아주 닮음 주황+밑줄 · 닮음 주황 · 다름 빨강) — 아래 tierOf.
 // 설명(어떻게 산출했나)은 제목 옆 ? 도움말에 있다 — 화면에는 부제를 두지 않는다.
 
 const RT_LABEL = { 1: '핸승', 2: '핸무', 3: '무', 4: '역' }
 
-// 국내 배당 호가 단위(한 칸) — 2026-09-26 과거 자료로 확인: 2.5 미만 0.01 · 2.5~5 0.05 · 5 이상 0.10
-// (무는 늘 2.5 이상이라 0.05부터). 글자 강조는 같은 값이 아니면서 이 단위로 2칸 이내일 때.
-const NEAR_TICKS = 2
-function tickOf(v) {
-  return v < 2.5 ? 0.01 : v < 5 ? 0.05 : 0.10
-}
-function ticksApart(v, ref) {
-  if (v === null || v === undefined || ref === null || ref === undefined) return null
-  return Math.round(Math.abs(v - ref) * 100) / Math.round(tickOf(Math.min(v, ref)) * 100)
-}
 const f2 = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(2))
 const khText = (v) => (v === null || v === undefined ? '' : `${v > 0 ? '+' : ''}${v}`)
 
@@ -39,71 +28,30 @@ function MoveMark({ v, v0 }) {
   return <span className={`ts-mv ${d > 0 ? 'up' : 'down'}`} title={`초기 ${f2(v0)} → 배변 ${f2(v)}`}>({f2(Math.abs(d) / 100)}{d > 0 ? '▲' : '▼'})</span>
 }
 
-// 아주 비슷한 값(밑줄) — 폭을 넓혀 찾은 표본은 값이 멀어지니 그중에서도 특히 가까운 값을 따로 표시한다.
-// 쓴 폭 1~4칸이면 1칸 이내, 5칸 이상이면 2칸 이내(2026-09-26 사용자 지정). 완전 일치(0칸)는 비슷한 값이 없다.
-// 칸 = 12사 평균은 0.01, 국배·국핸디는 국내 호가 단위.
-function closeLimit(tol) {
-  const k = Math.round(tol * 100)
-  return k >= 5 ? 2 : k >= 1 ? 1 : 0
-}
-function isClose(v, base, tol, useTick) {
-  const lim = closeLimit(tol)
-  if (!lim) return false
-  const t = useTick ? ticksApart(v, base) : Math.round(Math.abs(v - base) * 100)
-  return t !== null && t <= lim
-}
-
-// 값 하나의 상태 — 같은 값(same) / 비슷한 값(near) / 그 밖(null).
-//   비슷한 값 = 같은 값이 아니면서 ① 이 영역의 허용 폭 안(같은 리그 ±0.03 · 통합 ±0.02)이거나
-//              ② (국배·국핸디만) 국내 호가 단위로 1~2칸 차이.
-//   12사 평균은 계산으로 나오는 값이라 호가 단위가 없어 ①만 쓴다.
-function stateOf(v, base, tol, useTick) {
+// ── 카드 배당 값 색 — 통일 기준(2026-10-05 사용자 지정) ─────────────────────────────
+// 12사 평균(마감) · 국배 · 국핸디의 승·무·패 9칸 모두 같은 네 단계로 칠한다(무만 따로 쓰던 0.20/0.30 경고는 없앴다).
+//   같은 값    차이 0                         → 노랑 배경
+//   아주 닮음  승·패 1% 이내 · 무 0.05 이내    → 주황 글자 + 밑줄
+//   닮음      승·패 2.5% 이내 · 무 0.10 이내   → 주황 글자
+//   다름      그 밖                           → 빨강 글자
+// 경계는 카드 점수(cardScore — 승·패 % 2.5에서 0점, 무 0.05 만점·0.10 절반)와 같아서 '색이 있으면 점수가 있다'.
+// 탭 폭(±N칸)·호가 단위는 표본을 찾는 데만 쓰고 색 판정에는 쓰지 않는다.
+function tierOf(v, base, isDraw) {
   if (v === null || v === undefined || base === null || base === undefined) return null
   const d = Math.round(Math.abs(v - base) * 100)
   if (d === 0) return 'same'
-  if (d <= Math.round(tol * 100)) return 'near'
-  if (useTick) {
-    const t = ticksApart(v, base)
-    if (t !== null && t <= NEAR_TICKS) return 'near'
-  }
-  return null
+  if (isDraw) return d <= 5 ? 'close' : d <= 10 ? 'near' : 'far'
+  const pct = Math.abs(v - base) / base * 100
+  return pct <= 1 + 1e-9 ? 'close' : pct <= 2.5 + 1e-9 ? 'near' : 'far'
 }
-
-// 국배·국핸디 한 칸 — 같은 값 노랑 배경 / 비슷한 값 글자색만
-function OddsCell({ v, base, tol }) {
+const TIER_CLASS = { same: 'ts-same', close: 'ts-near ts-close', near: 'ts-near', far: 'ts-far' }
+const TIER_TEXT = { same: '같은 값', close: '아주 닮음', near: '닮음', far: '다름' }
+function ValCell({ v, base, isDraw }) {
   if (v === null || v === undefined) return <>-</>
-  const st = stateOf(v, base, tol, true)
-  if (st === 'same') return <span className="ts-same">{f2(v)}</span>
-  if (st === 'near') return <span className={`ts-near${isClose(v, base, tol, true) ? ' ts-close' : ''}`} title={`이번 경기 ${f2(base)}와 비슷한 값(${f2(Math.abs(v - base))} 차이)${isClose(v, base, tol, true) ? ' — 특히 가까움' : ''}`}>{f2(v)}</span>
-  return <>{f2(v)}</>
-}
-
-// 12사 평균 한 칸 — 같은 값 파랑 밑줄 / 비슷한 값 글자색만
-function AvgCell({ v, base, tol }) {
-  const st = stateOf(v, base, tol, false)
-  if (st === 'same') return <span className="ts-a-same">{f2(v)}</span>
-  if (st === 'near') return <span className={`ts-near${isClose(v, base, tol, false) ? ' ts-close' : ''}`} title={`이번 경기 12사 평균 ${f2(base)}와 비슷한 값(${f2(Math.abs(v - base))} 차이)${isClose(v, base, tol, false) ? ' — 특히 가까움' : ''}`}>{f2(v)}</span>
-  return <>{f2(v)}</>
-}
-
-// 무 값이 이번 경기와 많이 다른 표본 표시(2026-09-26 사용자 지정) — 0.20 이상 주황 / 0.30 이상 빨강(글자색만, 차이값 기준).
-// 12사 평균 무·국배 무에만 건다. 무 차이가 결과 일치율과 관계 있다는 실측은 없어서(103,001장, 차이별 일치율 26% 안팎) 신뢰도 점수가 아니라
-// '이 표본은 무가 많이 다르다'는 눈 표시다.
-const DRAW_WARN = 20
-const DRAW_BAD = 30
-function drawGap(v, base) {
-  if (v === null || v === undefined || base === null || base === undefined) return null
-  const d = Math.round(Math.abs(v - base) * 100)
-  return d >= DRAW_BAD ? 'bad' : d >= DRAW_WARN ? 'warn' : null
-}
-function DrawMark({ v, base, children }) {
-  const g = drawGap(v, base)
-  if (!g) return children
-  return (
-    <span className={g === 'bad' ? 'ts-draw-bad' : 'ts-draw-warn'} title={`이번 경기 무 ${f2(base)}와 ${f2(Math.abs(v - base))} 차이 — ${g === 'bad' ? '0.30 이상(빨강)' : '0.20 이상(주황)'}`}>
-      {children}
-    </span>
-  )
+  const t = tierOf(v, base, isDraw)
+  if (!t) return <>{f2(v)}</>
+  const diff = isDraw ? `${f2(Math.abs(v - base))} 차이` : `${(Math.abs(v - base) / base * 100).toFixed(2)}% 차이`
+  return <span className={TIER_CLASS[t]} title={`이번 경기 ${f2(base)} — ${TIER_TEXT[t]}(${diff})`}>{f2(v)}</span>
 }
 
 // 카드 하나의 고유키 — 신뢰 체크를 기억할 때 쓴다(같은 경기는 기본/넓힘 탭이 달라도 같은 카드).
@@ -114,7 +62,7 @@ const cardKey = (c) => `${c.lg}|${c.S}|${c.R}|${c.ht}|${c.at}`
 // 국핸디 4·2·4(기준점 같을 때) / 칸수 10 / 같은 리그 6 / 최근 6·4·2 / 이번 경기 팀 등장 16(무 비슷할 때만).
 // 승·패 = % 차이(0% 만점 → 2.5% 0점) · 무 = 0.05 이하 만점, 0.10 이하 절반 · 칸수 = 승·패 네 값 중 가장 먼 값(0.01 칸, 0 만점 → 15칸 0).
 // 실측(과거 약 2.9만 경기): 배변 표본에서 1순위 점수 70↑이면 '배제 적중'이 기대보다 +3.6%p, 구간이 낮을수록 줄어든다.
-// 초기 표본은 어느 구간도 효과가 없어 화면에서 '(참고)'로 흐리게 보인다(사용자 지정 — 둘 다 표시).
+// 초기 표본은 어느 구간도 효과가 없지만, 강조는 배변과 똑같이 한다(2026-10-05 사용자 지정 — "회색이라 안 보인다, 판단은 내가 한다").
 const seasonNo = (v) => {
   const t = String(v ?? '').trim()
   return /^[0-9]{4}$/.test(t) ? Number(t) % 100 : parseInt(t.slice(0, 2), 10)
@@ -149,7 +97,7 @@ const scoreTitle = ({ total, p }, final) => `${final ? '배변' : '초기'} 표�
   + `\n같은 리그 ${p.lg}/6 · 최근 ${p.rc}/6 · 팀 등장 ${p.tm}/16(무가 비슷할 때만)`
   + (final ? '\n70점 이상은 과거 실측에서 배제 적중이 평소보다 +3.6%p(도움말 ⑥)' : '\n초기 표본 점수는 실측 효과가 없어 참고용입니다(도움말 ⑥)')
 
-function Card({ c, ck, game, tol, trusted, distrusted, onTrust, onDistrust, teams, avgLabel, ptag }) {
+function Card({ c, ck, game, trusted, distrusted, onTrust, onDistrust, teams, avgLabel, ptag }) {
   const sameH = c.kh !== null && game.kh !== null && c.kh === game.kh
   const hRef = [game.khw, game.khd, game.khl]
   const hVals = [c.khw, c.khd, c.khl]
@@ -186,15 +134,15 @@ function Card({ c, ck, game, tol, trusted, distrusted, onTrust, onDistrust, team
         <tbody>
           {c.A.some((v) => v !== null && v !== undefined) && <tr>
             <td>{avgLabel}</td>
-            {c.A.map((v, i) => <td key={i}>{i === 1 ? <DrawMark v={v} base={game.A[i]}><AvgCell v={v} base={game.A[i]} tol={tol} /></DrawMark> : <AvgCell v={v} base={game.A[i]} tol={tol} />}</td>)}
+            {c.A.map((v, i) => <td key={i}><ValCell v={v} base={game.A[i]} isDraw={i === 1} /></td>)}
           </tr>}
           <tr>
             <td>국배</td>
-            {c.K.map((v, i) => <td key={i}>{i === 1 ? <DrawMark v={v} base={game.K[i]}><OddsCell v={v} base={game.K[i]} tol={tol} /></DrawMark> : <OddsCell v={v} base={game.K[i]} tol={tol} />}</td>)}
+            {c.K.map((v, i) => <td key={i}><ValCell v={v} base={game.K[i]} isDraw={i === 1} /></td>)}
           </tr>
           <tr title={c.khw === null ? '핸디 배당이 없는 경기입니다(20-21 시즌 이전 경기는 없는 경우가 많습니다)' : undefined}>
             <td>핸디 {khText(c.kh)}</td>
-            {hVals.map((v, i) => <td key={i}><OddsCell v={v} base={sameH ? hRef[i] : null} tol={tol} /></td>)}
+            {hVals.map((v, i) => <td key={i}><ValCell v={v} base={sameH ? hRef[i] : null} isDraw={i === 1} /></td>)}
           </tr>
         </tbody>
       </table>
@@ -302,9 +250,9 @@ function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distr
                   return (s.area.cards[String(k)] || []).map((c, i) => {
                     const ck = keyOf(c)
                     // 카드 첫 줄 오른쪽 '배변 · 72점'(2026-10-05 사용자 지정) — 보기와 상관없이 늘 붙인다. 점수에 마우스를 올리면 내역.
-                    // 배변 70↑ 진하게 · 60~70 연하게 / 초기는 실측 근거가 없어 점수를 흐리게('(참고)' 글자는 사용자 지정으로 뺐다).
+                    // 70↑ 진하게 · 60~70 연하게 — 초기·배변 같은 규칙(초기 회색 처리는 사용자 지정으로 뺐다)
                     const sc = cardScore(c, data[p].game, areaKey === 'same', s0, teams)
-                    const tone = p === 'init' ? 'ref' : sc.total >= 70 ? 'hi' : sc.total >= 60 ? 'mid' : 'base'
+                    const tone = sc.total >= 70 ? 'hi' : sc.total >= 60 ? 'mid' : 'base'
                     const ptag = (
                       <span className={`ts-cmp-tag ts-cmp-tag-${p}`}>
                         {PHASE_LABEL[p]}
@@ -315,7 +263,7 @@ function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distr
                     )
                     return (
                       <div key={`${p}${i}`} className={`ts-cmp-item${both ? ` ts-cmp-${p}` : ''}`}>
-                        <Card c={c} ck={ck} game={data[p].game} tol={s.tol} trusted={trusted.has(ck)} distrusted={distrusted.has(ck)} onTrust={onTrust} onDistrust={onDistrust} teams={teams} avgLabel={p === 'final' ? '마감' : '평균'} ptag={ptag} />
+                        <Card c={c} ck={ck} game={data[p].game} trusted={trusted.has(ck)} distrusted={distrusted.has(ck)} onTrust={onTrust} onDistrust={onDistrust} teams={teams} avgLabel={p === 'final' ? '마감' : '평균'} ptag={ptag} />
                       </div>
                     )
                   })
@@ -334,10 +282,17 @@ function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distr
 function RefLine({ data, finalReady }) {
   const gi = data.init.game
   const gf = finalReady ? data.final.game : null
-  const one = (v0, v1, cls, i) => (
-    <span key={i}>
-      <span className={cls}>{f2(v0)}</span>
-      {gf && <>→<span className={cls}>{f2(v1)}</span><MoveMark v={v1} v0={v0} /></>}
+  // 묶음 하나 — '2.88 / 3.34 / 2.39 → 2.75(0.13▼) / 3.41(0.07▲) / 2.50(0.11▲)'(2026-10-05 사용자 지정 — 초기 세 값을 먼저,
+  // 화살표 뒤에 배변 세 값과 변화. 밑줄·노랑 배경 같은 강조는 뺐다). 배변이 없으면 초기 세 값만.
+  const group = (v0s, v1s) => (
+    <span className="ts-ref-vals">
+      {v0s.map((v, i) => <span key={`i${i}`}>{i > 0 && ' / '}{f2(v)}</span>)}
+      {v1s && (
+        <>
+          <span className="ts-ref-arrow">→</span>
+          {v1s.map((v, i) => <span key={`f${i}`}>{i > 0 && ' / '}{f2(v)}<MoveMark v={v} v0={v0s[i]} /></span>)}
+        </>
+      )}
     </span>
   )
   const sameH = gf && gf.kh === gi.kh
@@ -345,11 +300,9 @@ function RefLine({ data, finalReady }) {
     // 앞 라벨('이번 경기 (초기 → 배변)')은 빼고 한 줄로(2026-10-04 사용자 지정) — 줄바꿈 대신 좁은 화면에선 가로 스크롤.
     <div className="ts-ref ts-ref-line">
       {data.init.mode === 'kr' && <span className="ts-kr-only" title="이 리그는 12사(스코어맨 12개 배당사) 과거 배당이 아직 충분히 쌓이지 않아, 국배 승·패만 비슷한 과거 경기를 찾았습니다. 12사 배당이 쌓이면 자동으로 12사 평균까지 맞춰 찾습니다.">국배만 비교</span>}
-      {gi.A.some((v) => v !== null) && <span>12사 평균 <span className="ts-nums">{gi.A.map((v, i) => one(v, gf?.A[i], i === 1 ? '' : 'ts-a-same', i))}</span></span>}
-      <span>국배 <span className="ts-nums">{gi.K.map((v, i) => one(v, gf?.K[i], 'ts-same', i))}</span></span>
-      <span>국핸디 ({khText(gi.kh) || '-'}) <span className="ts-nums">{[gi.khw, gi.khd, gi.khl].map((v, i) => (
-        sameH ? one(v, [gf.khw, gf.khd, gf.khl][i], 'ts-same', i) : <span key={i}><span className="ts-same">{f2(v)}</span></span>
-      ))}</span></span>
+      {gi.A.some((v) => v !== null) && <span>12사 평균 {group(gi.A, gf ? gf.A : null)}</span>}
+      <span>국배 {group(gi.K, gf ? gf.K : null)}</span>
+      <span>국핸디 ({khText(gi.kh) || '-'}) {group([gi.khw, gi.khd, gi.khl], sameH ? [gf.khw, gf.khd, gf.khl] : null)}</span>
       {gf && !sameH && gf.kh !== null && <small className="ts-msg">국핸디 기준점이 {khText(gi.kh)} → {khText(gf.kh)}로 바뀌어 핸디 값은 비교하지 않습니다</small>}
     </div>
   )
@@ -628,16 +581,15 @@ function TripleSampleLegend({ onClose, final }) {
             <tr><th>표시</th><th>뜻</th></tr>
           </thead>
           <tbody>
-            <tr><td><span className="ts-same">2.50</span></td><td>이번 경기와 <b>같은 값</b> (국배·국핸디, 노랑 배경)</td></tr>
-            <tr><td><span className="ts-a-same">2.55</span></td><td>12사 평균이 이번 경기와 <b>같은 값</b> (파랑 밑줄)</td></tr>
-            <tr><td><span className="ts-near">2.26</span></td><td><b>비슷한 값</b> (12사 평균·국배·국핸디 공통, 글자색만) — 같은 값은 아니면서 <b>그 영역의 허용 폭 안</b>(같은 리그 ±0.03, 통합 ±0.02)입니다. 국배·국핸디는 여기에 더해 <b>국내 호가 단위로 1~2칸 차이</b>인 값도 포함합니다(호가 단위: 2.5 미만 0.01 · 2.5~5 0.05 · 5 이상 0.10, 무는 0.05). 12사 평균 승·패는 검색 조건 자체가 폭 안이라 같은 값이 아니면 대부분 이 색이 됩니다 — 차이를 보려면 무 칸과 국배를 함께 보세요</td></tr>
-            <tr><td><span className="ts-near ts-close">1.81</span></td><td><b>아주 가까운 값</b> (비슷한 값 중에서 밑줄) — 표본을 찾느라 폭이 <b>1~4칸</b>이면 이번 경기와 <b>1칸 이내</b>, <b>5칸 이상</b>이면 <b>2칸 이내</b>인 값입니다. 예: 이번 경기 12사 평균 패가 1.80이고 폭 5칸으로 찾은 표본이 1.81이면 1칸 차이라 거의 같은 값이니 밑줄을 긋습니다. 칸은 12사 평균이 0.01, 국배·국핸디는 국내 호가 단위입니다. 밑줄은 두 탭 모두, 같은 리그·통합 모두에 똑같이 적용됩니다.</td></tr>
+            <tr><td><span className="ts-same">2.50</span></td><td><b>같은 값</b> — 이번 경기와 차이 0 (12사 평균·국배·국핸디의 승·무·패 모두 같은 기준)</td></tr>
+            <tr><td><span className="ts-near ts-close">1.81</span></td><td><b>아주 닮음</b> — 승·패는 <b>1% 이내</b>, 무는 <b>0.05 이내</b> (주황 글자 + 밑줄)</td></tr>
+            <tr><td><span className="ts-near">2.26</span></td><td><b>닮음</b> — 승·패는 <b>2.5% 이내</b>, 무는 <b>0.10 이내</b> (주황 글자)</td></tr>
+            <tr><td><span className="ts-far">3.48</span></td><td><b>다름</b> — 그보다 멀면 빨강 글자. 이 칸은 카드 점수가 0점입니다. 색 단계의 경계는 카드 점수(⑥)와 같아서 <b>색이 있으면 점수가 있고, 색이 강할수록 점수도 높습니다</b>. 국핸디는 기준점(±1)이 같을 때만 칠합니다. 값에 마우스를 올리면 차이가 나옵니다.</td></tr>
             <tr><td><b className="ts-date-new">24-09-14</b></td><td>카드 날짜가 <b>2020년 이후</b> 경기면 날짜 색이 다릅니다(최근 경기 구분용).</td></tr>
             <tr><td><span className="ts-team-hit">첼시</span></td><td>카드의 팀이 <b>이번 경기에 나오는 팀</b>과 같으면 팀명 글자색이 노랑으로 바뀌고 굵어집니다(홈·원정 자리는 상관없음).</td></tr>
             <tr><td>☑ 신뢰</td><td>카드 날짜 옆 체크박스 — <b>이 표본은 믿는다</b>고 표시하면 <b>신뢰</b> 글자가 초록 굵은 글씨로 바뀌고, 위쪽 탭 제목의 표본 건수 옆에 <b>(신뢰ㆍ1건)</b>처럼 체크한 카드 수가 붙습니다(체크한 게 없으면 안 붙습니다). 경기별로 서버에 저장되어 다른 기기·브라우저에서도 같게 보입니다.</td></tr>
             <tr><td>☑ 비신뢰</td><td>신뢰 옆 체크박스 — <b>이 표본은 믿지 않는다</b>고 표시하면 <b>비신뢰</b> 글자가 빨간 굵은 글씨로 바뀝니다. 신뢰와 비신뢰는 <b>한 카드에 동시에 체크되지 않아</b> 한쪽을 체크하면 다른 쪽은 저절로 풀립니다. 신뢰와 같이 경기별로 서버에 저장됩니다.</td></tr>
             <tr><td><span className="ts-tab ts-tab-static"><span className="ts-k ts-k-yellow">±1칸</span></span> <span className="ts-tab ts-tab-static"><span className="ts-k ts-k-green">±3칸</span></span> <span className="ts-tab ts-tab-static"><span className="ts-k ts-k-red">±7칸</span></span></td><td><b>탭 색</b> — 탭 글자 중 <b>±N칸</b>에만 색이 있습니다. 표본을 찾는 데 쓴 폭이 <b>±0~1칸이면 노랑, ±2~4칸이면 초록, ±5칸 이상이면 빨강</b>입니다(좁을수록 배당이 더 비슷한 표본이라는 눈 표시이고, <b>과거 32,591경기 실측에서는 폭이 좁다고 결과가 더 잘 맞지는 않았습니다</b>). 지금 보고 있는 탭은 <b>테두리 색</b>이 바뀝니다. 탭 글자에서 &apos;표본&apos;은 보통 굵기, 건수(예: <b>1건 (0/1/0/0)</b>)는 굵게 보입니다.</td></tr>
-            <tr><td><span className="ts-draw-warn">3.61</span> / <span className="ts-draw-bad">3.48</span></td><td><b>무 값이 많이 다른 표본</b> (12사 평균 무·국배 무의 글자색) — 이번 경기 무와의 차이가 <b>0.20 이상이면 주황, 0.30 이상이면 빨강</b>입니다. 예: 이번 경기 무가 3.82이면 3.61(0.21 차이)은 주황, 3.48(0.34 차이)은 빨강. 승·패가 폭 안에 들어와도 무가 이만큼 다르면 배당 모양이 다른 경기라는 눈 표시입니다. 무 차이가 클수록 결과가 덜 맞는다는 실측은 없어서(카드 103,001장, 차이별 결과 일치율 26% 안팎으로 비슷) 점수가 아니라 참고 표시입니다.</td></tr>
             <tr><td>핸디 +1</td><td>국내 핸디 배당(홈팀 기준선 ±1). 기준선이 같을 때만 같은 값·차이를 표시합니다. 핸디 배당은 20-21 시즌부터 거의 전 경기에 있고 그 이전은 없는 경우가 많아 <b>-</b>로 보입니다</td></tr>
           </tbody>
         </table>
@@ -680,7 +632,7 @@ function TripleSampleLegend({ onClose, final }) {
         <p className="help-legend-note">
           배변 표본은 <b>점수가 높을수록 더 맞는 계단</b>이 보입니다. 그래서 배변 카드 첫 줄 점수는 <b>70점 이상 진하게 · 60~70 연하게</b> 표시합니다.
           다만 맞힌 것은 &apos;무엇이 안 나오나(배제)&apos;이고, 4결과 중 무엇이 나올지(정확히)는 어느 구간도 평소와 같았습니다.
-          <b>초기 표본</b>은 점수가 높아도 효과가 없어(70 이상 +0.10%p) 회색 <b>(참고)</b>로 보입니다.
+          <b>초기 표본</b>은 점수가 높아도 효과가 없었습니다(70 이상 +0.10%p). 강조 색은 배변과 똑같이 붙이니, 초기 점수는 참고로만 보세요.
           80% 대 77% 수준의 차이라 &apos;높으면 확실&apos;이 아니라 &apos;평소보다 조금 더 믿을 만함&apos;으로 보세요.
         </p>
 

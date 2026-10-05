@@ -252,15 +252,9 @@
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-/* 무 값이 이번 경기와 크게 다른 표본 — 0.20 이상 주황 / 0.30 이상 빨강(글자색만) */
-.ts-draw-warn {
-  color: #f97316; /* 진한 주황 — 비슷한 값(ts-near, 호박색)과 구분 */
-  font-weight: 700;
-}
-
-.ts-draw-bad {
+/* 다름(2026-10-05 통일 기준) — 승·패 2.5% 초과 · 무 0.10 초과: 빨강 글자 */
+.ts-far {
   color: var(--chip-red-fg);
-  font-weight: 700;
 }
 
 /* 신뢰·비신뢰 체크 — 날짜 옆 체크박스 둘, 체크하면 그 글자만 굵게(신뢰=초록, 비신뢰=빨강,
@@ -441,6 +435,12 @@
   font-weight: 400;
 }
 
+/* 점수 글자색은 등급만 따른다(2026-10-05 사용자 지정) — 기본 등급(60 미만)은 꼬리표 색(초기 보라·배변 주황)을
+   물려받지 않고 잘 보이는 기본 글자색 */
+.ts-pt.ts-pt-base {
+  color: var(--text-primary);
+}
+
 .ts-pt.ts-pt-hi {
   padding: 0 4px;
   border-radius: 4px;
@@ -452,10 +452,6 @@
 .ts-pt.ts-pt-mid {
   color: var(--chip-yellow-fg);
   font-weight: 700;
-}
-
-.ts-pt.ts-pt-ref {
-  color: var(--text-muted);
 }
 
 /* 카드 둘째 줄 — 왼쪽 리그·시즌·라운드(작게) · 오른쪽 팀 스코어(2026-10-05) */
@@ -472,4 +468,14 @@
   gap: 4px;
   margin-left: auto;
   white-space: nowrap;
+}
+
+/* 이번 경기 줄 값 묶음 — 초기 세 값 → 배변 세 값(2026-10-05) */
+.ts-ref-vals {
+  color: var(--text-primary);
+}
+
+.ts-ref-arrow {
+  margin: 0 6px;
+  color: var(--text-muted);
 }
