@@ -317,27 +317,35 @@ def _ensure_sample_card_marks(con) -> None:
         )
         """
     )
+    # pre_match: 표시한 순간이 경기 시작 전이었나(1) / 뒤였나(0) / 알 수 없음(NULL) — 2026-10-05 추가.
+    # 나중에 '신뢰한 카드가 실제로 더 맞았나'를 잴 때 결과를 보고 고른 표시(사후)를 빼려고 남긴다.
+    try:
+        con.execute("ALTER TABLE sample_card_marks ADD COLUMN pre_match INTEGER")
+    except sqlite3.OperationalError:
+        pass
 
 
 def list_sample_card_marks(username: str, code: str, scope: str,
                            s: str, r: str, no: str, ht: str, at: str) -> dict:
-    """그 경기에서 내가 체크한 표본 카드 전부 — {card_key: 'trust' | 'distrust'}."""
+    """그 경기에서 내가 체크한 표본 카드 전부 — ({card_key: 'trust' | 'distrust'}, [경기 시작 뒤에 표시한 card_key])."""
     con = _connect(username)
     try:
         _ensure_sample_card_marks(con)
         rows = con.execute(
-            "SELECT card_key, mark FROM sample_card_marks "
+            "SELECT card_key, mark, pre_match FROM sample_card_marks "
             "WHERE code=? AND scope=? AND S=? AND R=? AND No=? AND HT=? AND AT=?",
             (code, scope, normalize(s), normalize(r), normalize(no), normalize(ht), normalize(at)),
         ).fetchall()
-        return {row["card_key"]: row["mark"] for row in rows}
+        return ({row["card_key"]: row["mark"] for row in rows},
+                [row["card_key"] for row in rows if row["pre_match"] == 0])
     finally:
         con.close()
 
 
 def set_sample_card_mark(username: str, code: str, scope: str, s: str, r: str, no: str,
-                         ht: str, at: str, card_key: str, mark) -> None:
-    """mark가 'trust'/'distrust'면 저장(있으면 덮어쓰기 — 신뢰↔비신뢰 전환), 비어 있으면 그 카드의 체크를 지운다."""
+                         ht: str, at: str, card_key: str, mark, pre_match=None) -> None:
+    """mark가 'trust'/'distrust'면 저장(있으면 덮어쓰기 — 신뢰↔비신뢰 전환), 비어 있으면 그 카드의 체크를 지운다.
+    pre_match = 이번 표시가 경기 시작 전인가(1/0/None) — 표시할 때마다 그 순간 기준으로 다시 적는다."""
     con = _connect(username)
     try:
         _ensure_sample_card_marks(con)
@@ -345,12 +353,12 @@ def set_sample_card_mark(username: str, code: str, scope: str, s: str, r: str, n
         if mark:
             con.execute(
                 """
-                INSERT INTO sample_card_marks (code, scope, S, R, No, HT, AT, card_key, mark, updated_dt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                INSERT INTO sample_card_marks (code, scope, S, R, No, HT, AT, card_key, mark, updated_dt, pre_match)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
                 ON CONFLICT(code, scope, S, R, No, HT, AT, card_key)
-                DO UPDATE SET mark = excluded.mark, updated_dt = excluded.updated_dt
+                DO UPDATE SET mark = excluded.mark, updated_dt = excluded.updated_dt, pre_match = excluded.pre_match
                 """,
-                (*key, mark),
+                (*key, mark, pre_match),
             )
         else:
             con.execute(

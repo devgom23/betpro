@@ -1394,7 +1394,8 @@ class SampleCardMarkBody(BaseModel):
 def get_sample_card_marks(code: str, scope: str = PATHS.SCOPE_MASTER, season: str = "", round: str = "",   # noqa: A002
                           no: str = "", ht: str = "", at: str = "", user: dict = Depends(get_current_user)):
     _check_league_for(code, scope, user)
-    return {"marks": MYPICKS.list_sample_card_marks(user["username"], code, scope, season, round, no, ht, at)}
+    marks, post = MYPICKS.list_sample_card_marks(user["username"], code, scope, season, round, no, ht, at)
+    return {"marks": marks, "post": post}
 
 
 @app.post("/api/leagues/{code}/sample_card_marks")
@@ -1404,9 +1405,31 @@ def save_sample_card_mark(code: str, body: SampleCardMarkBody, user: dict = Depe
         raise HTTPException(status_code=400, detail=f"알 수 없는 표시: {body.mark}")
     if not body.card_key.strip():
         raise HTTPException(status_code=400, detail="카드 키가 비어 있습니다.")
+    pre = None
+    if body.mark:
+        ko = _kickoff_of(_resolve_scope_db(body.scope, user), code, body.S, body.R, body.No, body.HT, body.AT)
+        pre = None if ko is None else int(datetime.now() < ko)
     MYPICKS.set_sample_card_mark(user["username"], code, body.scope, body.S, body.R, body.No,
-                                 body.HT, body.AT, body.card_key, body.mark or None)
-    return {"ok": True}
+                                 body.HT, body.AT, body.card_key, body.mark or None, pre)
+    return {"ok": True, "pre_match": pre}
+
+
+def _kickoff_of(db: str, code: str, s, r, no, ht, at):
+    """경기 시작 시각(서버 PC 시각 기준) — DT 'YY-MM-DD (요일)' + TM(예 2200·400). 못 구하면 None.
+    신뢰/비신뢰 표시가 경기 전인지 사후인지 가리는 데 쓴다(2026-10-05)."""
+    try:
+        idx = _pick_key_index(db, code).get(_my_pick_key(s, r, no, ht, at))
+        if idx is None:
+            return None
+        row = DATA.load_league_df(db, code).loc[idx]
+        d = datetime.strptime("20" + str(row.get("DT"))[:8], "%Y-%m-%d")
+        tm = pd.to_numeric(row.get("TM"), errors="coerce")
+        if pd.isna(tm):
+            return d
+        tm = int(tm)
+        return d + timedelta(hours=tm // 100, minutes=tm % 100)
+    except (ValueError, TypeError, KeyError):
+        return None
 
 
 @app.get("/api/same_odds")
