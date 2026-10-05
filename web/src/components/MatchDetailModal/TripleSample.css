@@ -453,3 +453,34 @@
   overflow-x: auto;
   white-space: nowrap;
 }
+
+/* 카드 꼬리표 색(보기와 상관없이) + 점수(2026-10-05) */
+.ts-cmp-tag.ts-cmp-tag-init {
+  color: var(--chip-purple-fg);
+}
+
+.ts-cmp-tag.ts-cmp-tag-final {
+  color: var(--warning-text);
+}
+
+.ts-score {
+  cursor: help;
+  font-weight: 400;
+}
+
+.ts-score.ts-score-hi {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}
+
+.ts-score.ts-score-mid {
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}
+
+.ts-score.ts-score-ref {
+  color: var(--text-muted);
+}

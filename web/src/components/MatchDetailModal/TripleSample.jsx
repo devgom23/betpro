@@ -109,6 +109,46 @@ function DrawMark({ v, base, children }) {
 // 카드 하나의 고유키 — 신뢰 체크를 기억할 때 쓴다(같은 경기는 기본/넓힘 탭이 달라도 같은 카드).
 const cardKey = (c) => `${c.lg}|${c.S}|${c.R}|${c.ht}|${c.at}`
 
+// ── 표본 카드 점수(2026-10-05 사용자 지정 · 실측 — 도움말 ⑥ 참고) ──────────────────
+// 이 카드가 이번 경기와 얼마나 닮았나(100점). 배점: 12사 승·무·패 11·4·11 / 국배 11·4·11 /
+// 국핸디 4·2·4(기준점 같을 때) / 칸수 10 / 같은 리그 6 / 최근 6·4·2 / 이번 경기 팀 등장 16(무 비슷할 때만).
+// 승·패 = % 차이(0% 만점 → 2.5% 0점) · 무 = 0.05 이하 만점, 0.10 이하 절반 · 칸수 = 승·패 네 값 중 가장 먼 값(0.01 칸, 0 만점 → 15칸 0).
+// 실측(과거 약 2.9만 경기): 배변 표본에서 1순위 점수 70↑이면 '배제 적중'이 기대보다 +3.6%p, 구간이 낮을수록 줄어든다.
+// 초기 표본은 어느 구간도 효과가 없어 화면에서 '(참고)'로 흐리게 보인다(사용자 지정 — 둘 다 표시).
+const seasonNo = (v) => {
+  const t = String(v ?? '').trim()
+  return /^[0-9]{4}$/.test(t) ? Number(t) % 100 : parseInt(t.slice(0, 2), 10)
+}
+const wlSim = (v, ref) => (v == null || ref == null || !ref ? 0 : Math.max(0, 1 - (Math.abs(v - ref) / ref * 100) / 2.5))
+const drawSim = (v, ref) => {
+  if (v == null || ref == null) return 0
+  const d = Math.round(Math.abs(v - ref) * 100)
+  return d <= 5 ? 1 : d <= 10 ? 0.5 : 0
+}
+function cardScore(c, g, sameLeague, s0, teams) {
+  const p = {}
+  p.a = 11 * wlSim(c.A[0], g.A[0]) + 4 * drawSim(c.A[1], g.A[1]) + 11 * wlSim(c.A[2], g.A[2])
+  p.k = 11 * wlSim(c.K[0], g.K[0]) + 4 * drawSim(c.K[1], g.K[1]) + 11 * wlSim(c.K[2], g.K[2])
+  const hok = c.kh != null && c.kh === g.kh && c.khw != null && g.khw != null
+  p.h = hok ? 4 * wlSim(c.khw, g.khw) + 2 * drawSim(c.khd, g.khd) + 4 * wlSim(c.khl, g.khl) : 0
+  const d4 = [[c.A[0], g.A[0]], [c.A[2], g.A[2]], [c.K[0], g.K[0]], [c.K[2], g.K[2]]]
+    .filter(([x, y]) => x != null && y != null).map(([x, y]) => Math.round(Math.abs(x - y) * 100))
+  p.span = d4.length ? Math.max(...d4) : 15
+  p.sp = 10 * Math.max(0, 1 - p.span / 15)
+  p.lg = sameLeague ? 6 : 0
+  const ago = s0 - seasonNo(c.S)
+  p.rc = ago <= 2 ? 6 : ago <= 5 ? 4 : ago <= 9 ? 2 : 0
+  const drawOk = c.A[1] != null && g.A[1] != null && Math.round(Math.abs(c.A[1] - g.A[1]) * 100) <= 10
+    && Math.round(Math.abs(c.K[1] - g.K[1]) * 100) <= 10
+  p.tm = drawOk && (teams.has(String(c.ht).trim()) || teams.has(String(c.at).trim())) ? 16 : 0
+  const total = p.a + p.k + p.h + p.sp + p.lg + p.rc + p.tm
+  return { total, p }
+}
+const scoreTitle = ({ total, p }, final) => `${final ? '배변' : '초기'} 표본 점수 ${total.toFixed(1)}점`
+  + `\n12사 ${p.a.toFixed(1)}/26 · 국배 ${p.k.toFixed(1)}/26 · 국핸디 ${p.h.toFixed(1)}/10 · 칸수(±${p.span}칸) ${p.sp.toFixed(1)}/10`
+  + `\n같은 리그 ${p.lg}/6 · 최근 ${p.rc}/6 · 팀 등장 ${p.tm}/16(무가 비슷할 때만)`
+  + (final ? '\n70점 이상은 과거 실측에서 배제 적중이 평소보다 +3.6%p(도움말 ⑥)' : '\n초기 표본 점수는 실측 효과가 없어 참고용입니다(도움말 ⑥)')
+
 function Card({ c, ck, game, tol, trusted, distrusted, onTrust, onDistrust, teams, avgLabel }) {
   const sameH = c.kh !== null && game.kh !== null && c.kh === game.kh
   const hRef = [game.khw, game.khd, game.khl]
@@ -248,7 +288,7 @@ function CompareSummary({ data, sel }) {
 }
 
 // 영역 하나(같은 리그 / 통합) — 보이는 단계(초기·배변·둘 다)의 폭 탭 + 결과 4칸 카드
-function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distrusted, onTrust, onDistrust, teams, notes }) {
+function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distrusted, onTrust, onDistrust, teams, notes, s0 }) {
   const both = shown.length === 2
   return (
     <div className="ts-band">
@@ -304,9 +344,21 @@ function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distr
                   return (s.area.cards[String(k)] || []).map((c, i) => {
                     const ck = keyOf(c)
                     const card = <Card c={c} ck={ck} game={data[p].game} tol={s.tol} trusted={trusted.has(ck)} distrusted={distrusted.has(ck)} onTrust={onTrust} onDistrust={onDistrust} teams={teams} avgLabel={p === 'final' ? '마감' : '평균'} />
-                    return both
-                      ? <div key={`${p}${i}`} className={`ts-cmp-item ts-cmp-${p}`}><span className="ts-cmp-tag">{PHASE_LABEL[p]} 표본</span>{card}</div>
-                      : <div key={`${p}${i}`}>{card}</div>
+                    // 꼬리표 '배변 표본 · 72점'(2026-10-05 사용자 지정) — 보기와 상관없이 늘 붙인다. 점수에 마우스를 올리면 내역.
+                    // 배변 70↑ 진하게 · 60~70 연하게 / 초기는 실측 근거가 없어 회색 '(참고)'.
+                    const sc = cardScore(c, data[p].game, areaKey === 'same', s0, teams)
+                    const tone = p === 'init' ? 'ref' : sc.total >= 70 ? 'hi' : sc.total >= 60 ? 'mid' : 'base'
+                    return (
+                      <div key={`${p}${i}`} className={`ts-cmp-item${both ? ` ts-cmp-${p}` : ''}`}>
+                        <span className={`ts-cmp-tag ts-cmp-tag-${p}`}>
+                          {PHASE_LABEL[p]} 표본
+                          <span className={`ts-score ts-score-${tone}`} title={scoreTitle(sc, p === 'final')}>
+                            {' · '}{Math.round(sc.total)}점{p === 'init' ? '(참고)' : ''}
+                          </span>
+                        </span>
+                        {card}
+                      </div>
+                    )
                   })
                 })
                 return items.length ? items : <div className="ts-empty">—</div>
@@ -489,6 +541,7 @@ export default function TripleSampleSection({ code, scope, row, noteSlots }) {
                   onDistrust={toggleDistrust}
                   teams={teams}
                   notes={noteSlots?.[k] || null}
+                  s0={seasonNo(row.S)}
                 />
               ))}
             </>
@@ -632,7 +685,49 @@ function TripleSampleLegend({ onClose, final }) {
           </tbody>
         </table>
 
-        <p className="help-legend-title">⑥ 주의 — 참고용입니다</p>
+        <p className="help-legend-title">⑥ 표본 점수 — 카드 꼬리표의 &apos;배변 표본 · 72점&apos;</p>
+        <p className="help-legend-note">
+          카드마다 <b>이번 경기와 얼마나 닮았나</b>를 100점으로 매긴 값입니다. 점수에 마우스를 올리면 항목별 내역이 나옵니다.
+          배점은 사용자 지정, 효과는 과거 경기로 실측했습니다(2026-10-05).
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>묶음</th><th>항목</th><th>배점</th><th>계산</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>12사 평균</td><td>승 · 무 · 패</td><td>11 · 4 · 11 (26)</td><td rowSpan={3}>승·패: <b>% 차이</b> 0%면 만점, 1%면 60%, 2.5% 이상이면 0<br />무: 차이 0.05 이하 만점, 0.10 이하 절반, 그 밖 0<br />국핸디는 기준점(±1)이 같을 때만</td></tr>
+            <tr><td>국배</td><td>승 · 무 · 패</td><td>11 · 4 · 11 (26)</td></tr>
+            <tr><td>국핸디</td><td>승 · 무 · 패</td><td>4 · 2 · 4 (10)</td></tr>
+            <tr><td>칸수</td><td>승·패 네 값 중 가장 먼 값</td><td>10</td><td>0칸 만점 → 15칸 0 (1칸 = 0.01)</td></tr>
+            <tr><td rowSpan={3}>맥락</td><td>같은 리그</td><td>6</td><td></td></tr>
+            <tr><td>최근 경기</td><td>6</td><td>2시즌 안 6 · 5시즌 안 4 · 9시즌 안 2</td></tr>
+            <tr><td>이번 경기 팀 등장</td><td>16</td><td><b>무가 비슷할 때만</b>(12사 무·국배 무 둘 다 차이 0.10 이하)</td></tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          <b>실측</b> — 과거 6대리그 경기마다 그 경기 날짜 이전 표본만으로 점수 1순위 카드를 정하고, <b>배제 적중</b>(1순위 카드가 정 쪽이면 &apos;역은 안 나온다&apos;,
+          플 쪽이면 &apos;핸승은 안 나온다&apos;)이 같은 배당대의 평소 비율(기대)보다 얼마나 더 맞았는지 쟀습니다.
+        </p>
+        <table className="detail-table help-legend-table">
+          <thead>
+            <tr><th>1순위 점수</th><th>배변 표본 (경기)</th><th>배제 적중</th><th>기대</th><th>차이</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><b>70 이상</b></td><td>717 (2.5%)</td><td><b>80.33%</b></td><td>76.76%</td><td><b>+3.57%p</b> (옛 시즌 +2.70 · 최근 시즌 +4.79)</td></tr>
+            <tr><td>60~70</td><td>2,487 (8.6%)</td><td>78.41%</td><td>76.78%</td><td>+1.62%p</td></tr>
+            <tr><td>50~60</td><td>7,785 (27.0%)</td><td>77.76%</td><td>76.80%</td><td>+0.96%p</td></tr>
+            <tr><td>40~50</td><td>10,035 (34.8%)</td><td>77.19%</td><td>76.96%</td><td>+0.23%p</td></tr>
+            <tr><td>40 미만</td><td>7,845 (27.2%)</td><td>76.80%</td><td>77.37%</td><td>−0.57%p</td></tr>
+          </tbody>
+        </table>
+        <p className="help-legend-note">
+          배변 표본은 <b>점수가 높을수록 더 맞는 계단</b>이 보입니다. 그래서 배변 꼬리표는 <b>70점 이상 진하게 · 60~70 연하게</b> 표시합니다.
+          다만 맞힌 것은 &apos;무엇이 안 나오나(배제)&apos;이고, 4결과 중 무엇이 나올지(정확히)는 어느 구간도 평소와 같았습니다.
+          <b>초기 표본</b>은 점수가 높아도 효과가 없어(70 이상 +0.10%p) 회색 <b>(참고)</b>로 보입니다.
+          80% 대 77% 수준의 차이라 &apos;높으면 확실&apos;이 아니라 &apos;평소보다 조금 더 믿을 만함&apos;으로 보세요.
+        </p>
+
+        <p className="help-legend-title">⑦ 주의 — 참고용입니다</p>
         <p className="help-legend-note">
           과거 26,483경기로 재 보니 표본이 나오는 경기는 <b>같은 리그 18.8% · 다른 리그 22.5%</b>(둘 중 하나라도 33.7%)였고,
           표본이 가리키는 다수 방향(정/플)이 실제와 같았던 비율은 <b>51~53%로 우연 수준</b>이었습니다.
