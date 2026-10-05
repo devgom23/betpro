@@ -151,9 +151,10 @@
 
 .ts-card-teams {
   display: flex;
+  flex-wrap: wrap;           /* 팀 이름이 길면 팀·스코어가 다음 줄로 */
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 2px 6px;
   margin-bottom: 4px;
   font-size: 12px;
   font-weight: 700;
@@ -342,35 +343,6 @@
   display: contents;
 }
 
-.ts-sum {
-  width: 100%;
-  margin: 10px 0 8px;
-  border-collapse: collapse;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.ts-sum th,
-.ts-sum td {
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  text-align: center;
-}
-
-.ts-sum th {
-  background: var(--bg-surface-2);
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-.ts-sum td.l {
-  text-align: left;
-}
-
-.ts-sum tr.ts-sum-total td {
-  background: var(--bg-surface-2);
-}
-
 .ts-cmp-up {
   color: var(--chip-red-fg);
 }
@@ -463,12 +435,13 @@
   color: var(--warning-text);
 }
 
-.ts-score {
+/* 꼬리표 점수 — 카드 안 경기 스코어(.ts-score)와 이름이 겹치지 않게 ts-pt */
+.ts-pt {
   cursor: help;
   font-weight: 400;
 }
 
-.ts-score.ts-score-hi {
+.ts-pt.ts-pt-hi {
   padding: 0 4px;
   border-radius: 4px;
   background: var(--chip-yellow-bg);
@@ -476,11 +449,27 @@
   font-weight: 700;
 }
 
-.ts-score.ts-score-mid {
+.ts-pt.ts-pt-mid {
   color: var(--chip-yellow-fg);
   font-weight: 700;
 }
 
-.ts-score.ts-score-ref {
+.ts-pt.ts-pt-ref {
   color: var(--text-muted);
+}
+
+/* 카드 둘째 줄 — 왼쪽 리그·시즌·라운드(작게) · 오른쪽 팀 스코어(2026-10-05) */
+.ts-card-lg {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.ts-card-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  white-space: nowrap;
 }

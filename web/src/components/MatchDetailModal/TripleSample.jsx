@@ -5,7 +5,7 @@ import './TripleSample.css'
 
 // 상세보기 '표본' 섹션 — 12개 배당사 섹션 바로 아래(2026-09-26 사용자 지정).
 // 초기 표본(12사 초기 평균 + 국배 초기)과 배변 표본(12사 마감 평균 + 국배 최신, 서버 /api/triple_sample?phase=final)을
-// 한 섹션에서 비교해 본다(2026-10-04 사용자 지정 A안 — 예전엔 두 섹션을 위아래로 따로 뒀다. 아래 CompareSummary 위 주석 참고).
+// 한 섹션에서 비교해 본다(2026-10-04 사용자 지정 A안 — 예전엔 두 섹션을 위아래로 따로 뒀다. 아래 '초기·배변 한 번에 보기' 주석 참고).
 // 12사 평균 승·패 + 국배 승·패가 둘 다 비슷한 과거 경기를 결과(핸승·핸무·무·역)별 4칸으로 보여준다.
 //   위   = 같은 리그 / 아래 = 통합(다른 리그만). 폭은 둘 다 ±0칸(완전 일치)에서 시작해 0건이면 1건 나올 때까지 1칸씩 넓히고, 제목에 쓴 폭(±N칸)을 적는다. 계산·기준은 서버 api/triple_sample.py.
 // 카드 = 경기일 · 팀 이름(스코어) · 12사 평균 · 국배 · 국핸디.
@@ -149,7 +149,7 @@ const scoreTitle = ({ total, p }, final) => `${final ? '배변' : '초기'} 표�
   + `\n같은 리그 ${p.lg}/6 · 최근 ${p.rc}/6 · 팀 등장 ${p.tm}/16(무가 비슷할 때만)`
   + (final ? '\n70점 이상은 과거 실측에서 배제 적중이 평소보다 +3.6%p(도움말 ⑥)' : '\n초기 표본 점수는 실측 효과가 없어 참고용입니다(도움말 ⑥)')
 
-function Card({ c, ck, game, tol, trusted, distrusted, onTrust, onDistrust, teams, avgLabel }) {
+function Card({ c, ck, game, tol, trusted, distrusted, onTrust, onDistrust, teams, avgLabel, ptag }) {
   const sameH = c.kh !== null && game.kh !== null && c.kh === game.kh
   const hRef = [game.khw, game.khd, game.khl]
   const hVals = [c.khw, c.khd, c.khl]
@@ -168,14 +168,19 @@ function Card({ c, ck, game, tol, trusted, distrusted, onTrust, onDistrust, team
             비신뢰
           </label>
         </span>
-        <span>{c.lg} · {c.S} · {/R$/.test(c.R) ? c.R : `${c.R}R`}</span>
+        {/* 첫 줄 오른쪽 = '초기 · 45점'(2026-10-05 사용자 지정 — 카드 위 꼬리표를 카드 안으로) */}
+        {ptag}
       </div>
+      {/* 둘째 줄 = 왼쪽 리그·시즌·라운드 · 오른쪽 팀 스코어(2026-10-05 사용자 지정 — 리그 정보를 첫 줄에서 내림) */}
       <div className="ts-card-teams">
-        <span className={teams.has(String(c.ht).trim()) ? 'ts-team-hit' : undefined} title={teams.has(String(c.ht).trim()) ? '이번 경기에 나오는 팀' : undefined}>{c.ht}</span>
-        <span className="ts-score">
-          <b className={c.hs > c.as_ ? 'ts-win' : undefined}>{c.hs ?? '-'}</b> : <b className={c.as_ > c.hs ? 'ts-win' : undefined}>{c.as_ ?? '-'}</b>
+        <span className="ts-card-lg">{c.lg} · {c.S} · {/R$/.test(c.R) ? c.R : `${c.R}R`}</span>
+        <span className="ts-card-match">
+          <span className={teams.has(String(c.ht).trim()) ? 'ts-team-hit' : undefined} title={teams.has(String(c.ht).trim()) ? '이번 경기에 나오는 팀' : undefined}>{c.ht}</span>
+          <span className="ts-score">
+            <b className={c.hs > c.as_ ? 'ts-win' : undefined}>{c.hs ?? '-'}</b> : <b className={c.as_ > c.hs ? 'ts-win' : undefined}>{c.as_ ?? '-'}</b>
+          </span>
+          <span className={teams.has(String(c.at).trim()) ? 'ts-team-hit' : undefined} title={teams.has(String(c.at).trim()) ? '이번 경기에 나오는 팀' : undefined}>{c.at}</span>
         </span>
-        <span className={teams.has(String(c.at).trim()) ? 'ts-team-hit' : undefined} title={teams.has(String(c.at).trim()) ? '이번 경기에 나오는 팀' : undefined}>{c.at}</span>
       </div>
       <table className="ts-card-table">
         <tbody>
@@ -218,8 +223,8 @@ function TabText({ k, a, trusted, keyOf }) {
 // ── 초기·배변 한 번에 보기(A안, 2026-10-04 사용자 지정 — 목업 web/public/mockups/sample_compare_mock2.html) ──
 // 예전엔 '초기 표본'·'배변 표본' 두 섹션을 위아래로 따로 뒀다. 이제 한 섹션에서
 //   ① 이번 경기 줄: 초기 → 배변 값과 변화(0.39▼)
-//   ② 변화 요약표: 영역(같은 리그·통합)별 폭·표본 수·결과 4칸 건수(초기 → 배변)·0건인 결과(= 배제 후보)
-//   ③ [초기 · 배변 · 같이] 버튼: 같이 보면 결과 칸 안에 초기 카드 → 배변 카드 순서로, 카드 위 꼬리표·왼쪽 띠 색으로 구분
+//   (변화 요약표는 2026-10-05 사용자 지정으로 뺐다 — "이거 안 본다, 화면에서 삭제". 결과 칸 머리의 '1 → 0건'은 그대로)
+//   ③ [초기 · 배변 · 같이] 버튼: 같이 보면 결과 칸 안에 초기 카드 → 배변 카드 순서로, 카드 첫 줄 오른쪽 꼬리표·왼쪽 띠 색으로 구분
 // 카드 모양·값 표시 규칙·신뢰/비신뢰·폭 탭·의견칸은 예전과 똑같다(초기·배변을 각자 따로 고른다).
 const PHASES = ['init', 'final']
 const PHASE_LABEL = { init: '초기', final: '배변' }
@@ -234,57 +239,10 @@ function pickArea(d, key, wide) {
   return { base, nx, on, baseTol: d.tol[key], area: on ? nx.area : base, tol: on ? nx.tol : d.tol[key] }
 }
 
-// 0건인 결과 — '이 배당의 과거 경기에서 안 나온 결과' = 배제 후보(CLAUDE.md 5-1). 역 0 → 정무 쪽 · 핸승 0 → 플핸무 쪽.
-const zeroText = (cnt) => {
-  const z = [1, 2, 3, 4].filter((k) => cnt[k - 1] === 0).map((k) => RT_LABEL[k])
-  return z.length ? `${z.join('·')} 0` : '없음'
-}
 // 초기 → 배변 건수 한 칸 — 늘면 빨강, 줄면 파랑(배당 화살표와 같은 색 규칙)
 function CountMove({ a, b }) {
   if (a === b) return <>{a} → {b}</>
   return <>{a} → <b className={b > a ? 'ts-cmp-up' : 'ts-cmp-down'}>{b}</b></>
-}
-
-function CompareSummary({ data, sel }) {
-  const tot = { init: [0, 0, 0, 0], final: [0, 0, 0, 0] }
-  const rows = AREA_KEYS.map((key) => {
-    const i = sel.init[key]
-    const f = sel.final[key]
-    for (let k = 0; k < 4; k += 1) {
-      tot.init[k] += i.area.cnt[k]
-      tot.final[k] += f.area.cnt[k]
-    }
-    return (
-      <tr key={key}>
-        <td className="l"><b>{key === 'same' ? `같은 리그 (${data.init.game.lg})` : '통합 (다른 리그)'}</b></td>
-        <td>±{Math.round(i.tol * 100)} → ±{Math.round(f.tol * 100)}칸</td>
-        <td>{i.area.n} → {f.area.n}건</td>
-        {[0, 1, 2, 3].map((k) => <td key={k}><CountMove a={i.area.cnt[k]} b={f.area.cnt[k]} /></td>)}
-        <td>{zeroText(i.area.cnt)} → <b>{zeroText(f.area.cnt)}</b></td>
-      </tr>
-    )
-  })
-  const ni = tot.init.reduce((s, v) => s + v, 0)
-  const nf = tot.final.reduce((s, v) => s + v, 0)
-  return (
-    <table className="ts-sum">
-      <thead>
-        <tr>
-          <th>영역</th><th>폭</th><th>표본</th>
-          {[1, 2, 3, 4].map((k) => <th key={k}><RtBadge label={RT_LABEL[k]} /></th>)}
-          <th title="이 배당의 과거 경기에서 한 번도 안 나온 결과 — 사용자 방식으로는 배제 후보">안 나온 결과 → 배제 후보</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows}
-        <tr className="ts-sum-total">
-          <td className="l"><b>합계</b></td><td>—</td><td>{ni} → {nf}건</td>
-          {[0, 1, 2, 3].map((k) => <td key={k}><CountMove a={tot.init[k]} b={tot.final[k]} /></td>)}
-          <td><b>{zeroText(tot.init)} → {zeroText(tot.final)}</b></td>
-        </tr>
-      </tbody>
-    </table>
-  )
 }
 
 // 영역 하나(같은 리그 / 통합) — 보이는 단계(초기·배변·둘 다)의 폭 탭 + 결과 4칸 카드
@@ -343,20 +301,21 @@ function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distr
                   const keyOf = keyOfPhase(p)
                   return (s.area.cards[String(k)] || []).map((c, i) => {
                     const ck = keyOf(c)
-                    const card = <Card c={c} ck={ck} game={data[p].game} tol={s.tol} trusted={trusted.has(ck)} distrusted={distrusted.has(ck)} onTrust={onTrust} onDistrust={onDistrust} teams={teams} avgLabel={p === 'final' ? '마감' : '평균'} />
-                    // 꼬리표 '배변 표본 · 72점'(2026-10-05 사용자 지정) — 보기와 상관없이 늘 붙인다. 점수에 마우스를 올리면 내역.
-                    // 배변 70↑ 진하게 · 60~70 연하게 / 초기는 실측 근거가 없어 회색 '(참고)'.
+                    // 카드 첫 줄 오른쪽 '배변 · 72점'(2026-10-05 사용자 지정) — 보기와 상관없이 늘 붙인다. 점수에 마우스를 올리면 내역.
+                    // 배변 70↑ 진하게 · 60~70 연하게 / 초기는 실측 근거가 없어 점수를 흐리게('(참고)' 글자는 사용자 지정으로 뺐다).
                     const sc = cardScore(c, data[p].game, areaKey === 'same', s0, teams)
                     const tone = p === 'init' ? 'ref' : sc.total >= 70 ? 'hi' : sc.total >= 60 ? 'mid' : 'base'
+                    const ptag = (
+                      <span className={`ts-cmp-tag ts-cmp-tag-${p}`}>
+                        {PHASE_LABEL[p]}
+                        <span className={`ts-pt ts-pt-${tone}`} title={scoreTitle(sc, p === 'final')}>
+                          {' · '}{Math.round(sc.total)}점
+                        </span>
+                      </span>
+                    )
                     return (
                       <div key={`${p}${i}`} className={`ts-cmp-item${both ? ` ts-cmp-${p}` : ''}`}>
-                        <span className={`ts-cmp-tag ts-cmp-tag-${p}`}>
-                          {PHASE_LABEL[p]} 표본
-                          <span className={`ts-score ts-score-${tone}`} title={scoreTitle(sc, p === 'final')}>
-                            {' · '}{Math.round(sc.total)}점{p === 'init' ? '(참고)' : ''}
-                          </span>
-                        </span>
-                        {card}
+                        <Card c={c} ck={ck} game={data[p].game} tol={s.tol} trusted={trusted.has(ck)} distrusted={distrusted.has(ck)} onTrust={onTrust} onDistrust={onDistrust} teams={teams} avgLabel={p === 'final' ? '마감' : '평균'} ptag={ptag} />
                       </div>
                     )
                   })
@@ -400,11 +359,11 @@ function RefLine({ data, finalReady }) {
 export default function TripleSampleSection({ code, scope, row, noteSlots }) {
   const [data, setData] = useState({ init: undefined, final: undefined })   // 단계별: undefined 불러오는 중 · null 실패
   const [help, setHelp] = useState(false)
-  // 접기/펼치기(2026-10-04) — 접어도 '이번 경기' 줄은 남고 요약표·카드만 숨는다.
+  // 접기/펼치기(2026-10-04) — 접어도 '이번 경기' 줄은 남고 카드만 숨는다.
   const [folded, setFolded] = useState(false)
   // 보기 — 'both' 같이(기본) · 'init' 초기만 · 'final' 배변만
   const [view, setView] = useState('both')
-  // 폭 탭(기본/넓힌) — 단계·영역마다 따로 고른다. 요약표도 지금 고른 탭 기준으로 센다.
+  // 폭 탭(기본/넓힌) — 단계·영역마다 따로 고른다.
   const [wide, setWideState] = useState({})
   const setWide = (p, key, v) => setWideState((w) => ({ ...w, [`${p}:${key}`]: v }))
   // 신뢰/비신뢰 체크 — 이 경기에서 내가 믿는/믿지 않는 표본 카드들. 서버 DB에 저장한다(2026-09-30 사용자 지정 —
@@ -511,14 +470,13 @@ export default function TripleSampleSection({ code, scope, row, noteSlots }) {
             <>
               {finalReady ? (
                 <>
-                  <CompareSummary data={data} sel={sel} />
                   <div className="ts-view-bar">
                     <span className="ts-view-seg" role="tablist" aria-label="표본 보기">
                       {[['init', '초기'], ['final', '배변'], ['both', '같이']].map(([v, lab]) => (
                         <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? 'is-on' : ''} onClick={() => setView(v)}>{lab}</button>
                       ))}
                     </span>
-                    {view === 'both' && <small>카드 위 꼬리표 · 왼쪽 띠 색: <span className="ts-cmp-tag ts-cmp-init-c">초기</span> <span className="ts-cmp-tag ts-cmp-final-c">배변</span></small>}
+                    {view === 'both' && <small>카드 첫 줄 오른쪽 · 왼쪽 띠 색: <span className="ts-cmp-tag ts-cmp-init-c">초기</span> <span className="ts-cmp-tag ts-cmp-final-c">배변</span></small>}
                   </div>
                 </>
               ) : (
@@ -574,10 +532,9 @@ function TripleSampleLegend({ onClose, final }) {
         <p className="help-legend-title">① 무엇을 보여주나</p>
         <p className="help-legend-note">
           이 섹션은 <b>초기 표본</b>(처음 나온 배당으로 찾은 과거 경기)과 <b>배변 표본</b>(움직인 뒤 배당으로 찾은 과거 경기)을 함께 보여줍니다.
-          맨 위 <b>이번 경기</b> 줄은 초기 → 배변 값과 변화(오르면 빨강 ▲ · 내리면 파랑 ▼ · 그대로 0.00 ■), 그 아래 <b>요약표</b>는
-          같은 리그·통합별로 폭·표본 수·결과 4칸 건수가 초기 → 배변으로 어떻게 바뀌었는지(늘면 빨강 · 줄면 파랑)와
-          <b>0건인 결과</b>(= 이 배당의 과거 경기에서 안 나온 결과, 배제 후보 — 역 0이면 정무 쪽 · 핸승 0이면 플핸무 쪽)를 보여줍니다.
-          카드는 <b>[초기 · 배변 · 같이]</b> 버튼으로 고르고, '같이'에서는 결과 칸 안에 초기 카드 → 배변 카드 순서로 꼬리표와 왼쪽 띠 색으로 구분합니다.
+          맨 위 <b>이번 경기</b> 줄은 초기 → 배변 값과 변화(오르면 빨강 ▲ · 내리면 파랑 ▼ · 그대로 0.00 ■), 결과 칸 머리의
+          <b>1 → 0건</b>은 그 결과의 표본 건수가 초기 → 배변으로 어떻게 바뀌었는지입니다(늘면 빨강 · 줄면 파랑).
+          카드는 <b>[초기 · 배변 · 같이]</b> 버튼으로 고르고, '같이'에서는 결과 칸 안에 초기 카드 → 배변 카드 순서로 카드 첫 줄 오른쪽(초기·배변)과 왼쪽 띠 색으로 구분합니다.
           폭 탭·신뢰/비신뢰·의견칸은 초기와 배변이 <b>따로</b>입니다. 이번 경기에 국내 배당 배변이 아직 없으면 초기만 보입니다.
         </p>
         {final && (
@@ -685,7 +642,7 @@ function TripleSampleLegend({ onClose, final }) {
           </tbody>
         </table>
 
-        <p className="help-legend-title">⑥ 표본 점수 — 카드 꼬리표의 &apos;배변 표본 · 72점&apos;</p>
+        <p className="help-legend-title">⑥ 표본 점수 — 카드 첫 줄 오른쪽의 &apos;배변 · 72점&apos;</p>
         <p className="help-legend-note">
           카드마다 <b>이번 경기와 얼마나 닮았나</b>를 100점으로 매긴 값입니다. 점수에 마우스를 올리면 항목별 내역이 나옵니다.
           배점은 사용자 지정, 효과는 과거 경기로 실측했습니다(2026-10-05).
@@ -721,7 +678,7 @@ function TripleSampleLegend({ onClose, final }) {
           </tbody>
         </table>
         <p className="help-legend-note">
-          배변 표본은 <b>점수가 높을수록 더 맞는 계단</b>이 보입니다. 그래서 배변 꼬리표는 <b>70점 이상 진하게 · 60~70 연하게</b> 표시합니다.
+          배변 표본은 <b>점수가 높을수록 더 맞는 계단</b>이 보입니다. 그래서 배변 카드 첫 줄 점수는 <b>70점 이상 진하게 · 60~70 연하게</b> 표시합니다.
           다만 맞힌 것은 &apos;무엇이 안 나오나(배제)&apos;이고, 4결과 중 무엇이 나올지(정확히)는 어느 구간도 평소와 같았습니다.
           <b>초기 표본</b>은 점수가 높아도 효과가 없어(70 이상 +0.10%p) 회색 <b>(참고)</b>로 보입니다.
           80% 대 77% 수준의 차이라 &apos;높으면 확실&apos;이 아니라 &apos;평소보다 조금 더 믿을 만함&apos;으로 보세요.
