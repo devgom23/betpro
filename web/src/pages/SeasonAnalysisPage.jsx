@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { RichMemoInput } from '../components/RichMemo/RichMemo'
+import CupCollectButton from '../components/CupCollectButton/CupCollectButton'
+import { useAuth } from '../context/AuthContext'
 import './SeasonAnalysisPage.css'
 
 // 시즌분석 — 6대리그 라운드를 프로토 회차에 놓은 시즌 표 + 회차별 '주간 라운드 지표'
@@ -29,7 +31,7 @@ function jpCls(j, p) {
   return j > p ? 'jung' : p > j ? 'pl' : 'even'
 }
 
-function SeasonTable({ data, sel, onSelect, seasons, season, onSeason }) {
+function SeasonTable({ data, sel, onSelect, seasons, season, onSeason, headerExtra }) {
   const { cols, leagues } = data
   const months = useMemo(() => {
     const out = []
@@ -113,7 +115,9 @@ function SeasonTable({ data, sel, onSelect, seasons, season, onSeason }) {
           <span>빗금 = 휴식기(A매치)</span>
           <span>흐린 글씨 = 아직 경기 전</span>
           <span><i className="sw sw-moved" />연기 경기가 있는 라운드(마우스를 올리면 경기·날짜)</span>
+          <span>예정 = 확정 시각 전(수~목 기간으로 표시)</span>
         </span>
+        {headerExtra}
       </h2>
       <div className="sa-scroll">
         <table className="sa-season-table">
@@ -133,7 +137,9 @@ function SeasonTable({ data, sel, onSelect, seasons, season, onSeason }) {
             <tr>
               {cols.map((c, i) => (
                 <th key={i} className={`wk wk-date t-${c.type === '평일' ? 'mid' : c.type === '휴식기' ? 'rest' : 'wkend'}${selCls(i)}`}
-                  onClick={() => c.type !== '휴식기' && onSelect(i)}>{dd2(c.from)}~{dd2(c.to)}</th>
+                  onClick={() => c.type !== '휴식기' && onSelect(i)}
+                  title={c.est ? '아직 확정 시각이 안 올라온 라운드(경기가 전부 같은 시각으로 들어 있음) — 평일 회차 기준 기간(한국 시간 수~목)으로 표시합니다. [일정 최신화]로 확정 시각이 들어오면 실제 날짜로 바뀝니다.' : undefined}>
+                  {dd2(c.from)}~{dd2(c.to)}{c.est && <small className="sa-est">예정</small>}</th>
               ))}
             </tr>
           </thead>
@@ -371,11 +377,36 @@ function WeekPanel({ data, col, season, note, onNoteSaved }) {
   )
 }
 
+// 오늘이 속한 회차 열(2026-10-09 사용자 지정 — "시즌분석은 현재주가 디폴트") — 서버 season_view._week와 같은 규칙:
+// 수·목 = 평일 열(그 주 수요일 키) / 금·토·일 = 주말 열(그 주 금요일 키) / 월·화 = 지난 금요일의 주말 열.
+// 그 열이 없으면(평일 경기가 없는 주 등) 같은 주 주말 열로, 그래도 없으면 null(옛 기본값 — 결과 있는 마지막 회차).
+function currentColIndex(cols) {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  const shift = (d, days) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + days)
+  const wd = (now.getDay() + 6) % 7                     // 월=0 … 일=6 (서버 weekday와 같다)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const [key, type] = wd === 2 || wd === 3 ? [fmt(shift(today, 2 - wd)), '평일']
+    : wd >= 4 ? [fmt(shift(today, 4 - wd)), '주말'] : [fmt(shift(today, -(wd + 3))), '주말']
+  let i = cols.findIndex((c) => c.key === key && c.type === type)
+  if (i < 0 && type === '평일') {
+    const fri = fmt(shift(today, 4 - wd))
+    i = cols.findIndex((c) => c.key === fri && c.type === '주말')
+  }
+  return i >= 0 ? i : null
+}
+
 export default function SeasonAnalysisPage() {
+  const { user } = useAuth()
   const [season, setSeason] = useState('')
   const [resp, setResp] = useState(null)
   const [error, setError] = useState('')
   const [sel, setSel] = useState(null)
+  // '일정 최신화'가 끝나면 표를 다시 불러오되, 보던 회차 선택은 그대로 둔다(keepSel — 다음 한 번의 불러오기에서 선택을 안 건드림).
+  const [refresh, setRefresh] = useState(0)
+  const keepSel = useRef(false)
+  const onCollected = useCallback(() => { keepSel.current = true; setRefresh((n) => n + 1) }, [])
 
   useEffect(() => {
     let alive = true
@@ -385,9 +416,12 @@ export default function SeasonAnalysisPage() {
         if (!alive) return
         setResp(r)
         if (!season && r.season) setSeason(r.season)
-        // 기본 선택 — 결과가 있는 마지막 회차(없으면 첫 회차)
+        // 기본 선택 — 오늘이 속한 현재 주(이 시즌에 그 주가 있을 때), 없으면 결과가 있는 마지막 회차(그것도 없으면 첫 회차)
         const d = r.data
+        if (keepSel.current) { keepSel.current = false; return }
         if (!d?.cols?.length) { setSel(null); return }
+        const cur = currentColIndex(d.cols)
+        if (cur !== null) { setSel(cur); return }
         let last = null
         d.cols.forEach((c, i) => {
           if (c.type === '휴식기') return
@@ -397,7 +431,7 @@ export default function SeasonAnalysisPage() {
       })
       .catch((e) => alive && setError(e.message))
     return () => { alive = false }
-  }, [season])
+  }, [season, refresh])
 
   const data = resp?.data
   const onNoteSaved = (wk, memo) => {
@@ -416,7 +450,8 @@ export default function SeasonAnalysisPage() {
         onSelect={setSel}
         seasons={resp.seasons}
         season={resp.season}
-        onSeason={(s) => { setResp(null); setSeason(s) }}
+        onSeason={(s) => { keepSel.current = false; setResp(null); setSeason(s) }}
+        headerExtra={user?.role === 'admin' ? <CupCollectButton label="일정 최신화" onDone={onCollected} /> : null}
       />
       {sel !== null && data.cols[sel] && (
         <WeekPanel

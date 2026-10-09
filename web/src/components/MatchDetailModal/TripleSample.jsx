@@ -6,8 +6,12 @@ import './TripleSample.css'
 // 상세보기 '표본' 섹션 — 12개 배당사 섹션 바로 아래(2026-09-26 사용자 지정).
 // 초기 표본(12사 초기 평균 + 국배 초기)과 배변 표본(12사 마감 평균 + 국배 최신, 서버 /api/triple_sample?phase=final)을
 // 한 섹션에서 비교해 본다(2026-10-04 사용자 지정 A안 — 예전엔 두 섹션을 위아래로 따로 뒀다. 아래 '초기·배변 한 번에 보기' 주석 참고).
-// 12사 평균 승·패 + 국배 승·패가 둘 다 비슷한 과거 경기를 결과(핸승·핸무·무·역)별 4칸으로 보여준다.
-//   위   = 같은 리그 / 아래 = 통합(다른 리그만). 폭은 둘 다 ±0칸(완전 일치)에서 시작해 0건이면 1건 나올 때까지 1칸씩 넓히고, 제목에 쓴 폭(±N칸)을 적는다. 계산·기준은 서버 api/triple_sample.py.
+// 2026-10-09 규칙 변경(사용자 지정): 국배 승·무·패가 똑같은 과거 경기를 골라, 그 안에서 12사(해배) 평균 승·무·패가 가장 비슷한 순으로
+// 결과(핸승·핸무·무·역)별 4칸에 보여준다(예전: 12사 평균 승·패 + 국배 승·패가 둘 다 비슷한 경기).
+//   위   = 같은 리그 / 아래 = 통합(다른 리그만). 폭(국배 기준)은 ±0칸(완전 일치)에서 시작해 0건이면 1건 나올 때까지 1칸씩 넓히고,
+//   제목에 쓴 폭을 적는다. 계산·기준은 서버 api/triple_sample.py.
+// '국배 예측'(12사 평균이 비슷했던 과거 경기들의 국배 중앙값) 줄은 2026-10-09 만든 날 바로 화면에서 뺐다(사용자 지정).
+//   서버(triple_sample.predict_kr)는 응답의 predict로 계속 계산해 주므로, 다시 보이려면 화면 줄만 새로 그리면 된다.
 // 카드 = 경기일 · 팀 이름(스코어) · 12사 평균 · 국배 · 국핸디.
 //   배당 값 색은 12사·국배·국핸디 승·무·패 모두 같은 네 단계(같은 값 노랑 배경 · 아주 닮음 주황+밑줄 · 닮음 주황 · 다름 빨강) — 아래 tierOf.
 // 설명(어떻게 산출했나)은 제목 옆 ? 도움말에 있다 — 화면에는 부제를 두지 않는다.
@@ -29,6 +33,7 @@ function MoveMark({ v, v0 }) {
 }
 
 // ── 카드 배당 값 색 — 통일 기준(2026-10-05 사용자 지정) ─────────────────────────────
+// (2026-10-09부터 국배·국핸디는 % 가 아니라 '호가 단계'로 판정한다 — 아래 hogaSteps. 이 표의 % 기준은 12사 평균에만 쓴다.)
 // 12사 평균(마감) · 국배 · 국핸디의 승·무·패 9칸 모두 같은 네 단계로 칠한다(무만 따로 쓰던 0.20/0.30 경고는 없앴다).
 //   같은 값    차이 0                         → 노랑 배경
 //   아주 닮음  승·패 1% 이내 · 무 0.05 이내    → 주황 글자 + 밑줄
@@ -36,6 +41,20 @@ function MoveMark({ v, v0 }) {
 //   다름      그 밖                           → 빨강 글자
 // 경계는 카드 점수(cardScore — 승·패 % 2.5에서 0점, 무 0.05 만점·0.10 절반)와 같아서 '색이 있으면 점수가 있다'.
 // 탭 폭(±N칸)·호가 단위는 표본을 찾는 데만 쓰고 색 판정에는 쓰지 않는다.
+// ── 호가 단계(2026-10-09 사용자 지정 — "비슷하면 언더라인 주는 효과를 현재 호가대로") ────────────────
+// 국내 배당(국배·국핸디)은 0.01씩 움직이지 않고 구간별 호가 단위로만 움직인다(33,000경기 실측): 2.5 미만 0.01 · 2.5~5 0.05 ·
+// 5~10 0.10 · 10 이상 0.50. 그래서 국배·국핸디는 % 차이가 아니라 '호가 몇 단계 차이'로 색을 정한다(서버 odds_rank와 같은 식).
+//   같은 값 0단계 → 노랑 배경 · 아주 닮음 1단계 → 주황 + 밑줄 · 닮음 2~3단계 → 주황 · 다름 4단계 이상 → 빨강
+// (단계 경계 1·3은 감으로 정했다 — 예전 % 기준과 비슷한 폭: 2.2대 승 1%≈2단계, 3~5대 무 0.05=1단계.)
+// 12사 평균은 평균값이라 호가 단위가 없어 예전 % 기준 그대로다. 카드 점수(cardScore)도 아직 % 기준이다.
+const oddsRank = (x) => (x < 2.5 ? x * 100 : x < 5 ? 250 + (x - 2.5) / 0.05 : x < 10 ? 300 + (x - 5) / 0.1 : 350 + (x - 10) / 0.5)
+function hogaSteps(v, base) {
+  return Math.round(Math.abs(oddsRank(v) - oddsRank(base)))
+}
+function hogaTier(n) {
+  return n === 0 ? 'same' : n === 1 ? 'close' : n <= 3 ? 'near' : 'far'
+}
+
 function tierOf(v, base, isDraw) {
   if (v === null || v === undefined || base === null || base === undefined) return null
   const d = Math.round(Math.abs(v - base) * 100)
@@ -45,13 +64,17 @@ function tierOf(v, base, isDraw) {
   return pct <= 1 + 1e-9 ? 'close' : pct <= 2.5 + 1e-9 ? 'near' : 'far'
 }
 const TIER_CLASS = { same: 'ts-same', close: 'ts-near ts-close', near: 'ts-near', far: 'ts-far' }
-const TIER_TEXT = { same: '같은 값', close: '아주 닮음', near: '닮음', far: '다름' }
-function ValCell({ v, base, isDraw }) {
+function ValCell({ v, base, isDraw, hoga }) {
   if (v === null || v === undefined) return <>-</>
+  if (hoga && base !== null && base !== undefined) {           // 국배·국핸디 — 호가 단계로
+    const n = hogaSteps(v, base)
+    const t = hogaTier(n)
+    return <span className={TIER_CLASS[t]} title={`이번 경기 ${f2(base)} - 호가 ${n}단계`}>{f2(v)}</span>
+  }
   const t = tierOf(v, base, isDraw)
   if (!t) return <>{f2(v)}</>
   const diff = isDraw ? `${f2(Math.abs(v - base))} 차이` : `${(Math.abs(v - base) / base * 100).toFixed(2)}% 차이`
-  return <span className={TIER_CLASS[t]} title={`이번 경기 ${f2(base)} — ${TIER_TEXT[t]}(${diff})`}>{f2(v)}</span>
+  return <span className={TIER_CLASS[t]} title={`이번 경기 ${f2(base)} - ${diff}`}>{f2(v)}</span>
 }
 
 // 카드 하나의 고유키 — 신뢰 체크를 기억할 때 쓴다(같은 경기는 기본/넓힘 탭이 달라도 같은 카드).
@@ -138,11 +161,11 @@ function Card({ c, ck, game, trusted, distrusted, onTrust, onDistrust, teams, av
           </tr>}
           <tr>
             <td>국배</td>
-            {c.K.map((v, i) => <td key={i}><ValCell v={v} base={game.K[i]} isDraw={i === 1} /></td>)}
+            {c.K.map((v, i) => <td key={i}><ValCell v={v} base={game.K[i]} isDraw={i === 1} hoga /></td>)}
           </tr>
           <tr title={c.khw === null ? '핸디 배당이 없는 경기입니다(20-21 시즌 이전 경기는 없는 경우가 많습니다)' : undefined}>
             <td>핸디 {khText(c.kh)}</td>
-            {hVals.map((v, i) => <td key={i}><ValCell v={v} base={sameH ? hRef[i] : null} isDraw={i === 1} /></td>)}
+            {hVals.map((v, i) => <td key={i}><ValCell v={v} base={sameH ? hRef[i] : null} isDraw={i === 1} hoga /></td>)}
           </tr>
         </tbody>
       </table>
@@ -162,10 +185,22 @@ const trustText = (a, trusted, keyOf) => {
 // ±0~1칸 노랑 · ±2~4칸 초록 · ±5칸 이상 빨강, 색은 '±N칸' 글자에만 준다. 선택 여부는 테두리로만 구분한다.
 // (실측(32,591경기)으로는 폭과 적중이 무관해 '믿을 만함'을 뜻하는 색이 아니다 — 폭을 눈으로 구분하는 표시일 뿐.)
 const tabTone = (k) => (k <= 1 ? 'yellow' : k <= 4 ? 'green' : 'red')
+// 2026-10-09부터 폭 = 국배 승·무·패 세 값 차이를 '국내 호가 단계 수'로 더한 거리(서버 dist='sum', triple_sample.odds_rank) — '합 N단계'로 적는다.
+// (국내 배당은 0.01씩 안 움직인다: 2.5 미만 0.01 · 2.5~5 0.05 · 5~10 0.10 · 10 이상 0.50 — 무 3.00→2.95는 1단계)
+// 색 구간: 3단계 이하 노랑 · 8단계 이하 초록 · 그보다 크면 빨강(한 값 기준이던 예전 1·4칸 눈금을 세 값 합 기준으로 바꾼 감).
+const tabToneSum = (k) => (k <= 3 ? 'yellow' : k <= 8 ? 'green' : 'red')
 // '표본'은 보통 굵기, '1건(0/1/0/0)'은 굵게.
-function TabText({ k, a, trusted, keyOf }) {
-  // 색은 '±N칸' 글자에만(탭 배경은 글자가 잘 보이는 기본색) — 표본이 0건이면 색을 안 넣는다.
-  return <><span className={`ts-k${a.n > 0 ? ` ts-k-${tabTone(k)}` : ''}`}>±{k}칸</span> · 표본 <b>{a.n}건 {cntText(a)}</b>{trustText(a, trusted, keyOf)}</>
+function TabText({ k, a, trusted, keyOf, sum }) {
+  // 색은 '±N칸'·'합 N칸' 글자에만(탭 배경은 글자가 잘 보이는 기본색) — 표본이 0건이면 색을 안 넣는다.
+  const tone = sum ? tabToneSum(k) : tabTone(k)
+  return (
+    <>
+      <span className={`ts-k${a.n > 0 ? ` ts-k-${tone}` : ''}`}
+        title={sum ? '국배 승·무·패 세 값이 국내 호가로 몇 단계 벌어졌는지를 더한 거리(2.5 미만 0.01 · 2.5~5 0.05 · 5~10 0.10 단위) — 0이면 국배가 똑같은 경기입니다' : undefined}>
+        {sum ? (k === 0 ? '국배 같음' : `합 ${k}단계`) : `±${k}칸`}
+      </span> · 표본 <b>{a.n}건 {cntText(a)}</b>{trustText(a, trusted, keyOf)}
+    </>
+  )
 }
 
 // ── 초기·배변 한 번에 보기(A안, 2026-10-04 사용자 지정 — 목업 web/public/mockups/sample_compare_mock2.html) ──
@@ -211,16 +246,16 @@ function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distr
               {s.nx ? (
                 <span className="ts-tabs" role="tablist">
                   <button type="button" role="tab" aria-selected={!s.on} className={`ts-tab${s.on ? '' : ' is-on'}`} onClick={() => setWide(p, areaKey, false)}>
-                    <TabText k={kb} a={s.base} trusted={trusted} keyOf={keyOf} />
+                    <TabText k={kb} a={s.base} trusted={trusted} keyOf={keyOf} sum={data[p].dist === 'sum'} />
                   </button>
                   <button type="button" role="tab" aria-selected={s.on} className={`ts-tab${s.on ? ' is-on' : ''}`} onClick={() => setWide(p, areaKey, true)}
                     title="표본이 더 늘어나는 폭까지 넓힌 표본">
-                    <TabText k={kn} a={s.nx.area} trusted={trusted} keyOf={keyOf} />
+                    <TabText k={kn} a={s.nx.area} trusted={trusted} keyOf={keyOf} sum={data[p].dist === 'sum'} />
                   </button>
                 </span>
               ) : (
                 <small className="ts-tab ts-tab-static">
-                  <TabText k={kb} a={s.base} trusted={trusted} keyOf={keyOf} />
+                  <TabText k={kb} a={s.base} trusted={trusted} keyOf={keyOf} sum={data[p].dist === 'sum'} />
                 </small>
               )}
             </span>
@@ -278,6 +313,74 @@ function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distr
   )
 }
 
+// 호가 설명(2026-10-09 사용자 지정) — 표본 도움말(제목의 '표본 ?')의 ⑧ 절. 표본 카드 색·합 N단계가 무엇을 뜻하는지.
+// 예시는 도르트문트-브레멘(26-27 5R)과 표본 카드 레버쿠젠-아르미니아(21-22 24R) 실제 값이다.
+// (처음엔 이번 경기 줄 끝 '호가 ?' 버튼의 따로 팝업이었는데, 표본 도움말 안으로 옮기고 버튼은 없앴다.)
+const HOGA_EX = [['승', 1.27, 1.27], ['무', 4.65, 4.60], ['패', 6.80, 6.90]]
+function HogaSection() {
+  const ex = HOGA_EX
+  return (
+    <>
+    <p className="help-legend-title">⑧-1 호가란</p>
+    <p className="help-legend-note">
+      <b>호가</b> = 국내 배당이 움직이는 <b>최소 눈금</b>입니다. 국내 배당(국배·국핸디)은 0.01씩 움직이지 않고 구간마다 정해진 눈금으로만 움직입니다
+      (승·무·패 33,000경기 실측으로 확인). 그래서 같은 0.05 차이라도 구간에 따라 한 눈금일 수도, 다섯 눈금일 수도 있습니다.
+      한 눈금을 <b>1단계</b>라고 부릅니다.
+    </p>
+    <table className="detail-table help-legend-table">
+      <thead><tr><th>배당 구간</th><th>한 눈금(1단계)</th><th>예</th></tr></thead>
+      <tbody>
+        <tr><td>2.5 미만</td><td>0.01</td><td>2.20 → 2.22 = 2단계</td></tr>
+        <tr><td>2.5 ~ 5</td><td>0.05</td><td>3.00 → 2.95 = <b>1단계</b> (0.01로 세면 5칸)</td></tr>
+        <tr><td>5 ~ 10</td><td>0.10</td><td>6.80 → 6.90 = 1단계</td></tr>
+        <tr><td>10 이상</td><td>0.50</td><td>10.0 → 10.5 = 1단계</td></tr>
+      </tbody>
+    </table>
+
+    <p className="help-legend-title">⑧-2 카드 색 — 국배·국핸디</p>
+    <p className="help-legend-note">
+      카드의 <b>국배</b>와 <b>핸디</b> 줄 숫자는 이번 경기 값과 <b>호가로 몇 단계 벌어졌는지</b>로 색을 칠합니다.
+      숫자에 마우스를 올리면 <b>&quot;이번 경기 1.27 - 호가 2단계&quot;</b>처럼 이번 경기 값과 단계 차이가 나옵니다.
+    </p>
+    <table className="detail-table help-legend-table">
+      <thead><tr><th>표시</th><th>이번 경기와 호가 차이</th><th>모양</th></tr></thead>
+      <tbody>
+        <tr><td><span className="ts-same">1.27</span></td><td>0단계</td><td>노랑 배경</td></tr>
+        <tr><td><span className="ts-near ts-close">4.60</span></td><td>1단계</td><td>주황 글자 + 밑줄</td></tr>
+        <tr><td><span className="ts-near">3.05</span></td><td>2~3단계</td><td>주황 글자</td></tr>
+        <tr><td><span className="ts-far">4.10</span></td><td>4단계 이상</td><td>빨강 글자</td></tr>
+      </tbody>
+    </table>
+    <p className="help-legend-note">
+      단계 경계(1·3)는 <b>감으로 정한 값</b>입니다(예전 % 기준과 비슷한 폭으로 맞춤). 12사 평균은 평균값이라 호가가 없어서 예전처럼 % 차이로 칠하고,
+      카드 점수(예: 72점)도 아직 % 기준입니다.
+    </p>
+
+    <p className="help-legend-title">⑧-3 예시 — 도르트문트 vs 브레멘 (26-27 5R) · 표본 레버쿠젠 vs 아르미니아 (21-22 24R)</p>
+    <table className="detail-table help-legend-table">
+      <thead><tr><th>국배(초기)</th><th>이번 경기</th><th>표본 카드</th><th>호가 차이</th></tr></thead>
+      <tbody>
+        {ex.map(([lab, a, b]) => {
+          const n = hogaSteps(b, a)
+          const t = hogaTier(n)
+          return (
+            <tr key={lab}>
+              <td>{lab}</td><td>{f2(a)}</td><td><span className={TIER_CLASS[t]}>{f2(b)}</span></td>
+              <td>{n}단계{lab === '무' ? ' (4.65 → 4.60, 0.05 단위)' : lab === '패' ? ' (6.80 → 6.90, 0.10 단위)' : ''}</td>
+            </tr>
+          )
+        })}
+        <tr><td>합</td><td colSpan={3}><b>2단계</b> — 탭에 <b>합 2단계</b>로 나오는 값(국배 승·무·패 단계 차이를 더한 것)</td></tr>
+      </tbody>
+    </table>
+    <p className="help-legend-note">
+      표본 탭의 <b>합 N단계</b>도 같은 단계입니다 — 국배 승·무·패가 호가로 몇 단계씩 벌어졌는지를 더한 값이라 작을수록 이번 경기와 국배가 비슷한 표본입니다.
+      0이면 <b>국배 같음</b>입니다.
+    </p>
+    </>
+  )
+}
+
 // 이번 경기 줄 — 배변이 있으면 '초기 → 배변 (변화)', 없으면 초기 값만
 function RefLine({ data, finalReady }) {
   const gi = data.init.game
@@ -299,7 +402,7 @@ function RefLine({ data, finalReady }) {
   return (
     // 앞 라벨('이번 경기 (초기 → 배변)')은 빼고 한 줄로(2026-10-04 사용자 지정) — 줄바꿈 대신 좁은 화면에선 가로 스크롤.
     <div className="ts-ref ts-ref-line">
-      {data.init.mode === 'kr' && <span className="ts-kr-only" title="이 리그는 12사(스코어맨 12개 배당사) 과거 배당이 아직 충분히 쌓이지 않아, 국배 승·패만 비슷한 과거 경기를 찾았습니다. 12사 배당이 쌓이면 자동으로 12사 평균까지 맞춰 찾습니다.">국배만 비교</span>}
+      {data.init.mode === 'kr' && <span className="ts-kr-only" title="12사(스코어맨 12개 배당사) 평균이 이 경기에 없거나 이 리그에 과거 12사 배당이 아직 충분하지 않아, 국배가 같은 경기를 국배 차이·최근 순으로만 줄 세웠습니다.">국배만 비교</span>}
       {gi.A.some((v) => v !== null) && <span>12사 평균 {group(gi.A, gf ? gf.A : null)}</span>}
       <span>국배 {group(gi.K, gf ? gf.K : null)}</span>
       <span>국핸디 ({khText(gi.kh) || '-'}) {group([gi.khw, gi.khd, gi.khl], sameH ? [gf.khw, gf.khd, gf.khl] : null)}</span>
@@ -498,9 +601,9 @@ function TripleSampleLegend({ onClose, final }) {
           </p>
         )}
         <p className="help-legend-note">
-          이 경기와 <b>배당 모양이 비슷했던 과거 경기</b>를 찾아 결과(핸승·핸무·무·역)별로 나눠 보여줍니다.
-          기준은 <b>12개 배당사 평균의 승·패</b>와 <b>국내 배당(국배)의 승·패</b> 두 가지이고, <b>넷이 모두</b> 폭 안에
-          들어와야 합니다(승과 패 둘 다). <b>무는 조건이 아니라 참고</b>로 카드에만 보여줍니다.
+          이 경기와 <b>국내 배당(국배) 승·무·패가 똑같았던 과거 경기</b>를 찾아 결과(핸승·핸무·무·역)별로 나눠 보여줍니다(2026-10-09부터).
+          후보는 <b>19-20 시즌 이후 경기만</b> 씁니다(그 앞 시즌은 제외). 그 안에서는 <b>12개 배당사(해배) 평균 승·무·패가 이 경기와 가장 비슷한 경기</b>가 앞에 옵니다 — &quot;국내가 같은 배당을 줬을 때
+          해외 시장은 어떻게 봤고 결과가 어땠나&quot;를 보는 구조입니다. 국배가 똑같은 경기가 없으면 <b>국배 승·무·패 세 값의 차이를 더한 거리가 가장 작은 경기</b>까지 넓힙니다(무도 조건에 듭니다). 탭에는 그 거리를 <b>합 N단계</b>로 적고, 똑같으면 <b>국배 같음</b>으로 적습니다. <b>단계</b>는 국내 호가 한 눈금입니다 — 국내 배당은 0.01씩 움직이지 않고 2.5 미만은 0.01, 2.5~5는 0.05, 5~10은 0.10, 10 이상은 0.50 단위로만 움직여서, 무 3.00 → 2.95나 승 2.60 → 2.55는 한 단계로 셉니다.
         </p>
 
         <p className="help-legend-title">② 같은 리그 · 통합은 어떻게 나누나</p>
@@ -514,7 +617,7 @@ function TripleSampleLegend({ onClose, final }) {
           </tbody>
         </table>
         <p className="help-legend-note">
-          <b>칸</b> = 소수 둘째 자리 한 눈금(0.01)입니다. 예를 들어 12사 평균 승이 2.55이고 폭이 ±2칸이면 2.53~2.57까지 봅니다. 승·패 네 값이 <b>모두</b> 폭 안이어야 표본이 됩니다.
+          <b>칸</b> = 소수 둘째 자리 한 눈금(0.01)입니다. 예를 들어 이번 경기 국배가 2.20 / 3.40 / 2.50이고 과거 경기가 2.22 / 3.40 / 2.55면 승 2단계 + 무 0 + 패 1단계(2.50 → 2.55는 호가 한 눈금)라 <b>합 3단계</b>입니다. 이 합이 가장 작은 경기들이 표본이 되고(12사 평균은 거르지 않고 순서만 정합니다), 아래 설명의 '±N칸'은 2026-10-09 전 규칙(가장 크게 벌어진 한 값) 기준입니다.
           폭은 같은 리그·통합 모두 <b>완전 일치(±0칸)</b>에서 시작하고, 표본이 0건이면 <b>1건이 나올 때까지 1칸씩 넓혀</b>(최대 ±15칸) 찾습니다. 제목에 실제로 쓴 폭을 <b>±5칸</b>처럼 적으니, 숫자가 작을수록 배당이 더 비슷한 표본입니다. 폭을 넓혀 표본이 1건뿐이면 근거가 약해서, 표본이 늘어나는 더 넓은 폭을 <b>탭</b>으로 나란히 두었습니다(탭을 누르면 그 표본으로 바뀝니다). 넓은 폭 탭에는 좁은 폭 표본도 함께 들어 있어서, 그 경기들은 카드에 <b>파란 테두리</b>를 둘러 구분합니다(나머지가 새로 더해진 경기). 끝까지 없으면 비어 있습니다.
         </p>
 
@@ -524,7 +627,7 @@ function TripleSampleLegend({ onClose, final }) {
             <tr><th>순서</th><th>내용</th></tr>
           </thead>
           <tbody>
-            <tr><td>1</td><td>과거 경기마다 <b>승·패 네 값(12사 평균 승·패, 국배 승·패) 중 가장 크게 벌어진 값이 몇 칸인지</b>를 잽니다. 한 값이라도 크게 벌어지면 그 경기는 그만큼 먼 경기입니다.</td></tr>
+            <tr><td>1</td><td>과거 경기마다 <b>국배 승·무·패 세 값이 호가로 몇 단계 벌어졌는지를 더한 값</b>을 잽니다(2026-10-09 — 예전엔 0.01을 1칸으로 세서 무 3.00 → 2.95가 5칸이 됐고, 가장 크게 벌어진 한 값만 봤습니다).</td></tr>
             <tr><td>2</td><td><b>가장 가까운 경기의 칸 수</b>까지만 폭을 넓힙니다(±0칸에서 시작). 그 폭 안에 든 경기가 표본이고, 제목에 그 폭이 <b>±N칸</b>으로 적힙니다.</td></tr>
             <tr><td>3</td><td>가장 가까운 경기도 <b>15칸을 넘으면 표본을 만들지 않습니다</b>(그 이상이면 &apos;비슷한 배당&apos;이라 하기 어렵다고 봅니다). 같은 리그와 통합을 따로 계산하므로 한쪽만 비고 다른 쪽은 나올 수도 있습니다.</td></tr>
           </tbody>
@@ -532,7 +635,7 @@ function TripleSampleLegend({ onClose, final }) {
         <p className="help-legend-note">
           <b>표본이 비어 있다고 자료가 부족한 것은 아닙니다.</b> 과거 경기는 충분한데, 그중 이번 경기와 가까운 경기가 <b>15칸 밖</b>이라 안 잡힌 것입니다.
           특히 <b>정배가 아주 세서 패(언더독) 배당이 8~10대로 큰 경기</b>는 잘 비어 있습니다. 칸은 0.01 단위인데, 배당이 클수록 같은 배당이라도 숫자가 크게 흔들리기 때문입니다.
-          국내 배당은 5 이상에서 <b>호가 단위(배당이 움직이는 최소 눈금)가 0.10</b>이라 한 눈금만 달라도 10칸이 벌어지고, 12사 평균도 회사마다 달라 큰 배당에서는 0.2~0.3까지 벌어지는 경우가 있습니다(아래 예).
+          국내 배당은 5 이상에서 <b>호가 단위(배당이 움직이는 최소 눈금)가 0.10</b>이라 한 눈금만 달라도 10칸이 벌어집니다(아래 예는 2026-10-09 규칙 변경 전 — 그때는 12사 평균도 거르는 조건이었다).
         </p>
         <table className="detail-table help-legend-table">
           <thead>
@@ -571,7 +674,7 @@ function TripleSampleLegend({ onClose, final }) {
         <p className="help-legend-title">④ 시점과 정렬</p>
         <p className="help-legend-note">
           이 경기 날짜 <b>이전</b>에 끝난 경기만 씁니다(같은 날 경기는 서로 세지 않습니다). 카드는 결과별 칸 안에서
-          승·패 차이(12사+국배)가 작은 순 → 무 차이가 작은 순 → 최근 순이고, 칸마다 최대 12장까지 보입니다.
+          <b>12사 평균 승·무·패 차이의 합이 작은 순</b> → 국배 차이가 작은 순 → 최근 순이고(12사 평균이 없는 경기는 맨 뒤), 칸마다 최대 12장까지 보입니다.
           표본 개수는 칸 제목 옆(예: <b>3건 중 12</b>)에 적힙니다. 제목 줄의 <b>표본 9건 (3/1/6/4)</b>에서 괄호 안 숫자는 <b>핸승/핸무/무/역</b> 순서의 결과별 건수입니다.
         </p>
 
@@ -581,10 +684,10 @@ function TripleSampleLegend({ onClose, final }) {
             <tr><th>표시</th><th>뜻</th></tr>
           </thead>
           <tbody>
-            <tr><td><span className="ts-same">2.50</span></td><td><b>같은 값</b> — 이번 경기와 차이 0 (12사 평균·국배·국핸디의 승·무·패 모두 같은 기준)</td></tr>
-            <tr><td><span className="ts-near ts-close">1.81</span></td><td><b>아주 닮음</b> — 승·패는 <b>1% 이내</b>, 무는 <b>0.05 이내</b> (주황 글자 + 밑줄)</td></tr>
-            <tr><td><span className="ts-near">2.26</span></td><td><b>닮음</b> — 승·패는 <b>2.5% 이내</b>, 무는 <b>0.10 이내</b> (주황 글자)</td></tr>
-            <tr><td><span className="ts-far">3.48</span></td><td><b>다름</b> — 그보다 멀면 빨강 글자. 이 칸은 카드 점수가 0점입니다. 색 단계의 경계는 카드 점수(⑥)와 같아서 <b>색이 있으면 점수가 있고, 색이 강할수록 점수도 높습니다</b>. 국핸디는 기준점(±1)이 같을 때만 칠합니다. 값에 마우스를 올리면 차이가 나옵니다.</td></tr>
+            <tr><td><span className="ts-same">2.50</span></td><td>노랑 배경 — 이번 경기와 차이 0</td></tr>
+            <tr><td><span className="ts-near ts-close">1.81</span></td><td>주황 글자 + 밑줄 — <b>국배·국핸디</b>는 호가 <b>1단계</b> 이내, <b>12사 평균</b>은 승·패 1% 이내 · 무 0.05 이내</td></tr>
+            <tr><td><span className="ts-near">2.26</span></td><td>주황 글자 — 국배·국핸디는 호가 2~3단계, 12사 평균은 승·패 2.5% 이내 · 무 0.10 이내</td></tr>
+            <tr><td><span className="ts-far">3.48</span></td><td>빨강 글자 — 그보다 멀 때. 국배·국핸디는 <b>호가 단계</b>(아래 ⑧ 참고), 12사 평균은 % 차이로 칠합니다. 국핸디는 기준점(±1)이 같을 때만 칠합니다. 값에 마우스를 올리면 차이가 나옵니다.</td></tr>
             <tr><td><b className="ts-date-new">24-09-14</b></td><td>카드 날짜가 <b>2020년 이후</b> 경기면 날짜 색이 다릅니다(최근 경기 구분용).</td></tr>
             <tr><td><span className="ts-team-hit">첼시</span></td><td>카드의 팀이 <b>이번 경기에 나오는 팀</b>과 같으면 팀명 글자색이 노랑으로 바뀌고 굵어집니다(홈·원정 자리는 상관없음).</td></tr>
             <tr><td>☑ 신뢰</td><td>카드 날짜 옆 체크박스 — <b>이 표본은 믿는다</b>고 표시하면 <b>신뢰</b> 글자가 초록 굵은 글씨로 바뀌고, 위쪽 탭 제목의 표본 건수 옆에 <b>(신뢰ㆍ1건)</b>처럼 체크한 카드 수가 붙습니다(체크한 게 없으면 안 붙습니다). 경기별로 서버에 저장되어 다른 기기·브라우저에서도 같게 보입니다.</td></tr>
@@ -643,6 +746,9 @@ function TripleSampleLegend({ onClose, final }) {
           그래서 이 표본은 결과를 예측하는 근거가 아니라 <b>비슷한 배당의 과거 경기를 눈으로 보는 용도</b>입니다.
           표본이 없으면 칸이 <b>—</b>로 비어 있습니다.
         </p>
+
+        <p className="help-legend-title">⑧ 호가 — 국배·국핸디 색과 &apos;합 N단계&apos;</p>
+        <HogaSection />
       </div>
     </div>
   )

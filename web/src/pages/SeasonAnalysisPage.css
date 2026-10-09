@@ -311,3 +311,43 @@
 .sa-page .chip.red { background: var(--chip-red-bg); }
 .sa-page .chip.gray { background: var(--chip-gray-bg); }
 .sa-page .chip.orange { background: color-mix(in srgb, #fb923c 25%, transparent); color: #fb923c; }
+
+/* '일정 최신화' 버튼(2026-10-09) — 수집 버튼 부품(CupCollectButton)은 탭 줄 전용 스타일(.tab-bar …)이라
+   여기서는 같은 모양을 따로 준다. 제목줄 오른쪽 끝에 붙인다. */
+.sa-page h2 .cup-collect {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 0 auto;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.sa-page h2 button.cup-collect-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sa-page h2 button.cup-collect-btn:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.sa-page h2 button.cup-collect-btn:disabled {
+  color: var(--text-muted);
+  cursor: progress;
+}
+
+/* 머리글 날짜 밑의 '예정' 꼬리표(확정 시각 전 평일 열) */
+.sa-est {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--chip-yellow-fg);
+}

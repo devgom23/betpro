@@ -382,7 +382,7 @@ def _cards_pl(db, code, S, R, HT, AT):
     """배변 표본 카드(같은 리그 + 다른 리그) 중 무·역 비율과 장 수. 카드가 없으면 (NaN, 0)."""
     import triple_sample as TS
     try:
-        q = TS.query(db, code, S, R, HT, AT, phase="final")
+        q = TS.query(db, code, S, R, HT, AT, phase="final", legacy=True)   # 옛 표본 규칙 — 신호 문턱을 그 규칙으로 정했다
     except Exception:  # noqa: BLE001
         return np.nan, 0
     if not q.get("ready"):

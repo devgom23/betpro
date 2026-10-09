@@ -177,8 +177,21 @@ def build(season: str, db=None) -> dict:
         wed = k - timedelta(days=2)
         if wed in placed and week_type.get(wed) == "평일":
             days = sorted(week_days[wed])
-            cols.append({"type": "평일", "key": str(wed), "label": "평일",
-                         "from": str(days[0]), "to": str(days[-1]), "rounds": placed[wed]})
+            col = {"type": "평일", "key": str(wed), "label": "평일",
+                   "from": str(days[0]), "to": str(days[-1]), "rounds": placed[wed]}
+            # 스코어맨이 아직 확정 시각을 안 올린 라운드는 열 경기 전부가 같은 시각으로 들어 있다(2026-10-09 실측: 앞으로 라운드 190개 중
+            # 151개). 그러면 평일 열이 하루('29~29')로 나와 실제(과거 시즌은 현지 화~수 = 한국 수~목 이틀)와 달라 보인다 —
+            # 리그마다 경기가 8개 이상인데 시각이 하나뿐이고 아직 결과가 없으면 임시값으로 보고, 머리글을 평일 기준 기간
+            # (한국 시간 수~목)으로 보여 준다. 실제 시각이 들어오면 이 조건이 풀려 저절로 실제 날짜로 돌아온다('일정 최신화' 버튼).
+            est = bool(placed[wed])
+            for lg, r in placed[wed].items():
+                gl = [g for g in by_round[(lg, r)] if not g["cancel"] and _week(g["d"])[0] == wed]
+                if len(gl) < 8 or len({(g["d"], g["hour"]) for g in gl}) != 1 or any(g["rt"] is not None for g in gl):
+                    est = False
+                    break
+            if est:
+                col.update({"from": str(wed), "to": str(wed + timedelta(days=1)), "est": True})
+            cols.append(col)
         if k in placed:
             n += 1
             days = sorted(d for d in week_days[k] if _week(d)[0] == k)

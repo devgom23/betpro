@@ -25,20 +25,29 @@ function resultText(status) {
   return `완료 ${String(status.finished || '').slice(11, 16)} · 일정 ${r.matches?.toLocaleString() ?? 0}경기${failed}`
 }
 
-export default function CupCollectButton() {
+// label — 버튼 글자(기본: 리그 외 경기 및 결과 수집). onDone — 이 화면에서 시작한 수집이 끝났을 때 한 번 부른다
+// (시즌분석 '일정 최신화'가 표를 다시 불러오는 데 쓴다, 2026-10-09). 화면을 열었을 때 이미 끝나 있던 수집엔 안 부른다.
+export default function CupCollectButton({ label = '리그 외 경기 및 결과 수집', onDone }) {
   const [status, setStatus] = useState(null)
   const [error, setError] = useState('')
   const timer = useRef(null)
+  const sawRunning = useRef(false)
 
   const poll = useCallback(async () => {
     try {
       const s = await api.get('/api/cup_collect/status')
       setStatus(s)
-      if (s.running) timer.current = setTimeout(poll, POLL_MS)
+      if (s.running) {
+        sawRunning.current = true
+        timer.current = setTimeout(poll, POLL_MS)
+      } else if (sawRunning.current) {
+        sawRunning.current = false
+        if (!s.error) onDone?.()
+      }
     } catch (e) {
       setError(e.message)
     }
-  }, [])
+  }, [onDone])
 
   // 화면을 새로 열었을 때 이미 돌고 있던 수집이 있으면 이어서 보여준다.
   useEffect(() => {
@@ -51,6 +60,7 @@ export default function CupCollectButton() {
     try {
       const res = await api.post('/api/cup_collect/start', {})
       setStatus(res.status)
+      sawRunning.current = true
       clearTimeout(timer.current)
       timer.current = setTimeout(poll, POLL_MS)
     } catch (e) {
@@ -77,7 +87,7 @@ export default function CupCollectButton() {
         disabled={running}
         title="6대리그 팀의 유럽대항전·컵 경기 일정·결과를 최신으로 받습니다(앞뒤 일정용 — 배당은 안 받음)"
       >
-        {running ? '수집 중…' : '리그 외 경기 및 결과 수집'}
+        {running ? '수집 중…' : label}
       </button>
     </span>
   )

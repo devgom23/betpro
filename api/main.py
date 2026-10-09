@@ -852,8 +852,8 @@ def triple_sample(code: str, S: str, R: str, HT: str, AT: str,
                   scope: str = PATHS.SCOPE_MASTER,
                   phase: str = "init",
                   user: dict = Depends(get_current_user)):
-    """상세보기 '표본' 섹션 — 12사 평균 승·패 + 국배 승·패가 둘 다 비슷한 과거 경기(위=같은 리그,
-    아래=다른 리그 — 폭은 ±0칸부터 0건이면 1칸씩 넓힘). 계산·기준은 api/triple_sample.py. 공식 6대리그만(12사 배당이 거기만 있다)."""
+    """상세보기 '표본' 섹션 — 국배 승·무·패가 똑같은 과거 경기를 12사 평균이 가장 비슷한 순으로(2026-10-09 규칙 변경, 위=같은 리그,
+    아래=다른 리그 — 국배 폭은 ±0칸부터 0건이면 1칸씩 넓힘) + 국배 예측(predict). 계산·기준은 api/triple_sample.py."""
     _check_league_for(code, scope, user)
     if scope == PATHS.SCOPE_USER and code in TRIPLE.USER_CODES:
         # 내 데이터 K1·K2(2026-09-27) — 그 계정 user.db와 그 계정 multibook.db로. 12사 과거 배당이
