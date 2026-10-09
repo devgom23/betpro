@@ -502,7 +502,11 @@ export default function TripleSampleSection({ code, scope, row, noteSlots }) {
   const initReady = !!data.init?.ready
   const finalReady = !!data.final?.ready
   // 배변 표본이 없으면(국배 배변 전 등) 초기만 보인다 — 버튼도 숨긴다.
-  const shown = !initReady ? [] : !finalReady ? ['init'] : view === 'both' ? PHASES : [view]
+  // 배변이 안 된 경기(국배 배변 전 등)는 '배변' 탭에 안내 문구만 보이고 초기 카드를 대신 보여주지 않는다(2026-10-09 사용자 지정).
+  // '같이'에서는 초기 카드만 보이고 배변 쪽은 안내 문구가 대신한다.
+  const shown = !initReady ? [] : view === 'init' ? ['init'] : view === 'final' ? (finalReady ? ['final'] : [])
+    : finalReady ? PHASES : ['init']
+  const finalMsg = data.final === undefined ? '배변 표본을 불러오는 중…' : data.final === null ? '배변 표본을 불러오지 못했습니다' : '배변이 안되었습니다'
   const sel = { init: {}, final: {} }
   for (const p of PHASES) {
     if (!data[p]?.ready) continue
@@ -534,23 +538,18 @@ export default function TripleSampleSection({ code, scope, row, noteSlots }) {
           <RefLine data={data} finalReady={finalReady} />
           {!folded && (
             <>
-              {finalReady ? (
-                <>
-                  <div className="ts-view-bar">
-                    <span className="ts-view-seg" role="tablist" aria-label="표본 보기">
-                      {[['init', '초기'], ['final', '배변'], ['both', '같이']].map(([v, lab]) => (
-                        <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? 'is-on' : ''} onClick={() => setView(v)}>{lab}</button>
-                      ))}
-                    </span>
-                    {view === 'both' && <small>카드 첫 줄 오른쪽 · 왼쪽 띠 색: <span className="ts-cmp-tag ts-cmp-init-c">초기</span> <span className="ts-cmp-tag ts-cmp-final-c">배변</span></small>}
-                  </div>
-                </>
-              ) : (
-                <div className="ts-msg">
-                  배변 표본: {data.final === undefined ? '불러오는 중…' : data.final === null ? '불러오지 못했습니다' : (data.final.reason || '만들 수 없습니다')}
-                </div>
+              <div className="ts-view-bar">
+                <span className="ts-view-seg" role="tablist" aria-label="표본 보기">
+                  {[['init', '초기'], ['final', '배변'], ['both', '같이']].map(([v, lab]) => (
+                    <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? 'is-on' : ''} onClick={() => setView(v)}>{lab}</button>
+                  ))}
+                </span>
+                {view === 'both' && finalReady && <small>카드 첫 줄 오른쪽 · 왼쪽 띠 색: <span className="ts-cmp-tag ts-cmp-init-c">초기</span> <span className="ts-cmp-tag ts-cmp-final-c">배변</span></small>}
+              </div>
+              {!finalReady && view !== 'init' && (
+                <div className="ts-msg" title={data.final?.reason || undefined}>{finalMsg}</div>
               )}
-              {AREA_KEYS.map((k) => (
+              {shown.length > 0 && AREA_KEYS.map((k) => (
                 <CompareBand
                   key={k}
                   areaKey={k}
