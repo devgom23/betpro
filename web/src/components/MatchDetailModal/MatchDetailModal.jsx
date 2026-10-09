@@ -21,6 +21,8 @@ import {
 } from '../../utils/verdictCalc'
 import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
 import TripleSampleSection from './TripleSample'
+import PlhanScorePopup from './PlhanScore'
+import { plhanChipText, plhanChipTitle } from '../../utils/plhanScore'
 import { RichMemoInput } from '../RichMemo/RichMemo'
 import { stripMemo } from '../../utils/richMemo'
 import {
@@ -251,12 +253,22 @@ const DDONG_GRADES = [
 // 라벨을 값에 붙여 두는 이유: 이 줄에는 성격이 다른 뱃지가 여러 개 늘어설 예정이라,
 // 뱃지마다 자기가 무엇을 말하는지 스스로 설명해야 한다(제목 하나로는 못 가른다).
 // tone을 주면 --chip-* 토큰으로 배경까지 칠한다(등급처럼 값 자체가 경고인 경우).
-function MatchChip({ label, tone, title, children }) {
+function MatchChip({ label, tone, title, children, onClick, extraClass }) {
   const style = tone
     ? { background: `var(--chip-${tone}-bg)`, color: `var(--chip-${tone}-fg)` }
     : undefined
+  const cls = `match-chip${tone ? ' match-chip-tone' : ''}${extraClass ? ` ${extraClass}` : ''}`
+  // 누르면 무언가를 여는 칩(플핸 점수 → 근거 팝업)은 버튼으로 — 키보드(Enter·Space)로도 열린다.
+  if (onClick) {
+    return (
+      <button type="button" className={`${cls} match-chip-btn`} style={style} title={title} onClick={onClick}>
+        <span className="match-chip-label">{label}</span>
+        <strong>{children}</strong>
+      </button>
+    )
+  }
   return (
-    <span className={`match-chip${tone ? ' match-chip-tone' : ''}`} style={style} title={title}>
+    <span className={cls} style={style} title={title}>
       <span className="match-chip-label">{label}</span>
       <strong>{children}</strong>
     </span>
@@ -811,6 +823,28 @@ function strongPickChips(row, fin) {
   ]
 }
 
+// ── 플핸 점수 칩 (2026-10-07 사용자 지정 — 경기지표 맨 위, 누르면 근거 팝업) ─────────────
+// 점수 = 패턴분석-01(0~2) + 다른 방법 동의(0~3) — 계산은 서버(api/plhan_score.py), 팝업은 PlhanScore.jsx.
+// 맨 위 고정 자리라 0~1점도 흐리게 늘 보인다(사용자 지정). 4~5점 진한 빨강 · 3점 연한 빨강 · 2점 이하 회색,
+// 5점(최대)은 테두리에 노란 강조. 마감(배변) 배당 전에는 '대기'. 공식 6대리그가 아니면 안 뜬다.
+function plhanChips(plhan, onOpen) {
+  if (!plhan) return []
+  if (!plhan.ready) {
+    if (plhan.state !== 'nodom') return []
+    return [
+      <MatchChip key="plhan" label="플핸" extraClass="match-chip-dim" title={plhan.reason}>—</MatchChip>,
+    ]
+  }
+  const sc = plhan.state === 'ok' ? plhan.score : null
+  const tone = sc === null ? 'gray' : sc >= 4 ? 'red' : sc === 3 ? 'red-soft' : 'gray'
+  const extra = [sc === 5 ? 'match-chip-hl' : '', sc !== null && sc <= 1 ? 'match-chip-dim' : ''].filter(Boolean).join(' ')
+  return [
+    <MatchChip key="plhan" label="플핸" tone={tone} extraClass={extra || undefined} title={plhanChipTitle(plhan)} onClick={onOpen}>
+      {plhanChipText(plhan)}
+    </MatchChip>,
+  ]
+}
+
 // ── 플축·국≠해 뱃지 (2026-09-26 사용자 지정) — 조건·실측은 verdictCalc.js plSplitAxis 주석 ──
 // 기존 플축(표본 방향 7개 기준)과 따로 세는 이유: 505경기 중 기존 플축과 겹치는 건 28경기뿐이었다.
 function plSplitAxisChips(row, fin) {
@@ -959,7 +993,7 @@ function archiveChips(tags) {
   })
 }
 
-function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, xg, archiveTags, seasonSample, h2hMatches, axisStats }) {
+function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, xg, archiveTags, seasonSample, h2hMatches, axisStats, plhan, onPlhanOpen }) {
   // 똥배 → 국/해 엇갈림 → 전적 → 무 순으로 세로로 쌓는다.
   // (동배당 뱃지는 2026-09-23에 뺐다 — 같은 내용을 '같은 회차 동배당 결과' 섹션이
   //  초기·배변까지 갈라 표로 보여주게 되면서 뱃지 쪽이 중복이 됐다. 사용자 지정.)
@@ -973,7 +1007,8 @@ function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, xg, 
   const h2hRecent = verdict
     ? h2hVerdictRecent(h2hMatches, String(row.HT || '').trim(), row.S)
     : null
-  const chips = [...archiveChips(archiveTags), ...axisChips(row, seasonSample, h2hMatches, axisStats),
+  // 플핸 점수는 맨 위(2026-10-07 사용자 지정 — "경기지표 가장 상단") — 📌 아카이브 태그보다도 앞이다.
+  const chips = [...plhanChips(plhan, onPlhanOpen), ...archiveChips(archiveTags), ...axisChips(row, seasonSample, h2hMatches, axisStats),
     ...plSplitAxisChips(row, fin),
     ...plhan85Chips(row, verdict), ...seasonStakeChips(row),
     ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
@@ -4869,7 +4904,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, seasonSample, h2hMatches, axisStats }) {
+function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, seasonSample, h2hMatches, axisStats, plhan, onPlhanOpen }) {
   // '경기지표'의 무·전적 뱃지와 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -4912,6 +4947,8 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveT
                   seasonSample={seasonSample}
                   h2hMatches={h2hMatches}
                   axisStats={axisStats}
+                  plhan={plhan}
+                  onPlhanOpen={onPlhanOpen}
                 />
               </div>
               {/* 방향성·배당 두 표를 한 덩어리로 묶고, 그 아래에 구분선 + 시스템
@@ -5039,6 +5076,26 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
       alive = false
     }
   }, [code, scope, matchKey])
+
+  // 플핸 점수(경기지표 맨 위 칩 + 근거 팝업, 2026-10-07) — 서버 api/plhan_score.py.
+  // 마감(배변) 배당이 새로 들어오면(최신배당 불러오기) 점수가 바뀌므로 배변 배당도 다시 부르는 조건에 넣는다.
+  const [plhan, setPlhan] = useState(null)
+  const [showPlhan, setShowPlhan] = useState(false)
+  const closeOddsKey = [row.EFW, row.EFD, row.EFL, row.EKW, row.EKD, row.EKL].join('|')
+  useEffect(() => {
+    let alive = true
+    const r = rowRef.current
+    setPlhan(null)
+    const params = new URLSearchParams({
+      code, scope, S: String(r.S ?? ''), R: String(r.R ?? ''), HT: String(r.HT ?? ''), AT: String(r.AT ?? ''),
+    })
+    api.get(`/api/plhan_score?${params.toString()}`)
+      .then((res) => alive && setPlhan(res || null))
+      .catch(() => alive && setPlhan(null))
+    return () => {
+      alive = false
+    }
+  }, [code, scope, matchKey, closeOddsKey])
 
   // 아카이브 — 이 경기에 걸리는 내 태그(📌). 태그 팝업에서 저장·해제하면 archiveTick을
   // 올려 다시 불러온다(경기지표 뱃지와 팝업의 '이 경기에 걸린 태그' 목록이 같이 갱신).
@@ -5398,6 +5455,8 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           seasonSample={seasonSample}
           h2hMatches={pickData ? (pickData.h2h?.matches || []) : null}
           axisStats={axisStats}
+          plhan={plhan}
+          onPlhanOpen={() => setShowPlhan(true)}
         />
 
         {/* 12개 배당사 — 배당 섹션 바로 아래(2026-09-24 사용자 지정). 자료가 없으면 섹션째 숨긴다. */}
@@ -5664,6 +5723,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
     {showSeasonLegend && <SeasonRecordLegend onClose={() => setShowSeasonLegend(false)} />}
     {showSampleDirLegend && <SampleDirectionLegend onClose={() => setShowSampleDirLegend(false)} />}
     {showMultiBookLegend && <MultiBookLegend onClose={() => setShowMultiBookLegend(false)} />}
+    {showPlhan && plhan?.ready && <PlhanScorePopup data={plhan} row={row} onClose={() => setShowPlhan(false)} />}
     {showArchive && (
       <ArchiveTagModal
         row={row}

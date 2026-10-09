@@ -100,6 +100,7 @@ import same_odds as SAMEODDS  # noqa: E402
 import sample_dir as SAMPLEDIR  # noqa: E402
 import book_dir as BOOKDIR      # noqa: E402
 import triple_sample as TRIPLE  # noqa: E402
+import plhan_score as PLHAN  # noqa: E402
 import odds_lookup as ODDSLOOK  # noqa: E402
 import misc_matches as MISC    # noqa: E402
 import season_view as SEASONVIEW  # noqa: E402
@@ -863,6 +864,18 @@ def triple_sample(code: str, S: str, R: str, HT: str, AT: str,
         return {"ready": False, "reason": "공식 6대리그와 내 데이터 K1·K2에서만 표본을 냅니다"}
     return TRIPLE.query(PATHS.get_master_db(), code, S, R, HT, AT, phase=phase)
 
+
+
+@app.get("/api/plhan_score")
+def plhan_score_get(code: str, S: str, R: str, HT: str, AT: str,
+                    scope: str = PATHS.SCOPE_MASTER,
+                    user: dict = Depends(get_current_user)):
+    """상세보기 경기지표 맨 위 '플핸 점수' 칩(0~5점)과 그 근거(2026-10-07 사용자 지정).
+    점수 = 패턴분석-01(0~2) + 다른 방법 동의(0~3). 계산·기준·실측은 api/plhan_score.py. 공식 6대리그만."""
+    _check_league_for(code, scope, user)
+    if scope != PATHS.SCOPE_MASTER or code not in PATHS.VALID_LEAGUES:
+        return {"ready": False, "reason": "공식 6대리그에서만 계산합니다(12사 배당이 거기만 있다)"}
+    return PLHAN.score(code, S, R, HT, AT)
 
 def _lookup_sources(user: dict, leagues: str = "") -> list:
     """배당 조회 대상 — 공식 6대리그 + 이 계정 내 데이터 리그. leagues(쉼표)를 주면 그 코드들만."""

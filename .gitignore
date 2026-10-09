@@ -32,3 +32,6 @@ data/_*백업_*/
 
 # 외부 API 키(API-Football 등) — 유출되면 남이 내 호출량을 쓴다. 절대 올리지 않는다.
 api_football_key.txt
+
+# 플핸 점수 학습 모델·검증 점수(api/plhan_score.py train 으로 다시 만든다, 약 3분)
+data/master/plhan/

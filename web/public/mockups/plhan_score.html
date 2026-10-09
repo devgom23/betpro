@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>플핸 점수 목업</title>
+<style>
+:root {
+  --bg-page: #eaeef3; --bg-surface: #ffffff; --bg-surface-2: #eef2f7; --border: #cbd5e1; --border-strong: #94a3b8;
+  --text-primary: #0b1220; --text-muted: #55617a;
+  --chip-red-bg: #fee2e2; --chip-red-fg: #991b1b; --chip-red-soft-bg: #fbefef; --chip-red-soft-fg: #a45a5a;
+  --chip-blue-bg: #dbeafe; --chip-blue-fg: #1e40af; --chip-purple-bg: #f3e8ff; --chip-purple-fg: #6b21a8;
+  --chip-gray-bg: #e8ecf2; --chip-gray-fg: #4b5568; --ok: #12965a; --no: #8a94a6; --note: #a16207; --hl: #fff4c2;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-page: #0d1421; --bg-surface: #18212f; --bg-surface-2: #131b28; --border: #2e3a4d; --border-strong: #47566d;
+    --text-primary: #f4f7fb; --text-muted: #93a1b5;
+    --chip-red-bg: #4a1f22; --chip-red-fg: #ffabab; --chip-red-soft-bg: #372122; --chip-red-soft-fg: #c99494;
+    --chip-blue-bg: #1c3768; --chip-blue-fg: #a9caff; --chip-purple-bg: #3a2260; --chip-purple-fg: #d8b4fe;
+    --chip-gray-bg: #263142; --chip-gray-fg: #aab6c7; --ok: #4ade80; --no: #6b7a91; --note: #f2c14e; --hl: #3a3415;
+  }
+}
+:root[data-theme="dark"] {
+  --bg-page: #0d1421; --bg-surface: #18212f; --bg-surface-2: #131b28; --border: #2e3a4d; --border-strong: #47566d;
+  --text-primary: #f4f7fb; --text-muted: #93a1b5;
+  --chip-red-bg: #4a1f22; --chip-red-fg: #ffabab; --chip-red-soft-bg: #372122; --chip-red-soft-fg: #c99494;
+  --chip-blue-bg: #1c3768; --chip-blue-fg: #a9caff; --chip-purple-bg: #3a2260; --chip-purple-fg: #d8b4fe;
+  --chip-gray-bg: #263142; --chip-gray-fg: #aab6c7; --ok: #4ade80; --no: #6b7a91; --note: #f2c14e; --hl: #3a3415;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg-page); }
+body { margin: 0; padding: 14px 16px 40px; color: var(--text-primary);
+  font: 13px/1.5 "Malgun Gothic", "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+.frame { max-width: 980px; margin: 0 auto; display: grid; gap: 12px; }
+.tb { display: flex; justify-content: flex-end; }
+.tb button { background: var(--bg-surface-2); color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 10px; font: inherit; cursor: pointer; }
+.tb button:focus-visible { outline: 2px solid var(--note); outline-offset: 2px; }
+.mock-note { padding: 8px 12px; border: 1px dashed var(--note); border-radius: 8px; color: var(--note); font-size: 12px; }
+.sec { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.sec > h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: 13px; }
+.sec > h3 small { font-size: 11px; font-weight: 400; color: var(--text-muted); }
+.match { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.match .meta { color: var(--text-muted); font-size: 12px; }
+.match b { font-size: 15px; }
+/* 경기지표 칩 — 앱의 MatchChip과 같은 모양 */
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 12px;
+  background: var(--bg-surface-2); border: 1px solid var(--border); }
+.chip .lb { color: var(--text-muted); font-size: 11px; }
+.chip.red { background: var(--chip-red-bg); color: var(--chip-red-fg); border-color: transparent; }
+.chip.red .lb, .chip.soft .lb, .chip.gray .lb, .chip.purple .lb { color: inherit; opacity: .85; }
+.chip.soft { background: var(--chip-red-soft-bg); color: var(--chip-red-soft-fg); border-color: transparent; }
+.chip.gray { background: var(--chip-gray-bg); color: var(--chip-gray-fg); border-color: transparent; }
+.chip.purple { background: var(--chip-purple-bg); color: var(--chip-purple-fg); border-color: transparent; }
+.chip.old { opacity: .45; }
+.chip.new { box-shadow: 0 0 0 2px var(--note); }
+.tag-new { font-size: 10px; color: var(--note); margin-left: 2px; }
+/* 표 — 앱의 detail-table 톤 */
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td { padding: 4px 8px; border: 1px solid var(--border); text-align: center; white-space: nowrap; }
+th { background: var(--bg-surface-2); color: var(--text-muted); font-weight: 600; }
+td.l { text-align: left; }
+td.grp { font-weight: 700; background: var(--bg-surface-2); }
+.ok { color: var(--ok); font-weight: 700; }
+.no { color: var(--no); }
+.pt { font-weight: 700; }
+tr.me td { background: var(--hl); font-weight: 700; }
+.wrap { overflow-x: auto; }
+.two { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.two table { width: auto; min-width: 100%; }
+.legend { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+.big { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; margin-bottom: 8px; }
+.big .score { font-size: 20px; font-weight: 800; color: var(--chip-red-fg); }
+.big .pct { font-size: 13px; }
+.sig { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 4px 16px; margin-top: 8px; font-size: 12px; }
+.sig span { display: flex; gap: 6px; }
+pre.tip { margin: 0; white-space: pre-wrap; font: 12px/1.5 "Malgun Gothic", sans-serif; color: var(--text-primary);
+  background: var(--bg-surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="tb"><button id="theme" type="button">라이트 / 다크</button></div>
+  <div class="mock-note">목업 — 상세보기에 <b>'플핸 점수'</b>를 붙이는 예시입니다. ① 경기지표 줄 맨 앞 칩 ② 칩 아래에 펼치는 점수 내역 표.
+    숫자는 실제 18시즌 분석 값으로 채운 예시 경기(EPL 24-25 22R 에버턴 3:2 토트넘 — 결과 역)입니다. 화면만 보여주는 그림이고 앱에는 아직 없습니다.</div>
+
+  <section class="sec">
+    <div class="match"><span class="meta">24-25 · 22R · 25-01-19</span><b>에버턴 3 : 2 토트넘</b>
+      <span class="meta">국내 초기 2.65 / 3.40 / <b style="font-size:13px">2.15</b>(토트넘 정배)</span></div>
+  </section>
+
+  <section class="sec">
+    <h3>경기지표 <small>— 새 칩은 맨 앞(노란 테두리). 흐린 칩은 지금도 있는 다른 칩을 예로 둔 것</small></h3>
+    <div class="chip-row">
+      <span class="chip red new" title="(아래 '마우스 오버 내용' 참고)"><span class="lb">플핸</span><b>5점 · 83%</b></span><span class="tag-new">새로 추가</span>
+      <span class="chip red old"><span class="lb">플축·국≠해</span><b>72%</b></span>
+      <span class="chip purple old"><span class="lb">강추</span><b>반전</b></span>
+      <span class="chip old"><span class="lb">국/해</span><b>엇갈림</b></span>
+    </div>
+    <div class="legend">칩 색: 4~5점 진한 빨강 · 3점 연한 빨강 · 2점 회색 · 0~1점은 칩 없음(아래 표에서만 보임) · 마감 배당 전에는 회색 '플핸 대기'</div>
+  </section>
+
+  <section class="sec">
+    <h3>플핸 점수 <small>단통 플핸(무+역) — 패턴분석-01(패턴 0~2점) + 다른 방법 동의(0~3점)</small></h3>
+    <div class="big"><span class="score">5 / 5점</span>
+      <span class="pct">같은 점수였던 지난 경기 <b>96%</b> (25/26 — 경기 수가 적어 <b>4점 이상 83%</b>(154/186)로 표시)</span></div>
+    <div class="two">
+      <div class="wrap">
+        <table>
+          <thead><tr><th>구분</th><th>항목</th><th>이 경기</th><th>기준</th><th>점수</th></tr></thead>
+          <tbody>
+            <tr><td class="grp" rowspan="3">패턴</td><td class="l">국내 접전형</td><td>역배 2.65 ≤ 무 3.40×0.876(2.98)</td><td>역배 ≤ 무×0.876</td><td class="ok">✓</td></tr>
+            <tr><td class="l">Bet365 마감 정배확률</td><td>40.9% → 33.7% (−7.2%p)</td><td>−4.5%p 이하 → B</td><td class="ok">✓ B</td></tr>
+            <tr><td class="l">12사 마감 평균 정배확률</td><td>40.9% → 34.2% (−6.8%p)</td><td>−6.5%p 이하 → B12s</td><td class="ok pt">B12s = 2점</td></tr>
+            <tr><td class="grp" rowspan="3">동의</td><td class="l">S 모델 (국내·Bet365 배당)</td><td>0.74</td><td>0.72 이상</td><td class="ok pt">1점</td></tr>
+            <tr><td class="l">12사 모델 (12사 평균 배당)</td><td>0.77</td><td>0.70 이상</td><td class="ok pt">1점</td></tr>
+            <tr><td class="l">합의 신호</td><td>3 / 6 (아래)</td><td>3개 이상</td><td class="ok pt">1점</td></tr>
+            <tr><td class="grp">합계</td><td class="l" colspan="3">패턴 2 + 동의 3</td><td class="ok pt">5점</td></tr>
+          </tbody>
+        </table>
+        <div class="sig">
+          <span><b class="no">✗</b> Sbobet 정배확률 변화 −3.5%p <span class="no">(기준 −4.2↓)</span></span>
+          <span><b class="no">✗</b> 가장 레드인 회사 +1.66 <span class="no">(기준 −5.85↓)</span></span>
+          <span><b class="ok">✓</b> 국배 승 같은배당 표본 +1.36 <span class="no">(기준 1.15↑)</span></span>
+          <span><b class="ok">✓</b> 국배 배변 승 같은배당 표본 +2.62 <span class="no">(기준 1.15↑)</span></span>
+          <span><b class="ok">✓</b> 국배 통합 승 같은배당 표본 +6.10 <span class="no">(기준 1.28↑)</span></span>
+          <span><b class="no">✗</b> 배변 카드 무·역 4/8 = 50% <span class="no">(기준 67%↑)</span></span>
+        </div>
+      </div>
+      <div class="wrap">
+        <table>
+          <thead><tr><th>점수</th><th>지난 경기 플핸</th><th>적중/경기</th><th>시즌당</th></tr></thead>
+          <tbody>
+            <tr class="me"><td>5점</td><td>96.2%</td><td>25 / 26</td><td>2.2</td></tr>
+            <tr><td>4점</td><td>80.6%</td><td>129 / 160</td><td>13.3</td></tr>
+            <tr><td>3점</td><td>67.7%</td><td>272 / 402</td><td>33.5</td></tr>
+            <tr><td>2점</td><td>65.3%</td><td>534 / 818</td><td>68.2</td></tr>
+            <tr><td>1점</td><td>58.1%</td><td>3,053 / 5,255</td><td>437.9</td></tr>
+            <tr><td>0점</td><td>40.4%</td><td>6,741 / 16,693</td><td>1,391</td></tr>
+          </tbody>
+        </table>
+        <div class="legend">6대리그 15-16~26-27 시즌(모델 점수가 있는 기간). 4점 이상만 기간별로 보면
+          찾기 83.6% (46/55) · 고르기 82.1% (46/56) · 최근 5시즌 82.7% (62/75).<br>
+          찾기 = 패턴을 찾은 시기 · 고르기 = 후보를 고른 시기 · 최근 5시즌 = 안 보고 남겨 둔 시험 시기</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h3>마감 배당을 아직 안 불러온 경기 <small>— 예시 값</small></h3>
+    <div class="chip-row"><span class="chip gray"><span class="lb">플핸</span><b>대기</b></span></div>
+    <div class="wrap" style="margin-top:8px">
+      <table>
+        <thead><tr><th>항목</th><th>지금</th><th>마감에서 이렇게 되면</th></tr></thead>
+        <tbody>
+          <tr><td class="l">국내 접전형</td><td class="ok">✓ (역배 2.70 ≤ 무 3.20×0.876)</td><td>—</td></tr>
+          <tr><td class="l">Bet365 마감 (B, 1점)</td><td class="no">마감 없음</td><td>정배 팀 배당 <b>2.62 이상</b>이면 B</td></tr>
+          <tr><td class="l">12사 마감 평균 (B12s, 2점)</td><td class="no">마감 없음</td><td>정배 팀 평균 배당 <b>2.77 이상</b>이면 B12s</td></tr>
+          <tr><td class="l">동의 3가지</td><td class="no">계산 전</td><td>마감 배당이 들어오면 자동 계산</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="legend">킥오프 가까이 '최신배당 불러오기'를 하면 칩이 점수로 바뀝니다.</div>
+  </section>
+
+  <section class="sec">
+    <h3>칩에 마우스를 올리면 <small>— 툴팁 글</small></h3>
+<pre class="tip">플핸 점수 5점 (패턴 2 + 동의 3) — 단통 플핸(무+역): "국내 정배는 못 이긴다"
+· 패턴: 국내 접전형 ✓ · Bet365 마감 −7.2%p(B) · 12사 마감 −6.8%p(B12s → 2점)
+· 동의: S 모델 0.74 ✓ · 12사 모델 0.77 ✓ · 합의 신호 3/6 ✓
+같은 점수 지난 경기 96% (25/26) — 경기 수가 적어 4점 이상 83% (154/186)로 표시
+4점 이상 기간별: 찾기 83.6% · 고르기 82.1% · 최근 5시즌 82.7%
+※ 마감 배당으로 계산합니다 — 몇 시간 전 배당으로도 같은지는 아직 검증 전입니다.</pre>
+  </section>
+</div>
+<script>
+(function () {
+  var b = document.getElementById("theme");
+  b.addEventListener("click", function () {
+    var r = document.documentElement;
+    var dark = r.getAttribute("data-theme") ? r.getAttribute("data-theme") === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    r.setAttribute("data-theme", dark ? "light" : "dark");
+  });
+})();
+</script>
+</body>
+</html>

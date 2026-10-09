@@ -1,0 +1,82 @@
+/* 플핸 점수 근거 팝업(PlhanScore.jsx) — 표는 상세보기 공용 .detail-table 톤 그대로 쓴다. */
+.modal-card.help-legend-card.plh-card {
+  max-width: 720px;
+  max-height: calc(100vh - 80px);   /* 표가 넷이라 길다 — 화면보다 길면 팝업 안에서 스크롤(위 여백 40px + 아래 40px) */
+  overflow-y: auto;
+}
+
+.plh-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin: 4px 0 6px;
+  font-size: 13px;
+}
+
+.plh-score {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.plh-score.hi { color: var(--chip-red-fg); }
+.plh-score.mid { color: var(--chip-red-soft-fg); }
+
+.plh-table td:nth-child(2) {
+  white-space: nowrap;
+}
+
+.plh-ok { color: var(--chip-green-fg); }
+.plh-no { color: var(--text-muted); font-weight: 400; }
+.plh-sub { color: var(--text-muted); font-size: 11px; }
+
+.plh-table tr.plh-sum td,
+.plh-ladder tr.plh-sum td {
+  background: var(--bg-surface-2);
+}
+
+/* 이 경기 점수 줄 — 표본 카드의 '같은 값'과 같은 노랑 배경 */
+.plh-ladder tr.plh-me td {
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}
+
+.plh-ladder tr.plh-me-soft td {
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}
+
+.plh-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.plh-warn {
+  color: var(--warning-text);
+}
+
+/* 경기지표 칩 — 누를 수 있는 칩(버튼)은 보통 칩과 같은 모양을 유지한다 */
+.match-chip.match-chip-btn {
+  font: inherit;
+  font-size: 11px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.match-chip.match-chip-btn:focus-visible {
+  outline: 2px solid var(--chip-yellow-fg);
+  outline-offset: 1px;
+}
+
+/* 5점(최대) — 목업처럼 테두리에 노란 강조 */
+.match-chip.match-chip-hl {
+  box-shadow: 0 0 0 2px var(--chip-yellow-fg);
+}
+
+/* 0~1점 — 자리는 지키되 흐리게 */
+.match-chip.match-chip-dim {
+  opacity: 0.6;
+}
