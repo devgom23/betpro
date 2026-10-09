@@ -80,12 +80,17 @@ function ValCell({ v, base, isDraw, hoga }) {
 // 카드 하나의 고유키 — 신뢰 체크를 기억할 때 쓴다(같은 경기는 기본/넓힘 탭이 달라도 같은 카드).
 const cardKey = (c) => `${c.lg}|${c.S}|${c.R}|${c.ht}|${c.at}`
 
-// ── 표본 카드 점수(2026-10-05 사용자 지정 · 실측 — 도움말 ⑥ 참고) ──────────────────
+// ── 표본 카드 점수(2026-10-05 사용자 지정 · 2026-10-09 국배·국핸디·칸수를 호가 단계로 — 도움말 ⑥ 참고) ──────────────────
 // 이 카드가 이번 경기와 얼마나 닮았나(100점). 배점: 12사 승·무·패 11·4·11 / 국배 11·4·11 /
 // 국핸디 4·2·4(기준점 같을 때) / 칸수 10 / 같은 리그 6 / 최근 6·4·2 / 이번 경기 팀 등장 16(무 비슷할 때만).
-// 승·패 = % 차이(0% 만점 → 2.5% 0점) · 무 = 0.05 이하 만점, 0.10 이하 절반 · 칸수 = 승·패 네 값 중 가장 먼 값(0.01 칸, 0 만점 → 15칸 0).
-// 실측(과거 약 2.9만 경기): 배변 표본에서 1순위 점수 70↑이면 '배제 적중'이 기대보다 +3.6%p, 구간이 낮을수록 줄어든다.
-// 초기 표본은 어느 구간도 효과가 없지만, 강조는 배변과 똑같이 한다(2026-10-05 사용자 지정 — "회색이라 안 보인다, 판단은 내가 한다").
+// 12사 평균(호가 단위 없음) — 승·패 = % 차이(0% 만점 → 2.5% 0점) · 무 = 0.05 이하 만점, 0.10 이하 절반.
+// 국배·국핸디(호가 단계, hogaSteps) — 승·패 = 0단계 만점 → 4단계 0점(1단계 75% · 2단계 50% · 3단계 25%) · 무 = 1단계 이하 만점, 2단계 절반.
+// 칸수 = 국배 승·무·패 호가 단계를 더한 값(0 만점 → 12단계 0점, 표본 탭의 '합 N단계'와 같은 값). 단계 경계(4·12)는 감으로 정했다.
+// 실측 — 2026-10-05(옛 점수·옛 표본 규칙, 약 2.9만 경기): 배변 1순위 70↑ 배제 적중 +3.5%p(z2.2), 구간이 낮을수록 줄어드는 계단.
+//        2026-10-09 재측정(호가 단계 점수 + 새 표본 규칙, 13,857경기): 70↑ +1.4%p(z0.8)로 줄고 계단도 사라졌다 — 점수가 높아도 평소와 같다.
+//        (옛 점수 + 새 표본 규칙도 70↑ +3.7%p z1.3(193경기)로 약해진다. 새 표본 후보가 19-20 이후뿐이라 경기·카드 수가 줄어든 영향도 있다.)
+// 그래서 지금 점수는 '얼마나 닮았나'를 보여주는 값이지 신뢰도가 아니다. 강조 색은 사용자 지정으로 유지한다
+// (2026-10-05 — "회색이라 안 보인다, 판단은 내가 한다").
 const seasonNo = (v) => {
   const t = String(v ?? '').trim()
   return /^[0-9]{4}$/.test(t) ? Number(t) % 100 : parseInt(t.slice(0, 2), 10)
@@ -96,29 +101,34 @@ const drawSim = (v, ref) => {
   const d = Math.round(Math.abs(v - ref) * 100)
   return d <= 5 ? 1 : d <= 10 ? 0.5 : 0
 }
+// 호가 단계 버전(국배·국핸디) — 값이 없으면 0점
+const stepWl = (v, ref) => (v == null || ref == null ? 0 : Math.max(0, 1 - hogaSteps(v, ref) / 4))
+const stepDraw = (v, ref) => {
+  if (v == null || ref == null) return 0
+  const n = hogaSteps(v, ref)
+  return n <= 1 ? 1 : n <= 2 ? 0.5 : 0
+}
 function cardScore(c, g, sameLeague, s0, teams) {
   const p = {}
   p.a = 11 * wlSim(c.A[0], g.A[0]) + 4 * drawSim(c.A[1], g.A[1]) + 11 * wlSim(c.A[2], g.A[2])
-  p.k = 11 * wlSim(c.K[0], g.K[0]) + 4 * drawSim(c.K[1], g.K[1]) + 11 * wlSim(c.K[2], g.K[2])
+  p.k = 11 * stepWl(c.K[0], g.K[0]) + 4 * stepDraw(c.K[1], g.K[1]) + 11 * stepWl(c.K[2], g.K[2])
   const hok = c.kh != null && c.kh === g.kh && c.khw != null && g.khw != null
-  p.h = hok ? 4 * wlSim(c.khw, g.khw) + 2 * drawSim(c.khd, g.khd) + 4 * wlSim(c.khl, g.khl) : 0
-  const d4 = [[c.A[0], g.A[0]], [c.A[2], g.A[2]], [c.K[0], g.K[0]], [c.K[2], g.K[2]]]
-    .filter(([x, y]) => x != null && y != null).map(([x, y]) => Math.round(Math.abs(x - y) * 100))
-  p.span = d4.length ? Math.max(...d4) : 15
-  p.sp = 10 * Math.max(0, 1 - p.span / 15)
+  p.h = hok ? 4 * stepWl(c.khw, g.khw) + 2 * stepDraw(c.khd, g.khd) + 4 * stepWl(c.khl, g.khl) : 0
+  p.span = [0, 1, 2].reduce((sum, i) => sum + hogaSteps(c.K[i], g.K[i]), 0)     // 국배 승·무·패 호가 단계 합
+  p.sp = 10 * Math.max(0, 1 - p.span / 12)
   p.lg = sameLeague ? 6 : 0
   const ago = s0 - seasonNo(c.S)
   p.rc = ago <= 2 ? 6 : ago <= 5 ? 4 : ago <= 9 ? 2 : 0
   const drawOk = c.A[1] != null && g.A[1] != null && Math.round(Math.abs(c.A[1] - g.A[1]) * 100) <= 10
-    && Math.round(Math.abs(c.K[1] - g.K[1]) * 100) <= 10
+    && hogaSteps(c.K[1], g.K[1]) <= 2
   p.tm = drawOk && (teams.has(String(c.ht).trim()) || teams.has(String(c.at).trim())) ? 16 : 0
   const total = p.a + p.k + p.h + p.sp + p.lg + p.rc + p.tm
   return { total, p }
 }
 const scoreTitle = ({ total, p }, final) => `${final ? '배변' : '초기'} 표본 점수 ${total.toFixed(1)}점`
-  + `\n12사 ${p.a.toFixed(1)}/26 · 국배 ${p.k.toFixed(1)}/26 · 국핸디 ${p.h.toFixed(1)}/10 · 칸수(±${p.span}칸) ${p.sp.toFixed(1)}/10`
+  + `\n12사 ${p.a.toFixed(1)}/26 · 국배 ${p.k.toFixed(1)}/26 · 국핸디 ${p.h.toFixed(1)}/10 · 칸수(합 ${p.span}단계) ${p.sp.toFixed(1)}/10`
   + `\n같은 리그 ${p.lg}/6 · 최근 ${p.rc}/6 · 팀 등장 ${p.tm}/16(무가 비슷할 때만)`
-  + (final ? '\n70점 이상은 과거 실측에서 배제 적중이 평소보다 +3.6%p(도움말 ⑥)' : '\n초기 표본 점수는 실측 효과가 없어 참고용입니다(도움말 ⑥)')
+  + '\n닮은 정도를 보여주는 값입니다 — 과거 실측에서 점수가 높아도 결과가 평소와 같았습니다(도움말 ⑥)'
 
 function Card({ c, ck, game, trusted, distrusted, onTrust, onDistrust, teams, avgLabel, ptag }) {
   const sameH = c.kh !== null && game.kh !== null && c.kh === game.kh
@@ -700,20 +710,20 @@ function TripleSampleLegend({ onClose, final }) {
         <p className="help-legend-title">⑥ 표본 점수 — 카드 첫 줄 오른쪽의 &apos;배변 · 72점&apos;</p>
         <p className="help-legend-note">
           카드마다 <b>이번 경기와 얼마나 닮았나</b>를 100점으로 매긴 값입니다. 점수에 마우스를 올리면 항목별 내역이 나옵니다.
-          배점은 사용자 지정, 효과는 과거 경기로 실측했습니다(2026-10-05).
+          배점은 사용자 지정, 효과는 과거 경기로 실측했습니다. 2026-10-09부터 국배·국핸디·칸수는 <b>호가 단계</b>로 계산합니다(아래 ⑧ 참고).
         </p>
         <table className="detail-table help-legend-table">
           <thead>
             <tr><th>묶음</th><th>항목</th><th>배점</th><th>계산</th></tr>
           </thead>
           <tbody>
-            <tr><td>12사 평균</td><td>승 · 무 · 패</td><td>11 · 4 · 11 (26)</td><td rowSpan={3}>승·패: <b>% 차이</b> 0%면 만점, 1%면 60%, 2.5% 이상이면 0<br />무: 차이 0.05 이하 만점, 0.10 이하 절반, 그 밖 0<br />국핸디는 기준점(±1)이 같을 때만</td></tr>
+            <tr><td>12사 평균</td><td>승 · 무 · 패</td><td>11 · 4 · 11 (26)</td><td rowSpan={3}><b>12사 평균</b> — 승·패: % 차이 0%면 만점, 1%면 60%, 2.5% 이상이면 0 · 무: 차이 0.05 이하 만점, 0.10 이하 절반<br /><b>국배·국핸디</b> — 승·패: 호가 0단계 만점, 1단계 75% · 2단계 50% · 3단계 25% · 4단계 이상 0 / 무: 1단계 이하 만점, 2단계 절반<br />국핸디는 기준점(±1)이 같을 때만</td></tr>
             <tr><td>국배</td><td>승 · 무 · 패</td><td>11 · 4 · 11 (26)</td></tr>
             <tr><td>국핸디</td><td>승 · 무 · 패</td><td>4 · 2 · 4 (10)</td></tr>
-            <tr><td>칸수</td><td>승·패 네 값 중 가장 먼 값</td><td>10</td><td>0칸 만점 → 15칸 0 (1칸 = 0.01)</td></tr>
+            <tr><td>칸수</td><td>국배 승·무·패 호가 단계를 더한 값(탭의 합 N단계)</td><td>10</td><td>0단계 만점 → 12단계 0</td></tr>
             <tr><td rowSpan={3}>맥락</td><td>같은 리그</td><td>6</td><td></td></tr>
             <tr><td>최근 경기</td><td>6</td><td>2시즌 안 6 · 5시즌 안 4 · 9시즌 안 2</td></tr>
-            <tr><td>이번 경기 팀 등장</td><td>16</td><td><b>무가 비슷할 때만</b>(12사 무·국배 무 둘 다 차이 0.10 이하)</td></tr>
+            <tr><td>이번 경기 팀 등장</td><td>16</td><td><b>무가 비슷할 때만</b>(12사 무 차이 0.10 이하 · 국배 무 호가 2단계 이내)</td></tr>
           </tbody>
         </table>
         <p className="help-legend-note">
@@ -722,21 +732,24 @@ function TripleSampleLegend({ onClose, final }) {
         </p>
         <table className="detail-table help-legend-table">
           <thead>
-            <tr><th>1순위 점수</th><th>배변 표본 (경기)</th><th>배제 적중</th><th>기대</th><th>차이</th></tr>
+            <tr><th>배변 표본 1순위 점수</th><th>경기</th><th>배제 적중</th><th>기대</th><th>차이</th></tr>
           </thead>
           <tbody>
-            <tr><td><b>70 이상</b></td><td>717 (2.5%)</td><td><b>80.33%</b></td><td>76.76%</td><td><b>+3.57%p</b> (옛 시즌 +2.70 · 최근 시즌 +4.79)</td></tr>
-            <tr><td>60~70</td><td>2,487 (8.6%)</td><td>78.41%</td><td>76.78%</td><td>+1.62%p</td></tr>
-            <tr><td>50~60</td><td>7,785 (27.0%)</td><td>77.76%</td><td>76.80%</td><td>+0.96%p</td></tr>
-            <tr><td>40~50</td><td>10,035 (34.8%)</td><td>77.19%</td><td>76.96%</td><td>+0.23%p</td></tr>
-            <tr><td>40 미만</td><td>7,845 (27.2%)</td><td>76.80%</td><td>77.37%</td><td>−0.57%p</td></tr>
+            <tr><td><b>2026-10-09 지금 점수</b> (호가 단계 점수 + 새 표본 규칙, 13,857경기)</td><td colSpan={4}></td></tr>
+            <tr><td>70 이상</td><td>486 (3.5%)</td><td>78.40%</td><td>77.00%</td><td>+1.39%p (z0.75 — 우연 범위)</td></tr>
+            <tr><td>60~70</td><td>1,666 (12.0%)</td><td>77.19%</td><td>77.06%</td><td>+0.13%p</td></tr>
+            <tr><td>50~60</td><td>4,894 (35.3%)</td><td>77.42%</td><td>77.21%</td><td>+0.21%p</td></tr>
+            <tr><td>40~50</td><td>5,195 (37.5%)</td><td>77.59%</td><td>77.56%</td><td>+0.04%p</td></tr>
+            <tr><td>40 미만</td><td>1,616 (11.7%)</td><td>75.68%</td><td>77.48%</td><td>−1.80%p</td></tr>
+            <tr><td><b>2026-10-05 예전 점수</b> (% 기준 + 옛 표본 규칙, 28,869경기)</td><td colSpan={4}></td></tr>
+            <tr><td>70 이상</td><td>712 (2.5%)</td><td>80.20%</td><td>76.69%</td><td><b>+3.51%p</b> (z2.24 — 점수가 낮을수록 줄어드는 계단)</td></tr>
           </tbody>
         </table>
         <p className="help-legend-note">
-          배변 표본은 <b>점수가 높을수록 더 맞는 계단</b>이 보입니다. 그래서 배변 카드 첫 줄 점수는 <b>70점 이상 진하게 · 60~70 연하게</b> 표시합니다.
-          다만 맞힌 것은 &apos;무엇이 안 나오나(배제)&apos;이고, 4결과 중 무엇이 나올지(정확히)는 어느 구간도 평소와 같았습니다.
-          <b>초기 표본</b>은 점수가 높아도 효과가 없었습니다(70 이상 +0.10%p). 강조 색은 배변과 똑같이 붙이니, 초기 점수는 참고로만 보세요.
-          80% 대 77% 수준의 차이라 &apos;높으면 확실&apos;이 아니라 &apos;평소보다 조금 더 믿을 만함&apos;으로 보세요.
+          <b>호가 단계 점수로 바꾸고 새 표본 규칙을 쓰면서 &apos;점수가 높을수록 더 맞는 계단&apos;이 사라졌습니다.</b> 70점 이상도 평소와 거의 같습니다(+1.4%p, 우연 범위).
+          옛 점수를 새 표본 규칙에 그대로 쓰면 70 이상 +3.7%p(z1.3, 193경기)로 약해지는 정도라, 새 표본 규칙(19-20 시즌 이후 후보 · 국배 같음 우선)이 경기·카드 수를 줄인 영향도 큽니다.
+          그래서 <b>이 점수는 신뢰도가 아니라 &apos;얼마나 닮았나&apos;를 보여주는 값</b>이며, 70점 이상 진하게 · 60~70 연하게 표시하는 색은 비교하기 쉽게 남겨 둔 표시입니다.
+          <b>초기 표본</b>도 점수 구간별 효과가 없었습니다(70 이상 +0.29%p).
         </p>
 
         <p className="help-legend-title">⑦ 주의 — 참고용입니다</p>
