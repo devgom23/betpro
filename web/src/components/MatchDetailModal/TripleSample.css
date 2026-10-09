@@ -479,3 +479,18 @@
   margin: 0 6px;
   color: var(--text-muted);
 }
+
+/* 신뢰로 체크한 카드 — 테두리를 노랗게 강조(2026-10-09 사용자 지정). 1px 바깥 테두리를 한 겹 더해 눈에 띄게 하되
+   카드 크기는 안 바뀐다. 초기(보라)·배변(주황) 카드의 왼쪽 막대와 '앞 탭에도 있던 경기' 파란 테두리보다 위에 와야 해서 맨 뒤에 둔다. */
+.ts-card.ts-trust {
+  border-color: var(--chip-yellow-fg);
+  box-shadow: 0 0 0 1px var(--chip-yellow-fg);
+}
+
+.ts-cmp-init .ts-card.ts-trust {
+  box-shadow: 0 0 0 1px var(--chip-yellow-fg), inset 3px 0 0 var(--chip-purple-fg);
+}
+
+.ts-cmp-final .ts-card.ts-trust {
+  box-shadow: 0 0 0 1px var(--chip-yellow-fg), inset 3px 0 0 var(--warning-text);
+}
