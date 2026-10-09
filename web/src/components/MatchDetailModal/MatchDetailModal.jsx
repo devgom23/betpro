@@ -17,12 +17,12 @@ import {
   ODDS_PHASE_WEIGHTED_GRADE, PHASE_CELL_RATE, phaseVerdict, strongPickTier, STRONG_TIER_TITLE,
   CLOSE_ODDS_CUT_K, CLOSE_ODDS_CUT_F, favFlip,
   marketSetMoved, RISK_FIELD_MARKET, DIRECTION_SCOPE_MARKET, ODDS_SCOPE_MARKET, opinionLabel, SAMPLE_RELIABLE_N,
-  plSplitAxis, PL_SPLIT_AXIS,
+  plSplitAxis,
 } from '../../utils/verdictCalc'
 import { teamStake, seasonEndWarn, SEASON_END_TITLE } from '../../utils/seasonStake'
 import TripleSampleSection from './TripleSample'
 import PlhanScorePopup from './PlhanScore'
-import { plhanChipText, plhanChipTitle } from '../../utils/plhanScore'
+import { plhanChipText, plhanChipTitle, plhanUnified } from '../../utils/plhanScore'
 import { RichMemoInput } from '../RichMemo/RichMemo'
 import { stripMemo } from '../../utils/richMemo'
 import {
@@ -275,15 +275,29 @@ function MatchChip({ label, tone, title, children, onClick, extraClass }) {
   )
 }
 
-// 똥배 뱃지 — 리그 표의 '똥배' 그룹(똥 / 분석 / 똥사)과 같은 값.
+// '참고' 줄 한 칸(2026-10-09 사용자 승인 — 경기지표 칩 정리). 배당이 이미 말한 사실을 칩 대신 글자로 둔다.
+// 라벨은 흐리게, 값은 밝게(CLAUDE.md 6-2), 값에 등급·방향 색이 있으면 글자색만 입힌다(배경 없음).
+// 설명은 칩일 때와 같은 문구가 마우스를 올리면 나온다.
+// 왜 내렸나 — 단통 플핸 기준으로 '마감 시장 예상보다 더 맞힌 몫'이 전부 ±2%p 안이었다(15-16~ 22,589경기,
+// 메모리 reference-match-chip-audit): 똥배 +0.7 · 기대점수 +0.4 · 전적 −0.9~−0.2 · 무 −1.0/+0.7 · 해외만 반전 +0.9 · 해배동배 −1.0.
+function RefItem({ label, tone, title, children }) {
+  return (
+    <span className="match-ref-item" title={title}>
+      {label && <span className="match-ref-label">{label}</span>}
+      <strong style={tone ? { color: `var(--chip-${tone}-fg)` } : undefined}>{children}</strong>
+    </span>
+  )
+}
+
+// 똥배 — 리그 표의 '똥배' 그룹(똥 / 분석 / 똥사)과 같은 값.
 // 등급 경계와 색은 columnGroups.js의 DDONG_RISK_CUTS와 맞춰 둔다(계산 근거는
 // api/data_access.py의 _ddong_risk 주석에 6대리그 실측과 함께 있다).
-// 2026-08-30 '배당' 카드 제목 옆에 있던 것을 경기지표 줄로 옮겼다 — 배당에서 파생된
-// 값이긴 하지만 성격은 '이 경기가 어떤 경기인가'라서 경기지표 쪽이 맞다.
-// 뱃지는 컴포넌트가 아니라 '원소 배열을 돌려주는 함수'로 만든다 — 지표마다 해당이
-// 없으면 아예 안 나오는데, 컴포넌트로 두면 "이 줄에 뱃지가 하나라도 있나"를 밖에서
+// 2026-08-30 '배당' 카드 제목 옆 → 경기지표 칩, 2026-10-09 경기지표 '참고' 줄 글자로 내렸다
+// (위험%가 국내 정배배당 하나로 계산한 값이라 시장 예상과 같다 — 등급별 −0.8~+1.8%p).
+// 칸은 컴포넌트가 아니라 '원소 배열을 돌려주는 함수'로 만든다 — 지표마다 해당이
+// 없으면 아예 안 나오는데, 컴포넌트로 두면 "이 줄에 하나라도 있나"를 밖에서
 // 알 방법이 없다(원소를 직접 호출해 보는 건 훅이 들어가는 순간 깨진다).
-function ddongChips(row) {
+function ddongRefs(row) {
   const ddong = String(row.DDONG || '').trim()
   if (!ddong) return []
   const risk = numOrNull(row.DDONG_RISK)
@@ -291,7 +305,7 @@ function ddongChips(row) {
   // 똥사는 여기 두지 않는다 — '결과가 뒤집혔다'는 결과 정보라, 팝업 맨 위 RT 배지
   // 옆(DdongsaBadge)에 붙는 게 맞다. 경기지표는 결과가 아니라 경기의 성격만 담는다.
   return [
-    <MatchChip
+    <RefItem
       key="ddong"
       label="똥배"
       tone={risk !== null ? tone : undefined}
@@ -299,8 +313,8 @@ function ddongChips(row) {
         + (risk !== null ? ` 무/역으로 뒤집힐 확률 ${Math.round(risk)}%(${label}).` : '')}
     >
       {ddong}
-      {risk !== null && ` · ${label} ${Math.round(risk)}%`}
-    </MatchChip>,
+      {risk !== null && ` ${label} ${Math.round(risk)}%`}
+    </RefItem>,
   ]
 }
 
@@ -342,12 +356,13 @@ function oddsSplitChips(row) {
 //   배변 배당으로 방향을 정해 억지로 판정을 내 봐도 256건 당첨 80.86%로,
 //   그냥 전부 플핸무를 건 81.27%보다 못하고 별점까지 거꾸로 돈다(★3 78.82% < ★2 85.53%).
 //   그래서 판정은 지금처럼 비워 두는 게 맞고, 이 뱃지는 사실 표시로만 쓴다.
-function foreignTieChips(row) {
+// 2026-10-09 경기지표 '참고' 줄 글자로 내렸다(단통 플핸 시장 대비 −1.0%p, 185경기).
+function foreignTieRefs(row) {
   const fw = numOrNull(row.FW)
   const fl = numOrNull(row.FL)
   if (fw === null || fl === null || fw !== fl) return []
   return [
-    <MatchChip
+    <RefItem
       key="ftie"
       label="해배동배"
       title={'해외 초기배당의 승·패가 정확히 같습니다(FW=FL) — 어느 팀이 정배인지'
@@ -361,32 +376,21 @@ function foreignTieChips(row) {
         + ' 이 경기는 "접전 배당대의 평범한 경기"로 보시면 됩니다(그 구간 평균 당첨 82.85%).'}
     >
       {fw.toFixed(2)}
-    </MatchChip>,
+    </RefItem>,
   ]
 }
 
-// 시즌 막판 뱃지 — 경기마다 '시즌 마지막 2라운드 · 정무 주의', 팀마다 '무엇이 걸려 있나'
-// (남은 경기 10 이하). 규칙·실측 근거는 utils/seasonStake.js, 계산은 api/standings.py.
-// 팀 뱃지는 참고용(배당에 이미 반영된 정보), 막판 주의만 실측으로 결과가 갈린 신호다.
-function seasonStakeChips(row) {
-  const chips = []
-  if (seasonEndWarn(row)) {
-    chips.push(
-      <MatchChip key="season-end" label="시즌막판" tone="yellow" title={SEASON_END_TITLE}>
-        정무 주의
-      </MatchChip>,
-    )
-  }
-  for (const [side, team] of [['H', row.HT], ['A', row.AT]]) {
-    const s = teamStake(row, side)
-    if (!s) continue
-    chips.push(
-      <MatchChip key={`stake-${side}`} label={`${team})`} tone={s.tone} title={s.title}>
-        {s.label}{s.text ? ` · ${s.text}` : ''}
-      </MatchChip>,
-    )
-  }
-  return chips
+// 시즌 막판 뱃지 — '시즌 마지막 2라운드 · 정무 주의'. 규칙·실측 근거는 utils/seasonStake.js, 계산은 api/standings.py.
+// 막판 주의는 실측으로 결과가 갈린 신호라 '확인' 칩으로 둔다(단통 플핸도 시장보다 +2.4%p, 세 기간 +2.1~2.8 — 10-09).
+// 팀마다 '무엇이 걸려 있나'(우승경쟁·강등확정…) 칩은 2026-10-09에 뺐다 — 배당 표 팀 이름 밑 뱃지(OddsTable stakeBadge)가
+// 같은 내용·같은 설명을 이미 보여주고, 시즌 끝 10라운드 경기마다 칩이 2개씩 붙어 경기지표가 길어지던 주범이었다.
+function seasonEndChips(row) {
+  if (!seasonEndWarn(row)) return []
+  return [
+    <MatchChip key="season-end" label="시즌막판" tone="yellow" title={SEASON_END_TITLE}>
+      정무 주의
+    </MatchChip>,
+  ]
 }
 
 // 정역반전 뱃지 — 초기엔 A팀이 정배였는데 배변에서 B팀이 정배가 된 경기.
@@ -399,26 +403,32 @@ function seasonStakeChips(row) {
 //
 // 실측(6대리그 28,638건): 하나라도 반전이면 당첨 86.36% vs 반전 없음 68.66%
 // (z=15.76, 리그 6/6). 배변 해외 정배배당 2.0~2.5 구간으로 고정해도 +6.71%p(z=4.42).
-function favFlipChips(row) {
-  const { dom, forr } = favFlip(row)
-  if (!dom && !forr) return []
-  const where = dom && forr ? '국·해' : (dom ? '국' : '해')
+// 2026-10-09 — 국내가 섞인 반전만 '확인' 칩(거는 방법이 바뀐다), 해외만 반전은 '참고' 글자로 내렸다
+// (마감 시장 예상과 비교하면 +0.9%p — 반전은 마감 배당에 이미 들어 있다).
+function favFlipTitle(dom, forr) {
   const domNote = '\n⚠ 국내배당이 뒤집혔습니다 — 프로토에서는 플핸이 아니라 정무로 걸어야'
     + ' 같은 베팅이 됩니다(정·역이 가리키는 팀이 바뀌었습니다).'
+  return '초기에는 한쪽이 정배였는데 배변(최신 배당)에서 반대편이 정배가 됐습니다'
+    + ` — ${dom && forr ? '국내·해외 두 시장 모두' : (dom ? '국내배당만' : '해외배당만')} 뒤집혔습니다.\n`
+    + '6대리그 실측: 정역반전이 있으면 당첨률 86.36%(반전 없음 68.66%, z=15.76,'
+    + ' 리그 6/6). 배당 구간을 고정해도 살아남는 신호입니다.'
+    + (dom ? domNote : '\n해외만 뒤집힌 경우는 실제로 거는 시장이 아니라 플핸 그대로 가면 됩니다.')
+}
+
+function domFlipChips(row) {
+  const { dom, forr } = favFlip(row)
+  if (!dom) return []
   return [
-    <MatchChip
-      key="fav-flip"
-      label={`${where})`}
-      tone={dom ? 'yellow' : undefined}
-      title={'초기에는 한쪽이 정배였는데 배변(최신 배당)에서 반대편이 정배가 됐습니다'
-        + ` — ${dom && forr ? '국내·해외 두 시장 모두' : (dom ? '국내배당만' : '해외배당만')} 뒤집혔습니다.\n`
-        + '6대리그 실측: 정역반전이 있으면 당첨률 86.36%(반전 없음 68.66%, z=15.76,'
-        + ' 리그 6/6). 배당 구간을 고정해도 살아남는 신호입니다.'
-        + (dom ? domNote : '\n해외만 뒤집힌 경우는 실제로 거는 시장이 아니라 플핸 그대로 가면 됩니다.')}
-    >
+    <MatchChip key="fav-flip" label={forr ? '국·해)' : '국)'} tone="yellow" title={favFlipTitle(dom, forr)}>
       정역반전
     </MatchChip>,
   ]
+}
+
+function forFlipRefs(row) {
+  const { dom, forr } = favFlip(row)
+  if (dom || !forr) return []
+  return [<RefItem key="fav-flip" label="정역반전" title={favFlipTitle(dom, forr)}>해)</RefItem>]
 }
 
 // ── 기대점수 뱃지 (2026-09-07 실측, 6대리그 29,938경기) ──
@@ -450,7 +460,9 @@ const XG_RULES = [
 
 // 기대점수는 백엔드(api/pick_ai.py)가 시즌전적과 같이 계산해 내려준다 — 전체 기준 값
 // (괄호 앞쪽)을 쓴다. 장소 기준은 표본이 절반이라 실측에서 신호가 더 약했다.
-function xgChips(row, xg) {
+// 2026-10-09 경기지표 '참고' 줄 글자로 내렸다 — 배당 구간 평균 대비로는 위 숫자가 맞지만, 마감 시장 예상과
+// 비교하면 단통 플핸 몫이 +0.4%p(정배압도 +0.3 · 접전 +1.4 · 정배우위 −0.3)로 시장이 이미 아는 정보였다.
+function xgRefs(row, xg) {
   if (!xg || xg.home === null || xg.home === undefined
       || xg.away === null || xg.away === undefined) return []
   const fw = numOrNull(row.FW)
@@ -464,16 +476,16 @@ function xgChips(row, xg) {
   if (!hit) return []
   const [, , , , label, tone, note] = hit
   return [
-    <MatchChip
+    <RefItem
       key="xg"
-      label={`차 ${margin >= 0 ? '+' : ''}${margin.toFixed(2)}`}
+      label="기대"
       tone={tone}
       title={`기대점수 차이 = 정배(${(homeIsFav ? xg.home : xg.away).toFixed(2)}) −`
         + ` 언더독(${(homeIsFav ? xg.away : xg.home).toFixed(2)}) = ${margin.toFixed(2)}\n`
-        + `${note}\n※ 접전 배당(2.30 이상)에서는 기대점수가 결과를 예고하지 못해 뱃지를 띄우지 않는다.`}
+        + `${note}\n※ 접전 배당(2.30 이상)에서는 기대점수가 결과를 예고하지 못해 표시하지 않는다.`}
     >
-      {label}
-    </MatchChip>,
+      {label.replace('기대 ', '')} {margin >= 0 ? '+' : ''}{margin.toFixed(2)}
+    </RefItem>,
   ]
 }
 
@@ -495,7 +507,7 @@ function DdongsaBadge({ row }) {
 // 팝업 맨 위 결과 배지 자리 — 아직 결과가 없는(예정) 경기에서 그 자리를 채운다.
 // 예전엔 '예정 경기'라는 글자를 넣었는데(2026-09-12 사용자 지정으로 삭제), 그 경기가
 // 똥배(강한 정배)면 순번(똥1·똥2…)을 대신 보여준다 — 모양·등급 기준은 경기지표 줄의
-// ddongChips와 같다. 똥배가 아니면 빈 자리(아무 것도 안 보여줌)로 둔다.
+// '참고' 줄의 ddongRefs와 같다. 똥배가 아니면 빈 자리(아무 것도 안 보여줌)로 둔다.
 function DdongBadge({ row }) {
   const ddong = String(row.DDONG || '').trim()
   if (!ddong) return null
@@ -615,50 +627,47 @@ function h2hValueText(w, d, l, row, pick) {
   return tone === 'gray' ? undefined : { color: `var(--chip-${tone}-fg)`, fontWeight: 700 }
 }
 
-function h2hChips(verdict, loading, recent, row, pick) {
+// 2026-10-09 경기지표 '참고' 줄 글자로 내렸다 — 전적 우세 방향은 마감 시장 예상 대비 단통 플핸 몫이
+// 우세=정배 −0.2%p · 우세=언더독 −0.9%p로 시장이 이미 아는 정보였다. 숫자 색 규칙(h2hTone)은 그대로.
+function h2hRefs(verdict, loading, recent, row, pick) {
   if (loading) {
-    return [<MatchChip key="h2h" label="전적">…</MatchChip>]
+    return [<RefItem key="h2h" label="전적">…</RefItem>]
   }
   // 첫 맞대결 — 두 팀이 이 경기 전까지 우리 DB 안에서 한 번도 만난 적이 없다
-  // (h2hVerdict는 맞대결 기록이 0건일 때만 null을 낸다). 전적 뱃지가 나올 수 없는
+  // (h2hVerdict는 맞대결 기록이 0건일 때만 null을 낸다). 전적이 나올 수 없는
   // 자리에 대신 넣는다 — 아무것도 안 뜨면 '계산을 못 한 건지, 기록이 없는 건지'를
   // 화면에서 구분할 수 없다.
-  // ⚠ 판단 재료가 아니라 사실 표시다. 강추 경기 842건 안에서 첫 맞대결 62건의
-  // 당첨률이 91.94%(강추 평균 85.39%)로 높게 나오긴 했지만 z=1.52로 확정할 수 없는
-  // 표본이라 색을 입히지 않는다 — 동배당 뱃지와 같은 취급(2026-09-07 실측).
+  // 2026-10-09 전체 경기 재측정: 단통 플핸이 마감 시장 예상보다 +3.9%p(15-16~ 1,072경기, 세 기간 +4.4/+2.1/+4.6).
+  // 그래도 플핸 확률 공식에는 안 넣었다 — 넣으면 65%↑ 등급 적중이 70.8% → 69.6%로 떨어졌다(api/plhan_score.py
+  // _train_unified 주석). 평균으로는 플핸 쪽이지만 걸 만한 경기를 더 잘 고르게 해 주지는 못한다.
   if (!verdict) {
     return [
-      <MatchChip
+      <RefItem
         key="h2h-first"
         label="전적"
         title={'이 경기 전까지 두 팀의 맞대결 기록이 없습니다(첫 맞대결).\n'
           + '승격·강등이나 리그가 다른 팀끼리 처음 만나는 경우입니다.\n'
-          + '※ 판단 재료는 아닙니다 — 강추 경기 안에서 첫 맞대결(62건)의 당첨률이'
-          + ' 91.94%로 강추 평균(85.39%)보다 높게 나왔지만, 표본이 작아(z=1.52)'
-          + ' 확정할 수 없어 색을 입히지 않았습니다.'}
+          + '평균으로는 단통 플핸이 마감 시장 예상보다 3.9%p 더 나왔습니다(1,072경기, 세 기간 모두 +).'
+          + ' 다만 플핸 확률 공식에 넣으면 65% 이상 등급의 적중이 오히려 떨어져서 공식에는 넣지 않았습니다.'}
       >
         첫맞대결
-      </MatchChip>,
+      </RefItem>,
     ]
   }
   const recentTitle = recent
     ? recent.title
     : `최근 ${RECENT_SEASONS}시즌(이번 시즌 제외) 안에는 이 구장에서 만난 적이 없습니다.`
   return [
-    <MatchChip
-      key="h2h"
-      label="전적"
-      tone="gray"
-      title={`${verdict.title}\n\n${recentTitle}`}
-    >
+    <RefItem key="h2h" label="전적" title={`${verdict.title}\n\n${recentTitle}`}>
       <span style={h2hValueText(verdict.w, verdict.d, verdict.l, row, pick)}>
-        전체 {verdict.w}/{verdict.d}/{verdict.l}
+        {verdict.w}/{verdict.d}/{verdict.l}
       </span>
-      {' '}·{' '}
+      {' (최근5 '}
       {recent
-        ? <span style={h2hValueText(recent.w, recent.d, recent.l, row, pick)}>최근5 {recent.w}/{recent.d}/{recent.l}</span>
-        : <span>최근5 －</span>}
-    </MatchChip>,
+        ? <span style={h2hValueText(recent.w, recent.d, recent.l, row, pick)}>{recent.w}/{recent.d}/{recent.l}</span>
+        : '－'}
+      )
+    </RefItem>,
   ]
 }
 
@@ -673,9 +682,11 @@ function h2hChips(verdict, loading, recent, row, pick) {
 // 기준선과 근거는 utils/systemVerdict.js 주석에 전부 있다.
 // 2026-09-02(2) — 시스템 판정 쪽 '무배당' 줄을 없애고, 그게 하던 일(지금 픽과
 // 같은 방향인지)을 이 뱃지 하나로 합쳤다. 같은 값을 두 군데서 다르게 말하지 않는다.
+// 2026-10-09 경기지표 '참고' 줄 글자로 내렸다(판정 줄 바로 밑이라 '같은방향/다른방향'을 판정과 나란히 본다).
+// 단통 플핸 기준으로는 무고려 −1.0%p · 무제외 +0.7%p로 마감 시장과 같았다.
 const DRAW_REL_LABEL = { 같은편: '같은방향', 상충: '다른방향', 무관: '무관' }
 
-function drawChips(row, pick) {
+function drawRefs(row, pick) {
   const t = drawTendency(row)
   if (!t) return []
   const kd = numOrNull(row.KD)
@@ -684,10 +695,9 @@ function drawChips(row, pick) {
   const rel = pick ? drawRelation(t, pick) : null
   const relLabel = rel ? DRAW_REL_LABEL[rel] : null
   return [
-    <MatchChip
+    <RefItem
       key="draw"
       label="무"
-      tone="gray"
       title={`무배당 국배 ${kd ? kd.toFixed(2) : '-'}`
         + `${fd ? ` · 해배 ${fd.toFixed(2)}` : ''}.\n`
         + (heavy
@@ -703,10 +713,10 @@ function drawChips(row, pick) {
         <span className={`draw-rel draw-rel-${
           rel === '같은편' ? 'ok' : rel === '상충' ? 'bad' : 'none'}`}
         >
-          {' '}· {relLabel}
+          ({relLabel})
         </span>
       )}
-    </MatchChip>,
+    </RefItem>,
   ]
 }
 
@@ -766,47 +776,30 @@ function extraOddsChips(row, extraOdds) {
 //   지표로는 성공 51경기와 구분되지 않았다(해외 정배배당 2.65 vs 2.61, 무배당
 //   3.06 vs 3.03). 유일하게 뚜렷한 차이는 총득점 3.11골 vs 2.00골이었는데 그건
 //   경기가 끝나야 아는 값이다. 즉 "9번 중 1번은 어쩔 수 없이 진다"가 정답이다.
+//
+// ★ 2026-10-09 — 따로 뜨던 '플핸 85%' 칩은 '플핸 확률'(패턴분석-02) 칩의 근거 하나로 합쳤다(사용자 승인).
+//   09-20 전적 판정이 홈기준 단일로 바뀐 뒤의 지금 정의로 다시 재면 18시즌 35경기 77.1%, 15-16~ 28경기 71.4%
+//   (마감 시장 예상 65.9%)라 위의 85%·60경기는 옛 정의 값이다. 공식 안에서 더하는 몫은 +1.5~3.5%p 정도다.
+//   조건 계산은 서버 학습(api/plhan_score.py _plhan85_flags)과 같아야 한다 — 한쪽을 고치면 같이 고친다.
 const PLHAN85_MIN_FAV = 2.40
 const PLHAN85_MAX_DRAW = 3.20
 
-function plhan85Chips(row, verdict) {
-  if (!verdict) return []
+function isPlhan85(row, verdict) {
+  if (!verdict) return false
   const side = H2H_HOME_SIDE[verdict.label]
-  if (!side) return []
+  if (!side) return false
   const favHome = marketFavHome(row.FW, row.FL)
-  if (favHome === null) return []
+  if (favHome === null) return false
   // ④ 전적 우세팀이 언더독 쪽인가(해외 초기배당 기준 — h2hRelation과 같은 기준)
-  if ((side === 'home') === favHome) return []
+  if ((side === 'home') === favHome) return false
   const pick2 = (a, b) => numOrNull(row[a]) ?? numOrNull(row[b])
   const fw = pick2('EFW', 'FW')
   const fl = pick2('EFL', 'FL')
   const fd = pick2('EFD', 'FD')
-  if (fw === null || fl === null || fd === null) return []
-  if (Math.min(fw, fl) < PLHAN85_MIN_FAV) return []        // ①
-  if (fd >= PLHAN85_MAX_DRAW) return []                    // ②
-  if (!favFlip(row).forr) return []                        // ③
-  return [
-    <MatchChip
-      key="plhan85"
-      label="플핸"
-      tone="green"
-      title={'★ 6대리그 36,034경기 전수 탐색에서 순수 플핸(무+역) 발생률이 가장 높았던'
-        + ' 조합입니다. 네 조건이 동시에 맞았습니다:'
-        + `\n  ① 해외 정배배당 ${PLHAN85_MIN_FAV} 이상(현재 ${Math.min(fw, fl).toFixed(2)})`
-        + `\n  ② 해외 무배당 ${PLHAN85_MAX_DRAW} 미만(현재 ${fd.toFixed(2)})`
-        + '\n  ③ 해외 정역반전(초기와 배변의 정배 팀이 다름)'
-        + `\n  ④ 전적 같은방향(상대전적 우세팀이 언더독 쪽 — ${verdict.label})`
-        + '\n\n실측 n=60 · 플핸 85.00% · 플핸무 96.67%(무 28 · 역 23 · 핸무 7 · 핸승 2)'
-        + '\n플핸 단독 회수율 1.165 — 지금까지 찾은 조합 중 유일하게 본전을 넘습니다.'
-        + '\n\n⚠ 6대리그 통틀어 연 3~4경기뿐이고, 기간 분할 검증에서 87.18%→80.95%로'
-        + ' 떨어졌습니다. 참값은 80% 언저리로 보세요. 분데스·에레디는 표본이 각 1건이라'
-        + ' 사실상 검증되지 않았습니다.'
-        + '\n⚠ 실패한 9경기는 배당·전적으로 미리 걸러낼 수 없었습니다(총득점이 3.11골로'
-        + ' 높았지만 그건 끝나야 아는 값) — 9번 중 1번은 어쩔 수 없이 집니다.'}
-    >
-      85%
-    </MatchChip>,
-  ]
+  if (fw === null || fl === null || fd === null) return false
+  if (Math.min(fw, fl) < PLHAN85_MIN_FAV) return false      // ①
+  if (fd >= PLHAN85_MAX_DRAW) return false                  // ②
+  return favFlip(row).forr                                  // ③
 }
 
 // ── 강추 등급 뱃지 (2026-09-22 사용자 지정 — 판정 줄에서 경기지표로 이동) ─────────
@@ -823,11 +816,14 @@ function strongPickChips(row, fin) {
   ]
 }
 
-// ── 플핸 점수 칩 (2026-10-07 사용자 지정 — 경기지표 맨 위, 누르면 근거 팝업) ─────────────
-// 점수 = 패턴분석-01(0~2) + 다른 방법 동의(0~3) — 계산은 서버(api/plhan_score.py), 팝업은 PlhanScore.jsx.
-// 맨 위 고정 자리라 0~1점도 흐리게 늘 보인다(사용자 지정). 4~5점 진한 빨강 · 3점 연한 빨강 · 2점 이하 회색,
-// 5점(최대)은 테두리에 노란 강조. 마감(배변) 배당 전에는 '대기'. 공식 6대리그가 아니면 안 뜬다.
-function plhanChips(plhan, onOpen) {
+// ── 플핸 확률 칩 (패턴분석-02, 2026-10-09 사용자 승인 — 경기지표 '축' 줄 맨 앞, 누르면 근거 팝업) ─────────────
+// 예전 '플핸 N점 · X%'(10-07) 칩의 %는 '같은 점수였던 지난 경기 평균'이라, 국내 정배 1.04 경기에도 0점 평균 40%가 떴다.
+// 이제는 이 경기의 확률 하나다 — 시장이 본 플핸 확률에 근거(기존 점수 4점↑·플축·플핸85)의 몫을 더한 값
+// (계산 utils/plhanScore.js plhanUnified, 계수·등급표는 서버 api/plhan_score.py 학습 결과).
+// 따로 뜨던 플축·플핸 85%·플축·국≠해 칩은 이 칩 하나로 합쳤고, 팝업 근거 표·'공식 밖 참고'에 남는다.
+// 색 = 등급: 75%↑ 진한 빨강 + 노란 테두리 · 65~75% 빨강 · 55~65% 연한 빨강 · 55% 미만 회색(흐리게).
+// 마감(Bet365 최신배당) 전에는 초기 배당으로 낸 값에 '초기'를 붙인다(CLAUDE.md 4-1). 공식 6대리그가 아니면 안 뜬다.
+function plhanChips(plhan, uni, onOpen) {
   if (!plhan) return []
   if (!plhan.ready) {
     if (plhan.state !== 'nodom') return []
@@ -835,42 +831,20 @@ function plhanChips(plhan, onOpen) {
       <MatchChip key="plhan" label="플핸" extraClass="match-chip-dim" title={plhan.reason}>—</MatchChip>,
     ]
   }
-  const sc = plhan.state === 'ok' ? plhan.score : null
-  const tone = sc === null ? 'gray' : sc >= 4 ? 'red' : sc === 3 ? 'red-soft' : 'gray'
-  const extra = [sc === 5 ? 'match-chip-hl' : '', sc !== null && sc <= 1 ? 'match-chip-dim' : ''].filter(Boolean).join(' ')
+  const g = uni?.grade
+  const extra = [g?.hl ? 'match-chip-hl' : '', !uni || g?.dim ? 'match-chip-dim' : ''].filter(Boolean).join(' ')
   return [
-    <MatchChip key="plhan" label="플핸" tone={tone} extraClass={extra || undefined} title={plhanChipTitle(plhan)} onClick={onOpen}>
-      {plhanChipText(plhan)}
+    <MatchChip key="plhan" label="플핸" tone={g?.tone ?? 'gray'} extraClass={extra || undefined}
+               title={plhanChipTitle(plhan, uni)} onClick={onOpen}>
+      {plhanChipText(plhan, uni)}
+      {uni?.phase === 'init' && <span className="match-chip-sub">초기</span>}
     </MatchChip>,
   ]
 }
 
-// ── 플축·국≠해 뱃지 (2026-09-26 사용자 지정) — 조건·실측은 verdictCalc.js plSplitAxis 주석 ──
-// 기존 플축(표본 방향 7개 기준)과 따로 세는 이유: 505경기 중 기존 플축과 겹치는 건 28경기뿐이었다.
-function plSplitAxisChips(row, fin) {
-  if (!plSplitAxis(row, fin)) return []
-  const a = PL_SPLIT_AXIS
-  const ht = String(row.HT || '').trim()
-  const at = String(row.AT || '').trim()
-  const kHome = Number(row.KW) < Number(row.KL)
-  const dog = kHome ? at : ht
-  return [
-    <MatchChip
-      key="pl-split-axis"
-      label="플축·국≠해"
-      tone="red"
-      title={'플축·국≠해 — 단통 플핸(무+역): "국내 정배는 못 이긴다"\n'
-        + `해외 마감 시장은 ${dog}을(를) 정배로 봤는데, 국내에서는 ${dog}이(가) 언더독이라 플핸 배당으로 살 수 있는 경기입니다.\n`
-        + `조건: 배변 판정 플핸무 + 해외(배변) 정배가 국내 초기 정배와 다른 팀 + 해외 정배배당 ${a.lo}~${a.hi}\n\n`
-        + `6대리그 18시즌 실측(그 경기 날짜 이전 자료만): 플 단통 ${a.rate}% (${a.n}경기, 같은 배당 평균보다 +${a.uplift}%p)\n`
-        + `국내 플핸 배당으로 건 회수율 ${a.roi}(핸디배당이 있는 ${a.roiN}경기) · 앞·뒤 시즌 모두, 6개 리그 전부 플러스\n`
-        + '※ 12사 방향 칩이 이 경기에서 \'정\'으로 보이는 경우가 많습니다 — 12사가 반대 팀을 정배로 봐서'
-        + ' 뒤집혀 찍힌 것이라 판정과 반대라고 걱정하지 않아도 됩니다.'}
-    >
-      {Math.round(a.rate)}%
-    </MatchChip>,
-  ]
-}
+// 플축·국≠해(2026-09-26) 칩은 2026-10-09에 '플핸 확률'로 합쳤다 — 이 경기들은 마감 시장이 이미 68% 안팎으로 봐서
+// 플핸 확률 칩도 65~75% 등급으로 뜬다. 조건(verdictCalc plSplitAxis)과 옛 실측은 근거 팝업 '공식 밖 참고'에 남아 있다.
+// (과거 시점 재현이 안 돼 공식에 못 넣었다 — 조건의 '배변 판정 플핸무'가 저장된 26지표를 쓰는데 거기 뒤 경기가 섞여 있다.)
 
 // ── 플축 · 정축 뱃지 (2026-09-21 실측, 사용자 지정) ───────────────────────────
 // 축 = 보험 없는 단통. 플축 = 무+역(RT3+4), 정축 = 핸승+핸무(RT1+2).
@@ -907,63 +881,28 @@ function axisStatsNote(stats) {
     : '※ 서버 재측정 값을 아직 못 받아 2026-09-21 측정값으로 표시합니다.'
 }
 
-function axisChips(row, seasonSample, h2hMatches, axisStats) {
-  const v = axisVerdict(seasonSample?.samples, row, h2hMatches)
-  if (!v) return []
+// 2026-10-09 — 플축 칩·7레드 칩은 '플핸 확률' 칩으로 합쳤다(플축은 공식의 근거, 7레드는 팝업 '공식 밖 참고' —
+// 37경기, 시장과 같음). 여기는 정축 칩만 남는다. v = axisVerdict 결과(MatchDetailBody가 한 번 계산해 내려준다).
+function jungAxisChips(row, v, axisStats) {
+  if (!v?.jung) return []
   const seasons = axisStats?.seasons || AXIS_FALLBACK.seasons
-  const chips = []
-  if (v.pl) {
-    // 여러 등급이 겹치면 이 경기 %가 가장 높게 나오는 등급을 뱃지에 쓴다.
-    const ms = v.plAll.map((k) => ({ k, ...axisMatchPct(row, axisStats, k) }))
-    const best = ms.reduce((a, b) => ((b.pct ?? 0) > (a.pct ?? 0) ? b : a))
-    chips.push(
-      <MatchChip
-        key="pl-axis"
-        label="플축"
-        tone="red"
-        title={'플축 — 단통 플핸(무+역): "정배는 못 이긴다"\n'
-          + `${matchPctLine(best, `단통 플핸 (${best.k})`)}\n\n`
-          + ms.map((m) => tierLine(m.k, m.tier, seasons)).join('\n')
-          + `\n\n${axisContextText(v.ctx)}\n\n${axisStatsNote(axisStats)}`}
-      >
-        {best.pct?.toFixed(0)}%
-      </MatchChip>,
-    )
-  } else if (v.ctx.nred === 7) {
-    const m = axisMatchPct(row, axisStats, 'RED7')
-    chips.push(
-      <MatchChip
-        key="pl-red7"
-        label="7레드"
-        title={'자동 방향성 7개가 전부 레드·레드(약)지만 플축 조건(배당신호, 또는 정배배당 2.1 초과 +'
-          + ' 전적 정배편 아님)이 없습니다.\n'
-          + `이런 경기는 지난 ${m.tier.n}경기 단통 플핸 ${pct1(m.tier.rate)} — 같은 배당 기대 ${pct1(m.tier.exp)}와`
-          + ' 차이가 없어 색을 입히지 않았습니다.\n\n' + axisContextText(v.ctx)}
-      >
-        약함
-      </MatchChip>,
-    )
-  }
-  if (v.jung) {
-    const m = axisMatchPct(row, axisStats, v.jung)
-    chips.push(
-      <MatchChip
-        key="jung-axis"
-        label="정축"
-        tone="blue"
-        title={'정축 — 단통 정(핸승+핸무): "정배가 이긴다"\n'
-          + `${matchPctLine(m, `단통 정 (${v.jung})`)}\n\n`
-          + tierLine(v.jung, m.tier, seasons)
-          + `\n\n${axisContextText(v.ctx)}\n\n`
-          + '⚠ 같은 배당의 원래 적중률만큼만 맞습니다(등급 몫이 거의 0) — 적중률은 높지만 배당이 낮아'
-          + ' 단통으로 계속 걸면 회수율 약 0.91(100만 원당 약 9만 원 손실). 조합에 넣으면 손실이 곱해집니다.\n'
-          + axisStatsNote(axisStats)}
-      >
-        {m.pct?.toFixed(0)}%
-      </MatchChip>,
-    )
-  }
-  return chips
+  const m = axisMatchPct(row, axisStats, v.jung)
+  return [
+    <MatchChip
+      key="jung-axis"
+      label="정축"
+      tone="blue"
+      title={'정축 — 단통 정(핸승+핸무): "정배가 이긴다"\n'
+        + `${matchPctLine(m, `단통 정 (${v.jung})`)}\n\n`
+        + tierLine(v.jung, m.tier, seasons)
+        + `\n\n${axisContextText(v.ctx)}\n\n`
+        + '⚠ 같은 배당의 원래 적중률만큼만 맞습니다(등급 몫이 거의 0) — 적중률은 높지만 배당이 낮아'
+        + ' 단통으로 계속 걸면 회수율 약 0.91(100만 원당 약 9만 원 손실). 조합에 넣으면 손실이 곱해집니다.\n'
+        + axisStatsNote(axisStats)}
+    >
+      {m.pct?.toFixed(0)}%
+    </MatchChip>,
+  ]
 }
 
 // 아카이브 뱃지 — 내가 이 팀·맞대결에 달아 둔 태그(📌). 다른 뱃지는 데이터가 만든 신호지만
@@ -993,32 +932,97 @@ function archiveChips(tags) {
   })
 }
 
-function MatchIndicators({ row, h2hVerdict: verdict, h2hLoading, pick, fin, xg, archiveTags, seasonSample, h2hMatches, axisStats, plhan, onPlhanOpen }) {
-  // 똥배 → 국/해 엇갈림 → 전적 → 무 순으로 세로로 쌓는다.
-  // (동배당 뱃지는 2026-09-23에 뺐다 — 같은 내용을 '같은 회차 동배당 결과' 섹션이
-  //  초기·배변까지 갈라 표로 보여주게 되면서 뱃지 쪽이 중복이 됐다. 사용자 지정.)
-  // (배당차 뱃지는 2026-09-02에 옆 칸 표로 뺐다가 2026-09-05에 아예 삭제했다 —
-  //  정배배당을 다시 적은 값이라 확률 지표와 중복이었다. DirectionScopeTable 주석 참고.)
-  // 플핸85는 맨 앞에 둔다 — 다른 뱃지가 '이 경기가 어떤 경기인가'를 말하는 데 비해
-  // 이것만 "그래서 어떻게 하라"에 가장 가까운 결론이라 눈에 먼저 들어와야 한다.
-  // 시즌막판(정무 주의)도 '어떻게 하라'에 가까워 플핸85 바로 뒤에 둔다.
-  // 아카이브(📌 내가 단 태그)는 그보다도 앞 — archiveChips 주석 참고.
-  // 전적 뱃지의 '최근5' — verdict(전체)가 있을 때만 뜻이 있다(h2hChips 첫맞대결 분기 참고).
-  const h2hRecent = verdict
-    ? h2hVerdictRecent(h2hMatches, String(row.HT || '').trim(), row.S)
-    : null
-  // 플핸 점수는 맨 위(2026-10-07 사용자 지정 — "경기지표 가장 상단") — 📌 아카이브 태그보다도 앞이다.
-  const chips = [...plhanChips(plhan, onPlhanOpen), ...archiveChips(archiveTags), ...axisChips(row, seasonSample, h2hMatches, axisStats),
-    ...plSplitAxisChips(row, fin),
-    ...plhan85Chips(row, verdict), ...seasonStakeChips(row),
-    ...ddongChips(row), ...oddsSplitChips(row), ...foreignTieChips(row),
-    ...favFlipChips(row), ...strongPickChips(row, fin),
-    ...xgChips(row, xg),
-    ...h2hChips(verdict, h2hLoading, h2hRecent, row, pick), ...drawChips(row, pick)]
+// ── 경기지표 = 축 · 확인 두 줄 (2026-10-09 사용자 승인 — "칩이 너무 많다" 정리안) ─────────────
+//   축   단통으로 걸 만한가 — 플핸 확률(패턴분석-02) · 정축
+//   확인 걸기 전에 볼 것 — 📌 내 태그 · 강추 등급 · 시즌막판 정무 주의 · 국내 정역반전(프로토는 정무로) · 국≠해((정)/(역) 기준이 갈림)
+// 배당이 이미 말한 사실(똥배·기대점수·전적·무·해외만 반전·해배동배)은 칩이 아니라 판정 줄 밑 '참고' 글자 한 줄(MatchRefLine).
+// 실측 근거(15-16~ 22,589경기, 메모리 reference-match-chip-audit): 단통 플핸을 마감 시장 예상보다 확실히 더 맞힌 칩은
+// 기존 점수 4점↑(+14.4%p)·플축(+12.3%p) 둘뿐이고 나머지는 ±2%p 안. 한 경기 칩 평균 3.7개(막판 5.4개) → 약 1.1개.
+// (동배당 뱃지는 2026-09-23, 배당차 뱃지는 2026-09-05에 이미 뺐다 — 각각 다른 섹션·표와 중복.)
+function MatchGroup({ label, title, children }) {
   return (
-    <span className="match-chip-row">
-      {chips.length ? chips : <span className="match-chip-empty">해당 없음</span>}
-    </span>
+    <div className="match-group">
+      <span className="match-group-label" title={title}>{label}</span>
+      <span className="match-group-chips">{children}</span>
+    </div>
+  )
+}
+
+function MatchIndicators({ row, fin, archiveTags, axisV, axisStats, uni, plhan, onPlhanOpen }) {
+  const axis = [...plhanChips(plhan, uni, onPlhanOpen), ...jungAxisChips(row, axisV, axisStats)]
+  const check = [...archiveChips(archiveTags), ...strongPickChips(row, fin), ...seasonEndChips(row),
+    ...domFlipChips(row), ...oddsSplitChips(row)]
+  if (!axis.length && !check.length) return <span className="match-chip-empty">해당 없음</span>
+  return (
+    <div className="match-groups">
+      {axis.length > 0 && (
+        <MatchGroup label="축" title="단통으로 걸 만한가 — 플핸 확률(무+역, 패턴분석-02)과 정축(핸승+핸무)">{axis}</MatchGroup>
+      )}
+      {check.length > 0 && (
+        <MatchGroup label="확인" title="걸기 전에 볼 것 — 내 태그 · 강추 등급 · 시즌막판 · 거는 방법이나 (정)/(역) 표기가 달라지는 경기">
+          {check}
+        </MatchGroup>
+      )}
+    </div>
+  )
+}
+
+// 'N구간 경기' 표(2026-10-09 사용자 지정, 엑셀 '구간 표' 모양) — 이 경기가 라운드에서 와이즈토토 순으로 N번째일 때,
+// 이번 시즌에 N번째였던 끝난 경기들의 결과(핸승·핸무·무·역) 개수를 6대리그 전체('6대')와 이 리그('리그')로 보여준다.
+// 연기·취소·결과 없는 경기는 센 숫자에 안 들어간다. 계산은 서버 /api/kno_zone. 순번이 없는 경기(과거 시즌 등)는 표가 없다.
+const ZONE_COLS = [['1', '핸승', 'blue'], ['2', '핸무', 'green'], ['3', '무', 'gray'], ['4', '역', 'red']]
+
+function KnoZoneTable({ zone }) {
+  if (!zone?.ready) return null
+  const sum = (o) => ZONE_COLS.reduce((a, [k]) => a + (o?.[k] || 0), 0)
+  return (
+    <table
+      className="detail-table kno-zone-table"
+      title={`이번 시즌(${zone.season}) 와이즈토토 순번이 ${zone.kno}번째였던 끝난 경기의 결과 개수 — 연기·취소·결과 없는 경기는 뺍니다.`}
+    >
+      <thead>
+        <tr><th colSpan={5} className="kno-zone-title">{zone.kno}구간 경기</th></tr>
+        <tr>
+          <th />
+          {ZONE_COLS.map(([k, name, tone]) => (
+            <th key={k} style={{ color: `var(--chip-${tone}-fg)` }}>{name}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {[['6대', zone.all], ['리그', zone.league]].map(([label, o]) => (
+          <tr key={label} title={`${label === '6대' ? '6대리그 전체' : '이 리그'} ${sum(o)}경기`}>
+            <th className="row-label">{label}</th>
+            {ZONE_COLS.map(([k]) => <td key={k}>{o?.[k] ?? 0}</td>)}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+// '참고' 한 줄 — 판정 줄 바로 밑(2026-10-09). 배당이 이미 말한 사실이라 칩 대신 흐린 글자로 늘어놓는다.
+// 항목 사이 가운뎃점은 글자 공백이 아니라 flex gap으로 벌린다(CLAUDE.md 6-2 — 공백은 브라우저가 합쳐 간격이 들쭉날쭉해진다).
+function MatchRefLine({ row, verdict, h2hLoading, h2hMatches, pick, xg }) {
+  // 전적의 '최근5' — verdict(전체)가 있을 때만 뜻이 있다(h2hRefs 첫맞대결 분기 참고).
+  const h2hRecent = verdict ? h2hVerdictRecent(h2hMatches, String(row.HT || '').trim(), row.S) : null
+  const items = [...ddongRefs(row), ...xgRefs(row, xg), ...h2hRefs(verdict, h2hLoading, h2hRecent, row, pick),
+    ...drawRefs(row, pick), ...forFlipRefs(row), ...foreignTieRefs(row)]
+  if (!items.length) return null
+  return (
+    <div className="match-ref-line">
+      <span className="match-ref-title" title="배당이 이미 말한 사실 — 단통 기준으로 마감 시장 예상과 ±2%p 안이었습니다(2026-10-09 실측). 마우스를 올리면 설명이 나옵니다.">
+        참고
+      </span>
+      <span className="match-ref-items">
+        {items.map((it, i) => (
+          <Fragment key={it.key}>
+            {i > 0 && <span className="match-ref-sep" aria-hidden="true">·</span>}
+            {it}
+          </Fragment>
+        ))}
+      </span>
+    </div>
   )
 }
 
@@ -1043,8 +1047,9 @@ function OddsTable({ row, weekRank }) {
   const homeFav = homeIsFav(row)
   // 시즌 막판(남은 경기 10 이하) 뱃지 — 예전엔 리그 표(LeagueTable)의 팀명 칸 옆에
   // 붙었는데, 배당 표 팀명 위로 옮겼다(2026-09-13 사용자 지정, 스샷 그대로 — 유로파/
-  // 챔스✔ 같은 알약 배지가 팀명 칸 머리 위에 온다). 계산 근거는 utils/seasonStake.js,
-  // '경기지표' 줄의 상세 칩(seasonStakeChips)과 같은 데이터를 짧은 라벨로만 보여준다.
+  // 챔스✔ 같은 알약 배지가 팀명 칸 머리 위에 온다). 계산 근거는 utils/seasonStake.js.
+  // 경기지표에 같은 내용을 길게 보여주던 팀 칩은 2026-10-09에 없앴다 — 이제 이 뱃지가 유일한 자리이고,
+  // 마우스를 올리면 '2위와 +2점' 같은 전체 설명이 나온다(teamStake title).
   const hStake = teamStake(row, 'H')
   const aStake = teamStake(row, 'A')
   // 해외 배당이 크게 움직인 경기인가 — '해외 배당' 표 제목 옆 (강)/(약) 표시.
@@ -2653,7 +2658,8 @@ function MultiBookLegend({ onClose }) {
         <p className="help-legend-note">
           1.7~2.1에서 갈리면 판정도 12사도 동전 던지기(단통 49~53%)라 축으로 걸 자리가 아닙니다.
           2.1~2.5에서 판정 플인데 12사가 정으로 보이면 대부분(94%) 12사가 반대 팀을 정배로 본 경기라
-          뒤집혀 찍힌 것이고, 이때는 판정 쪽이 크게 맞았습니다 — 경기지표의 <b>플축·국≠해</b> 뱃지가 이 경우입니다.
+          뒤집혀 찍힌 것이고, 이때는 판정 쪽이 크게 맞았습니다 — <b>플축·국≠해</b>가 이 경우입니다(2026-10-09부터 따로 뜨던
+          뱃지는 경기지표 &apos;플핸 확률&apos; 칩에 합쳤고, 칩을 누르면 &apos;공식 밖 참고&apos;에 표시됩니다).
           12사 칩을 &apos;같은 배당에서 보통 나오는 흐름&apos; 대비로 바꿔 재 봐도 정보가 없었습니다(배변 −0.04%p).
         </p>
 
@@ -3374,7 +3380,7 @@ function SeasonRecordLegend({ onClose }) {
         <p className="help-legend-note">
           <b>정배가 셀 때만 작동합니다.</b> 초강정배 배당(~1.35)에서는 기대점수 차이에 따라
           핸승이 <b>51.83% ↔ 61.22%</b>로 10%p 가까이 갈립니다. 반대로 <b>접전 배당(2.30 이상)에서는
-          어느 조합도 유의하지 않습니다</b> — 그래서 경기지표 뱃지도 접전 경기에는 안 뜹니다.
+          어느 조합도 유의하지 않습니다</b> — 그래서 판정 밑 &apos;참고&apos; 줄의 기대점수도 접전 경기에는 안 뜹니다.
         </p>
         <p className="help-legend-note">
           같은 &apos;강정배 배당&apos;이라도 기대점수가 갈리면 결과가 완전히 달라집니다:
@@ -3394,13 +3400,14 @@ function SeasonRecordLegend({ onClose }) {
           </tbody>
         </table>
         <p className="help-legend-title">
-          ⑥ 경기지표에 뱃지가 뜨는 6가지 조합
+          ⑥ &apos;참고&apos; 줄에 기대점수가 뜨는 6가지 조합
         </p>
         <p className="help-legend-note">
-          위 격자에서 <b>z≥2로 살아남은 칸만</b> 뱃지로 만들었습니다. 지금 보는 경기가 아래
-          조합 중 하나에 들어가면 경기지표 줄에 뜨고, 마우스를 올리면 그 칸의 실측값이
-          그대로 나옵니다. <b>접전 배당(2.30 이상)은 어느 조합도 유의하지 않아 뱃지가
-          아예 없습니다.</b>
+          위 격자에서 <b>z≥2로 살아남은 칸만</b> 표시합니다. 지금 보는 경기가 아래
+          조합 중 하나에 들어가면 판정 밑 &apos;참고&apos; 줄에 &apos;기대 정배압도 +2.59&apos;처럼 뜨고,
+          마우스를 올리면 그 칸의 실측값이 그대로 나옵니다. <b>접전 배당(2.30 이상)은 어느 조합도
+          유의하지 않아 아예 없습니다.</b> (2026-10-09 마감 시장 예상과 비교하면 단통 플핸 몫은 +0.4%p로,
+          시장이 이미 아는 정보라 칩에서 &apos;참고&apos; 글자로 내렸습니다.)
         </p>
         <table className="detail-table help-legend-table">
           <thead>
@@ -4614,9 +4621,9 @@ function NewSystemVerdictLegend({ onClose }) {
           ⚠ <b>국내배당이 뒤집힌 경기는 베팅 방식이 바뀝니다.</b> &apos;정&apos;과
           &apos;역&apos;이 가리키는 팀이 서로 자리를 바꾸기 때문에, 프로토(국내 시장)에서
           같은 팀에 거는 행위가 플핸이 아니라 <b>정무</b>가 됩니다. 해외만 뒤집힌 경우는
-          실제로 거는 시장이 아니라 플핸 그대로 가면 됩니다. 경기지표 줄의 뱃지가
-          <b> 국) · 해) · 국·해)</b>로 어느 쪽이 뒤집혔는지 알려주고, 국내가 포함되면
-          노란색으로 표시합니다.
+          실제로 거는 시장이 아니라 플핸 그대로 가면 됩니다. 국내가 포함되면 경기지표 &apos;확인&apos; 줄에
+          노란 <b>국) · 국·해) 정역반전</b> 칩으로, 해외만 뒤집혔으면 판정 밑 &apos;참고&apos; 줄에
+          <b> 해) 정역반전</b> 글자로 알려줍니다(2026-10-09).
         </p>
 
         <p className="help-legend-title">
@@ -4904,8 +4911,8 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, seasonSample, h2hMatches, axisStats, plhan, onPlhanOpen }) {
-  // '경기지표'의 무·전적 뱃지와 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
+function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, h2hMatches, axisV, axisStats, uni, plhan, onPlhanOpen, zone }) {
+  // '참고' 줄의 무·전적과 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
   // 같이 걷어냈다. 배지는 배변 판정을 우선하고, 배변이 아직 없으면 초기 판정을 쓴다.
@@ -4917,6 +4924,8 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveT
     <section className="pick-band">
       <div className="pick-band-risk">
         <div className="pick-band-risk-cols">
+          {/* 배당 + 경기지표를 한 묶음(같은 높이)으로 — 구간 표 아래 끝을 배당 표 아래 끝에 맞추려고(2026-10-09 사용자 지정) */}
+          <div className="pick-band-left-cols">
           <div className="pick-band-risk-col">
             <h3 className="pick-band-risk-col-title">
               배당
@@ -4924,36 +4933,36 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveT
             </h3>
             <OddsTable row={row} weekRank={weekRank} />
           </div>
+          {/* 3칸(2026-10-09 사용자 지정): 배당 | 경기지표(좁게) | 확률 지표. 경기지표는 예전엔 확률 지표 표 밑에 있었다. */}
+          <div className="pick-band-risk-col pick-band-match">
+            <h3 className="pick-band-risk-col-title">
+              경기지표
+            </h3>
+            <MatchIndicators
+              row={row}
+              fin={fin}
+              archiveTags={archiveTags}
+              axisV={axisV}
+              axisStats={axisStats}
+              uni={uni}
+              plhan={plhan}
+              onPlhanOpen={onPlhanOpen}
+            />
+            {/* 참고(2026-10-09 사용자 지정) — 경기지표의 축·확인 바로 아래, 같은 라벨 칸에 세로로. */}
+            <MatchRefLine row={row} verdict={verdict} h2hLoading={h2hLoading} h2hMatches={h2hMatches} pick={pick} xg={xg} />
+            {/* 구간 표(2026-10-09 사용자 지정) — 경기지표 맨 아래 */}
+            <KnoZoneTable zone={zone} />
+          </div>
+          </div>
           <div className="pick-band-risk-col">
             <h3 className="pick-band-risk-col-title">
               확률 지표
             </h3>
             <RiskCard row={row} />
-            {/* 경기지표·방향성·시스템 판정은 왼쪽('배당') 칸과는 무관하게
-                이 칸(확률 지표) 표 바로 밑에만 붙인다 — 왼쪽 칸 아래로는 안 내려간다.
-                예전엔 이 셋을 세로로 쌓아서 줄이 길었는데, 이 칸 폭 안에서 가로
-                3단(뱃지·표·표)으로 접어 줄 수를 줄인다. */}
+            {/* 방향성·시스템 판정은 이 칸(확률 지표) 표 바로 밑에만 붙인다. */}
             <div className="pick-band-bottom-cols">
-              <div className="pick-band-match">
-                <h3>경기지표</h3>
-                <MatchIndicators
-                  row={row}
-                  h2hVerdict={verdict}
-                  h2hLoading={h2hLoading}
-                  pick={pick}
-                  fin={fin}
-                  xg={xg}
-                  archiveTags={archiveTags}
-                  seasonSample={seasonSample}
-                  h2hMatches={h2hMatches}
-                  axisStats={axisStats}
-                  plhan={plhan}
-                  onPlhanOpen={onPlhanOpen}
-                />
-              </div>
               {/* 방향성·배당 두 표를 한 덩어리로 묶고, 그 아래에 구분선 + 시스템
-                  판정(새) 줄을 붙인다(2026-09-06, 사용자가 고른 '안 2') — 경기지표
-                  칸까지는 안 내려가고 이 두 표의 폭만큼만 걸친다. */}
+                  판정(새) 줄을 붙인다(2026-09-06, 사용자가 고른 '안 2'). */}
               <div className="pick-band-dscope-sys-wrap">
                 <div className="pick-band-dscope-sys-row">
                   <div className="pick-band-dscope">
@@ -5052,13 +5061,13 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
   const [pickError, setPickError] = useState('')
   // 종합분석 카드를 화면에서 뺀 뒤로 이 응답에서 실제로 쓰는 건 이 둘과 streaks뿐이다.
   const seasonSig = findSignal(pickData, 'season')
-  // 기대점수(전체 기준) — 시즌전적 표가 쓰는 값 그대로를 경기지표 뱃지(xgChips)에도 넘긴다.
+  // 기대점수(전체 기준) — 시즌전적 표가 쓰는 값 그대로를 판정 밑 '참고' 줄(xgRefs)에도 넘긴다.
   // rows[0]=홈 · rows[1]=원정, xg[0]=전체 기준 · xg[1]=오늘 장소 기준(뱃지는 [0]만 쓴다).
   const seasonXg = seasonSig && seasonSig.rows
     ? { home: seasonSig.rows[0]?.xg?.[0], away: seasonSig.rows[1]?.xg?.[0] }
     : null
   const h2hSig = findSignal(pickData, 'h2h')
-  // 경기지표의 '전적' 뱃지(홈우세/전적보합/원정우세).
+  // 판정 밑 '참고' 줄의 '전적'(홈우세/전적보합/원정우세 판정 + 숫자) — 플핸 확률의 플핸85 조건 ④에도 쓴다.
   // 상대전적 카드가 쓰는 것과 같은 h2h를 그대로 재사용한다 — API를 더 부르지 않는다.
   const h2hMark = pickData && pickData.h2h
     ? h2hVerdict(pickData.h2h.wdl_summary, pickData.h2h.wdl_summary_home)
@@ -5077,7 +5086,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
     }
   }, [code, scope, matchKey])
 
-  // 플핸 점수(경기지표 맨 위 칩 + 근거 팝업, 2026-10-07) — 서버 api/plhan_score.py.
+  // 플핸 확률(경기지표 '축' 줄 칩 + 근거 팝업, 패턴분석-02 2026-10-09 · 10-07 '플핸 점수'를 바꿈) — 서버 api/plhan_score.py.
   // 마감(배변) 배당이 새로 들어오면(최신배당 불러오기) 점수가 바뀌므로 배변 배당도 다시 부르는 조건에 넣는다.
   const [plhan, setPlhan] = useState(null)
   const [showPlhan, setShowPlhan] = useState(false)
@@ -5096,6 +5105,23 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
       alive = false
     }
   }, [code, scope, matchKey, closeOddsKey])
+
+  // 'N구간 경기' 표 — 이 경기의 와이즈토토 순번(N)이었던 이번 시즌 끝난 경기들의 결과 개수(서버 /api/kno_zone).
+  const [zone, setZone] = useState(null)
+  useEffect(() => {
+    let alive = true
+    const r = rowRef.current
+    setZone(null)
+    const params = new URLSearchParams({
+      code, scope, S: String(r.S ?? ''), R: String(r.R ?? ''), HT: String(r.HT ?? ''), AT: String(r.AT ?? ''),
+    })
+    api.get(`/api/kno_zone?${params.toString()}`)
+      .then((res) => alive && setZone(res || null))
+      .catch(() => alive && setZone(null))
+    return () => {
+      alive = false
+    }
+  }, [code, scope, matchKey])
 
   // 아카이브 — 이 경기에 걸리는 내 태그(📌). 태그 팝업에서 저장·해제하면 archiveTick을
   // 올려 다시 불러온다(경기지표 뱃지와 팝업의 '이 경기에 걸린 태그' 목록이 같이 갱신).
@@ -5148,6 +5174,18 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
       alive = false
     }
   }, [matchKey])
+
+  // 플핸 확률(패턴분석-02, 2026-10-09) — 서버가 준 시장 확률·계수에 화면이 판정한 근거를 얹는다.
+  // 근거 판정은 경기지표 칩(정축)·근거 팝업과 같은 값을 써야 하므로 여기서 한 번만 계산해 둘 다에 내려준다.
+  // 재료(표본·전적)를 아직 못 받았으면 null — 확률은 있는 것만으로 내고 팝업에 '판정 중'을 표시한다.
+  const h2hMatchList = pickData ? (pickData.h2h?.matches || []) : null
+  const axisV = axisVerdict(seasonSample?.samples, row, h2hMatchList)
+  const uniFlags = {
+    axpl: axisV ? !!axisV.pl : null,
+    p85: pickData ? isPlhan85(row, h2hMark) : null,
+    first: pickData?.h2h ? h2hMark === null : null,
+  }
+  const uni = plhanUnified(plhan, uniFlags)
 
   // 표본 박스 제목 옆 방향성·메모 — {kind: {direction, memo}}. undefined = 불러오는 중(그동안은 칸을 안 그려서
   // 빈 칸에 쓰다가 늦게 온 저장값에 덮이는 일을 막는다).
@@ -5452,11 +5490,13 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           weekRank={weekRank}
           archiveTags={archiveTags}
           extraOdds={extraOdds}
-          seasonSample={seasonSample}
-          h2hMatches={pickData ? (pickData.h2h?.matches || []) : null}
+          h2hMatches={h2hMatchList}
+          axisV={axisV}
           axisStats={axisStats}
+          uni={uni}
           plhan={plhan}
           onPlhanOpen={() => setShowPlhan(true)}
+          zone={zone}
         />
 
         {/* 12개 배당사 — 배당 섹션 바로 아래(2026-09-24 사용자 지정). 자료가 없으면 섹션째 숨긴다. */}
@@ -5723,7 +5763,17 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
     {showSeasonLegend && <SeasonRecordLegend onClose={() => setShowSeasonLegend(false)} />}
     {showSampleDirLegend && <SampleDirectionLegend onClose={() => setShowSampleDirLegend(false)} />}
     {showMultiBookLegend && <MultiBookLegend onClose={() => setShowMultiBookLegend(false)} />}
-    {showPlhan && plhan?.ready && <PlhanScorePopup data={plhan} row={row} onClose={() => setShowPlhan(false)} />}
+    {showPlhan && plhan?.ready && (
+      <PlhanScorePopup
+        data={plhan}
+        uni={uni}
+        flags={uniFlags}
+        axisV={axisV}
+        plSplit={plSplitAxis(row, phaseVerdict(row, true, '배변'))}
+        row={row}
+        onClose={() => setShowPlhan(false)}
+      />
+    )}
     {showArchive && (
       <ArchiveTagModal
         row={row}

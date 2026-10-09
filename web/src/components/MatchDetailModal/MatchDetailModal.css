@@ -1418,14 +1418,86 @@
   color: var(--text-secondary);
 }
 
-/* 뱃지(똥배·전적·무)를 한 줄에 하나씩 세로로 쌓는다 — 가로로 늘어놓으면 이 칸
-   폭(0.7fr)에서 줄바꿈이 들쭉날쭉했다. 세로 목록이라도 '나열 항목 사이' 기본
-   간격(8px)을 그대로 쓴다. */
-.match-chip-row {
-  display: inline-flex;
+/* 경기지표 = '축'·'확인' 두 줄(2026-10-09). 줄 이름(왼쪽)은 흐린 작은 글자로 폭을 맞추고,
+   칩은 그 오른쪽에 나란히 — 한 줄에 칩이 1~3개라 세로로 쌓던 예전보다 칸이 훨씬 짧다.
+   칩 묶음 폭을 260px로 묶어 두는 이유: 이 칸은 grid max-content 트랙이라, 안 묶으면 칩이 많을 때
+   한 줄로 길게 늘어나 오른쪽 방향성·배당 표를 밀어낸다. 넘치면 다음 줄로 접힌다. */
+.match-groups {
+  display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+.match-group {
+  display: flex;
   align-items: flex-start;
   gap: 8px;
+}
+
+.match-group-label {
+  flex: 0 0 24px;
+  padding-top: 3px;          /* 칩(위아래 2px + 테두리 1px) 글자 줄에 맞춘다 */
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.match-group-chips {
+  display: flex;
+  flex-direction: column;    /* 2026-10-09 사용자 지정 — 칩을 가로가 아니라 세로로 쌓는다 */
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* '참고' 한 줄 — 판정 줄 밑(2026-10-09). 배당이 이미 말한 사실이라 칩이 아니라 글자로:
+   라벨·구분자는 흐리게, 값은 밝게(CLAUDE.md 6-2). 가운뎃점은 글자 공백이 아니라 gap으로 벌린다. */
+.match-ref-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* 축·확인 라벨(.match-group-label)과 같은 칸·같은 글자 */
+.match-ref-title {
+  flex: 0 0 24px;
+  padding-top: 1px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: help;
+}
+
+.match-ref-items {
+  display: flex;
+  flex-direction: column;    /* 세로로 쌓는다(사용자 지정) — 가운뎃점은 필요 없어 숨긴다 */
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.match-ref-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;                  /* 라벨+값 한 덩어리 */
+  white-space: nowrap;
+  cursor: help;
+}
+
+.match-ref-label {
+  min-width: 44px;           /* 라벨 폭을 맞춰 값이 세로로 줄 맞게(해배동배 4글자 기준) */
+}
+
+.match-ref-item strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.match-ref-sep {
+  display: none;
 }
 
 .match-chip {
@@ -1498,9 +1570,22 @@
    오른쪽(확률 지표, RiskCard 9칸)은 남는 폭을 전부 가져간다. */
 .pick-band-risk-cols {
   display: grid;
-  grid-template-columns: 452px 1fr;
+  /* 2026-10-09 3칸: 배당 452px | 경기지표(칩 폭만큼) | 확률 지표(남는 폭) */
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 12px;
   align-items: start;
+}
+
+/* 배당(452px) + 경기지표(칩 폭) — 같은 줄·같은 높이. 경기지표가 배당보다 짧으면 구간 표가 배당 표 아래 끝에 맞는다. */
+.pick-band-left-cols {
+  display: grid;
+  grid-template-columns: 452px max-content;
+  gap: 12px;
+  align-items: stretch;
+}
+
+@media (max-width: 1200px) {
+  .pick-band-risk-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 860px) {
@@ -2508,4 +2593,41 @@
 .title-odds-hit {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* 'N구간 경기' 표(2026-10-09) — 엑셀 '구간 표' 모양: 제목 한 줄(합친 칸) / 핸승·핸무·무·역 / 6대·리그.
+   경기지표 칸 안에서 칩 폭에 맞춰 작게 둔다(숫자 칸 36px). */
+.detail-table.kno-zone-table {
+  width: auto;
+  margin-top: auto;          /* 칸 맨 아래에 붙인다 — 위 칩·참고가 늘고 줄어도 표 자리는 안 움직인다(2026-10-09) */
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.kno-zone-table th,
+.kno-zone-table td {
+  min-width: 36px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.kno-zone-table th.row-label {
+  min-width: 36px;
+}
+
+.kno-zone-table .kno-zone-title {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+/* 경기지표 칸을 옆 칸(배당·확률 지표) 높이만큼 늘려 구간 표를 맨 아래에 고정한다 — .pick-band-risk-cols가 align-items:start라 따로 늘려야 한다. */
+.pick-band-risk-col.pick-band-match {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+}
+
+.pick-band-match .match-ref-line + .kno-zone-table,
+.pick-band-match .kno-zone-table {
+  flex: 0 0 auto;
 }

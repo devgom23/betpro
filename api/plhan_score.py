@@ -1,6 +1,13 @@
-"""상세보기 '플핸 점수' — 단통 플핸(무+역, RT3+4) 점수 0~5점 (2026-10-07 사용자 지정).
+"""상세보기 '플핸 확률' 칩 — 단통 플핸(무+역, RT3+4)이 나올 확률 하나 (패턴분석-02, 2026-10-09 사용자 지정).
 
-[점수 = 패턴(0~2) + 동의(0~3)]
+[플핸 확률 = 패턴분석-02 — 아래 '통합 플핸 확률' 절]
+  logit P = 절편 + 기울기·logit(마감 시장이 본 플핸) + 근거별 몫([기존 점수 4점↑] · [플축] · [플핸85] · [첫맞대결])
+  출발점은 12사 평균 마감 배당의 '국내 정배 못 이길 확률'(없으면 Bet365 마감 → 국내 초기). 플핸은 마감 시장이 거의 다 말하고,
+  시장을 넘는 몫은 근거 칩 몇 개뿐이라는 10-09 전면 재검토 결과를 그대로 식으로 옮겼다(메모리 reference-plhan-unified-formula).
+  마감(Bet365 최신배당) 전에는 '초기판'(12사 초기 + 국내 초기 + 플축)으로 낸다 — CLAUDE.md 4-1.
+  플축·플핸85·첫맞대결 판정은 화면(sampleDirection.axisVerdict · MatchDetailModal)이 하고, 이 파일은 시장 확률·계수·등급표를 준다.
+
+[기존 점수 = 패턴(0~2) + 동의(0~3)] — 이제 플핸 확률의 근거 하나(4점↑)로 쓰고, 팝업 '기존 점수' 접기 안에 그대로 보여준다.
   패턴 = 패턴분석-01(.claude/skills/pattern-analysis-01) — '국내 초기로는 접전인데 마감 시장이 국내 정배를 더 약하게 봤다'
     2점  B12s : 국내 접전형(국내 초기 역배 배당 ≤ 무 배당×0.876) + 12사 마감 평균 정배확률이 국내 초기보다 6.5%p↑ 낮음
     1점  B    : 국내 접전형 + Bet365(앱의 해외배당) 마감 정배확률이 4.5%p↑ 낮음
@@ -22,7 +29,7 @@
   표본 카드: triple_sample.query(phase='final') — 원래 날짜 이전 경기만 쓴다.
 
 [학습] python api/plhan_score.py train  (약 10분, 읽기 전용) → data/master/plhan/
-  model_s.json · model_12.json · oos.parquet(과거 경기 모델 점수) · stats.json(점수별 실측표)
+  model_s.json · model_12.json · oos.parquet(과거 경기 모델 점수) · stats.json(점수별 실측표 + 'unified' 플핸 확률 계수·등급표)
 """
 from __future__ import annotations
 
@@ -78,6 +85,16 @@ M12_FEATS = ["mb_Fpf", "mb_Fpd", "mb_Fpg", "mb_Lpf", "mb_Lpd", "mb_Lpg", "mb_Lpf
              "mb_L_dshare", "mb_F_dshare", "mb_L_pnw", "mb_F_pnw", "ah_Fline", "ah_Fp", "ou_Fline", "ou_Fp", "ah_Lline", "ah_Lp",
              "ou_Lline", "ou_Lp", "ps_F_T", "ps_F_s", "ps_F_pd", "ps_F_pg", "ps_F_p1", "ps_F_p2p", "ps_F_pl", "ps_F_lf", "ps_F_lg",
              "ps_L_T", "ps_L_s", "ps_L_pd", "ps_L_pg", "ps_L_p1", "ps_L_p2p", "ps_L_pl", "ps_L_lf", "ps_L_lg", "ps_harm_mb", "ps_draw_gap"]
+
+# ── 통합 플핸 확률(패턴분석-02) ──
+UNI_C = 10.0              # 로지스틱 규제 강도(10-09 비교: 1~1e6 어디서나 계수 거의 같음)
+UNI_TEST_FROM = 18        # 시험은 18-19부터 — 시즌마다 그 앞 시즌(15-16~)만 배운 공식으로 계산
+UNI_CUTS = [0.75, 0.65, 0.55]     # 등급 경계 — 75%↑ / 65~75% / 55~65% / 55% 미만
+UNI_GRADE_KEYS = ["top", "hi", "mid", "low"]
+UNI_CLOSE = ["mkt", "pt45", "axpl", "p85"]       # 마감판 — 첫맞대결(first)은 시험을 통과할 때만 붙인다
+UNI_INIT = ["mkt_init", "mkt_k", "axpl_init"]    # 초기판(마감 전) — 첫맞대결 같은 규칙
+P85_MIN_FAV, P85_MAX_DRAW = 2.40, 3.20           # 플핸85 ①② (MatchDetailModal plhan85 조건과 같은 값)
+H2H_BASE_HOME, H2H_SHRINK, H2H_MARGIN = 1.582, 5, 0.30   # 홈기준 상대전적 판정(utils/h2hVerdict.js와 같은 값)
 
 
 def kstr(code, s, r, ht, at) -> str:
@@ -421,6 +438,202 @@ def _sig_on(op, v, t):
     return v <= t if op == "<=" else v >= t
 
 
+# ═══════════════════════════ 통합 플핸 확률(패턴분석-02) ═══════════════════════════
+def _logit(p):
+    p = np.clip(np.asarray(p, dtype=float), 1e-4, 1 - 1e-4)
+    return np.log(p / (1 - p))
+
+
+def _fit_logit_l2(X, y, C=UNI_C, iters=100):
+    """로지스틱 회귀(절편 제외 L2 = 1/C) — sklearn LogisticRegression(C)와 같은 답을 뉴턴법으로 낸다(학습 환경에 sklearn 불필요)."""
+    X1 = np.column_stack([np.ones(len(X)), np.asarray(X, dtype=float)])
+    y = np.asarray(y, dtype=float)
+    pen = np.full(X1.shape[1], 1.0 / C)
+    pen[0] = 0.0
+    b = np.zeros(X1.shape[1])
+    for _ in range(iters):
+        p = 1 / (1 + np.exp(-(X1 @ b)))
+        grad = X1.T @ (p - y) + pen * b
+        hess = X1.T @ (X1 * (p * (1 - p))[:, None]) + np.diag(pen) + 1e-9 * np.eye(len(b))
+        step = np.linalg.solve(hess, grad)
+        b -= step
+        if np.abs(step).max() < 1e-10:
+            break
+    return b
+
+
+def _h2h_home(X: pd.DataFrame):
+    """홈기준 상대전적(그 경기 날짜 이전, 지금 홈팀이 이 구장에서 그 원정팀을 상대한 기록) → 홈우세/원정우세/보합,
+    두 팀이 그 전까지 어디서도 안 만났으면 None(첫맞대결). utils/h2hVerdict.js와 같은 식(기준선 1.582·K=5·±0.30)."""
+    day = X["day"].to_numpy(dtype=float)
+    order = np.argsort(np.where(np.isnan(day), 1e9, day), kind="stable")
+    ht, at = X["HT"].to_numpy(), X["AT"].to_numpy()
+    hs, as_, done = X["HS"].to_numpy(dtype=float), X["AS"].to_numpy(dtype=float), X["done"].to_numpy()
+    home, anyv = {}, defaultdict(int)
+    lab = np.array([None] * len(X), dtype=object)
+    pos, n = 0, len(X)
+    while pos < n:
+        d0 = day[order[pos]]
+        j = pos
+        while j < n and (day[order[j]] == d0 or (np.isnan(d0) and np.isnan(day[order[j]]))):
+            j += 1
+        batch = order[pos:j]
+        for i in batch:                      # 같은 날 경기는 서로 안 본다 — 먼저 판정하고
+            if not anyv.get(frozenset((ht[i], at[i]))):
+                continue
+            w, d, l_ = home.get((ht[i], at[i]), (0, 0, 0))
+            t = w + d + l_
+            if t == 0:
+                lab[i] = "보합"
+                continue
+            adj = (w * 3 + d + H2H_BASE_HOME * H2H_SHRINK) / (t + H2H_SHRINK)
+            lab[i] = ("홈우세" if adj >= H2H_BASE_HOME + H2H_MARGIN
+                      else "원정우세" if adj <= H2H_BASE_HOME - H2H_MARGIN else "보합")
+        for i in batch:                      # 그 다음에 기록에 넣는다
+            if not done[i] or np.isnan(hs[i]) or np.isnan(as_[i]):
+                continue
+            k = (ht[i], at[i])
+            w, d, l_ = home.get(k, (0, 0, 0))
+            home[k] = (w + (hs[i] > as_[i]), d + (hs[i] == as_[i]), l_ + (hs[i] < as_[i]))
+            anyv[frozenset(k)] += 1
+        pos = j
+    return lab
+
+
+def _plhan85_flags(X: pd.DataFrame, lab) -> np.ndarray:
+    """플핸85 네 조건(MatchDetailModal isPlhan85와 같다) — ① 해외 정배배당(배변 우선) 2.40↑ ② 해외 무(배변 우선) 3.20 미만
+    ③ 해외 정역반전 ④ 홈기준 전적 우세팀이 해외 초기 언더독 쪽."""
+    has_e = X["ef_f"].notna().to_numpy()
+    ff = np.where(has_e, X["ef_f"], X["f_f"])
+    fg = np.where(has_e, X["ef_g"], X["f_g"])
+    fd = np.where(has_e, X["ef_d"], X["f_d"])
+    forr = (X["f_flip"].notna() & X["ef_flip"].notna() & (X["f_flip"] != X["ef_flip"])).to_numpy()
+    f_fav_home = np.where(X["f_flip"].isna(), np.nan, np.where((X["hf"] == 1) != (X["f_flip"] == 1), 1.0, 0.0))
+    side_home = np.where(lab == "홈우세", 1.0, np.where(lab == "원정우세", 0.0, np.nan))
+    h2h_dog = ~np.isnan(side_home) & ~np.isnan(f_fav_home) & (side_home != f_fav_home)
+    with np.errstate(invalid="ignore"):
+        return (np.fmin(ff, fg) >= P85_MIN_FAV) & (fd < P85_MAX_DRAW) & forr & h2h_dog
+
+
+def _axis_flags(db) -> pd.DataFrame:
+    """플축(P1∪P2∪P3)·7레드 — api/axis_stats.py가 화면 axisVerdict와 같은 조건으로 '그 경기 이전 기록만' 센 재료를 그대로 쓴다.
+    axpl_init은 마감 배당 없이(초기 배당만으로) 배당신호를 판정한 값 — 초기판 공식용."""
+    import axis_stats as AX
+    rows = AX._load_rows(db)
+    feats = AX._features(rows)
+    recs = []
+    for g, f in zip(rows, feats):
+        if g["KW"] is None or g["KL"] is None or g["KD"] is None or g["KW"] == g["KL"]:
+            continue
+        sg = 1 if g["KW"] < g["KL"] else -1
+        kf, ff = AX._fav_home(g["KW"], g["KL"]), AX._fav_home(g["FW"], g["FL"])
+        split = kf is not None and ff is not None and kf != ff
+        flip = any(a is not None and b is not None and a != b for a, b in (
+            (kf, AX._fav_home(g["EKW"], g["EKL"])), (ff, AX._fav_home(g["EFW"], g["EFL"]))))
+        fw, fl = g["EFW"] or g["FW"], g["EFL"] or g["FL"]
+        close = fw is not None and fl is not None and min(fw, fl) >= 2.5
+        close0 = g["FW"] is not None and g["FL"] is not None and min(g["FW"], g["FL"]) >= 2.5
+        form = (g["HTF"] - g["ATF"]) * sg if g["HTF"] is not None and g["ATF"] is not None else 0.0
+        rank = (g["AP"] - g["HP"]) * sg / 10 if g["HP"] is not None and g["AP"] is not None else 0.0
+        h2h, frm, rnk = AX._side3(f["h2h_home"] * sg, 0.3, -0.3), AX._side3(form, 0.5, -0.2), AX._side3(rank, 0.8, -0.2)
+        jung = min(g["KW"], g["KL"])
+
+        def pl(cue):
+            return ((f["nred"] == 7 and cue) or (f["nred"] >= 5 and cue and h2h == "역배" and frm != "정배" and rnk != "정배")
+                    or (f["nred"] == 7 and jung > 2.1 and h2h != "정배"))
+        p_fin = pl(flip or split or close)
+        recs.append({"code": g["L"], "S": g["S"], "HT": g["HT"], "AT": g["AT"], "axpl": float(p_fin),
+                     "axpl_init": float(pl(split or close0)), "red7": float(f["nred"] == 7 and not p_fin)})
+    return pd.DataFrame(recs).drop_duplicates(["code", "S", "HT", "AT"])
+
+
+def _uni_cell(s: pd.DataFrame, p: pd.Series, nseason: int) -> dict:
+    per = np.where(s["sidx"] <= UNI_TEST_FROM, "찾기", np.where(s["sidx"] <= SEL_MAX, "고르기", "최근"))
+    return {"n": int(len(s)), "hit": int(s["y"].sum()), "rate": round(float(s["y"].mean()) * 100, 1) if len(s) else None,
+            "pred": round(float(p.mean()) * 100, 1) if len(s) else None, "per_season": round(len(s) / nseason, 1),
+            "periods": {k: [int(s.loc[per == k, "y"].sum()), int((per == k).sum())] for k in ("찾기", "고르기", "최근")}}
+
+
+def _uni_roll(U: pd.DataFrame, cols: list):
+    """시즌마다 그 앞 시즌들만으로 배운 공식으로 그 시즌을 예측(미래를 안 본다) — 예측값과 시즌별 계수."""
+    P = pd.Series(np.nan, index=U.index)
+    coefs = []
+    for s in range(UNI_TEST_FROM, int(U["sidx"].max()) + 1):
+        tr, te = U[U["sidx"] < s], U[U["sidx"] == s]
+        if te.empty or tr.empty:
+            continue
+        b = _fit_logit_l2(tr[cols].to_numpy(), tr["y"].to_numpy())
+        P[te.index] = 1 / (1 + np.exp(-(b[0] + te[cols].to_numpy() @ b[1:])))
+        coefs.append(b)
+    return P, np.array(coefs)
+
+
+def _logloss(p, y):
+    p = np.clip(np.asarray(p, dtype=float), 1e-4, 1 - 1e-4)
+    y = np.asarray(y, dtype=float)
+    return float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))
+
+
+def _train_unified(E: pd.DataFrame, X: pd.DataFrame, db) -> dict:
+    """마감판·초기판 공식을 배우고(15-16~ 전부), 18-19~ 시험 성적으로 등급표를 만든다. 첫맞대결은 시험을 통과할 때만 넣는다."""
+    lab = _h2h_home(X)
+    X = X.assign(p85=_plhan85_flags(X, lab), first=np.array([v is None for v in lab], dtype=float))
+    ax = _axis_flags(db)
+    U = (E.drop(columns=["p85", "first", "axpl", "axpl_init", "red7"], errors="ignore").join(X[["p85", "first"]])
+         .merge(ax, on=["code", "S", "HT", "AT"], how="left"))
+    U = U[U["k_pf"].notna()].copy()
+    for c in ("axpl", "axpl_init", "red7"):
+        U[c] = U[c].fillna(0.0)
+    U["p85"] = U["p85"].astype(float)
+    U["mkt"] = _logit(U["mb_L_pnw"].fillna(U["ef_pd"] + U["ef_pg"]).fillna(U["k_pd"] + U["k_pg"]))
+    U["mkt_init"] = _logit(U["mb_F_pnw"].fillna(U["f_pd"] + U["f_pg"]).fillna(U["k_pd"] + U["k_pg"]))
+    U["mkt_k"] = _logit(U["k_pd"] + U["k_pg"])
+    U["pt45"] = (U["pts"] >= 4).astype(float)
+    T = U[U["sidx"] >= UNI_TEST_FROM]
+    out = {"trained_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "C": UNI_C, "cuts": UNI_CUTS,
+           "train_seasons": f"{int(U['sidx'].min())}-{int(U['sidx'].min()) + 1}~{int(U['sidx'].max())}-{int(U['sidx'].max()) + 1}",
+           "test_seasons": f"{UNI_TEST_FROM}-{UNI_TEST_FROM + 1}~{int(U['sidx'].max())}-{int(U['sidx'].max()) + 1}",
+           "test_games": int(len(T)), "train_games": int(len(U)),
+           "periods": {"찾기": f"{UNI_TEST_FROM}-{UNI_TEST_FROM + 1}", "고르기": f"{UNI_TEST_FROM + 1}-{UNI_TEST_FROM + 2}~{SEL_MAX}-{SEL_MAX + 1}",
+                       "최근": f"{SEL_MAX + 1}-{SEL_MAX + 2}~"},
+           "flag_counts": {c: int(U[c].sum()) for c in ("pt45", "axpl", "p85", "first", "red7")}, "first_test": {}}
+    nseason = T["sidx"].nunique()
+    for name, base in (("close", UNI_CLOSE), ("init", UNI_INIT)):
+        P0, _ = _uni_roll(U, base)
+        P1, cf = _uni_roll(U, base + ["first"])
+        ll0, ll1 = _logloss(P0[T.index], T["y"]), _logloss(P1[T.index], T["y"])
+        fc = cf[:, -1] if len(cf) else np.array([np.nan])
+        # 첫맞대결을 넣는 조건 셋 — ① 시험 오차(logloss)가 줄고 ② 시즌마다 계수가 늘 + 이고 ③ 실제로 거는 65%↑ 경기의 적중이
+        # 나빠지지 않을 것. 10-09 첫 학습: ①② 통과(0.64698→0.64693)인데 ③에서 70.8%(554/783) → 69.6%(563/809)로 떨어져 뺐다
+        # — 평균 +3.8%p는 맞지만 그 몫이 65%↑ 칸에 모이지 않는다(넣어서 등급이 오른 경기 실제 61.7%).
+        hi0, hi1 = T[P0[T.index] >= UNI_CUTS[1]], T[P1[T.index] >= UNI_CUTS[1]]
+        r0 = float(hi0["y"].mean()) if len(hi0) else 0.0
+        r1 = float(hi1["y"].mean()) if len(hi1) else 0.0
+        used = bool(ll1 < ll0 and np.all(fc > 0) and r1 >= r0)
+        fs = T[T["first"] == 1]
+        out["first_test"][name] = {
+            "logloss_without": round(ll0, 5), "logloss_with": round(ll1, 5), "coef_min": round(float(fc.min()), 3),
+            "coef_max": round(float(fc.max()), 3), "used": used, "n_first": int(len(fs)),
+            "hi_without": [int(hi0["y"].sum()), int(len(hi0))], "hi_with": [int(hi1["y"].sum()), int(len(hi1))],
+            "first_rate": round(float(fs["y"].mean()) * 100, 1) if len(fs) else None,
+            "first_pred_without": round(float(P0[fs.index].mean()) * 100, 1) if len(fs) else None}
+        cols = base + (["first"] if used else [])
+        P = P1 if used else P0
+        b = _fit_logit_l2(U[cols].to_numpy(), U["y"].to_numpy())
+        out[name] = {"intercept": round(float(b[0]), 4), "terms": [{"key": c, "coef": round(float(v), 4)} for c, v in zip(cols, b[1:])],
+                     "logloss": round(_logloss(P[T.index], T["y"]), 5)}
+        pt = P[T.index]
+        grades = {}
+        for k, lo, hi in zip(UNI_GRADE_KEYS, UNI_CUTS + [0.0], [1.01] + UNI_CUTS):
+            msk = (pt >= lo) & (pt < hi)
+            grades[k] = _uni_cell(T[msk], pt[msk], nseason)
+        out[f"{name}_grades"] = grades
+        _log(f"플핸 확률 {name}: 첫맞대결 {'넣음' if used else '뺌'} (logloss {ll0:.5f}→{ll1:.5f}, 계수 {fc.min():.3f}~{fc.max():.3f})"
+             f" · 75%↑ {grades['top']['rate']}%({grades['top']['hit']}/{grades['top']['n']})"
+             f" · 65~75% {grades['hi']['rate']}%({grades['hi']['hit']}/{grades['hi']['n']})")
+    return out
+
+
 # ═══════════════════════════ 학습(관리자·명령줄) ═══════════════════════════
 def _log(*a):
     print(time.strftime("[%H:%M:%S]"), *a, flush=True)
@@ -550,6 +763,7 @@ def train(db=None):
                     "최근": f"{SEL_MAX + 1}-{SEL_MAX + 2}~"},
         "ladder": ladder, "s_feats": SF, "m12_feats": M12_FEATS,
     }
+    stats["unified"] = _train_unified(E, X, db)
     with open(os.path.join(OUT_DIR, "stats.json"), "w", encoding="utf-8") as f:
         json.dump(stats, f, ensure_ascii=False, indent=1)
     _log(f"끝 ({time.time() - t0:.0f}초) — 5점 {ladder['5']['rate']}%({ladder['5']['hit']}/{ladder['5']['n']}) · 4점 이상 {ladder['4+']['rate']}%")
@@ -568,9 +782,16 @@ def _reset_cache():
 
 
 def _artifacts():
+    # 명령줄 재학습(python api/plhan_score.py train)은 서버와 다른 프로세스라 _reset_cache가 서버에 안 닿는다 —
+    # stats.json 수정 시각이 바뀌면 다시 읽는다(서버를 껐다 켜지 않아도 새 학습이 반영된다).
+    try:
+        mtime = os.path.getmtime(os.path.join(OUT_DIR, "stats.json"))
+    except OSError:
+        mtime = None
     with _LOCK:
-        if "art" in _CACHE:
+        if "art" in _CACHE and _CACHE.get("mtime") == mtime:
             return _CACHE["art"]
+        _CACHE["mtime"] = mtime
         art = {"stats": None, "oos": {}, "ms": None, "m12": None}
         try:
             with open(os.path.join(OUT_DIR, "stats.json"), encoding="utf-8") as f:
@@ -681,6 +902,18 @@ def score(code: str, S: str, R: str, HT: str, AT: str, db=None) -> dict:
 
     m12F = 1 / g("m12F_f") + 1 / g("m12F_d") + 1 / g("m12F_g") if len(m) else np.nan
     fav_team = r["HT"] if r["hf"] == 1 else r["AT"]
+
+    # 플핸 확률(패턴분석-02)의 출발점 — 시장이 본 '국내 정배 못 이길 확률'. 학습(_train_unified)과 같은 순서로 고른다.
+    def first_ok(*cands):
+        for v, src in cands:
+            v = _f(v)
+            if v is not None:
+                return v, src
+        return None, None
+
+    p_k = r["k_pd"] + r["k_pg"]
+    p_close, src_close = first_ok((g("mb_L_pnw"), "12사 평균 마감"), (r["ef_pd"] + r["ef_pg"], "Bet365 마감"), (p_k, "국내 초기"))
+    p_init, src_init = first_ok((g("mb_F_pnw"), "12사 평균 초기"), (r["f_pd"] + r["f_pg"], "Bet365 초기"), (p_k, "국내 초기"))
     return {
         "ready": True, "state": state, "score": total_pts if state == "ok" else None,
         "pattern": {
@@ -696,6 +929,9 @@ def score(code: str, S: str, R: str, HT: str, AT: str, db=None) -> dict:
         "agree": {"count": n_agree, "items": agree, "signals": signals, "model_src": model_src},
         "ladder": ladder, "show": show, "stats_at": stats.get("trained_at"), "stats_seasons": stats.get("seasons"),
         "stats_periods": stats.get("periods"),
+        "market": {"close": p_close, "close_src": src_close, "init": p_init, "init_src": src_init, "k": _f(p_k),
+                   "n12": int(g("mb_n")) if _f(g("mb_n")) is not None else 0},
+        "unified": stats.get("unified"),
     }
 
 

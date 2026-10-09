@@ -870,12 +870,50 @@ def triple_sample(code: str, S: str, R: str, HT: str, AT: str,
 def plhan_score_get(code: str, S: str, R: str, HT: str, AT: str,
                     scope: str = PATHS.SCOPE_MASTER,
                     user: dict = Depends(get_current_user)):
-    """상세보기 경기지표 맨 위 '플핸 점수' 칩(0~5점)과 그 근거(2026-10-07 사용자 지정).
-    점수 = 패턴분석-01(0~2) + 다른 방법 동의(0~3). 계산·기준·실측은 api/plhan_score.py. 공식 6대리그만."""
+    """상세보기 경기지표 '축' 줄의 '플핸 확률' 칩과 그 근거(패턴분석-02, 2026-10-09 — 10-07 '플핸 점수'를 바꿈).
+    시장 확률·계수·등급표 + 기존 점수(패턴분석-01 + 동의, 0~5). 계산·기준·실측은 api/plhan_score.py. 공식 6대리그만."""
     _check_league_for(code, scope, user)
     if scope != PATHS.SCOPE_MASTER or code not in PATHS.VALID_LEAGUES:
         return {"ready": False, "reason": "공식 6대리그에서만 계산합니다(12사 배당이 거기만 있다)"}
     return PLHAN.score(code, S, R, HT, AT)
+
+@app.get("/api/kno_zone")
+def kno_zone_get(code: str, S: str, R: str, HT: str, AT: str,
+                 scope: str = PATHS.SCOPE_MASTER,
+                 user: dict = Depends(get_current_user)):
+    """상세보기 경기지표 밑 'N구간 경기' 표(2026-10-09 사용자 지정, 엑셀 '구간 표' 참고).
+    N = 이 경기의 국배(와이즈토토) 순번(kno — 라운드 안에서 몇 번째로 나열됐나).
+    같은 시즌에서 같은 순번이었던 끝난 경기들의 결과(RT 1핸승·2핸무·3무·4역) 개수를
+    6대리그 전체('6대')와 이 리그('리그')로 센다. 연기·취소·결과 없는 경기는 뺀다. 공식 6대리그만."""
+    _check_league_for(code, scope, user)
+    if scope != PATHS.SCOPE_MASTER or code not in PATHS.VALID_LEAGUES:
+        return {"ready": False, "reason": "공식 6대리그만 해당합니다"}
+    db = PATHS.get_master_db()
+    me = KGNO.lookup(KGNO.load_index(db), code, S, R, HT, AT)
+    kno = (me or {}).get("kno")
+    if kno is None:
+        return {"ready": False, "reason": "국배(와이즈토토) 순번이 아직 없는 경기입니다"}
+    kno = int(kno)
+
+    def count(df, series):
+        sub = df[(df["S"].astype(str) == str(S)) & (series.reindex(df.index) == kno)]
+        rt = pd.to_numeric(sub["RT"], errors="coerce")
+        return {k: int((rt == k).sum()) for k in (1, 2, 3, 4)}
+
+    league, total = None, {1: 0, 2: 0, 3: 0, 4: 0}
+    for c in PATHS.LEAGUES:
+        df = DATA.load_league_df_ev(db, c)
+        if df.empty or "RT" not in df.columns:
+            continue
+        cnt = count(df, _kno_series(db, c))
+        for k in cnt:
+            total[k] += cnt[k]
+        if c == code:
+            league = cnt
+    league = league or {1: 0, 2: 0, 3: 0, 4: 0}
+    return {"ready": True, "kno": kno, "season": str(S),
+            "all": {str(k): v for k, v in total.items()}, "league": {str(k): v for k, v in league.items()}}
+
 
 def _lookup_sources(user: dict, leagues: str = "") -> list:
     """배당 조회 대상 — 공식 6대리그 + 이 계정 내 데이터 리그. leagues(쉼표)를 주면 그 코드들만."""

@@ -1,6 +1,6 @@
 /* 플핸 점수 근거 팝업(PlhanScore.jsx) — 표는 상세보기 공용 .detail-table 톤 그대로 쓴다. */
 .modal-card.help-legend-card.plh-card {
-  max-width: 720px;
+  max-width: 860px;          /* 등급표가 8칸(기간별 3칸 포함)이라 720px에선 숫자가 세로로 꺾였다(2026-10-09) */
   max-height: calc(100vh - 80px);   /* 표가 넷이라 길다 — 화면보다 길면 팝업 안에서 스크롤(위 여백 40px + 아래 40px) */
   overflow-y: auto;
 }
@@ -20,8 +20,10 @@
   color: var(--text-primary);
 }
 
-.plh-score.hi { color: var(--chip-red-fg); }
-.plh-score.mid { color: var(--chip-red-soft-fg); }
+/* 플핸 확률 등급 색 — 칩과 같은 축(75%↑·65~75% 빨강 · 55~65% 연한 빨강 · 55% 미만 기본 글자색) */
+.plh-score.plh-grade-top,
+.plh-score.plh-grade-hi { color: var(--chip-red-fg); }
+.plh-score.plh-grade-mid { color: var(--chip-red-soft-fg); }
 
 .plh-table td:nth-child(2) {
   white-space: nowrap;
@@ -58,6 +60,47 @@
   color: var(--warning-text);
 }
 
+/* 등급표·점수표 — 숫자 칸은 한 줄로(꺾이면 '59.2% (2,676)'이 두 줄로 갈라져 읽기 어렵다) */
+.plh-ladder th,
+.plh-ladder td {
+  white-space: nowrap;
+}
+
+/* 공식 밖 참고 표 — 이름·이 경기 칸은 한 줄로, 셋째 칸(이유)은 문장이라 줄바꿈되게 부가설명 크기로 */
+.plh-table.plh-ref th,
+.plh-table.plh-ref td:first-child {
+  white-space: nowrap;
+}
+
+.plh-table.plh-ref td:nth-child(3) {
+  white-space: normal;
+  text-align: left;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* 기존 플핸 점수 — 공식의 근거 하나라 접어 둔다(누르면 펼침) */
+.plh-details {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.plh-details > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.plh-details > summary:hover {
+  color: var(--text-primary);
+}
+
+.plh-details[open] > summary {
+  margin-bottom: 6px;
+}
+
 /* 경기지표 칩 — 누를 수 있는 칩(버튼)은 보통 칩과 같은 모양을 유지한다 */
 .match-chip.match-chip-btn {
   font: inherit;
@@ -71,12 +114,19 @@
   outline-offset: 1px;
 }
 
-/* 5점(최대) — 목업처럼 테두리에 노란 강조 */
+/* 75% 이상(최상 등급) — 테두리에 노란 강조 */
 .match-chip.match-chip-hl {
   box-shadow: 0 0 0 2px var(--chip-yellow-fg);
 }
 
-/* 0~1점 — 자리는 지키되 흐리게 */
+/* 55% 미만 — 자리는 지키되 흐리게 */
 .match-chip.match-chip-dim {
   opacity: 0.6;
+}
+
+/* 칩 안의 작은 꼬리표 — 마감 배당 전 '초기' */
+.match-chip .match-chip-sub {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.8;
 }
