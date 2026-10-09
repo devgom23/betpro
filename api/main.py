@@ -1220,6 +1220,7 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
         row["REASON_TAG"] = p["reason_tag"] if p else None
         row["MY_ODDS_PICK"] = p["odds_pick"] if p else None
         row["MY_ODDS_BET"] = p["odds_bet"] if p else None
+        row["MY_ODDS_MARK"] = p["odds_mark"] if p else None
         row["MY_BET"] = "P" if key in bet_keys else None
 
 
@@ -1321,6 +1322,7 @@ class MyPickBody(BaseModel):
     reason_tag: Optional[str] = None
     odds_pick: Optional[str] = None
     odds_bet: Optional[str] = None
+    odds_mark: Optional[str] = None   # 배당 표 초기 줄에서 찍은 칸 — 'KW,KHD'처럼 쉼표로 이은 칸 이름
     # 이번에 바꾼 칸 이름(PICK_COLUMNS 중) — 주면 그 칸만 저장하고 나머지는 DB 값을 유지한다.
     fields: Optional[list[str]] = None
 
@@ -1338,7 +1340,7 @@ def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_u
         body.S, body.R, body.No, body.HT, body.AT,
         body.starred, body.pick, body.hit, body.memo, body.p, body.reason_tag,
         body.memo_pre, body.odds_pick, body.odds_bet, body.fields, body.memo_ok, body.hit_note,
-        body.p_note,
+        body.p_note, body.odds_mark,
     )
     return {"ok": True}
 

@@ -451,6 +451,10 @@ def ensure_predlog_db(username: str) -> str:
             # (배답픽)과 마찬가지로 완전히 별개 값이고 어떤 집계·판정에도 안 쓰인다
             # (2026-09-13 추가).
             con.execute("ALTER TABLE my_picks ADD COLUMN odds_bet TEXT")
+        if "odds_mark" not in cols:
+            # 배당 찍기 — 상세보기 배당 표 초기 줄에서 내가 찍은 칸(예: 'KW,KHD')을 쉼표로 이은 값.
+            # 제목줄 국내 배당·핸디 숫자에 밑줄로 보인다. 참고용이라 판정·집계에는 안 쓴다(2026-10-09 사용자 지정).
+            con.execute("ALTER TABLE my_picks ADD COLUMN odds_mark TEXT")
         if "memo_ok" not in cols:
             # 분석맞음 — 경기 전 생각(memo_pre)이 결과로 맞았다는 표시(2026-09-19 사용자 지정).
             # 값은 '분석맞음' 또는 NULL. 집계·판정에는 안 쓰는 참고용 뱃지다.

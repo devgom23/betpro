@@ -2631,3 +2631,33 @@
 .pick-band-match .kno-zone-table {
   flex: 0 0 auto;
 }
+
+/* 내 예상 배당 찍기(2026-10-09 사용자 지정) — 배당 표 초기 줄 칸을 누르면 칸 색이 바뀌고(노랑 — 내 표시를 뜻하는 앱의 색),
+   다시 누르면 해제된다. 제목줄 국내 배당·핸디 숫자의 노랑 밑줄이 같은 값이다. 배변 줄은 안 눌린다. */
+.detail-table.odds-table td.odds-mark-btn {
+  cursor: pointer;
+}
+
+.detail-table.odds-table td.odds-mark-btn:hover {
+  outline: 1px solid var(--chip-yellow-fg);
+  outline-offset: -1px;
+}
+
+.detail-table.odds-table td.odds-mark-on {
+  background: var(--chip-yellow-bg);
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}
+
+.title-odds-mark {
+  text-decoration: underline;
+  text-decoration-color: var(--chip-yellow-fg);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  font-weight: 700;
+}
+
+/* 결과 적중 밑줄과 겹치면 두 줄(적중은 기본색 줄, 내 예상은 노랑 두꺼운 줄) */
+.title-odds-hit.title-odds-mark {
+  text-decoration-style: double;
+}

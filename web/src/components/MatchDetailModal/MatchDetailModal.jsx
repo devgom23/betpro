@@ -1032,7 +1032,7 @@ function MatchRefLine({ row, verdict, h2hLoading, h2hMatches, pick, xg }) {
 //   서울(1)
 //   (정)
 // 팝업 제목 줄은 한 줄에 "서울(1위)(정)"로 그대로 둔다 — 거기는 가로 폭이 넉넉하다.
-function OddsTable({ row, weekRank }) {
+function OddsTable({ row, weekRank, marks, onToggleMark }) {
   // 5번째 자리(final)는 그 배당의 배변(최종배당) 칸 이름 — 해외 핸디는 스코어맨이
   // 무(D) 값을 안 주고 최종배당 자체를 안 모으므로 배변 행이 없다.
   const rows = [
@@ -1191,9 +1191,18 @@ function OddsTable({ row, weekRank }) {
             <Fragment key={label}>
               <tr className={label === '해외 배당' ? 'odds-group-start' : undefined}>
                 <td className="row-label">{label}</td>
-                <td className={colClass('w')}>{numOrDash(row[w])}</td>
-                <td>{numOrDash(row[d])}</td>
-                <td className={colClass('l')}>{numOrDash(row[l])}</td>
+                {/* 초기 줄 칸은 눌러서 '내 예상 배당'으로 찍는다(2026-10-09 사용자 지정) — 배변 줄은 안 눌린다.
+                    찍은 칸은 색이 바뀌고 다시 누르면 해제, 국내 칸은 제목줄 숫자에 밑줄이 생긴다. */}
+                {[[w, colClass('w')], [d, undefined], [l, colClass('l')]].map(([k, cls]) => (
+                  <td
+                    key={k}
+                    className={`${cls || ''}${row[k] ? ' odds-mark-btn' : ''}${marks?.has(k) ? ' odds-mark-on' : ''}`.trim() || undefined}
+                    title={!row[k] ? undefined : marks?.has(k) ? '내 예상으로 찍음 — 다시 누르면 해제' : '눌러서 내 예상 배당으로 찍기'}
+                    onClick={onToggleMark && row[k] ? () => onToggleMark(k) : undefined}
+                  >
+                    {numOrDash(row[k])}
+                  </td>
+                ))}
               </tr>
               {final && (
                 <tr className="odds-final-row">
@@ -4911,7 +4920,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, h2hMatches, axisV, axisStats, uni, plhan, onPlhanOpen, zone }) {
+function PickBand({ marks, onToggleMark, row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, h2hMatches, axisV, axisStats, uni, plhan, onPlhanOpen, zone }) {
   // '참고' 줄의 무·전적과 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -4931,7 +4940,7 @@ function PickBand({ row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveT
               배당
               {extraOddsChips(row, extraOdds)}
             </h3>
-            <OddsTable row={row} weekRank={weekRank} />
+            <OddsTable row={row} weekRank={weekRank} marks={marks} onToggleMark={onToggleMark} />
           </div>
           {/* 3칸(2026-10-09 사용자 지정): 배당 | 경기지표(좁게) | 확률 지표. 경기지표는 예전엔 확률 지표 표 밑에 있었다. */}
           <div className="pick-band-risk-col pick-band-match">
@@ -5013,13 +5022,21 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
         return (
           <span key={k}>
             {i > 0 && ' / '}
-            <span className={`${cls || ''}${hit === i ? ' title-odds-hit' : ''}`.trim() || undefined}>{numOrDash(row[k])}</span>
+            <span className={`${cls || ''}${hit === i ? ' title-odds-hit' : ''}${oddsMarks.has(k) ? ' title-odds-mark' : ''}`.trim() || undefined}>{numOrDash(row[k])}</span>
           </span>
         )
       })}
       )
     </span>
   )
+  // 배당 표 초기 줄에서 내가 찍은 칸(2026-10-09) — 'KW,KHD'처럼 저장돼 있고, 제목줄 배당 숫자 밑줄과 표 칸 색이 같은 값을 본다.
+  const oddsMarks = new Set(String(row.MY_ODDS_MARK || '').split(',').filter(Boolean))
+  const toggleOddsMark = (key) => {
+    const next = new Set(oddsMarks)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    onSavePick({ oddsMark: [...next].join(',') || null })
+  }
   const [shooting, setShooting] = useState(false)
   const [shotError, setShotError] = useState('')
 
@@ -5497,6 +5514,8 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           plhan={plhan}
           onPlhanOpen={() => setShowPlhan(true)}
           zone={zone}
+          marks={oddsMarks}
+          onToggleMark={toggleOddsMark}
         />
 
         {/* 12개 배당사 — 배당 섹션 바로 아래(2026-09-24 사용자 지정). 자료가 없으면 섹션째 숨긴다. */}
@@ -5797,7 +5816,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
 const PICK_FIELD_OF = {
   important: 'IMPORTANT', pick: 'MY_PICK', p: 'MY_P', hit: 'MY_HIT', memo: 'MEMO',
   memoPre: 'MEMO_PRE', memoOk: 'MEMO_OK', hitNote: 'MY_HIT_NOTE', pNote: 'MY_P_NOTE', reasonTag: 'REASON_TAG',
-  oddsPick: 'MY_ODDS_PICK', oddsBet: 'MY_ODDS_BET',
+  oddsPick: 'MY_ODDS_PICK', oddsBet: 'MY_ODDS_BET', oddsMark: 'MY_ODDS_MARK',
 }
 
 function pickStateOf(row) {

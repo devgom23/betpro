@@ -4,7 +4,7 @@
 const SERVER_FIELD = {
   important: 'starred', pick: 'pick', p: 'p', hit: 'hit', memo: 'memo',
   memoPre: 'memo_pre', memoOk: 'memo_ok', hitNote: 'hit_note', pNote: 'p_note',
-  reasonTag: 'reason_tag', oddsPick: 'odds_pick', oddsBet: 'odds_bet',
+  reasonTag: 'reason_tag', oddsPick: 'odds_pick', oddsBet: 'odds_bet', oddsMark: 'odds_mark',
 }
 
 export function pickPatchBody(scope, row, patch) {
