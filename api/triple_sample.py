@@ -310,6 +310,12 @@ def query(db, code, season, rnd, ht, at, codes=None, mb_path=None, phase="init",
                 "predict": predict_kr(ix, qi, same, day), "phase": "final" if final else "init"}
     if np.isnan(day):
         return {"ready": False, "reason": "경기 날짜가 없어 표본을 만들 수 없습니다"}
+    # 배변 표본인데 국내 배당(국배)이 초기와 똑같으면 '배변이 안 된 것'으로 본다(2026-10-09 사용자 지정 — 국배가 안 움직인 경기는
+    # 배변 표본의 국배 조건이 초기와 같아 같은 카드가 초기·배변에 두 번 보였다. 앞으로 경기 54개 중 50개가 이랬다).
+    # 옛 규칙(legacy, 플핸 점수의 표본 카드 신호)은 그대로 둔다.
+    if final and not legacy and np.all(np.round(ix0["K"][qi], 2) == np.round(K[qi], 2)):
+        return {"ready": False, "unchanged": True, "reason": "국내 배당(국배)이 초기와 같아 배변이 안 된 것으로 봅니다",
+                "predict": predict_kr(ix, qi, same, day), "phase": "final"}
     pool = done & ~np.isnan(K).any(axis=1) & (ix["days"] < day)
     if legacy and use_books:
         pool &= ~np.isnan(A).any(axis=1)
