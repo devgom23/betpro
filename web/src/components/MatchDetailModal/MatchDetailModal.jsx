@@ -283,7 +283,7 @@ function MatchChip({ label, tone, title, children, onClick, extraClass }) {
 function RefItem({ label, tone, title, children }) {
   return (
     <span className="match-ref-item" title={title}>
-      {label && <span className="match-ref-label">{label}</span>}
+      {label !== undefined && <span className="match-ref-label">{label}</span>}
       <strong style={tone ? { color: `var(--chip-${tone}-fg)` } : undefined}>{children}</strong>
     </span>
   )
@@ -627,9 +627,35 @@ function h2hValueText(w, d, l, row, pick) {
   return tone === 'gray' ? undefined : { color: `var(--chip-${tone}-fg)`, fontWeight: 700 }
 }
 
+// 같은 두 팀이 같은 시즌에 몇 번째로 만나는 경기인가 — 같은 시즌의 맞대결을 날짜(같으면 라운드) 순으로 세어 1(전반기)·2(후반기)…
+// ms = 이 경기 직전까지의 맞대결 목록(/api/pick_ai의 h2h.matches, 홈·원정 모두).
+const meetKey = (m) => `${String(m.DT || '').slice(0, 8)}|${String(m.R || '').replace(/\D/g, '').padStart(3, '0')}`
+function meetingOrder(m, ms) {
+  return 1 + ms.filter((x) => String(x.S) === String(m.S) && meetKey(x) < meetKey(m)).length
+}
+
+// 홈기준 전적 옆 괄호(2026-10-09 사용자 지정) — 이번 경기가 이 시즌 N번째 맞대결일 때, 지난 홈 경기 중 같은 N번째 맞대결이었던
+// 경기만 센 승/무/패(기준 팀 = 이번 홈팀). 예: 이번이 전반기(1번째)면 지난 홈 경기 중 그 시즌 첫 맞대결이었던 경기들의 결과.
+function sameOrderHome(ms, row) {
+  const host = String(row.HT || '').trim()
+  const me = 1 + ms.filter((x) => String(x.S) === String(row.S)).length
+  const out = { w: 0, d: 0, l: 0, n: 0, order: me }
+  for (const m of ms) {
+    if (String(m.HT || '').trim() !== host || meetingOrder(m, ms) !== me) continue
+    const hs = Number(m.HS)
+    const as = Number(m.AS)
+    if (!Number.isFinite(hs) || !Number.isFinite(as)) continue
+    out.n += 1
+    if (hs > as) out.w += 1
+    else if (hs === as) out.d += 1
+    else out.l += 1
+  }
+  return out
+}
+
 // 2026-10-09 경기지표 '참고' 줄 글자로 내렸다 — 전적 우세 방향은 마감 시장 예상 대비 단통 플핸 몫이
 // 우세=정배 −0.2%p · 우세=언더독 −0.9%p로 시장이 이미 아는 정보였다. 숫자 색 규칙(h2hTone)은 그대로.
-function h2hRefs(verdict, loading, recent, row, pick) {
+function h2hRefs(verdict, loading, recent, row, pick, h2hMatches) {
   if (loading) {
     return [<RefItem key="h2h" label="전적">…</RefItem>]
   }
@@ -657,16 +683,26 @@ function h2hRefs(verdict, loading, recent, row, pick) {
   const recentTitle = recent
     ? recent.title
     : `최근 ${RECENT_SEASONS}시즌(이번 시즌 제외) 안에는 이 구장에서 만난 적이 없습니다.`
+  // 전적은 두 줄(2026-10-09 사용자 지정) — 1줄 '홈기준 전체 (이번과 같은 N번째 맞대결이었던 경기)', 2줄 '최근5'
+  const so = Array.isArray(h2hMatches) ? sameOrderHome(h2hMatches, row) : null
+  const orderName = so ? (so.order === 1 ? '전반기' : so.order === 2 ? '후반기' : `${so.order}번째`) : ''
+  const orderTitle = so
+    ? `괄호 = 이번 경기가 이 시즌 ${so.order}번째 맞대결(${orderName})이라, 지난 홈 경기 중 그 시즌 ${so.order}번째 맞대결이었던 ${so.n}경기만 센 승/무/패입니다.\n`
+      + '같은 시즌 맞대결 순서는 날짜 순으로 판단해서 컵 대회·연기로 순서가 바뀐 경기는 실제와 다를 수 있습니다.\n\n'
+    : ''
   return [
-    <RefItem key="h2h" label="전적" title={`${verdict.title}\n\n${recentTitle}`}>
+    <RefItem key="h2h" label="전적" title={`${orderTitle}${verdict.title}`}>
+      홈기준{' '}
       <span style={h2hValueText(verdict.w, verdict.d, verdict.l, row, pick)}>
         {verdict.w}/{verdict.d}/{verdict.l}
       </span>
-      {' (최근5 '}
+      {so && <span> ({so.w}/{so.d}/{so.l})</span>}
+    </RefItem>,
+    <RefItem key="h2h-recent" label="" title={recentTitle}>
+      최근5{' '}
       {recent
         ? <span style={h2hValueText(recent.w, recent.d, recent.l, row, pick)}>{recent.w}/{recent.d}/{recent.l}</span>
         : '－'}
-      )
     </RefItem>,
   ]
 }
@@ -1006,7 +1042,7 @@ function KnoZoneTable({ zone }) {
 function MatchRefLine({ row, verdict, h2hLoading, h2hMatches, pick, xg }) {
   // 전적의 '최근5' — verdict(전체)가 있을 때만 뜻이 있다(h2hRefs 첫맞대결 분기 참고).
   const h2hRecent = verdict ? h2hVerdictRecent(h2hMatches, String(row.HT || '').trim(), row.S) : null
-  const items = [...ddongRefs(row), ...xgRefs(row, xg), ...h2hRefs(verdict, h2hLoading, h2hRecent, row, pick),
+  const items = [...ddongRefs(row), ...xgRefs(row, xg), ...h2hRefs(verdict, h2hLoading, h2hRecent, row, pick, h2hMatches),
     ...drawRefs(row, pick), ...forFlipRefs(row), ...foreignTieRefs(row)]
   if (!items.length) return null
   return (
