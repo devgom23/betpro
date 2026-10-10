@@ -1312,10 +1312,9 @@
      .pick-band-dscope-sys-row가 flex로 알아서 맡는다. */
   grid-template-columns: max-content max-content;
   gap: 10px;
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 8px;
+  padding-top: 0;
   padding-bottom: 0;
-  border-top: 1px solid var(--border);
   align-items: start;
 }
 
@@ -1339,9 +1338,8 @@
    '초기 [픽] ★★☆ 84%  →  배변 [픽] ★★★ 87% 적중' 꼴. 표가 아니라 문장형이라
    표 폭에 안 맞추고 자유롭게 줄바꿈되게 둔다. */
 .pick-band-newverdict {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 0;
   display: flex;
   align-items: baseline;
   gap: 8px;              /* 나열 항목 사이 기본 간격(6-1장) */
@@ -1491,6 +1489,11 @@
   min-width: 44px;           /* 라벨 폭을 맞춰 값이 세로로 줄 맞게(해배동배 4글자 기준) */
 }
 
+/* 전적 두 줄(홈기준·최근5)은 라벨 칸을 '전적' 두 글자 폭(약 22px)에 맞춘다 — 라벨~값 간격이 '참고'~'전적' 간격(8px)과 같아진다(2026-10-10 사용자 지정) */
+.match-ref-compact .match-ref-label {
+  min-width: 26px;
+}
+
 .match-ref-item strong {
   font-weight: 600;
   color: var(--text-primary);
@@ -1573,7 +1576,25 @@
   /* 2026-10-09 3칸: 배당 452px | 경기지표(칩 폭만큼) | 확률 지표(남는 폭) */
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 12px;
-  align-items: start;
+  align-items: stretch;
+}
+
+/* 확률 지표 칸 — 시스템 판정 줄의 글자 아래 끝을 왼쪽 묶음(배당·경기지표 구간 표)의 아래 끝 줄에 맞춘다(2026-10-10 사용자 지정).
+   방향성·배당 표는 위에 붙고, 판정 줄만 칸 맨 아래로 내려간다. */
+.pick-band-risk-cols > .pick-band-risk-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.pick-band-risk-cols > .pick-band-risk-col .pick-band-bottom-cols {
+  display: flex;
+  flex: 1 1 auto;
+}
+
+.pick-band-risk-cols > .pick-band-risk-col .pick-band-dscope-sys-wrap {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 /* 배당(452px) + 경기지표(칩 폭) — 같은 줄·같은 높이. 경기지표가 배당보다 짧으면 구간 표가 배당 표 아래 끝에 맞는다. */

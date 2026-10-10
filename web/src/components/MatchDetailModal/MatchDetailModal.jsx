@@ -280,9 +280,9 @@ function MatchChip({ label, tone, title, children, onClick, extraClass }) {
 // 설명은 칩일 때와 같은 문구가 마우스를 올리면 나온다.
 // 왜 내렸나 — 단통 플핸 기준으로 '마감 시장 예상보다 더 맞힌 몫'이 전부 ±2%p 안이었다(15-16~ 22,589경기,
 // 메모리 reference-match-chip-audit): 똥배 +0.7 · 기대점수 +0.4 · 전적 −0.9~−0.2 · 무 −1.0/+0.7 · 해외만 반전 +0.9 · 해배동배 −1.0.
-function RefItem({ label, tone, title, children }) {
+function RefItem({ label, tone, title, compact, children }) {
   return (
-    <span className="match-ref-item" title={title}>
+    <span className={compact ? 'match-ref-item match-ref-compact' : 'match-ref-item'} title={title}>
       {label !== undefined && <span className="match-ref-label">{label}</span>}
       <strong style={tone ? { color: `var(--chip-${tone}-fg)` } : undefined}>{children}</strong>
     </span>
@@ -691,14 +691,14 @@ function h2hRefs(verdict, loading, recent, row, pick, h2hMatches) {
       + '같은 시즌 맞대결 순서는 날짜 순으로 판단해서 컵 대회·연기로 순서가 바뀐 경기는 실제와 다를 수 있습니다.\n\n'
     : ''
   return [
-    <RefItem key="h2h" label="전적" title={`${orderTitle}${verdict.title}`}>
+    <RefItem key="h2h" label="전적" compact title={`${orderTitle}${verdict.title}`}>
       홈기준{' '}
       <span style={h2hValueText(verdict.w, verdict.d, verdict.l, row, pick)}>
         {verdict.w}/{verdict.d}/{verdict.l}
       </span>
       {so && <span> ({so.w}/{so.d}/{so.l})</span>}
     </RefItem>,
-    <RefItem key="h2h-recent" label="" title={recentTitle}>
+    <RefItem key="h2h-recent" label="" compact title={recentTitle}>
       최근5{' '}
       {recent
         ? <span style={h2hValueText(recent.w, recent.d, recent.l, row, pick)}>{recent.w}/{recent.d}/{recent.l}</span>
