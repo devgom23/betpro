@@ -449,7 +449,7 @@ def list_round_picks(username: str, code: str, scope: str, s: str, round_no: int
         for row in rows:
             if re.sub(r"\D", "", str(row["R"])) != str(round_no):
                 continue
-            # done = 내픽·상세픽·의견·배당 클릭 네 가지를 전부 입력함 — 경기 칸 글자에 흰색 밑줄을 긋는 표시(2026-10-10 사용자 지정:
+            # done = 내픽·상세픽·의견·배당 클릭 네 가지를 전부 입력함 — 경기 칸 글자에 밑줄을 긋는 표시(2026-10-10 사용자 지정:
             # 하나라도 빠지면 밑줄 없음. 배당 클릭을 풀면 바로 빠진다).
             if row["pick"] or row["p"] or row["hit"] or row["odds_mark"]:
                 done = bool(row["pick"] and row["p"] and row["hit"] and row["odds_mark"])

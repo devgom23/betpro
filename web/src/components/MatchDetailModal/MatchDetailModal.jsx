@@ -60,18 +60,24 @@ function rankSuffix(v) {
 // 팀이름 옆 (적중/전체) 배지 — "이번주 벳"에서 이 팀을 선택("+추가")한 횟수 기준.
 // api/main.py team_bet_record 참고: 조합으로 곱해지기 전, 경기당 1건 + 그 경기에서
 // 가장 먼저 담은 유형의 적중 여부만 센다(베팅내역의 개별 벳/조합 개수와는 다르다).
-function TeamBetRecord({ name }) {
-  const [rec, setRec] = useState(null)
+// 두 팀을 한 번에 묻는다(2026-10-10 소스 점검 B — 예전엔 팀마다 따로 물어 서버가 베팅내역 전체를 두 번 읽었다).
+function useTeamBetRecords(ht, at) {
+  const [recs, setRecs] = useState({})
   useEffect(() => {
     let cancelled = false
-    setRec(null)
-    if (!name) return undefined
+    setRecs({})
+    const names = [ht, at].filter(Boolean)
+    if (!names.length) return undefined
     api
-      .get(`/api/team_bet_record?name=${encodeURIComponent(name)}`)
-      .then((res) => { if (!cancelled) setRec(res) })
-      .catch(() => { if (!cancelled) setRec(null) })
+      .get(`/api/team_bet_record?names=${encodeURIComponent(names.join(','))}`)
+      .then((res) => { if (!cancelled) setRecs(res?.records || {}) })
+      .catch(() => { if (!cancelled) setRecs({}) })
     return () => { cancelled = true }
-  }, [name])
+  }, [ht, at])
+  return recs
+}
+
+function TeamBetRecord({ rec }) {
   if (!rec) return null
   return <span className="team-bet-record"> ({rec.hit}/{rec.total})</span>
 }
@@ -5078,6 +5084,7 @@ function PickBand({ sameOdds, marks, onToggleMark, row, h2hVerdict: verdict, h2h
 function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir, weekRank, extraOdds, onClose, onSavePick }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
+  const teamRecs = useTeamBetRecords(ht, at)
   const rt = rtLabel(row.RT)
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
   // 제목 줄 배당(2026-09-26 사용자 지정) — 팀별 (정/역 승/핸디)를 없애고, 원정팀 뒤에 국내 초기 배당 두 묶음을
@@ -5535,7 +5542,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           <span className="detail-title-teams">
             {ht}
             {rankSuffix(row.HP)}
-            <TeamBetRecord name={ht} />
+            <TeamBetRecord rec={teamRecs[ht]} />
             {hasScore ? (
               <span className="detail-title-score">
                 {' '}
@@ -5549,7 +5556,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             )}
             {at}
             {rankSuffix(row.AP)}
-            <TeamBetRecord name={at} />
+            <TeamBetRecord rec={teamRecs[at]} />
             <span className="detail-title-odds">
               {titleOdds(['KW', 'KD', 'KL'], titleHit[0])}
               {titleOdds(['KHW', 'KHD', 'KHL'], titleHit[1])}
@@ -5907,6 +5914,19 @@ function pickStateOf(row) {
   return out
 }
 
+// /api/week_list(478KB)는 상세보기를 열 때마다 순위 배지 하나 때문에 받았다(2026-10-10 소스 점검 A) — 1분 동안은 받은 것을
+// 다시 쓰고, 받는 중이면 그 요청을 같이 기다린다. 실패하면 기억하지 않는다.
+const WEEK_LIST_TTL_MS = 60 * 1000
+let weekListCache = null   // { at, p }
+function getWeekList() {
+  if (!weekListCache || Date.now() - weekListCache.at > WEEK_LIST_TTL_MS) {
+    const p = api.get('/api/week_list')
+    weekListCache = { at: Date.now(), p }
+    p.catch(() => { if (weekListCache?.p === p) weekListCache = null })
+  }
+  return weekListCache.p
+}
+
 // 이번주 TOP30 순위 — /api/week_list(현재 회차) 기준. 이번주 TOP30 화면이 순위를 매기는
 // 재료와 같다. 내 데이터(scope==='user')는 순위 대상이 아니라 항상 null.
 function useWeekRank(row, code, scope, loadedKey) {
@@ -5922,7 +5942,7 @@ function useWeekRank(row, code, scope, loadedKey) {
     if (!score) return undefined
     ;(async () => {
       try {
-        const list = await api.get('/api/week_list')
+        const list = await getWeekList()
         const q = new URLSearchParams({ start: list.start || '', end: list.end || '', kind: score.pick })
         const members = await api.get(`/api/week_top20/members?${q}`).catch(() => ({ keys: [] }))
         const prevRanks = new Map((members.keys || []).map((k, i) => [k, i + 1]))

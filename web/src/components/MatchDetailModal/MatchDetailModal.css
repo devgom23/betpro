@@ -1278,43 +1278,6 @@
   margin: 0 0 18px;
 }
 
-.pick-band-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0 0 10px;
-}
-
-.pick-band-head h3 {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.pick-band-sub {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-/* 해외지표·국내지표 카드는 둘 다 승/승+패/승+무+패/통합승+분석 표를 담다 보니 폭이
-   좁으면 답답하다 — 상대전적·시즌전적 카드 몫을 줄여서 그만큼 넘긴다. 플핸무 확률
-   카드는 제목·배지·큰 글씨 확률·막대·문구까지 담아 너무 좁히면 찌그러져 보여서
-   0.8fr로 되돌리고, 그 몫은 여유가 있던 상대전적에서만 뺐다. 해외·국내지표는 표의
-   지표명 칸을 승+무+패에 딱 맞게(.pick-ind-table .row-label 22%) 줄인 만큼 카드
-   자체 몫도 살짝 줄여서(1.35→1.25) 시즌전적(0.85→1.05)이 한 줄로 보이게 넘긴다. */
-.pick-cards {
-  display: grid;
-  grid-template-columns: 0.8fr 1.25fr 1.25fr 0.65fr 1.05fr;
-  gap: 10px;
-  align-items: stretch;
-}
-
-@media (max-width: 980px) {
-  .pick-cards {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
 /* ── 경기지표 · 방향성·배당 — '확률 지표' 표 바로 밑, 그 칸 폭 안에서만 나란히
    둘(왼쪽 '배당' 칸과는 무관 — 그 칸 아래로는 안 내려간다). */
 .pick-band-bottom-cols {
@@ -2099,39 +2062,12 @@
   color: var(--text-primary);
 }
 
-/* 종합 판정이 나온 칸(해배·초기)을 옅게 짚어 준다 — 어디서 결론이 나왔는지 보이게. */
-.sys-table .sys-pick-cell {
-  background: rgba(148, 163, 184, 0.14);
-}
-
 .pick-bar {
   position: relative;
   height: 7px;
   border-radius: 999px;
   background: var(--border);
   margin: 8px 0 4px;
-}
-
-.pick-bar-fill {
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: var(--grade-fg);
-}
-
-.pick-bar-marker {
-  position: absolute;
-  top: -3px;
-  width: 2px;
-  height: 13px;
-  background: var(--text-muted-2);
-}
-
-.pick-bar-scale {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--text-muted);
 }
 
 /* "5(2)"의 괄호 부분 — 총계(5)보다 흐리게, 오늘과 같은 장소에서 나온 값이라는 표시 */
@@ -2288,32 +2224,6 @@
   flex: 1 1 0;
   min-width: 0;
   align-self: center;
-}
-
-
-.pick-notes {
-  margin-top: 10px;
-}
-
-.pick-consensus {
-  margin: 6px 0 0;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.pick-warn {
-  margin: 3px 0 0;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-/* 지표별 표본 토탈행: 숫자 아래 줄에 그 결과가 전체에서 차지하는 비율 */
-.grand-pct {
-  display: block;
-  font-size: 10px;
-  font-weight: 500;
-  opacity: 0.75;
 }
 
 /* 홈경기였던 칸만 배경을 칠해 원정경기와 구분한다 */

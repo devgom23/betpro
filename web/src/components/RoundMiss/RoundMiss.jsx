@@ -166,7 +166,7 @@ export function RoundMissGames({ lg, season, round, mkt }) {
                       title={picks[`${g.ht}|${g.at}`]?.done ? '누르면 상세보기 — 밑줄 = 내픽·상세픽·의견·배당 클릭을 전부 입력한 경기' : '누르면 상세보기'}
                       onClick={() => setDetailRow({ S: season, R: `${round}R`, HT: g.ht, AT: g.at })}
                     >
-                      {gameText(g)}<Sz />
+                      <GameLabel g={g} /><Sz />
                     </td>
                   ))}
                 </tr>
@@ -395,8 +395,15 @@ function MyPick({ pk }) {
   return <span className="rm-mypick" title="내가 찍은 내픽(상세픽/의견) — 고치는 곳은 리그 표·상세보기">{pickText(pk)}</span>
 }
 
-// 경기 줄 글자 — 결과가 있으면 점수를 팀 사이에('아스널 1:0 리즈'), 없으면 'vs'
-const gameText = (g) => (g.rt && g.hs !== null ? `${g.ht} ${g.hs}:${g.as} ${g.at}` : `${g.ht} vs ${g.at}`)
+// 경기 칸 — 결과가 있으면 점수를 팀 사이에('아스널 1:0 리즈'), 없으면 'vs'.
+// 정배 팀 파랑 · 역배 팀 빨강(2026-10-10 사용자 지정). 정배는 국내 초기 배당 기준(서버 round_miss._home_fav), 못 가리면 색 없음.
+const SIDE_CLS = { 1: 'blue', '-1': 'red' }
+function GameLabel({ g }) {
+  const homeCls = SIDE_CLS[g.hf] || ''
+  const awayCls = SIDE_CLS[-g.hf] || ''
+  const mid = g.rt && g.hs !== null ? ` ${g.hs}:${g.as} ` : ' vs '
+  return <><span className={homeCls}>{g.ht}</span>{mid}<span className={awayCls}>{g.at}</span></>
+}
 
 // 글자 폭 추정 — 한글·한자는 1, 영문·숫자·공백은 0.55
 const textWidth = (s) => [...s].reduce((a, c) => a + (c.charCodeAt(0) > 0x2e80 ? 1 : 0.55), 0)

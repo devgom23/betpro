@@ -1,0 +1,109 @@
+/* v3.5에서 지운 CSS — 화면 코드(jsx/js)에서 한 번도 안 쓰는 클래스의 규칙(14개 클래스 · 16곳 — 나머지 3개 detail-h2h-footnote·pick-ind-table·pick-ind-ref-row는 주석에만 이름이 남아 있던 것) */
+
+/* TripleSample.css */
+.ts-nums {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* TripleSample.css */
+.ts-a-same {
+  border-bottom: 2px solid var(--accent);
+}
+
+/* TripleSample.css */
+.ts-note-slot {
+  display: contents;
+}
+
+/* MatchDetailModal.css */
+.pick-band-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+/* MatchDetailModal.css */
+.pick-band-head h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* MatchDetailModal.css */
+.pick-band-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* MatchDetailModal.css */
+.pick-cards {
+  display: grid;
+  grid-template-columns: 0.8fr 1.25fr 1.25fr 0.65fr 1.05fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
+/* MatchDetailModal.css */
+.pick-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+
+/* MatchDetailModal.css */
+.sys-table .sys-pick-cell {
+  background: rgba(148, 163, 184, 0.14);
+}
+
+/* MatchDetailModal.css */
+.pick-bar-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--grade-fg);
+}
+
+/* MatchDetailModal.css */
+.pick-bar-marker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 13px;
+  background: var(--text-muted-2);
+}
+
+/* MatchDetailModal.css */
+.pick-bar-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* MatchDetailModal.css */
+.pick-notes {
+  margin-top: 10px;
+}
+
+/* MatchDetailModal.css */
+.pick-consensus {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* MatchDetailModal.css */
+.pick-warn {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* MatchDetailModal.css */
+.grand-pct {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.75;
+}

@@ -2903,19 +2903,25 @@ def list_bet_slips(scope: str = PATHS.SCOPE_MASTER, user: dict = Depends(get_cur
 
 
 @app.get("/api/team_bet_record")
-def team_bet_record(name: str, user: dict = Depends(get_current_user)):
+def team_bet_record(name: str = "", names: str = "", user: dict = Depends(get_current_user)):
     """상세보기 팀명 옆 (적중/전체) 배지용. "전체"는 베팅내역의 개별 벳(조합) 개수가
     아니라 "이번주 벳"에서 그 팀을 선택("+추가")한 횟수다 — 한 경기에 유형을 여러 개
     담아도(예: 플핸/핸무 둘 다 추가) 조합 곱해지기 전 기준으로 그 경기 1건만 센다.
     "적중"은 그 경기에 담은 유형 중 가장 먼저 추가한 것(다리 id가 가장 작은 것)의
     적중 여부만 본다 — 나중에 다른 유형을 더 담았다고 판정이 바뀌지 않는다.
-    스코프(공식/내 데이터) 구분 없이 이 계정의 전체 배팅 이력을 본다."""
-    name = (name or "").strip()
-    if not name:
-        return {"name": name, "hit": 0, "total": 0}
+    스코프(공식/내 데이터) 구분 없이 이 계정의 전체 배팅 이력을 본다.
+    names=홈,원정 처럼 여러 팀을 한 번에 물으면 {"records": {팀: {name, hit, total}}} — 상세보기가 두 팀을 따로 물어
+    베팅내역 전체(약 0.09초)를 두 번 읽던 것을 한 번으로 줄였다(2026-10-10 소스 점검 B). name= 한 팀 형태도 그대로 받는다."""
+    wanted = [n.strip() for n in (names.split(",") if names else [name]) if n and n.strip()]
+    if not wanted:
+        return {"records": {}} if names else {"name": (name or "").strip(), "hit": 0, "total": 0}
     slips = BETSLIPS.list_slips_all(user["username"])
     _attach_leg_hits(slips, user)
+    recs = {n: _team_bet_record_of(slips, n) for n in dict.fromkeys(wanted)}
+    return {"records": recs} if names else recs[wanted[0]]
 
+
+def _team_bet_record_of(slips: list, name: str) -> dict:
     # (batch_id, S, R, No, HT, AT) 조합마다 다리 id가 가장 작은(=가장 먼저 추가한) 것만 남긴다.
     first_leg: dict[tuple, dict] = {}
     for slip in slips:

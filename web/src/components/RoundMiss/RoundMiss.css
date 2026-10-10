@@ -139,7 +139,6 @@
 
 .rm-teams td {
   font-size: 11px;
-  color: var(--text-muted);
 }
 
 /* 경기 칸 너비를 같게 맞추는 보이지 않는 글자 — 가장 긴 '홈 vs 원정'을 모든 칸에 깔아 둔다 */
@@ -290,14 +289,13 @@
   cursor: pointer;
 }
 
+/* 마우스를 올리면 칸 배경만 살짝 — 밑줄은 '네 가지 입력 완료' 표시(rm-entered)에만 쓴다(2026-10-10 사용자 지정) */
 .rm-table td.rm-open:hover {
-  color: var(--text-primary);
-  text-decoration: underline;
+  background: var(--row-hover);
 }
 
-/* 상세보기에 내 입력(내픽·상세픽·의견·배당 클릭)을 전부 한 경기 — 경기 글자를 흰색(기본 글자색)으로 밑줄(2026-10-10 사용자 지정, 파랑은 이미 너무 많이 써서) */
+/* 상세보기에 내 입력(내픽·상세픽·의견·배당 클릭)을 전부 한 경기 — 경기 글자에 밑줄만(2026-10-10 사용자 지정 — 글자색은 정배 파랑·역배 빨강 그대로) */
 .rm-teams td.rm-entered {
-  color: var(--text-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
 }

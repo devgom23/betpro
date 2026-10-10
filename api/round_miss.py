@@ -290,7 +290,19 @@ def build(db: str | None = None) -> pd.DataFrame:
         "as_": pd.to_numeric(sub["AS"], errors="coerce").to_numpy(),
         "rt": sub["rt"].to_numpy(), "dd": sub["dd"].fillna("").to_numpy(), "ddo": sub["ddo"].to_numpy(),
         "k": st["k"], "kw": st["kw"], "f": st["f"], "fw": st["fw"], "v": st["v"], "vs": st["vs"],
+        "hf": _home_fav_arr(sub),
     })
+    return out
+
+
+def _home_fav_arr(sub: pd.DataFrame) -> np.ndarray:
+    """정배 쪽 — 1 홈 · -1 원정 · 0 못 가림. 국내 초기 승·패 배당 중 낮은 쪽(저장 RT와 같은 기준), 없으면 해외 초기.
+    경기별 세팅값 '경기' 칸에서 정배 팀 파랑·역배 팀 빨강으로 쓴다(2026-10-10 사용자 지정)."""
+    out = np.zeros(len(sub), np.int64)
+    for w, l in (("KW", "KL"), ("FW", "FL")):
+        a, b = _pos(sub[w]), _pos(sub[l])
+        ok = (out == 0) & np.isfinite(a) & np.isfinite(b) & (a != b)
+        out = np.where(ok, np.where(a < b, 1, -1), out)
     return out
 
 
@@ -298,7 +310,7 @@ def build(db: str | None = None) -> pd.DataFrame:
 def get(db: str | None = None) -> pd.DataFrame:
     """캐시 — 리그 표가 바뀌면 다시 만든다(약 5초). 경기 하나 = 한 줄."""
     db = db or PATHS.get_master_db()
-    return DATA.cached_derive(db, "round_miss:v5", lambda: build(db), tables=tuple(PATHS.LEAGUES))
+    return DATA.cached_derive(db, "round_miss:v6", lambda: build(db), tables=tuple(PATHS.LEAGUES))
 
 
 def _miss_counts(df: pd.DataFrame, side_col: str, split_col: str | None = None) -> pd.DataFrame:
@@ -323,7 +335,14 @@ def _miss_counts(df: pd.DataFrame, side_col: str, split_col: str | None = None) 
 
 
 def summary(db: str | None = None) -> dict:
-    """{market(v 판정·k 국배·f 해배): {리그: {시즌: {라운드: [전체, 결과, 세팅, 정→플 무, 정→플 역, 플→정 핸무, 플→정 핸승, 그중 엇(정), 그중 엇(플)]}}}} + 시즌·리그 목록."""
+    """{market(v 판정·k 국배·f 해배): {리그: {시즌: {라운드: [전체, 결과, 세팅, 정→플 무, 정→플 역, 플→정 핸무, 플→정 핸승, 그중 엇(정), 그중 엇(플)]}}}} + 시즌·리그 목록.
+    집계 결과도 같은 캐시에 얹는다 — 리그 표가 안 바뀌면 답이 같은데 부를 때마다 0.14초씩 다시 셌다(2026-10-10 소스 점검 D).
+    ⚠ 돌려주는 dict는 캐시본이라 부르는 쪽에서 고치면 안 된다(main은 그대로 직렬화만 한다)."""
+    db = db or PATHS.get_master_db()
+    return DATA.cached_derive(db, "round_miss_summary:v5", lambda: _summary(db), tables=tuple(PATHS.LEAGUES))
+
+
+def _summary(db: str) -> dict:
     df = get(db)
     out = {"seasons": sorted(df["S"].unique(), reverse=True), "leagues": [], "v": {}, "k": {}, "f": {}, "minSeason": MIN_SEASON}
     out["leagues"] = [{"code": c, "label": LEAGUE_LABEL.get(c, c)} for c in PATHS.LEAGUES]
@@ -364,6 +383,7 @@ def detail(lg: str, r: int, db: str | None = None) -> dict:
             "rt": rec["rt"] or None, "dd": rec["dd"] or None, "ddo": None if pd.isna(rec["ddo"]) else round(float(rec["ddo"]), 2), "k": int(rec["k"]), "kw": bool(rec["kw"]), "f": int(rec["f"]), "fw": bool(rec["fw"]), "v": int(rec["v"]), "vs": bool(rec["vs"]),
             "d": str((pd.Timestamp("2000-01-01") + pd.Timedelta(days=int(rec["ord"]))).date()),
             "wd": _wd_of(rec["ord"], rec["hour"]), "kno": kn["kno"] if kn else None,
+            "hf": int(rec["hf"]),
         })
     for gl in seasons.values():          # 와이즈토토 순서가 있으면 그 순서, 없으면 날짜·시각 순
         if all(g["kno"] is not None for g in gl):

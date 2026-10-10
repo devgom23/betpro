@@ -408,15 +408,19 @@ export default function SeasonAnalysisPage() {
   const [refresh, setRefresh] = useState(0)
   const keepSel = useRef(false)
   const onCollected = useCallback(() => { keepSel.current = true; setRefresh((n) => n + 1) }, [])
+  // 처음엔 시즌 없이 받아 서버가 정한 최신 시즌을 알게 되는데, 그 시즌을 setSeason하면 같은 표를 한 번 더 받았다
+  // (268KB × 2 — 2026-10-10 소스 점검 C). 응답에서 시즌을 정한 그 한 번은 다시 받지 않는다.
+  const seasonFromResp = useRef(false)
 
   useEffect(() => {
+    if (seasonFromResp.current) { seasonFromResp.current = false; return undefined }
     let alive = true
     setError('')
     api.get(`/api/season_view${season ? `?season=${encodeURIComponent(season)}` : ''}`)
       .then((r) => {
         if (!alive) return
         setResp(r)
-        if (!season && r.season) setSeason(r.season)
+        if (!season && r.season) { seasonFromResp.current = true; setSeason(r.season) }
         // 기본 선택 — 오늘이 속한 현재 주(이 시즌에 그 주가 있을 때), 없으면 결과가 있는 마지막 회차(그것도 없으면 첫 회차)
         const d = r.data
         if (keepSel.current) { keepSel.current = false; return }
