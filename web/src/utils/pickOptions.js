@@ -123,7 +123,7 @@ export const MEMO_TAG_FIELDS = [
   { key: 'tagVerdict', field: 'MY_TAG_VERDICT', label: '판정', options: ['정배쪽', '정', '플핸쪽', '플'] },   // 2026-10-10 정무→정배쪽·플핸무→플핸쪽(저장값도 바꿈)
   { key: 'tagZone', field: 'MY_TAG_ZONE', label: '구간', options: ['정', '정(약)', '플', '플(약)'] },
   { key: 'tagRel', field: 'MY_TAG_REL', label: '상대', options: ['홈팀강', '홈팀약강', '원정팀강', '원정팀약강', '판정못함'] },
-  { key: 'tagSample', field: 'MY_TAG_SAMPLE', label: '표본', options: ['정무', '정', '정역', '플핸무', '플', '플핸승'] },
+  { key: 'tagSample', field: 'MY_TAG_SAMPLE', label: '표본', options: ['정무', '정역', '정', '플핸무', '플핸승', '플'] },
 ]
 
 export const REASON_TAG_OPTIONS = [
