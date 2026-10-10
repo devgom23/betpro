@@ -128,8 +128,9 @@
 }
 
 /* 경기별 세팅값 표 */
-.rm-games td {
-  min-width: 78px;
+.rm-games td,
+.rm-games th:not(.rm-lab) {
+  min-width: 60px;
 }
 
 .rm-table td.rm-bad {
@@ -139,6 +140,17 @@
 .rm-teams td {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* 경기 칸 너비를 같게 맞추는 보이지 않는 글자 — 가장 긴 '홈 vs 원정'을 모든 칸에 깔아 둔다 */
+.rm-sizer {
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 /* 어느 화면에서든 같은 모양(시즌분석 · 리그 화면 시즌 지표 ④) — .sa-page 아래 규칙에 기대지 않는다 */

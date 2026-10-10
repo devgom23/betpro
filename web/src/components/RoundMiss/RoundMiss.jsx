@@ -85,6 +85,14 @@ export function RoundMissDetail({ sum, lg, season, round, mkt }) {
   const pastRows = sum.seasons.filter((s) => s !== newest).map((s) => unpack(sum[mkt]?.[lg]?.[s]?.[round])).filter((x) => x && x.done > 0)
   const pastAvg = pastRows.length ? pastRows.reduce((a, x) => a + x.miss, 0) / pastRows.length : null
   const sel = det?.seasons?.[season] || []
+  // 경기 칸 너비를 전부 같게(2026-10-10 사용자 지정) — 가장 긴 '홈 vs 원정' 글자를 모든 칸에 보이지 않게 깔아 둬서
+  // 표가 그 너비를 최소로 잡는다(한글은 영문보다 넓어 글자 수가 아니라 폭으로 가장 긴 것을 고른다).
+  // 끝난 경기는 '홈 1:0 원정'처럼 점수가 들어가므로(점수까지 고려 — 사용자 지정) 점수 꼴과 'vs' 꼴 둘 다 재서 가장 긴 것을 쓴다.
+  const longest = sel.reduce((best, g) => {
+    const cands = [`${g.ht} vs ${g.at}`, `${g.ht} 0:0 ${g.at}`]
+    return cands.reduce((b, txt) => (textWidth(txt) > textWidth(b) ? txt : b), best)
+  }, '')
+  const Sz = () => <span className="rm-sizer" aria-hidden="true">{longest}</span>
 
   return (
     <>
@@ -148,30 +156,34 @@ export function RoundMissDetail({ sum, lg, season, round, mkt }) {
                     <th key={g.key} colSpan={g.n} className={g.wd === '토' ? 'blue' : g.wd === '일' ? 'red' : ''}>{g.wd}요일</th>
                   ))}
                 </tr>
-                <tr>{sel.map((g, i) => <th key={i} title={`${g.ht} vs ${g.at}`}>{i + 1}경기</th>)}</tr>
+                <tr>{sel.map((g, i) => <th key={i} title={`${g.ht} vs ${g.at}`}>{i + 1}경기<Sz /></th>)}</tr>
               </thead>
               <tbody>
                 <tr>
                   <th className="rm-lab">판정<small>(배변 시스템 판정)</small></th>
-                  {sel.map((g, i) => <td key={i} className={missOf(g.v, g.rt) && mkt === 'v' ? 'rm-bad' : ''}><Setting side={g.v} split={g.vs} /></td>)}
+                  {sel.map((g, i) => <td key={i} className={missOf(g.v, g.rt) && mkt === 'v' ? 'rm-bad' : ''}><Setting side={g.v} split={g.vs} /><Sz /></td>)}
                 </tr>
                 <tr>
                   <th className="rm-lab">국배 세팅값</th>
-                  {sel.map((g, i) => <td key={i} className={missOf(g.k, g.rt) && mkt === 'k' ? 'rm-bad' : ''}><Setting side={g.k} weak={g.kw} /></td>)}
+                  {sel.map((g, i) => <td key={i} className={missOf(g.k, g.rt) && mkt === 'k' ? 'rm-bad' : ''}><Setting side={g.k} weak={g.kw} /><Sz /></td>)}
                 </tr>
                 <tr>
                   <th className="rm-lab">결과</th>
                   {sel.map((g, i) => (
                     <td key={i}>
-                      {g.rt ? <span className={RT_CLS[g.rt]}>{RT_TEXT[g.rt]}</span>
-                        : g.dd ? <span className="rm-dd" title="국내 초기배당 1.49 이하 — 리그 표의 똥 순번과 같음">{g.dd}</span> : <span className="gray">예정</span>}
-                      {g.rt && g.hs !== null ? <small className="rm-sub">{g.hs}:{g.as}</small> : null}
+                      {g.rt ? <span className={RT_CLS[g.rt]}>{RT_TEXT[g.rt]}</span> : g.dd ? null : <span className="gray">예정</span>}
+                      {g.dd && (
+                        <span className={g.rt ? 'rm-sub rm-dd' : 'rm-dd'} title="국내 초기배당 1.49 이하 — 리그 표의 똥 순번과 같음(숫자는 정배배당)">
+                          {g.dd} {g.ddo !== null ? g.ddo.toFixed(2) : ''}
+                        </span>
+                      )}
+                      <Sz />
                     </td>
                   ))}
                 </tr>
                 <tr className="rm-teams">
                   <th className="rm-lab">경기</th>
-                  {sel.map((g, i) => <td key={i}>{g.ht}<small className="rm-sub">{g.at}</small></td>)}
+                  {sel.map((g, i) => <td key={i}>{gameText(g)}<Sz /></td>)}
                 </tr>
               </tbody>
             </table>
@@ -289,6 +301,12 @@ function Setting({ side, weak, split }) {
   }
   return <span className={side === 1 ? 'blue' : 'red'}>{side === 1 ? '블루' : '레드'}{weak ? '(약)' : ''}</span>
 }
+
+// 경기 줄 글자 — 결과가 있으면 점수를 팀 사이에('아스널 1:0 리즈'), 없으면 'vs'
+const gameText = (g) => (g.rt && g.hs !== null ? `${g.ht} ${g.hs}:${g.as} ${g.at}` : `${g.ht} vs ${g.at}`)
+
+// 글자 폭 추정 — 한글·한자는 1, 영문·숫자·공백은 0.55
+const textWidth = (s) => [...s].reduce((a, c) => a + (c.charCodeAt(0) > 0x2e80 ? 1 : 0.55), 0)
 
 // 요일이 같은 경기끼리 묶어 머리글 칸(colspan)으로 — 순서(와이즈토토)는 그대로 둔다
 function groupByDay(games) {

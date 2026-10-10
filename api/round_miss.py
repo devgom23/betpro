@@ -78,6 +78,7 @@ def _frame(db: str) -> pd.DataFrame:
         d["lg"] = code
         d["li"] = li
         d["dd"] = DATA._ddong_columns(df)[0]        # 똥1·똥2… — 리그 표와 같은 계산(국내 초기배당 1.49 이하, 같은 라운드 안 낮은 순)
+        d["ddo"] = np.where(d["dd"] != "", np.fmin(pd.to_numeric(df["KW"], errors="coerce"), pd.to_numeric(df["KL"], errors="coerce")), np.nan)   # 그 똥 경기의 정배배당
         parts.append(d)
     t = pd.concat(parts, ignore_index=True)
     s = t["DT"].astype(str)
@@ -287,7 +288,7 @@ def build(db: str | None = None) -> pd.DataFrame:
         "ht": sub["HT"].astype(str).str.strip().to_numpy(), "at": sub["AT"].astype(str).str.strip().to_numpy(),
         "hs": pd.to_numeric(sub["HS"], errors="coerce").to_numpy(),
         "as_": pd.to_numeric(sub["AS"], errors="coerce").to_numpy(),
-        "rt": sub["rt"].to_numpy(), "dd": sub["dd"].fillna("").to_numpy(),
+        "rt": sub["rt"].to_numpy(), "dd": sub["dd"].fillna("").to_numpy(), "ddo": sub["ddo"].to_numpy(),
         "k": st["k"], "kw": st["kw"], "f": st["f"], "fw": st["fw"], "v": st["v"], "vs": st["vs"],
     })
     return out
@@ -297,7 +298,7 @@ def build(db: str | None = None) -> pd.DataFrame:
 def get(db: str | None = None) -> pd.DataFrame:
     """캐시 — 리그 표가 바뀌면 다시 만든다(약 5초). 경기 하나 = 한 줄."""
     db = db or PATHS.get_master_db()
-    return DATA.cached_derive(db, "round_miss:v4", lambda: build(db), tables=tuple(PATHS.LEAGUES))
+    return DATA.cached_derive(db, "round_miss:v5", lambda: build(db), tables=tuple(PATHS.LEAGUES))
 
 
 def _miss_counts(df: pd.DataFrame, side_col: str, split_col: str | None = None) -> pd.DataFrame:
@@ -351,7 +352,7 @@ def detail(lg: str, r: int, db: str | None = None) -> dict:
         seasons.setdefault(rec["S"], []).append({
             "ht": rec["ht"], "at": rec["at"],
             "hs": None if pd.isna(rec["hs"]) else int(rec["hs"]), "as": None if pd.isna(rec["as_"]) else int(rec["as_"]),
-            "rt": rec["rt"] or None, "dd": rec["dd"] or None, "k": int(rec["k"]), "kw": bool(rec["kw"]), "f": int(rec["f"]), "fw": bool(rec["fw"]), "v": int(rec["v"]), "vs": bool(rec["vs"]),
+            "rt": rec["rt"] or None, "dd": rec["dd"] or None, "ddo": None if pd.isna(rec["ddo"]) else round(float(rec["ddo"]), 2), "k": int(rec["k"]), "kw": bool(rec["kw"]), "f": int(rec["f"]), "fw": bool(rec["fw"]), "v": int(rec["v"]), "vs": bool(rec["vs"]),
             "d": str((pd.Timestamp("2000-01-01") + pd.Timedelta(days=int(rec["ord"]))).date()),
             "wd": _wd_of(rec["ord"], rec["hour"]), "kno": kn["kno"] if kn else None,
         })
