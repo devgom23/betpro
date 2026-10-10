@@ -432,7 +432,7 @@ function sameOddsRefs(sameOdds) {
     if (!g) continue
     const res = g.games.map((gm) => rtLabel(gm.rt)).filter(Boolean)
     out.push(
-      <RefItem key={`sameodds-${kind}`} label={out.length ? '' : '동배'} pop={<SameOddsColumns sameOdds={sameOdds} />}>
+      <RefItem key={`sameodds-${kind}`} label={out.length ? '' : '동배'} compact pop={<SameOddsColumns sameOdds={sameOdds} />}>
         {name} {g.odds}{res.length ? `(${res.join('/')})` : ''}
       </RefItem>,
     )

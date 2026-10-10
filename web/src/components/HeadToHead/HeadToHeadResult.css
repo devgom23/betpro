@@ -175,18 +175,16 @@
   width: 46px;
 }
 
-/* '기준' 라벨 칸 다음(항상 2번째 칸)과 핸승/핸무/무/역 그룹 사이(4칸씩 3그룹)는
-   순번 그대로 고정이라 nth-child를 쓴다. 승/무/패(토탈)는 실제로는 "핸승·핸무·무·역의
-   합계"라는 의미로 구분선을 건다 — 앞에 RT 칼럼이 몇 개든(그룹이 늘거나 줄어도)
-   항상 맞도록 순번(nth-child) 대신 "맨 끝 3칸(승/무/패)"이라는 뒤쪽 기준(nth-last-child)을 쓴다. */
+/* 구분선(2026-10-10 순서 변경): 라벨 | 승·무·패 합계 3칸 | 핸승·핸무·무·역 4칸씩 3그룹.
+   라벨 다음(2번째 칸)과 세부 3그룹의 시작(5·9·13번째 칸)에 건다 — 칸 순서가 고정이라 순번(nth-child)을 쓴다. */
 .h2h-wdl-grid th:nth-child(2),
 .h2h-wdl-grid td:nth-child(2),
-.h2h-wdl-grid th:nth-child(6),
-.h2h-wdl-grid td:nth-child(6),
-.h2h-wdl-grid th:nth-child(10),
-.h2h-wdl-grid td:nth-child(10),
-.h2h-wdl-grid th:nth-last-child(3),
-.h2h-wdl-grid td:nth-last-child(3) {
+.h2h-wdl-grid th:nth-child(5),
+.h2h-wdl-grid td:nth-child(5),
+.h2h-wdl-grid th:nth-child(9),
+.h2h-wdl-grid td:nth-child(9),
+.h2h-wdl-grid th:nth-child(13),
+.h2h-wdl-grid td:nth-child(13) {
   border-left: 2px solid var(--border-strong);
 }
 

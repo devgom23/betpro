@@ -153,11 +153,11 @@ function WdlCols() {
   return (
     <colgroup>
       <col className="h2h-col-label" />
-      {Array.from({ length: 12 }, (_, i) => (
-        <col key={i} className="h2h-col-rt" />
-      ))}
       {['w', 'd', 'l'].map((k) => (
         <col key={k} className="h2h-col-total" />
+      ))}
+      {Array.from({ length: 12 }, (_, i) => (
+        <col key={i} className="h2h-col-rt" />
       ))}
     </colgroup>
   )
@@ -175,13 +175,6 @@ function WdlRow({ title, wdl, scope, onTotalClick, activeMode }) {
   return (
     <tr>
       <td className="row-label">{title}</td>
-      {['W', 'D', 'L'].flatMap((key) =>
-        RT_ORDER.map((lab) => (
-          <td key={`${key}-${lab}`} className={GROUP_COL_CLASS[key]}>
-            {(wdl[key]?.breakdown?.[lab] || 0) || '-'}
-          </td>
-        ))
-      )}
       {['W', 'D', 'L'].map((key) => {
         const isActive = clickable && activeMode?.scope === scope && activeMode?.letter === key
         return (
@@ -211,6 +204,13 @@ function WdlRow({ title, wdl, scope, onTotalClick, activeMode }) {
           </td>
         )
       })}
+      {['W', 'D', 'L'].flatMap((key) =>
+        RT_ORDER.map((lab) => (
+          <td key={`${key}-${lab}`} className={GROUP_COL_CLASS[key]}>
+            {(wdl[key]?.breakdown?.[lab] || 0) || '-'}
+          </td>
+        ))
+      )}
     </tr>
   )
 }
@@ -218,7 +218,7 @@ function WdlRow({ title, wdl, scope, onTotalClick, activeMode }) {
 // 상대전적 W/D/L 요약 — "전체기준"(그 팀이 홈이든 원정이든)과 "홈기준"(그 팀이 실제로
 // 홈이었던 맞대결만)을 같은 표 안에 두 줄로 이어 붙여, 헤더 하나로 바로 비교할 수 있게 한다.
 // 헤더는 한 줄로 압축한다 — W/D/L 접두어 없이 핸승/핸무/무/역만 반복해서 보여주고(그룹
-// 구분은 세로선으로), 맨 뒤 토탈은 승/무/패 세 칸으로 나눠 W/D/L 각각의 합계를 바로 본다.
+// 구분은 세로선으로), 토탈은 승/무/패 세 칸으로 나눠 W/D/L 각각의 합계를 바로 본다 — 합계가 '기준' 바로 다음(2026-10-10 사용자 지정), 핸승/핸무/무/역 세부는 그 뒤.
 // rows를 넘기면 그 줄들({title, wdl})을 그린다 — 상세보기 참고 줄 '전적' 요약표가 같은 표 모양을 쓴다(2026-10-10).
 export function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode, rows }) {
   if (!wdl && !rows) return null
@@ -228,6 +228,9 @@ export function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode, rows }) {
       <thead>
         <tr>
           <th className="row-label">기준</th>
+          <th className="col-w">승</th>
+          <th className="col-d">무</th>
+          <th className="col-l">패</th>
           {['W', 'D', 'L'].flatMap((key) =>
             RT_ORDER.map((lab) => (
               <th key={`${key}-${lab}`} className={GROUP_COL_CLASS[key]}>
@@ -235,9 +238,6 @@ export function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode, rows }) {
               </th>
             ))
           )}
-          <th className="col-w">승</th>
-          <th className="col-d">무</th>
-          <th className="col-l">패</th>
         </tr>
       </thead>
       <tbody>
