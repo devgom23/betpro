@@ -321,29 +321,15 @@
   flex: 1;
 }
 
-/* 분석맞음 — 경기 전 생각 오른쪽 토글(2026-09-19). 꺼져 있으면 흐린 테두리 버튼,
-   켜면 초록 칩(맞았다는 뜻 — 적중 노랑·형광펜 노랑과 겹치지 않게 초록). */
-.memo-ok-btn {
-  flex: none;
-  padding: 2px 8px;
-  border: 1px dashed var(--border-strong);
-  border-radius: 12px;
-  background: transparent;
+/* 경기 전 생각 앞 드롭박스 4개(판정·구간·상대·표본) — 앞에 아주 작은 이름표, 이름표와 칸은 붙은 한 덩어리(6-1장 4px) */
+.mypick-tag {
+  gap: 4px;
+}
+
+.mypick-tag-lab {
+  font-size: 10px;
   color: var(--text-muted);
-  font-size: 12px;
   white-space: nowrap;
-  cursor: pointer;
-}
-
-.memo-ok-btn:hover {
-  color: var(--text-secondary);
-}
-
-.memo-ok-btn.is-on {
-  border: 1px solid transparent;
-  background: var(--chip-green-bg);
-  color: var(--chip-green-fg);
-  font-weight: 700;
 }
 
 /* 표본 방향성 집계 — 경기 전 생각 왼쪽(2026-09-17). 색은 표본 섹션 드롭박스와 같은 짝. */
@@ -355,18 +341,6 @@
   cursor: default;
 }
 
-.verdict-lead {
-  flex: none;
-  margin-right: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: default;
-}
-
-.verdict-lead.is-blue { color: var(--chip-blue-fg); }
-.verdict-lead.is-red { color: var(--chip-red-fg); }
-.verdict-lead.is-gray { color: var(--chip-gray-fg); }
 
 .direction-tally-chip {
   display: inline-flex;

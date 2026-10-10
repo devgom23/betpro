@@ -6,7 +6,7 @@ import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { formatTime, formatDt, scoreClass, LEAGUE_LABELS_SHORT } from '../../utils/format'
 import { computeAutoVerdict, pickVerdictStyle, opinionStyle, marketVerdictPick, rtToText, myPickStyle } from '../LeagueTable/columnGroups'
-import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS, SAMPLE_DIRECTION_OPTIONS, sampleDirectionText } from '../../utils/pickOptions'
+import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS, SAMPLE_DIRECTION_OPTIONS, sampleDirectionText, MEMO_TAG_FIELDS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict, h2hVerdictRecent, RECENT_SEASONS, seasonIdx, wdlBreakdown } from '../../utils/h2hVerdict'
 import {
@@ -3003,8 +3003,8 @@ function MyPickBar({ row, onSavePick, memoLead }) {
   // memoPre = 경기 전에 적는 메모, memo = 결과가 나온 뒤 적는 회고 메모 — 시점이
   // 다른 별개의 글이라 따로 관리한다(결과반성 칸 앞/뒤에 하나씩 둔다).
   const [memoPre, setMemoPre] = useState(row.MEMO_PRE || '')
-  // 분석맞음 — 경기 전 생각이 결과로 맞았다는 표시(2026-09-19). 값은 '분석맞음' 또는 ''.
-  const [memoOk, setMemoOk] = useState(row.MEMO_OK || '')
+  // 경기 전 생각 앞 드롭박스 4개(판정·구간·상대·표본, 2026-10-10 사용자 지정) — 예전 '분석맞음' 버튼 자리를 대신한다.
+  const [tags, setTags] = useState(() => Object.fromEntries(MEMO_TAG_FIELDS.map((t) => [t.key, row[t.field] || ''])))
   const [savedMemoPre, setSavedMemoPre] = useState(row.MEMO_PRE || '')
   const [memo, setMemo] = useState(row.MEMO || '')
   const [savedMemo, setSavedMemo] = useState(row.MEMO || '')
@@ -3069,10 +3069,9 @@ function MyPickBar({ row, onSavePick, memoLead }) {
     onSavePick({ memoPre: next || null })
   }
 
-  function toggleMemoOk() {
-    const next = memoOk ? '' : '분석맞음'
-    setMemoOk(next)
-    onSavePick({ memoOk: next || null })
+  function handleTagChange(key, next) {
+    setTags((t) => ({ ...t, [key]: next }))
+    onSavePick({ [key]: next || null })
   }
 
   function saveMemoIfChanged(next) {
@@ -3169,6 +3168,16 @@ function MyPickBar({ row, onSavePick, memoLead }) {
       </div>
       <div className="mypick-bar-row">
         {memoLead}
+        {MEMO_TAG_FIELDS.map((t) => (
+          <label key={t.key} className="mypick-bar-field mypick-tag" title={`${t.label}에 대한 내 생각 — 참고용(판정·집계에 안 쓰임)`}>
+            {/* 값을 고른 뒤에도 무슨 칸인지 보이게 앞에 아주 작은 이름표(2026-10-10 사용자 지정) */}
+            <span className="mypick-tag-lab">{t.label}</span>
+            <select value={tags[t.key]} onChange={(e) => handleTagChange(t.key, e.target.value)}>
+              <option value="">선택</option>
+              {t.options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </label>
+        ))}
         <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-pre" title="경기가 열리기 전에 적어 두는 메모">
           <RichMemoInput
             value={memoPre}
@@ -3176,15 +3185,6 @@ function MyPickBar({ row, onSavePick, memoLead }) {
             onCommit={saveMemoPreIfChanged}
           />
         </div>
-        <button
-          type="button"
-          className={`memo-ok-btn${memoOk ? ' is-on' : ''}`}
-          onClick={toggleMemoOk}
-          aria-pressed={!!memoOk}
-          title={memoOk ? '분석맞음 표시 끄기' : '경기 전 생각이 결과로 맞았으면 눌러 표시'}
-        >
-          {memoOk ? '✓ 분석맞음' : '분석맞음'}
-        </button>
       </div>
     </div>
   )
@@ -3242,28 +3242,6 @@ function DirectionTally({ notes, keys, autoOf }) {
           {g.detail && <small>({g.detail})</small>}
         </span>
       ))}
-    </span>
-  )
-}
-
-// 최종 판정 — 상단 내픽 바에서 방향성 블루/레드 배지 바로 왼쪽에 글자로만(2026-09-26 사용자 지정:
-// "뱃지 말고 그냥 텍스트로 최종 판정만, '판정'이라는 단어도 삭제"). 값은 아래 판정 줄(PickBand)이
-// 최종으로 쓰는 것과 같다 — 배변 판정, 배변에 픽이 없으면 초기 판정(pick = fin.pick ?? init.pick).
-// 정무=파랑 · 플핸무=빨강 · 엇갈림(배변은 엇(정)/엇(플))=회색 글자색만(배경 없음).
-function VerdictLead({ row }) {
-  const init = phaseVerdict(row, false, '초기')
-  const fin = phaseVerdict(row, true, '배변')
-  const v = fin.pick ? fin : init
-  if (!v.pick) return null
-  const name = v.split ? v.display : v.pick
-  const cls = v.split ? 'is-gray' : DIR_SIDE[v.pick] === '정' ? 'is-blue' : 'is-red'
-  const pct = v.rate !== null && v.rate !== undefined ? ` · 표본 실측 ${v.rate.toFixed(2)}%(${(v.n ?? 0).toLocaleString()}건)` : ''
-  return (
-    <span
-      className={`verdict-lead ${cls}`}
-      title={`최종 ${v.label} 판정: ${name}${v.split ? ' (국내·해외 지표가 갈렸습니다)' : ''}${pct}`}
-    >
-      {name}
     </span>
   )
 }
@@ -5622,7 +5600,6 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           onSavePick={onSavePick}
           memoLead={(
             <>
-              <VerdictLead row={row} />
               <DirectionTally notes={sampleNotes} keys={SAMPLE_SECTION_KEYS} autoOf={sampleAutoOf} />
             </>
           )}
@@ -5949,6 +5926,7 @@ const PICK_FIELD_OF = {
   important: 'IMPORTANT', pick: 'MY_PICK', p: 'MY_P', hit: 'MY_HIT', memo: 'MEMO',
   memoPre: 'MEMO_PRE', memoOk: 'MEMO_OK', hitNote: 'MY_HIT_NOTE', pNote: 'MY_P_NOTE', reasonTag: 'REASON_TAG',
   oddsPick: 'MY_ODDS_PICK', oddsBet: 'MY_ODDS_BET', oddsMark: 'MY_ODDS_MARK',
+  ...Object.fromEntries(MEMO_TAG_FIELDS.map((t) => [t.key, t.field])),
 }
 
 function pickStateOf(row) {

@@ -6,6 +6,7 @@
 
 | 파일 | 내용 |
 |---|---|
+| `removed_mypick_bar.txt` | 상세보기 '경기 전 생각' 줄 앞의 판정 글자(VerdictLead)와 뒤의 '분석맞음' 버튼 코드·CSS(2026-10-10 사용자 요청으로 삭제 — 저장된 분석맞음 값은 DB에 그대로) |
 | `removed_css.css.txt` | `MatchDetailModal.css` 13곳 · `TripleSample.css` 3곳 — 클래스 14개(대부분 예전 '종합픽 카드'·'픽 막대' 스타일)와 그 설명 주석 2개 |
 
 ## 어떻게 골랐나

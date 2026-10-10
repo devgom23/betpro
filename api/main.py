@@ -1236,6 +1236,9 @@ def _attach_my_picks(records: list, username: str, code: str, scope: str) -> Non
         row["MY_ODDS_PICK"] = p["odds_pick"] if p else None
         row["MY_ODDS_BET"] = p["odds_bet"] if p else None
         row["MY_ODDS_MARK"] = p["odds_mark"] if p else None
+        # 경기 전 생각 앞 드롭박스 4개(2026-10-10) — 판정·구간·상대·표본
+        for col in ("tag_verdict", "tag_zone", "tag_rel", "tag_sample"):
+            row["MY_" + col.upper()] = p[col] if p else None
         row["MY_BET"] = "P" if key in bet_keys else None
 
 
@@ -1338,6 +1341,11 @@ class MyPickBody(BaseModel):
     odds_pick: Optional[str] = None
     odds_bet: Optional[str] = None
     odds_mark: Optional[str] = None   # 배당 표 초기 줄에서 찍은 칸 — 'KW,KHD'처럼 쉼표로 이은 칸 이름
+    # 경기 전 생각 앞 드롭박스 4개(2026-10-10) — 판정·구간·상대·표본에 대한 내 생각(참고용)
+    tag_verdict: Optional[str] = None
+    tag_zone: Optional[str] = None
+    tag_rel: Optional[str] = None
+    tag_sample: Optional[str] = None
     # 이번에 바꾼 칸 이름(PICK_COLUMNS 중) — 주면 그 칸만 저장하고 나머지는 DB 값을 유지한다.
     fields: Optional[list[str]] = None
 
@@ -1356,6 +1364,7 @@ def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_u
         body.starred, body.pick, body.hit, body.memo, body.p, body.reason_tag,
         body.memo_pre, body.odds_pick, body.odds_bet, body.fields, body.memo_ok, body.hit_note,
         body.p_note, body.odds_mark,
+        tags={"tag_verdict": body.tag_verdict, "tag_zone": body.tag_zone, "tag_rel": body.tag_rel, "tag_sample": body.tag_sample},
     )
     return {"ok": True}
 

@@ -463,6 +463,11 @@ def ensure_predlog_db(username: str) -> str:
             # 의견(hit) 드롭박스 왼쪽의 자유 텍스트 — 의견 태그와 별개의 참고용 메모
             # (2026-09-19 사용자 지정). 판정·집계에는 안 쓴다.
             con.execute("ALTER TABLE my_picks ADD COLUMN hit_note TEXT")
+        # 상세보기 '경기 전 생각' 앞 드롭박스 4개(2026-10-10 사용자 지정) — 판정·구간·상대·표본에 대한 내 생각.
+        # 참고용 태그라 판정·집계에는 안 쓴다(api/my_picks.py PICK_COLUMNS, web/src/utils/pickOptions.js MEMO_TAG_FIELDS).
+        for col in ("tag_verdict", "tag_zone", "tag_rel", "tag_sample"):
+            if col not in cols:
+                con.execute(f"ALTER TABLE my_picks ADD COLUMN {col} TEXT")
         if "p_note" not in cols:
             # 상세픽(p) 옆의 자유 텍스트 — 상세픽 태그와 별개의 참고용 메모(2026-09-20 사용자
             # 지정, hit_note와 같은 개념). 판정·집계에는 안 쓴다.

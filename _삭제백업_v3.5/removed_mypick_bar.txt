@@ -1,0 +1,65 @@
+/* 2026-10-10 상세보기 '경기 전 생각' 줄에서 지운 것 — 앞의 판정 글자(VerdictLead)와 뒤의 '분석맞음' 버튼.
+   저장된 분석맞음 값(my_picks.memo_ok)은 DB에 그대로 있다. 되살리려면 아래를 원래 파일에 다시 붙이고 MyPickBar에 연결. */
+
+// ── MatchDetailModal.jsx ──
+// 최종 판정 — 상단 내픽 바에서 방향성 블루/레드 배지 바로 왼쪽에 글자로만(2026-09-26 사용자 지정:
+// "뱃지 말고 그냥 텍스트로 최종 판정만, '판정'이라는 단어도 삭제"). 값은 아래 판정 줄(PickBand)이
+// 최종으로 쓰는 것과 같다 — 배변 판정, 배변에 픽이 없으면 초기 판정(pick = fin.pick ?? init.pick).
+// 정무=파랑 · 플핸무=빨강 · 엇갈림(배변은 엇(정)/엇(플))=회색 글자색만(배경 없음).
+function VerdictLead({ row }) {
+  const init = phaseVerdict(row, false, '초기')
+  const fin = phaseVerdict(row, true, '배변')
+  const v = fin.pick ? fin : init
+  if (!v.pick) return null
+  const name = v.split ? v.display : v.pick
+  const cls = v.split ? 'is-gray' : DIR_SIDE[v.pick] === '정' ? 'is-blue' : 'is-red'
+  const pct = v.rate !== null && v.rate !== undefined ? ` · 표본 실측 ${v.rate.toFixed(2)}%(${(v.n ?? 0).toLocaleString()}건)` : ''
+  return (
+    <span
+      className={`verdict-lead ${cls}`}
+      title={`최종 ${v.label} 판정: ${name}${v.split ? ' (국내·해외 지표가 갈렸습니다)' : ''}${pct}`}
+    >
+      {name}
+    </span>
+  )
+}
+
+
+/* ── MatchDetailModal.css ── */
+/* 분석맞음 — 경기 전 생각 오른쪽 토글(2026-09-19). 꺼져 있으면 흐린 테두리 버튼,
+   켜면 초록 칩(맞았다는 뜻 — 적중 노랑·형광펜 노랑과 겹치지 않게 초록). */
+.memo-ok-btn {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.memo-ok-btn:hover {
+  color: var(--text-secondary);
+}
+
+.memo-ok-btn.is-on {
+  border: 1px solid transparent;
+  background: var(--chip-green-bg);
+  color: var(--chip-green-fg);
+  font-weight: 700;
+}
+
+.verdict-lead {
+  flex: none;
+  margin-right: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.verdict-lead.is-blue { color: var(--chip-blue-fg); }
+.verdict-lead.is-red { color: var(--chip-red-fg); }
+.verdict-lead.is-gray { color: var(--chip-gray-fg); }
