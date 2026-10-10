@@ -163,7 +163,7 @@ export function RoundMissGames({ lg, season, round, mkt }) {
                     <td
                       key={i}
                       className={picks[`${g.ht}|${g.at}`]?.done ? 'rm-open rm-entered' : 'rm-open'}
-                      title={picks[`${g.ht}|${g.at}`]?.done ? '누르면 상세보기 — 밑줄 = 내픽·상세픽·의견·배당 클릭 중 입력한 것이 있는 경기' : '누르면 상세보기'}
+                      title={picks[`${g.ht}|${g.at}`]?.done ? '누르면 상세보기 — 밑줄 = 내픽·상세픽·의견·배당 클릭을 전부 입력한 경기' : '누르면 상세보기'}
                       onClick={() => setDetailRow({ S: season, R: `${round}R`, HT: g.ht, AT: g.at })}
                     >
                       {gameText(g)}<Sz />
