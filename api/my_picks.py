@@ -438,19 +438,20 @@ def upsert_round_miss_note(username: str, code: str, s: str, r: str, kind: str, 
 
 
 def list_round_picks(username: str, code: str, scope: str, s: str, round_no: int) -> dict:
-    """그 리그·시즌·라운드에서 내가 찍은 내픽·상세픽(P)·의견 — {'홈|원정': {pick, p, hit}}.
+    """그 리그·시즌·라운드에서 내가 찍은 내픽·상세픽(P)·의견 — {'홈|원정': {pick, p, hit, done}}(done = 배당 클릭까지 포함해 하나라도 입력함).
     라운드는 저장값이 '6R'이든 '6'이든 숫자만 비교한다(경기별 세팅값 표의 '내 픽' 줄)."""
     import re
     con = _connect(username)
     try:
-        rows = con.execute("SELECT R, HT, AT, pick, p, hit FROM my_picks WHERE code=? AND scope=? AND S=?",
+        rows = con.execute("SELECT R, HT, AT, pick, p, hit, odds_mark FROM my_picks WHERE code=? AND scope=? AND S=?",
                            (code, scope, normalize(s))).fetchall()
         out = {}
         for row in rows:
             if re.sub(r"\D", "", str(row["R"])) != str(round_no):
                 continue
-            if row["pick"] or row["p"] or row["hit"]:
-                out[f"{row['HT']}|{row['AT']}"] = {"pick": row["pick"] or "", "p": row["p"] or "", "hit": row["hit"] or ""}
+            # 내픽·상세픽·의견·배당 클릭 중 하나라도 입력했으면 done — 경기 칸 글자를 파랗게 하는 표시(2026-10-10 사용자 지정)
+            if row["pick"] or row["p"] or row["hit"] or row["odds_mark"]:
+                out[f"{row['HT']}|{row['AT']}"] = {"pick": row["pick"] or "", "p": row["p"] or "", "hit": row["hit"] or "", "done": True}
         return out
     finally:
         con.close()
