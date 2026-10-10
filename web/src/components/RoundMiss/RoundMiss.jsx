@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import { LEAGUE_LABEL, useRoundDetail, useRoundMissSummary } from './useRoundMiss'
 import { myPickStyle } from '../LeagueTable/columnGroups'
@@ -110,7 +110,7 @@ export function RoundMissGames({ lg, season, round, mkt, noHead }) {
   // 내 픽 줄은 '정(핸무/P-고민)'처럼 길 수 있어 그것까지 재서 가장 긴 것을 쓴다.
   const longest = sel.reduce((best, g) => {
     const pk = picks[`${g.ht}|${g.at}`]
-    const cands = [`${g.ht} vs ${g.at}`, `${g.ht} 0:0 ${g.at}`, pk ? pickText(pk) : '']
+    const cands = [`${g.ht} vs ${g.at}`, `${g.ht} 0:0 ${g.at}`, pk ? pickText(pk) : '', ...oddsLines(g).map((l) => l.map((x) => x.t).join(' / '))]
     return cands.reduce((b, txt) => (textWidth(txt) > textWidth(b) ? txt : b), best)
   }, '')
   const Sz = () => <span className="rm-sizer" aria-hidden="true">{longest}</span>
@@ -175,6 +175,31 @@ export function RoundMissGames({ lg, season, round, mkt, noHead }) {
                       <GameLabel g={g} /><Sz />
                     </td>
                   ))}
+                </tr>
+                <tr>
+                  <th className="rm-lab">배당<small>국내 초기 · 핸디 ±1</small></th>
+                  {sel.map((g, i) => {
+                    const marks = new Set(picks[`${g.ht}|${g.at}`]?.marks || [])
+                    return (
+                      <td key={i} className={dc(i, 'rm-odds-cell')}>
+                        {oddsLines(g).map((line, li) => (
+                          <span key={li} className="rm-odds-line" title={li === 0 ? '국내 초기 승/무/패' : `국내 초기 핸디 ${khText(g) || ''} 승/무/패`}>
+                            {/* 한 줄 = 기준점 칸 · 승 · / · 무 · / · 패 · 같은 폭의 빈 칸. 양끝 칸 폭이 같아 숫자가 가운데에 오고,
+                                두 줄의 승·무·패는 자릿수와 상관없이 같은 칸에 놓인다 */}
+                            <span className="rm-odds-pre">{li === 1 ? khText(g) : ''}</span>
+                            {line.map((x, xi) => (
+                              <Fragment key={x.k}>
+                                {xi > 0 && <span className="rm-odds-sep">/</span>}
+                                <span className={`rm-odds-n${marks.has(x.k) ? ' rm-odds-mark' : ''}`}>{x.t}</span>
+                              </Fragment>
+                            ))}
+                            <span className="rm-odds-pre" aria-hidden="true" />
+                          </span>
+                        ))}
+                        <Sz />
+                      </td>
+                    )
+                  })}
                 </tr>
                 <tr>
                   <th className="rm-lab">내 예측<small>(판정이 맞을지)</small></th>
@@ -407,6 +432,17 @@ function MyPick({ pk }) {
     </span>
   )
 }
+
+// 배당 줄(2026-10-10 사용자 지정) — 국내 초기 승/무/패 한 줄, 핸디(±1) 승/무/패 한 줄. 서버 g.o = [KW,KD,KL,KHW,KHD,KHL,KH].
+// 상세보기 배당 표에서 찍은 칸(odds_mark의 칸 이름)은 노랑으로 — 국내 칸(KW~KHL)만 이 줄에 있다.
+const ODDS_KEYS = [['KW', 'KD', 'KL'], ['KHW', 'KHD', 'KHL']]
+const oddsLines = (g) => ODDS_KEYS.map((keys, li) => keys.map((k, i) => {
+  const v = g.o?.[li * 3 + i]
+  return { k, t: v === null || v === undefined ? '-' : v.toFixed(2) }
+}))
+
+// 핸디 기준점 — 둘째 줄 앞에 '-1)'·'+1)'(닫는 괄호만, 2026-10-10 사용자 지정). 기준점이 없으면 빈 글자.
+const khText = (g) => (g.o?.[6] === null || g.o?.[6] === undefined ? '' : `${g.o[6] > 0 ? '+' : ''}${g.o[6]})`)
 
 // 경기 칸 — 결과가 있으면 점수를 팀 사이에('아스널 1:0 리즈'), 없으면 'vs'.
 // 정배 팀 파랑 · 역배 팀 빨강(2026-10-10 사용자 지정). 정배는 국내 초기 배당 기준(서버 round_miss._home_fav), 못 가리면 색 없음.

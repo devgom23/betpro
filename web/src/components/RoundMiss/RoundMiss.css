@@ -311,3 +311,47 @@
   color: var(--chip-yellow-fg);
   font-weight: 700;
 }
+
+/* 배당 줄(2026-10-10 사용자 지정) — 국내 초기 승/무/패 한 줄 · 핸디(±1) 승/무/패 한 줄. 상세보기에서 찍은 칸은 노랑.
+   한 줄 = 기준점 칸 · 승 · / · 무 · / · 패 · 빈 칸(7칸 격자). 양끝 칸 폭이 같아 숫자가 칸 가운데에 오고,
+   두 줄의 승·무·패는 자릿수(1.09 / 12.50)와 상관없이 위아래 같은 칸에 놓인다. 칸 너비는 이 격자(약 130px)가 정한다(2026-10-10 17em → 130px로 줄임). */
+.rm-odds-cell {
+  white-space: nowrap;
+}
+
+.rm-odds-line {
+  display: grid;
+  grid-template-columns: 1.6em 2.5em auto 2.5em auto 2.5em 1.6em;
+  letter-spacing: -0.02em;       /* 5글자 숫자(12.50)가 2.5em 칸에 들어가게 아주 조금 좁힘 */
+  align-items: baseline;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.rm-odds-line + .rm-odds-line {
+  margin-top: 2px;
+}
+
+.rm-odds-n {
+  text-align: center;
+}
+
+.rm-odds-sep {
+  padding: 0 1px;
+  color: var(--text-muted);
+}
+
+.rm-odds-pre {
+  text-align: right;
+  padding-right: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.rm-odds-mark {
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}

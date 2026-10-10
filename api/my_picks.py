@@ -459,7 +459,8 @@ def list_round_picks(username: str, code: str, scope: str, s: str, round_no: int
             # 긋는 표시(2026-10-10 사용자 지정: 하나라도 빠지면 밑줄 없음. 배당 클릭을 풀거나 드롭박스를 '선택'으로 되돌리면 바로 빠진다).
             if row["pick"] or row["p"] or row["hit"] or row["odds_mark"]:
                 done = all(row[c] for c in ("pick", "p", "hit", "odds_mark", "tag_verdict", "tag_zone", "tag_rel", "tag_sample"))
-                out[f"{row['HT']}|{row['AT']}"] = {"pick": row["pick"] or "", "p": row["p"] or "", "hit": row["hit"] or "", "done": done}
+                out[f"{row['HT']}|{row['AT']}"] = {"pick": row["pick"] or "", "p": row["p"] or "", "hit": row["hit"] or "", "done": done,
+                                                    "marks": [m for m in str(row["odds_mark"] or "").split(",") if m]}   # 배당 줄 노랑 표시용
         return out
     finally:
         con.close()
