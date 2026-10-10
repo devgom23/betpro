@@ -281,12 +281,24 @@ function MatchChip({ label, tone, title, children, onClick, extraClass }) {
 // 왜 내렸나 — 단통 플핸 기준으로 '마감 시장 예상보다 더 맞힌 몫'이 전부 ±2%p 안이었다(15-16~ 22,589경기,
 // 메모리 reference-match-chip-audit): 똥배 +0.7 · 기대점수 +0.4 · 전적 −0.9~−0.2 · 무 −1.0/+0.7 · 해외만 반전 +0.9 · 해배동배 −1.0.
 function RefItem({ label, tone, title, compact, pop, children }) {
+  // 호버 상자가 스크롤 영역(상세보기 본문) 오른쪽·왼쪽 밖으로 넘치지 않게, 뜰 때 위치를 안쪽으로 당긴다(2026-10-10 사용자 지정).
+  const popRef = useRef(null)
+  const fitPop = (e) => {
+    const box = popRef.current
+    const bound = e.currentTarget.closest('.detail-modal-scroll')
+    if (!box || !bound) return
+    box.style.left = '0px'
+    const bb = bound.getBoundingClientRect()
+    const pb = box.getBoundingClientRect()
+    const shift = Math.min(0, bb.right - 8 - pb.right)
+    box.style.left = `${Math.max(shift, bb.left + 8 - pb.left)}px`
+  }
   return (
-    <span className={`${compact ? 'match-ref-item match-ref-compact' : 'match-ref-item'}${pop ? ' match-ref-has-pop' : ''}`} title={pop ? undefined : title}>
+    <span className={`${compact ? 'match-ref-item match-ref-compact' : 'match-ref-item'}${pop ? ' match-ref-has-pop' : ''}`} title={pop ? undefined : title} onMouseEnter={pop ? fitPop : undefined}>
       {label !== undefined && <span className="match-ref-label">{label}</span>}
       <strong style={tone ? { color: `var(--chip-${tone}-fg)` } : undefined}>{children}</strong>
       {/* 마우스를 올리면 뜨는 상자(2026-10-10 사용자 지정) — 글자 툴팁(title)은 표를 못 담아서 따로 그린다 */}
-      {pop && <span className="match-ref-pop">{pop}</span>}
+      {pop && <span className="match-ref-pop" ref={popRef}>{pop}</span>}
     </span>
   )
 }
@@ -382,19 +394,24 @@ function foreignTieRefs(row) {
   ]
 }
 
-// 동배 — 같은 회차에 국내 정배배당이 이 경기와 똑같았던 다른 경기가 있으면 '동배 1.27(무)'(2026-10-10 사용자 지정).
-// 괄호 = 그 동배당 경기들의 결과(끝난 것만, 여러 개면 / 로 이음). 마우스를 올리면 아래 '회차 동배당' 섹션과 같은 내용이 상자로 뜬다.
+// 동배 — 같은 회차에 국내 배당이 이 경기와 똑같았던 다른 경기가 있으면 '동배 정 1.27(무)' · '플 1.47'(2026-10-10 사용자 지정).
+// 정 = 정배(승/무/패) 쪽 배당, 플 = 플핸(핸디) 쪽 배당. 괄호 = 그 동배당 경기들의 결과(끝난 것만, 여러 개면 / 로 이음 —
+// 결과가 하나도 없으면 괄호 없이 배당만). 마우스를 올리면 아래 '회차 동배당' 섹션과 같은 내용이 상자로 뜬다.
 // 배변 동배당이 있으면 그것을, 없으면 초기 동배당을 쓴다.
 function sameOddsRefs(sameOdds) {
-  const fav = (sameOdds?.groups || []).filter((g) => g.kind === 'fav' && g.games.length)
-  const g = fav.find((x) => x.phase === '배변') || fav[0]
-  if (!g) return []
-  const res = g.games.map((gm) => rtLabel(gm.rt)).filter(Boolean)
-  return [
-    <RefItem key="sameodds" label="동배" pop={<SameOddsColumns sameOdds={sameOdds} />}>
-      {g.odds}{res.length ? `(${res.join('/')})` : ''}
-    </RefItem>,
-  ]
+  const out = []
+  for (const [kind, name] of [['fav', '정'], ['pl', '플']]) {
+    const groups = (sameOdds?.groups || []).filter((g) => g.kind === kind && g.games.length)
+    const g = groups.find((x) => x.phase === '배변') || groups[0]
+    if (!g) continue
+    const res = g.games.map((gm) => rtLabel(gm.rt)).filter(Boolean)
+    out.push(
+      <RefItem key={`sameodds-${kind}`} label={out.length ? '' : '동배'} pop={<SameOddsColumns sameOdds={sameOdds} />}>
+        {name} {g.odds}{res.length ? `(${res.join('/')})` : ''}
+      </RefItem>,
+    )
+  }
+  return out
 }
 
 // 시즌 막판 뱃지 — '시즌 마지막 2라운드 · 정무 주의'. 규칙·실측 근거는 utils/seasonStake.js, 계산은 api/standings.py.
