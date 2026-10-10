@@ -2990,7 +2990,8 @@ const TAG_PL = new Set(['플핸무', '플', '플(약)'])
 function tagClass(key, value, row) {
   if (TAG_JUNG.has(value)) return 'is-jung'
   if (TAG_PL.has(value)) return 'is-pl'
-  if (key === 'tagRel' && value) {
+  // '판정못함'처럼 팀을 고르지 않은 값은 색 없음
+  if (key === 'tagRel' && (value.startsWith('홈팀') || value.startsWith('원정팀'))) {
     const hf = homeIsFav(row)
     if (hf === null) return undefined
     const strongIsHome = value.startsWith('홈팀')
@@ -5787,15 +5788,6 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
                     value={sampleNotes[key]?.memo}
                     onSave={(memo) => saveSampleNote(key, { memo: memo || null })}
                   />
-                  <button
-                    type="button"
-                    className={`memo-ok-btn${sampleNotes[key]?.ok ? ' is-on' : ''}`}
-                    onClick={() => saveSampleNote(key, { ok: sampleNotes[key]?.ok ? null : '분석맞음' })}
-                    aria-pressed={!!sampleNotes[key]?.ok}
-                    title={sampleNotes[key]?.ok ? '분석맞음 표시 끄기' : '이 표본의 의견이 결과로 맞았으면 눌러 표시'}
-                  >
-                    {sampleNotes[key]?.ok ? '✓ 분석맞음' : '분석맞음'}
-                  </button>
                 </>
               )}
             </h3>

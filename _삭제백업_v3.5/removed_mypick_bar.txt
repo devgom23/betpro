@@ -63,3 +63,16 @@ function VerdictLead({ row }) {
 .verdict-lead.is-blue { color: var(--chip-blue-fg); }
 .verdict-lead.is-red { color: var(--chip-red-fg); }
 .verdict-lead.is-gray { color: var(--chip-gray-fg); }
+
+
+// ── 같은 날 추가로 지운 것: 표본 섹션 7개(정배·플핸·해배 표본, 국·해 승+패·승+무+패) 제목 줄의 '분석맞음' 버튼 ──
+// 저장값(sample_notes.ok)은 DB에 그대로. 위 .memo-ok-btn CSS를 함께 되살려야 모양이 나온다.
+                  <button
+                    type="button"
+                    className={`memo-ok-btn${sampleNotes[key]?.ok ? ' is-on' : ''}`}
+                    onClick={() => saveSampleNote(key, { ok: sampleNotes[key]?.ok ? null : '분석맞음' })}
+                    aria-pressed={!!sampleNotes[key]?.ok}
+                    title={sampleNotes[key]?.ok ? '분석맞음 표시 끄기' : '이 표본의 의견이 결과로 맞았으면 눌러 표시'}
+                  >
+                    {sampleNotes[key]?.ok ? '✓ 분석맞음' : '분석맞음'}
+                  </button>

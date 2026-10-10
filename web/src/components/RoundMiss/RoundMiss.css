@@ -260,7 +260,8 @@
   opacity: 0.8;
 }
 
-.rm-pred.rm-p-sure { color: var(--chip-blue-fg); font-weight: 700; }
+/* 확신 — 노랑(2026-10-10 사용자 지정, 예전 파랑) */
+.rm-pred.rm-p-sure { color: var(--chip-yellow-fg); font-weight: 700; }
 .rm-pred.rm-p-likely { color: var(--chip-green-fg); font-weight: 700; }
 .rm-pred.rm-p-unsure { color: var(--chip-gray-fg); }
 .rm-pred.rm-p-unlikely { color: var(--chip-red-fg); font-weight: 700; }
@@ -303,4 +304,10 @@
 /* 경기별 세팅값 — 요일(토·일·월…)이 바뀌는 곳에 굵은 세로선(2026-10-10 사용자 지정). 팀 흐름 표 묶음 구분선(tf-gl)과 같은 두께·색 */
 .rm-table .rm-day-start {
   border-left: 2px solid var(--border-strong);
+}
+
+/* 내 픽 줄 — 의견이 축정·축플이면 그 글자만 노랑(2026-10-10 사용자 지정) */
+.rm-mypick .rm-axis {
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
 }

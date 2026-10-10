@@ -399,7 +399,13 @@ const hitText = (h) => (h ? h.replace(/^축-/, '축') : '－')
 const pickText = (pk) => `${pk.pick || '－'}(${pk.p || '－'} / ${hitText(pk.hit)})`
 function MyPick({ pk }) {
   if (!pk || (!pk.pick && !pk.p && !pk.hit)) return <span className="gray">—</span>
-  return <span className="rm-mypick" title="내가 찍은 내픽(상세픽/의견) — 고치는 곳은 리그 표·상세보기">{pickText(pk)}</span>
+  // 의견이 축정·축플(축 찍은 경기)이면 그 글자만 노랑(2026-10-10 사용자 지정)
+  const h = hitText(pk.hit)
+  return (
+    <span className="rm-mypick" title="내가 찍은 내픽(상세픽/의견) — 고치는 곳은 리그 표·상세보기">
+      {pk.pick || '－'}({pk.p || '－'} / {h.startsWith('축') ? <span className="rm-axis">{h}</span> : h})
+    </span>
+  )
 }
 
 // 경기 칸 — 결과가 있으면 점수를 팀 사이에('아스널 1:0 리즈'), 없으면 'vs'.
