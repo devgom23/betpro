@@ -752,8 +752,18 @@
   font-weight: 700;
 }
 
-.same-odds-rt.is-pending {
-  background: transparent;
+/* 내픽(2026-10-10 — 예전 '예정' 자리). 색은 리그 표 내픽 칸과 같은 myPickStyle(정 쪽 파랑·플 쪽 빨강), 그 밖은 기본 글자 */
+.same-odds-pick {
+  flex: none;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.same-odds-pick.is-none {
   font-weight: 400;
   color: var(--text-muted);
 }

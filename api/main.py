@@ -749,14 +749,28 @@ def league_rows(code: str,
 # 안 보이거나(낡은 값) 메뉴마다 붙는 컬럼이 달랐다(통합DB는 EV·내픽 없음, 이번주 픽은
 # 결과반성·배답픽·배답벳 없음). 행 모양은 리그 조회(/api/leagues/{code})와 똑같다.
 
-def _same_odds_for(row: dict) -> Optional[dict]:
+def _same_odds_for(row: dict, username: str | None = None) -> Optional[dict]:
     """상세보기 '같은 회차 동배당 결과' 섹션의 재료 — 같은 프로토 회차(금~화 / 수~목)에
     국내 정배배당·플핸(언더독 핸디)배당이 똑같은 6대리그 다른 경기. 초기·배변 양쪽을
     따로 찾는다(2026-09-23 사용자 지정).
     계산은 api/same_odds.py 한 곳에서만 한다 — 리그 표의 이중밑줄과 이 섹션이 서로 다른
     규칙으로 갈리면 안 되기 때문이다(예전엔 여기서 베팅내역 회차 규칙(금~월)으로 따로
     긁어서, 수요일 경기가 주말 경기와 한 회차로 묶이는 문제가 있었다)."""
-    return SAMEODDS.for_match(row)
+    out = SAMEODDS.for_match(row)
+    if out and username:
+        # 동배당 경기마다 내 내픽을 붙인다(2026-10-10 사용자 지정 — 경기 줄 끝 '예정' 자리에 내픽, 결과가 나오면 내픽 옆에 결과).
+        # for_match는 매번 새 dict를 만들어 주므로 여기서 붙여도 캐시는 안 바뀐다. 라운드는 '8R'·'8' 모두 숫자만 비교한다.
+        dig = lambda v: re.sub(r"\D", "", str(v or ""))  # noqa: E731
+        picks: dict[str, dict] = {}
+        for g in out["groups"]:
+            for gm in g["games"]:
+                code = gm.get("code")
+                if code not in picks:
+                    picks[code] = {(MYPICKS.normalize(p["S"]), dig(p["R"]), MYPICKS.normalize(p["HT"]), MYPICKS.normalize(p["AT"])): p.get("pick")
+                                   for p in MYPICKS.list_my_picks(username, code, PATHS.SCOPE_MASTER) if p.get("pick")}
+                gm["pick"] = picks[code].get((MYPICKS.normalize(gm.get("S")), dig(gm.get("round")),
+                                              MYPICKS.normalize(gm.get("home")), MYPICKS.normalize(gm.get("away"))))
+    return out
 
 
 @app.get("/api/match_detail")
@@ -784,7 +798,7 @@ def match_detail(code: str,
     records = DATA.df_to_records(df.loc[[idx]])
     _attach_my_picks(records, user["username"], code, scope)
     row = records[0]
-    same_odds = _same_odds_for(row) if scope == PATHS.SCOPE_MASTER and code in PATHS.VALID_LEAGUES else None
+    same_odds = _same_odds_for(row, user["username"]) if scope == PATHS.SCOPE_MASTER and code in PATHS.VALID_LEAGUES else None
     # 표본 방향성 시스템 판정(저장값) — 공식 6대리그만. 아직 계산 전이면 None(화면이 직접 계산).
     sample_dir = None
     if scope == PATHS.SCOPE_MASTER and code in PATHS.VALID_LEAGUES:

@@ -104,7 +104,7 @@ export default function MainPage() {
         >
           <img className="app-logo" src="/logo.png" alt="BET PRO W" />
           <span className="app-name">BET PRO W</span>
-          <span className="app-version-chip">v3.1</span>
+          <span className="app-version-chip">v3.5</span>
         </button>
 
         <div className="scope-toggle">

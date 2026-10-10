@@ -22,6 +22,8 @@
   플핸 : 언더독 쪽 핸디배당(승 > 패면 홈이 언더독 → 핸디승, 아니면 핸디패).
   초기(KW…)와 배변(EKW…) **양쪽 다** 따로 묶는다(2026-09-23 사용자 지정 — 배변으로만
   같아지는 경기가 실제로 있다). 소수 둘째 자리 문자열로 맞춰 비교한다.
+  단 배변은 **실제로 움직인 경기만**(2026-10-10 — 안 움직여도 배변 칸에 초기 값이 들어 있어 같은 묶음이
+  배변 줄에 또 나왔다. _moved 참고).
   K1/K2(내 데이터)는 빼고 6대리그끼리만 본다.
 """
 import re
@@ -70,9 +72,24 @@ def _num(v):
     return None if pd.isna(f) or f <= 0 else f
 
 
+def _moved(row, kind: str) -> bool:
+    """배변이 실제로 움직였나 — 국배는 안 움직여도 배변 칸(EKW…)에 초기와 같은 값이 들어 있다(6대리그 배변 30,122경기 중
+    22,464경기). 정배 묶음은 승·무·패, 플핸 묶음은 핸디 승·무·패 세 값이 초기와 모두 같으면 '배변 안 됨'으로 본다
+    (2026-10-10 사용자 지정 — 배변이 없는데 초기와 같은 동배당이 배변 줄에 또 나왔다. 표본의 '배변이 안되었습니다'와 같은 생각)."""
+    cols = ("KW", "KD", "KL") if kind == "fav" else ("KHW", "KHD", "KHL")
+    for c in cols:
+        a, b = _num(row.get(c)), _num(row.get("E" + c))
+        if (None if a is None else round(a, 2)) != (None if b is None else round(b, 2)):
+            return True
+    return False
+
+
 def odds_of(row, prefix: str, kind: str) -> str | None:
     """그 경기의 '정배' 또는 '플핸' 배당값(문자열). 못 가리면 None.
-    prefix='' 초기 · 'E' 배변. 화면(LeagueTable favOddsKey/plOddsKey)과 같은 규칙."""
+    prefix='' 초기 · 'E' 배변. 화면(LeagueTable favOddsKey/plOddsKey)과 같은 규칙.
+    배변(E)은 초기에서 실제로 움직였을 때만 — 안 움직였으면 None(배변 동배당 묶음에 넣지 않는다)."""
+    if prefix == "E" and not _moved(row, kind):
+        return None
     w, l = _num(row.get(prefix + "KW")), _num(row.get(prefix + "KL"))
     if w is None or l is None or w == l:
         return None
@@ -112,7 +129,7 @@ def _build(db: str) -> dict:
 def index(db: str | None = None) -> dict:
     """회차별 동배당 묶음(캐시). DB가 바뀌면 data_access 캐시가 알아서 다시 만든다."""
     db = db or PATHS.get_master_db()
-    return DATA.cached_derive(db, "same_odds_index_v2", lambda: _build(db),
+    return DATA.cached_derive(db, "same_odds_index_v3", lambda: _build(db),
                               tables=tuple(PATHS.LEAGUES))
 
 
@@ -162,6 +179,7 @@ def for_match(row: dict, db: str | None = None) -> dict | None:
             trio, hit = _trio(g, prefix, kind)
             games.append({
                 "league": PATHS.LEAGUE_LABEL.get(g.get("L"), g.get("L")),
+                "code": g.get("L"), "S": str(g.get("S") or "").strip(),   # 내픽 찾기용(main._same_odds_for)
                 "round": str(g.get("R") or "").strip(),
                 "dt": g.get("DT"), "tm": g.get("TM"),
                 "home": str(g.get("HT") or "").strip(),

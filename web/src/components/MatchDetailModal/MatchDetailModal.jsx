@@ -5,7 +5,7 @@ import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { formatTime, formatDt, scoreClass, LEAGUE_LABELS_SHORT } from '../../utils/format'
-import { computeAutoVerdict, pickVerdictStyle, opinionStyle, marketVerdictPick, rtToText } from '../LeagueTable/columnGroups'
+import { computeAutoVerdict, pickVerdictStyle, opinionStyle, marketVerdictPick, rtToText, myPickStyle } from '../LeagueTable/columnGroups'
 import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS, SAMPLE_DIRECTION_OPTIONS, sampleDirectionText } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
 import { h2hVerdict, h2hVerdictRecent, RECENT_SEASONS } from '../../utils/h2hVerdict'
@@ -2795,9 +2795,11 @@ function SameOddsGame({ g }) {
           ))})
         </span>
       )}
-      {done
-        ? <span className={`same-odds-rt rt-${SAME_ODDS_RT_CLASS.has(rt) ? rt : '무'}`}>{g.hs}:{g.as_}{rt ? ` ${rt}` : ''}</span>
-        : <span className="same-odds-rt is-pending">예정</span>}
+      {/* 내픽(2026-10-10 사용자 지정) — 예전 '예정' 자리. 없으면 '-', 결과가 나오면 내픽 옆에 결과. 색은 리그 표 내픽 칸과 같다. */}
+      {g.pick
+        ? <span className="same-odds-pick" style={myPickStyle(g.pick) || undefined} title="이 경기에 찍은 내 내픽">{g.pick}</span>
+        : <span className="same-odds-pick is-none" title="이 경기에 찍은 내픽이 없습니다">-</span>}
+      {done && <span className={`same-odds-rt rt-${SAME_ODDS_RT_CLASS.has(rt) ? rt : '무'}`}>{g.hs}:{g.as_}{rt ? ` ${rt}` : ''}</span>}
     </div>
   )
 }
