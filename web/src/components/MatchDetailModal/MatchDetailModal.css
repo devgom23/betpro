@@ -332,6 +332,19 @@
   white-space: nowrap;
 }
 
+/* 정 쪽 값(정무·정·정(약))은 칸 배경 파랑, 플 쪽 값(플핸무·플·플(약))은 빨강 — 리그 표 내픽 칸과 같은 색 */
+.mypick-bar-field select.is-jung {
+  background: var(--chip-blue-bg);
+  color: var(--chip-blue-fg);
+  font-weight: 700;
+}
+
+.mypick-bar-field select.is-pl {
+  background: var(--chip-red-bg);
+  color: var(--chip-red-fg);
+  font-weight: 700;
+}
+
 /* 표본 방향성 집계 — 경기 전 생각 왼쪽(2026-09-17). 색은 표본 섹션 드롭박스와 같은 짝. */
 .direction-tally {
   display: inline-flex;

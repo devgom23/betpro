@@ -2982,6 +2982,10 @@ function ScheduleContextSection({ ctx, note, onSaveNote }) {
   )
 }
 
+// 경기 전 생각 앞 드롭박스 — 정 쪽 값은 칸 배경 파랑, 플 쪽 값은 빨강(2026-10-10 사용자 지정, 리그 표 내픽 칸과 같은 짝)
+const TAG_JUNG = new Set(['정무', '정', '정(약)'])
+const TAG_PL = new Set(['플핸무', '플', '플(약)'])
+
 function MyPickBar({ row, onSavePick, memoLead }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
   const [p, setP] = useState(row.MY_P || '')
@@ -3083,6 +3087,31 @@ function MyPickBar({ row, onSavePick, memoLead }) {
 
   return (
     <div className="mypick-bar">
+      {/* 줄 순서(2026-10-10 사용자 지정) — 1줄: 뱃지·판정/구간/상대/표본·경기 전 생각, 2줄: 내픽~결과반성 */}
+      <div className="mypick-bar-row">
+        {memoLead}
+        {MEMO_TAG_FIELDS.map((t) => (
+          <label key={t.key} className="mypick-bar-field mypick-tag" title={`${t.label}에 대한 내 생각 — 참고용(판정·집계에 안 쓰임)`}>
+            {/* 값을 고른 뒤에도 무슨 칸인지 보이게 앞에 아주 작은 이름표(2026-10-10 사용자 지정) */}
+            <span className="mypick-tag-lab">{t.label}</span>
+            <select
+              className={TAG_JUNG.has(tags[t.key]) ? 'is-jung' : TAG_PL.has(tags[t.key]) ? 'is-pl' : undefined}
+              value={tags[t.key]}
+              onChange={(e) => handleTagChange(t.key, e.target.value)}
+            >
+              <option value="">선택</option>
+              {t.options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </label>
+        ))}
+        <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-pre" title="경기가 열리기 전에 적어 두는 메모">
+          <RichMemoInput
+            value={memoPre}
+            placeholder="경기 전 생각을 입력해주세요"
+            onCommit={saveMemoPreIfChanged}
+          />
+        </div>
+      </div>
       <div className="mypick-bar-row">
         <label className="mypick-bar-field">
           <select value={pick} onChange={handlePickChange}>
@@ -3163,26 +3192,6 @@ function MyPickBar({ row, onSavePick, memoLead }) {
             value={memo}
             placeholder="결과 반성 의견"
             onCommit={saveMemoIfChanged}
-          />
-        </div>
-      </div>
-      <div className="mypick-bar-row">
-        {memoLead}
-        {MEMO_TAG_FIELDS.map((t) => (
-          <label key={t.key} className="mypick-bar-field mypick-tag" title={`${t.label}에 대한 내 생각 — 참고용(판정·집계에 안 쓰임)`}>
-            {/* 값을 고른 뒤에도 무슨 칸인지 보이게 앞에 아주 작은 이름표(2026-10-10 사용자 지정) */}
-            <span className="mypick-tag-lab">{t.label}</span>
-            <select value={tags[t.key]} onChange={(e) => handleTagChange(t.key, e.target.value)}>
-              <option value="">선택</option>
-              {t.options.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </label>
-        ))}
-        <div className="mypick-bar-field mypick-bar-memo mypick-bar-memo-pre" title="경기가 열리기 전에 적어 두는 메모">
-          <RichMemoInput
-            value={memoPre}
-            placeholder="경기 전 생각을 입력해주세요"
-            onCommit={saveMemoPreIfChanged}
           />
         </div>
       </div>
