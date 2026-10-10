@@ -113,6 +113,9 @@ export function RoundMissGames({ lg, season, round, mkt }) {
     return cands.reduce((b, txt) => (textWidth(txt) > textWidth(b) ? txt : b), best)
   }, '')
   const Sz = () => <span className="rm-sizer" aria-hidden="true">{longest}</span>
+  // 요일이 바뀌는 첫 경기 칸에 굵은 왼쪽 선(2026-10-10 사용자 지정 — 토·일·월 구분). 머리글부터 내 픽 줄까지 모든 줄에 같은 칸.
+  const dayStart = (i) => i > 0 && sel[i].wd !== sel[i - 1].wd
+  const dc = (i, cls = '') => [cls, dayStart(i) ? 'rm-day-start' : ''].filter(Boolean).join(' ') || undefined
 
   return (
     <>
@@ -128,25 +131,25 @@ export function RoundMissGames({ lg, season, round, mkt }) {
               <thead>
                 <tr>
                   <th className="rm-lab" rowSpan={2}>{round} Round</th>
-                  {groupByDay(sel).map((g) => (
-                    <th key={g.key} colSpan={g.n} className={g.wd === '토' ? 'blue' : g.wd === '일' ? 'red' : ''}>{g.wd}요일</th>
+                  {groupByDay(sel).map((g, gi) => (
+                    <th key={g.key} colSpan={g.n} className={[g.wd === '토' ? 'blue' : g.wd === '일' ? 'red' : '', gi > 0 ? 'rm-day-start' : ''].filter(Boolean).join(' ') || undefined}>{g.wd}요일</th>
                   ))}
                 </tr>
-                <tr>{sel.map((g, i) => <th key={i} title={`${g.ht} vs ${g.at}`}>{i + 1}경기<Sz /></th>)}</tr>
+                <tr>{sel.map((g, i) => <th key={i} className={dc(i)} title={`${g.ht} vs ${g.at}`}>{i + 1}경기<Sz /></th>)}</tr>
               </thead>
               <tbody>
                 <tr>
                   <th className="rm-lab">판정<small>(배변 시스템 판정)</small></th>
-                  {sel.map((g, i) => <td key={i} className={missOf(g.v, g.rt) && mkt === 'v' ? 'rm-bad' : ''}><Setting side={g.v} split={g.vs} /><Sz /></td>)}
+                  {sel.map((g, i) => <td key={i} className={dc(i, missOf(g.v, g.rt) && mkt === 'v' ? 'rm-bad' : '')}><Setting side={g.v} split={g.vs} /><Sz /></td>)}
                 </tr>
                 <tr>
                   <th className="rm-lab">국배 세팅값</th>
-                  {sel.map((g, i) => <td key={i} className={missOf(g.k, g.rt) && mkt === 'k' ? 'rm-bad' : ''}><Setting side={g.k} weak={g.kw} /><Sz /></td>)}
+                  {sel.map((g, i) => <td key={i} className={dc(i, missOf(g.k, g.rt) && mkt === 'k' ? 'rm-bad' : '')}><Setting side={g.k} weak={g.kw} /><Sz /></td>)}
                 </tr>
                 <tr>
                   <th className="rm-lab">결과</th>
                   {sel.map((g, i) => (
-                    <td key={i}>
+                    <td key={i} className={dc(i)}>
                       {g.rt ? <span className={RT_CLS[g.rt]}>{RT_TEXT[g.rt]}</span> : g.dd ? null : <span className="gray">예정</span>}
                       {g.dd && (
                         <span className={g.rt ? 'rm-sub rm-dd' : 'rm-dd'} title="국내 초기배당 1.49 이하 — 리그 표의 똥 순번과 같음(숫자는 정배배당)">
@@ -162,7 +165,7 @@ export function RoundMissGames({ lg, season, round, mkt }) {
                   {sel.map((g, i) => (
                     <td
                       key={i}
-                      className={picks[`${g.ht}|${g.at}`]?.done ? 'rm-open rm-entered' : 'rm-open'}
+                      className={dc(i, picks[`${g.ht}|${g.at}`]?.done ? 'rm-open rm-entered' : 'rm-open')}
                       title={picks[`${g.ht}|${g.at}`]?.done ? '누르면 상세보기 — 밑줄 = 내픽·상세픽·의견·배당 클릭을 전부 입력한 경기' : '누르면 상세보기'}
                       onClick={() => setDetailRow({ S: season, R: `${round}R`, HT: g.ht, AT: g.at })}
                     >
@@ -179,7 +182,7 @@ export function RoundMissGames({ lg, season, round, mkt }) {
                     const graded = g.rt && side && v && v !== '애매해'
                     const ok = graded ? (v === '틀릴듯') === missOf(side, g.rt) : null
                     return (
-                      <td key={i} className="rm-pred-cell">
+                      <td key={i} className={dc(i, 'rm-pred-cell')}>
                         <select
                           className={`rm-pred ${PRED_CLS[v] || ''}`}
                           value={v}
@@ -199,7 +202,7 @@ export function RoundMissGames({ lg, season, round, mkt }) {
                 <tr>
                   <th className="rm-lab">내 픽<small>내픽(상세픽/의견)</small></th>
                   {sel.map((g, i) => (
-                    <td key={i} className="rm-pick-cell" style={myPickStyle(picks[`${g.ht}|${g.at}`]?.pick) || undefined}>
+                    <td key={i} className={dc(i, 'rm-pick-cell')} style={myPickStyle(picks[`${g.ht}|${g.at}`]?.pick) || undefined}>
                       <MyPick pk={picks[`${g.ht}|${g.at}`]} />
                       <Sz />
                     </td>

@@ -299,3 +299,8 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* 경기별 세팅값 — 요일(토·일·월…)이 바뀌는 곳에 굵은 세로선(2026-10-10 사용자 지정). 팀 흐름 표 묶음 구분선(tf-gl)과 같은 두께·색 */
+.rm-table .rm-day-start {
+  border-left: 2px solid var(--border-strong);
+}
