@@ -2985,6 +2985,19 @@ function ScheduleContextSection({ ctx, note, onSaveNote }) {
 // 경기 전 생각 앞 드롭박스 — 정 쪽 값은 칸 배경 파랑, 플 쪽 값은 빨강(2026-10-10 사용자 지정, 리그 표 내픽 칸과 같은 짝)
 const TAG_JUNG = new Set(['정무', '정', '정(약)'])
 const TAG_PL = new Set(['플핸무', '플', '플(약)'])
+// 상대 칸 — 강하다고 고른 팀이 정배면 파랑, 역배면 빨강(2026-10-10 사용자 지정). 정배는 제목의 (정)/(역)과 같은 기준
+// (homeIsFav — 국내 초기 우선, 없으면 해외). 정배를 못 가리면(동배) 색 없음.
+function tagClass(key, value, row) {
+  if (TAG_JUNG.has(value)) return 'is-jung'
+  if (TAG_PL.has(value)) return 'is-pl'
+  if (key === 'tagRel' && value) {
+    const hf = homeIsFav(row)
+    if (hf === null) return undefined
+    const strongIsHome = value.startsWith('홈팀')
+    return strongIsHome === hf ? 'is-jung' : 'is-pl'
+  }
+  return undefined
+}
 
 function MyPickBar({ row, onSavePick, memoLead }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
@@ -3095,7 +3108,7 @@ function MyPickBar({ row, onSavePick, memoLead }) {
             {/* 값을 고른 뒤에도 무슨 칸인지 보이게 앞에 아주 작은 이름표(2026-10-10 사용자 지정) */}
             <span className="mypick-tag-lab">{t.label}</span>
             <select
-              className={TAG_JUNG.has(tags[t.key]) ? 'is-jung' : TAG_PL.has(tags[t.key]) ? 'is-pl' : undefined}
+              className={tagClass(t.key, tags[t.key], row)}
               value={tags[t.key]}
               onChange={(e) => handleTagChange(t.key, e.target.value)}
             >
