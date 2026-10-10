@@ -97,6 +97,7 @@ import cup_matches as CUPS     # noqa: E402
 import collect_jobs as JOBS    # noqa: E402
 import axis_stats as AXIS      # noqa: E402
 import same_odds as SAMEODDS  # noqa: E402
+import similar_season as SIMSEASON  # noqa: E402
 import sample_dir as SAMPLEDIR  # noqa: E402
 import book_dir as BOOKDIR      # noqa: E402
 import triple_sample as TRIPLE  # noqa: E402
@@ -1034,6 +1035,18 @@ def misc_matches_collect(user: dict = Depends(get_current_user)):
     return res
 
 
+@app.get("/api/similar_season")
+def similar_season(code: str, S: str, R: str, HT: str, AT: str,
+                   scope: str = PATHS.SCOPE_MASTER,
+                   user: dict = Depends(get_current_user)):
+    """상세보기 '이번 시즌 유사 경기' — 정배당·역배당 기준으로 승무패가 가장 비슷한 이번 시즌 경기를 리그마다 1개씩
+    (2026-10-10 사용자 지정, 계산은 api/similar_season.py). 6대리그 공식 데이터만."""
+    _check_league_for(code, scope, user)
+    if scope != PATHS.SCOPE_MASTER or code not in PATHS.VALID_LEAGUES:
+        return {"result": None}
+    return {"result": SIMSEASON.for_match(code, S, R, HT, AT)}
+
+
 @app.get("/api/schedule_context")
 def schedule_context(code: str, HT: str, AT: str, DT: str, TM: Optional[float] = None,
                      scope: str = PATHS.SCOPE_MASTER,
@@ -1480,7 +1493,7 @@ def save_season_note(code: str, body: SeasonNoteBody, user: dict = Depends(get_c
 
 
 # 상세보기 표본 박스 7개 제목 옆 메모(2026-09-15) — 경기 하나 × 표본 박스 하나에 1개.
-SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl", "same_odds", "books", "triple", "triple_same", "triple_other", "triple_f", "triple_f_same", "triple_f_other", "team_flow", "schedule")   # triple_f* = 배변 표본 메모(2026-10-04) · same_odds = 회차 동배당 · books = 12개 배당사 메모(2026-09-24) · triple = 12사 평균·국배 표본 메모(2026-09-26) · team_flow = 팀 흐름 메모 · schedule = 앞뒤 일정 메모(2026-09-29)
+SAMPLE_NOTE_KINDS = ("fav", "pl", "ffav", "k_wl", "f_wl", "k_wdl", "f_wdl", "same_odds", "books", "triple", "triple_same", "triple_other", "triple_f", "triple_f_same", "triple_f_other", "team_flow", "schedule", "sim_season")   # sim_season = 이번 시즌 유사 경기 메모(2026-10-10) · triple_f* = 배변 표본 메모(2026-10-04) · same_odds = 회차 동배당 · books = 12개 배당사 메모(2026-09-24) · triple = 12사 평균·국배 표본 메모(2026-09-26) · team_flow = 팀 흐름 메모 · schedule = 앞뒤 일정 메모(2026-09-29)
 
 
 class SampleNoteBody(BaseModel):

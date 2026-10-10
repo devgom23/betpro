@@ -2681,3 +2681,73 @@
 .title-odds-hit.title-odds-mark {
   text-decoration-style: double;
 }
+
+/* 이번 시즌 유사 경기(2026-10-10) — 왼쪽 기준 칸 + 6대리그 칸 × 정배·역배 두 줄. 카드는 표본 카드(166px) 그대로 */
+.sim-grid {
+  display: grid;
+  grid-template-columns: 64px repeat(var(--sim-cols, 6), minmax(166px, 1fr));
+  gap: 6px 8px;
+  overflow-x: auto;
+}
+
+.sim-head {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sim-lab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.sim-lab.is-fav b { color: var(--chip-blue-fg); }
+.sim-lab.is-dog b { color: var(--chip-red-fg); }
+.sim-lab span { font-weight: 700; font-variant-numeric: tabular-nums; }
+.sim-lab small { font-size: 10px; color: var(--text-muted); }
+
+.sim-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sim-diff {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 카드 밑 결과 4칸(핸승·핸무·무·역) — 그 리그 같은 조건 경기의 결과 수. 0은 빈 칸으로 흐리게 */
+.sim-counts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  width: 166px;
+}
+
+.sim-count {
+  min-height: 18px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-count.is-hs { background: var(--chip-blue-bg); color: var(--chip-blue-fg); }
+.sim-count.is-hm { background: var(--chip-green-bg); color: var(--chip-green-fg); }
+.sim-count.is-mu { background: var(--chip-gray-bg); color: var(--chip-gray-fg); }
+.sim-count.is-yk { background: var(--chip-red-bg); color: var(--chip-red-fg); }
+.sim-count.is-zero { opacity: 0.35; }

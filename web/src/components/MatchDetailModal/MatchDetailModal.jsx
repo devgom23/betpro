@@ -420,26 +420,6 @@ function foreignTieRefs(row) {
   ]
 }
 
-// 동배 — 같은 회차에 국내 배당이 이 경기와 똑같았던 다른 경기가 있으면 '동배 정 1.27(무)' · '플 1.47'(2026-10-10 사용자 지정).
-// 정 = 정배(승/무/패) 쪽 배당, 플 = 플핸(핸디) 쪽 배당. 괄호 = 그 동배당 경기들의 결과(끝난 것만, 여러 개면 / 로 이음 —
-// 결과가 하나도 없으면 괄호 없이 배당만). 마우스를 올리면 아래 '회차 동배당' 섹션과 같은 내용이 상자로 뜬다.
-// 배변 동배당이 있으면 그것을, 없으면 초기 동배당을 쓴다.
-function sameOddsRefs(sameOdds) {
-  const out = []
-  for (const [kind, name] of [['fav', '정'], ['dog', '역'], ['pl', '플'], ['fh', '정핸']]) {
-    const groups = (sameOdds?.groups || []).filter((g) => g.kind === kind && g.games.length)
-    const g = groups.find((x) => x.phase === '배변') || groups[0]
-    if (!g) continue
-    const res = g.games.map((gm) => rtLabel(gm.rt)).filter(Boolean)
-    out.push(
-      <RefItem key={`sameodds-${kind}`} label={out.length ? '' : '동배'} compact pop={<SameOddsColumns sameOdds={sameOdds} />}>
-        {name} {g.odds}{res.length ? `(${res.join('/')})` : ''}
-      </RefItem>,
-    )
-  }
-  return out
-}
-
 // 시즌 막판 뱃지 — '시즌 마지막 2라운드 · 정무 주의'. 규칙·실측 근거는 utils/seasonStake.js, 계산은 api/standings.py.
 // 막판 주의는 실측으로 결과가 갈린 신호라 '확인' 칩으로 둔다(단통 플핸도 시장보다 +2.4%p, 세 기간 +2.1~2.8 — 10-09).
 // 팀마다 '무엇이 걸려 있나'(우승경쟁·강등확정…) 칩은 2026-10-09에 뺐다 — 배당 표 팀 이름 밑 뱃지(OddsTable stakeBadge)가
@@ -1124,11 +1104,35 @@ function KnoZoneTable({ zone }) {
 
 // '참고' 한 줄 — 판정 줄 바로 밑(2026-10-09). 배당이 이미 말한 사실이라 칩 대신 흐린 글자로 늘어놓는다.
 // 항목 사이 가운뎃점은 글자 공백이 아니라 flex gap으로 벌린다(CLAUDE.md 6-2 — 공백은 브라우저가 합쳐 간격이 들쭉날쭉해진다).
-function MatchRefLine({ row, verdict, h2hLoading, h2hMatches, pick, xg, sameOdds }) {
+// 동배 — 이번 시즌 6대리그에서 국내 정배·플핸 배당이 이 경기와 같은 쪽(홈/원정)에 똑같이 뜬 경기의 결과 수(2026-10-11 사용자 지정,
+// 예전 '동배 정 1.27(무)'(같은 회차 동배당)을 바꿨다). 숫자는 아래 정배 표본·플핸 표본 '이 경기' 줄의 '시즌' 칸 그대로 —
+// 정)2.10(1 / 0 / 0 / 0) = 핸승 / 핸무 / 무 / 역. 표본을 아직 못 받았으면 줄을 안 그린다.
+const fmtCounts = (v) => `(${v.join(' / ')})`
+
+function sameSeasonRefs(row, samples) {
+  if (!samples) return []
+  const kw = numOrNull(row.KW)
+  const kl = numOrNull(row.KL)
+  if (kw === null || kl === null || kw === kl) return []
+  const fav = Math.min(kw, kl)
+  const pl = numOrNull(kw > kl ? row.KHW : row.KHL)
+  const lines = [['fav', '정', fav], ['pl', '플', pl]]
+    .map(([key, name, odds]) => [key, name, odds, samples[key]?.[0]?.season])
+    .filter(([, , odds, vals]) => odds !== null && Array.isArray(vals))
+  const tip = '이번 시즌 6대리그에서 같은 국내 배당이 이 경기와 같은 쪽(홈/원정)에 뜬 경기의 결과 — 핸승 / 핸무 / 무 / 역.\n'
+    + '정 = 정배 배당 · 플 = 플핸(언더독 핸디) 배당. 아래 정배 표본·플핸 표본의 \'시즌\' 칸과 같은 숫자입니다.'
+  return lines.map(([key, name, odds, vals], i) => (
+    <RefItem key={`same-season-${key}`} label={i === 0 ? '동배' : ''} compact title={tip}>
+      {name}){odds.toFixed(2)}{fmtCounts(vals)}
+    </RefItem>
+  ))
+}
+
+function MatchRefLine({ row, verdict, h2hLoading, h2hMatches, pick, xg, samples }) {
   // 전적의 '최근5' — verdict(전체)가 있을 때만 뜻이 있다(h2hRefs 첫맞대결 분기 참고).
   const h2hRecent = verdict ? h2hVerdictRecent(h2hMatches, String(row.HT || '').trim(), row.S) : null
   const items = [...ddongRefs(row), ...xgRefs(row, xg), ...h2hRefs(verdict, h2hLoading, h2hRecent, row, pick, h2hMatches),
-    ...drawRefs(row, pick), ...forFlipRefs(row), ...foreignTieRefs(row), ...sameOddsRefs(sameOdds)]
+    ...drawRefs(row, pick), ...forFlipRefs(row), ...foreignTieRefs(row), ...sameSeasonRefs(row, samples)]
   if (!items.length) return null
   return (
     <div className="match-ref-line">
@@ -2857,7 +2861,7 @@ function SameOddsGame({ g }) {
   )
 }
 
-// 정배·플핸 두 칸 — 회차 동배당 섹션과 '참고' 줄 해배동배 호버 상자가 같이 쓴다.
+// 정배·역배·플핸·정배 핸디 네 칸 — 회차 동배당 섹션(경기지표 '참고' 줄 동배 호버는 2026-10-11 사용자 지정으로 삭제).
 function SameOddsColumns({ sameOdds }) {
   return (
     <div className="same-odds-two">
@@ -2883,6 +2887,134 @@ function SameOddsColumns({ sameOdds }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ───────── 이번 시즌 유사 경기(2026-10-10 사용자 지정) ─────────
+// 분석 엑셀(스샷/토요일.xlsx)의 '정배 Point · 역배 Point' 옆으로 펼쳐지는 경기 줄. 위 줄 = 국내 정배 배당 기준,
+// 아래 줄 = 역배 배당 기준으로 승무패가 가장 비슷한 이번 시즌 경기를 6대리그 칸마다 1개씩(계산·규칙은 api/similar_season.py).
+// 카드는 정배·플핸 표본 카드(SeasonSampleCard)를 그대로 쓴다 — 기준 칸은 파랑, 이 경기와 우연히 같은 칸은 다른 색.
+// data: undefined(불러오는 중) · null(없음/실패) · {base, leagues, fav:{리그:카드}, dog:{리그:카드}}
+const SIM_ROWS = [['fav', '정배'], ['dog', '역배']]
+// 카드 밑 결과 4칸 — 핸승·핸무·무·역(색은 앱 RT 칩과 같다: 파랑·초록·회색·빨강)
+const SIM_RT = [['핸승', 'is-hs'], ['핸무', 'is-hm'], ['무', 'is-mu'], ['역', 'is-yk']]
+
+// 카드 아래 — 기준 배당과의 차이(호가 단계)와 승·무·패 세 값 호가 단계 합(표본 카드의 '합 N단계'와 같은 셈)
+function simDiffText(m, name) {
+  const d = m.diff ? ` (${m.diff > 0 ? '+' : ''}${m.diff.toFixed(2)})` : ''
+  return `${name} ${m.steps}단계${d} · 합 ${m.total_steps}단계`
+}
+
+// 설명글은 제목 옆 ? 팝업으로(2026-10-10 사용자 지정), 제목 옆 입력칸은 표본 메모(sample_notes, kind='sim_season').
+function SimilarSeasonSection({ data, row, onHelp, note, onSaveNote }) {
+  if (data === null) return null
+  const homeFav = data?.base?.home_fav
+  return (
+    <section className="detail-section sim-season-section">
+      <h3>
+        <button type="button" className="help-btn" onClick={onHelp} title="이번 시즌 유사 경기 보는 법">
+          이번 시즌 유사 경기 <span className="help-mark">?</span>
+        </button>
+        {onSaveNote && <SampleNoteInput value={note} onSave={onSaveNote} placeholder="이번 시즌 유사 경기에 대한 의견" />}
+      </h3>
+      {data === undefined ? (
+        <div className="season-sample-cards-empty">불러오는 중…</div>
+      ) : (
+        <div className="sim-grid" style={{ '--sim-cols': data.leagues.length }}>
+          <div className="sim-corner" />
+          {data.leagues.map((l) => <div key={l.code} className="sim-head">{l.label}</div>)}
+          {SIM_ROWS.map(([basis, name]) => {
+            // 기준 칸 강조 — 정배 줄은 정배 쪽(홈 정배면 승), 역배 줄은 반대쪽
+            const favCode = (basis === 'fav') === homeFav ? 'K-W' : 'K-L'
+            const cards = data[basis] || {}
+            return (
+              <Fragment key={basis}>
+                <div className={`sim-lab ${basis === 'fav' ? 'is-fav' : 'is-dog'}`}>
+                  <b>{name}</b>
+                  <span>{data.base[basis].toFixed(2)}</span>
+                  <small>기준</small>
+                </div>
+                {data.leagues.map((l) => {
+                  const m = cards[l.code]
+                  return (
+                    <div key={l.code} className="sim-cell">
+                      {/* 비슷한 경기가 없으면 칸을 그냥 비워 둔다(2026-10-10 사용자 지정) */}
+                      {m && (
+                        <>
+                          <SeasonSampleCard m={m} kind="fav" favCode={favCode} curRow={row} />
+                          <span className="sim-diff" title={`기준 ${data.base[basis].toFixed(2)}와의 호가 단계 차이 · 승·무·패 세 값 호가 단계 합`}>{simDiffText(m, name)}</span>
+                          {/* 그 리그에서 같은 조건(기준 3단계·무 6단계 안)을 통과한 경기 전부의 결과 수 — 엑셀 카드 밑 4칸 */}
+                          <div className="sim-counts" title={`${l.label}에서 같은 조건을 통과한 이번 시즌 경기 ${m.counts.reduce((a, b) => a + b, 0)}개의 결과`}>
+                            {SIM_RT.map(([lab, cls], k) => (
+                              <span key={lab} className={`sim-count ${cls}${m.counts[k] ? '' : ' is-zero'}`} title={lab}>{m.counts[k] || ''}</span>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </Fragment>
+            )
+          })}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function SimilarSeasonLegend({ onClose }) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop help-legend-back" onClick={onClose}>
+      <div className="modal-card help-legend-card" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="닫기">✕</button>
+        <h2 className="modal-title">📊 이번 시즌 유사 경기 — 보는 법</h2>
+
+        <p className="help-legend-title">① 무엇을 보여주나</p>
+        <p className="help-legend-note">
+          이 경기와 국내 승·무·패 배당이 비슷했던 <b>이번 시즌</b> 6대리그 경기입니다. 위 줄은 <b>정배 배당</b>(승·패 중 낮은 쪽)을,
+          아래 줄은 <b>역배 배당</b>(높은 쪽)을 기준으로 찾습니다. 분석 엑셀의 &apos;정배 Point · 역배 Point&apos; 옆 경기 줄과 같은 자리입니다.
+        </p>
+
+        <p className="help-legend-title">② 어떤 경기를 고르나</p>
+        <p className="help-legend-note">
+          국내 초기 배당만 보고, 결과가 난 경기만, <b>정배가 같은 쪽</b>(홈 정배면 홈 정배 경기만)인 경기 중에서
+          <b> 기준 배당이 3호가 단계 안</b>, <b>무 배당이 6호가 단계 안</b>인 경기만 남깁니다.
+          호가 단계는 국내 배당이 실제로 움직이는 칸 수입니다 — 2.5 미만 0.01 · 2.5~5 0.05 · 5~10 0.10 · 10 이상 0.50이 한 칸
+          (무 3.00 → 2.95 = 1단계). 무 6단계는 분석 엑셀 카드 87장을 세어 정한 값입니다(평균 4.9 · 중앙값 4단계, 6단계 안이 67%).
+        </p>
+
+        <p className="help-legend-title">③ 카드 한 장</p>
+        <p className="help-legend-note">
+          리그 칸마다 남은 경기 중 <b>가장 비슷한 경기</b>(승·무·패 세 값 호가 단계 합이 가장 작은 경기) 가운데 <b>최근</b> 경기 1장입니다.
+          파란 숫자가 기준이 된 칸이고, 다른 색 숫자는 이 경기와 우연히 같은 값입니다. 카드 아래 &apos;정배 2단계 (-0.02) · 합 5단계&apos;는
+          기준 배당과의 차이와 세 값 합 단계입니다. 비슷한 경기가 없는 리그는 칸을 비워 둡니다.
+          한 줄에 최대 3칸까지만 보이고, 넘치면 합 단계가 작은 리그부터 남깁니다.
+        </p>
+
+        <p className="help-legend-title">④ 카드 밑 4칸</p>
+        <p className="help-legend-note">
+          <b>핸승 · 핸무 · 무 · 역</b>(파랑 · 초록 · 회색 · 빨강) — 그 리그에서 ②의 조건을 통과한 이번 시즌 경기 <b>전부</b>의 결과 수입니다.
+          카드는 그중 한 경기일 뿐이라, 같은 조건에서 결과가 어느 쪽으로 몰렸는지는 이 4칸으로 봅니다. 0은 비워 둡니다.
+        </p>
+
+        <p className="help-legend-title">⑤ 주의</p>
+        <p className="help-legend-note">
+          리그마다 몇 경기 안 되는 참고 표시입니다 — 판정이나 적중률 근거로 쓰지 않습니다.
+          같은 경기가 정배·역배 두 줄에 함께 나올 수 있습니다.
+        </p>
+      </div>
     </div>
   )
 }
@@ -5056,7 +5188,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ sameOdds, marks, onToggleMark, row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, h2hMatches, axisV, axisStats, uni, plhan, onPlhanOpen, zone }) {
+function PickBand({ samples, marks, onToggleMark, row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, h2hMatches, axisV, axisStats, uni, plhan, onPlhanOpen, zone }) {
   // '참고' 줄의 무·전적과 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -5094,7 +5226,7 @@ function PickBand({ sameOdds, marks, onToggleMark, row, h2hVerdict: verdict, h2h
               onPlhanOpen={onPlhanOpen}
             />
             {/* 참고(2026-10-09 사용자 지정) — 경기지표의 축·확인 바로 아래, 같은 라벨 칸에 세로로. */}
-            <MatchRefLine row={row} verdict={verdict} h2hLoading={h2hLoading} h2hMatches={h2hMatches} pick={pick} xg={xg} sameOdds={sameOdds} />
+            <MatchRefLine row={row} verdict={verdict} h2hLoading={h2hLoading} h2hMatches={h2hMatches} pick={pick} xg={xg} samples={samples} />
             {/* 구간 표(2026-10-09 사용자 지정) — 경기지표 맨 아래 */}
             <KnoZoneTable zone={zone} />
           </div>
@@ -5211,6 +5343,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
   const [showSeasonLegend, setShowSeasonLegend] = useState(false)
   const [showSampleDirLegend, setShowSampleDirLegend] = useState(false)
   const [showMultiBookLegend, setShowMultiBookLegend] = useState(false)
+  const [showSimLegend, setShowSimLegend] = useState(false)   // 이번 시즌 유사 경기 도움말
   const [pickData, setPickData] = useState(null)
   const [pickError, setPickError] = useState('')
   // 종합분석 카드를 화면에서 뺀 뒤로 이 응답에서 실제로 쓰는 건 이 둘과 streaks뿐이다.
@@ -5375,6 +5508,22 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
   // 앞뒤 일정 — 두 팀 각각의 바로 앞·뒤 경기(리그·컵 포함, 1경기씩). {home:{prev,next}, away:{...}}
   // undefined = 불러오는 중, null = 실패. 내 데이터(user scope)는 서버가 빈 값을 돌려준다.
   const [scheduleCtx, setScheduleCtx] = useState(undefined)
+  // 이번 시즌 유사 경기(정배·역배 기준) — undefined = 불러오는 중, null = 없음/실패
+  const [simSeason, setSimSeason] = useState(undefined)
+  useEffect(() => {
+    let alive = true
+    setSimSeason(undefined)
+    const r = rowRef.current
+    const params = new URLSearchParams({
+      code, scope, S: String(r.S ?? ''), R: String(r.R ?? ''), HT: String(r.HT ?? ''), AT: String(r.AT ?? ''),
+    })
+    api.get(`/api/similar_season?${params.toString()}`)
+      .then((res) => alive && setSimSeason(res?.result || null))
+      .catch(() => alive && setSimSeason(null))
+    return () => {
+      alive = false
+    }
+  }, [code, scope, matchKey])
   const rowDt = row.DT
   const rowTm = row.TM
   useEffect(() => {
@@ -5636,7 +5785,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             고정, 아래만 스크롤). .detail-modal-card 주석 참고. */}
         <div className="detail-modal-scroll">
         <PickBand
-          sameOdds={sameOdds}
+          samples={seasonSample?.samples}
           row={row}
           h2hVerdict={h2hMark}
           h2hLoading={!pickData && !pickError}
@@ -5653,6 +5802,32 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           zone={zone}
           marks={oddsMarks}
           onToggleMark={toggleOddsMark}
+        />
+
+        {/* 앞뒤 일정 — 두 팀의 직전·다음 경기(리그·컵 포함) 표(2026-09-16 사용자 지정:
+            그래프 없이 표만). 2026-10-11 배당 바로 아래로 옮겼다(사용자 지정 — 회차 동배당과 함께). 일정이 하나도 없으면 섹션째 숨긴다.
+            오른쪽에 '같은 회차 동배당 결과'를 나란히 둔다(2026-09-23 사용자 지정) —
+            한쪽이 없으면 남은 쪽이 폭을 다 쓴다(schedule-ctx-row는 auto-fit 그리드). */}
+        <div className="schedule-ctx-row">
+          <ScheduleContextSection
+            ctx={scheduleCtx}
+            note={sampleNotes?.schedule?.memo}
+            onSaveNote={(memo) => saveSampleNote('schedule', { memo: memo || null })}
+          />
+          <SameOddsSection
+            sameOdds={sameOdds}
+            note={sampleNotes?.same_odds?.memo}
+            onSaveNote={(memo) => saveSampleNote('same_odds', { memo: memo || null })}
+          />
+        </div>
+
+        {/* 이번 시즌 유사 경기 — 앞뒤 일정·회차 동배당 아래(2026-10-10 사용자 지정, 10-11 한 칸 내려감) */}
+        <SimilarSeasonSection
+          data={simSeason}
+          row={row}
+          onHelp={() => setShowSimLegend(true)}
+          note={sampleNotes?.sim_season?.memo}
+          onSaveNote={sampleNotes !== undefined ? (memo) => saveSampleNote('sim_season', { memo: memo || null }) : null}
         />
 
         {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,
@@ -5733,23 +5908,6 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             />,
           } : null}
         />
-
-        {/* 앞뒤 일정 — 두 팀의 직전·다음 경기(리그·컵 포함) 표(2026-09-16 사용자 지정:
-            그래프 없이 표만, 배당과 표본 섹션 사이). 일정이 하나도 없으면 섹션째 숨긴다.
-            오른쪽에 '같은 회차 동배당 결과'를 나란히 둔다(2026-09-23 사용자 지정) —
-            한쪽이 없으면 남은 쪽이 폭을 다 쓴다(schedule-ctx-row는 auto-fit 그리드). */}
-        <div className="schedule-ctx-row">
-          <ScheduleContextSection
-            ctx={scheduleCtx}
-            note={sampleNotes?.schedule?.memo}
-            onSaveNote={(memo) => saveSampleNote('schedule', { memo: memo || null })}
-          />
-          <SameOddsSection
-            sameOdds={sameOdds}
-            note={sampleNotes?.same_odds?.memo}
-            onSaveNote={(memo) => saveSampleNote('same_odds', { memo: memo || null })}
-          />
-        </div>
 
         {/* 정배 표본 · 플핸 표본 · 해배 표본 · 국)승+패 · 해)승+패 · 국)승+무+패 · 해)승+무+패
             — 배당(PickBand)과 지표별 표본 사이에 배당과 같은 폭의 독립 섹션으로 둔다
@@ -5910,6 +6068,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
     {showSeasonLegend && <SeasonRecordLegend onClose={() => setShowSeasonLegend(false)} />}
     {showSampleDirLegend && <SampleDirectionLegend onClose={() => setShowSampleDirLegend(false)} />}
     {showMultiBookLegend && <MultiBookLegend onClose={() => setShowMultiBookLegend(false)} />}
+    {showSimLegend && <SimilarSeasonLegend onClose={() => setShowSimLegend(false)} />}
     {showPlhan && plhan?.ready && (
       <PlhanScorePopup
         data={plhan}
