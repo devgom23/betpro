@@ -1493,8 +1493,59 @@
   white-space: nowrap;
 }
 
-.match-ref-has-pop:hover .match-ref-pop {
+.match-ref-has-pop:not(.match-ref-click):hover .match-ref-pop,
+.match-ref-pop.is-open {
   display: block;
+}
+
+/* 누르면 열리는 상자(전적 요약표) — 누를 수 있다는 표시 */
+.match-ref-click {
+  cursor: pointer;
+}
+
+.match-ref-click:hover > strong {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* 전적 요약표 상자 안 — 아래 상대전적 섹션 요약표(h2h-wdl-grid)를 그대로 쓰고 제목·설명만 붙인다 */
+.h2h-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: default;
+}
+
+.h2h-pop-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.h2h-pop-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+/* 표 폭은 칸 폭(colgroup) 합계 그대로 — .detail-table의 width:100%가 상자를 화면 끝까지 늘려 가로 스크롤이 생겼다 */
+.h2h-pop .h2h-wdl-grid {
+  width: max-content;
+  margin-bottom: 0;
+}
+
+.h2h-pop .h2h-col-label {
+  width: 84px;                /* '첫경기 기준'·'최근 5시즌'이 한 줄에 들어가게 */
+}
+
+.h2h-pop .h2h-wdl-grid .row-label {
+  white-space: nowrap;
+}
+
+/* 홈기준에 딸린 두 줄(- 첫경기 · - 최근5) — 이름을 한 칸 들여 홈기준 밑에 붙어 보이게 */
+.h2h-pop .h2h-wdl-grid tbody tr:nth-child(n + 3) .row-label {
+  padding-left: 14px;
+  color: var(--text-secondary);
 }
 
 .match-ref-item strong {

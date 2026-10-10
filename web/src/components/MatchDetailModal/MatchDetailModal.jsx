@@ -1,14 +1,14 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { toBlob } from 'html-to-image'
 import { api, saveBlob } from '../../api/client'
-import HeadToHeadResult from '../HeadToHead/HeadToHeadResult'
+import HeadToHeadResult, { WdlGrid } from '../HeadToHead/HeadToHeadResult'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
 import { formatTime, formatDt, scoreClass, LEAGUE_LABELS_SHORT } from '../../utils/format'
 import { computeAutoVerdict, pickVerdictStyle, opinionStyle, marketVerdictPick, rtToText, myPickStyle } from '../LeagueTable/columnGroups'
 import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS, SAMPLE_DIRECTION_OPTIONS, sampleDirectionText } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
-import { h2hVerdict, h2hVerdictRecent, RECENT_SEASONS } from '../../utils/h2hVerdict'
+import { h2hVerdict, h2hVerdictRecent, RECENT_SEASONS, seasonIdx, wdlBreakdown } from '../../utils/h2hVerdict'
 import {
   drawTendency, drawRelation, VERDICT_TONE,
 } from '../../utils/systemVerdict'
@@ -286,12 +286,14 @@ function MatchChip({ label, tone, title, children, onClick, extraClass }) {
 // 설명은 칩일 때와 같은 문구가 마우스를 올리면 나온다.
 // 왜 내렸나 — 단통 플핸 기준으로 '마감 시장 예상보다 더 맞힌 몫'이 전부 ±2%p 안이었다(15-16~ 22,589경기,
 // 메모리 reference-match-chip-audit): 똥배 +0.7 · 기대점수 +0.4 · 전적 −0.9~−0.2 · 무 −1.0/+0.7 · 해외만 반전 +0.9 · 해배동배 −1.0.
-function RefItem({ label, tone, title, compact, pop, children }) {
-  // 호버 상자가 스크롤 영역(상세보기 본문) 오른쪽·왼쪽 밖으로 넘치지 않게, 뜰 때 위치를 안쪽으로 당긴다(2026-10-10 사용자 지정).
+function RefItem({ label, tone, title, compact, pop, clickPop, children }) {
+  // 상자가 스크롤 영역(상세보기 본문) 오른쪽·왼쪽 밖으로 넘치지 않게, 뜰 때 위치를 안쪽으로 당긴다(2026-10-10 사용자 지정).
   const popRef = useRef(null)
-  const fitPop = (e) => {
+  const itemRef = useRef(null)
+  const [open, setOpen] = useState(false)
+  const fitPop = () => {
     const box = popRef.current
-    const bound = e.currentTarget.closest('.detail-modal-scroll')
+    const bound = itemRef.current?.closest('.detail-modal-scroll')
     if (!box || !bound) return
     box.style.left = '0px'
     const bb = bound.getBoundingClientRect()
@@ -299,12 +301,30 @@ function RefItem({ label, tone, title, compact, pop, children }) {
     const shift = Math.min(0, bb.right - 8 - pb.right)
     box.style.left = `${Math.max(shift, bb.left + 8 - pb.left)}px`
   }
+  // clickPop — 마우스를 올릴 때가 아니라 누르면 열리고 다시 누르면 닫힌다(2026-10-10 사용자 지정, 전적 요약표).
+  // 바깥을 누르거나 Esc를 누르면 닫힌다(Esc는 상세보기 자체가 닫히지 않게 여기서 멈춘다).
+  useEffect(() => {
+    if (!open) return undefined
+    fitPop()
+    const onDown = (e) => { if (!itemRef.current?.contains(e.target)) setOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) } }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey, true)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey, true) }
+  }, [open])
+  const cls = ['match-ref-item', compact ? 'match-ref-compact' : '', pop ? 'match-ref-has-pop' : '', clickPop ? 'match-ref-click' : ''].filter(Boolean).join(' ')
   return (
-    <span className={`${compact ? 'match-ref-item match-ref-compact' : 'match-ref-item'}${pop ? ' match-ref-has-pop' : ''}`} title={pop ? undefined : title} onMouseEnter={pop ? fitPop : undefined}>
+    <span
+      ref={itemRef}
+      className={cls}
+      title={pop && !clickPop ? undefined : title}
+      onMouseEnter={pop && !clickPop ? fitPop : undefined}
+      onClick={clickPop ? (e) => { if (!popRef.current?.contains(e.target)) setOpen((v) => !v) } : undefined}
+    >
       {label !== undefined && <span className="match-ref-label">{label}</span>}
       <strong style={tone ? { color: `var(--chip-${tone}-fg)` } : undefined}>{children}</strong>
-      {/* 마우스를 올리면 뜨는 상자(2026-10-10 사용자 지정) — 글자 툴팁(title)은 표를 못 담아서 따로 그린다 */}
-      {pop && <span className="match-ref-pop" ref={popRef}>{pop}</span>}
+      {/* 상자 — 글자 툴팁(title)은 표를 못 담아서 따로 그린다. 호버형은 CSS로 보이고, 클릭형은 열렸을 때만 그린다. */}
+      {pop && (!clickPop || open) && <span className={`match-ref-pop${clickPop ? ' is-open' : ''}`} ref={popRef}>{pop}</span>}
     </span>
   )
 }
@@ -693,6 +713,39 @@ function sameOrderHome(ms, row) {
   return out
 }
 
+// 전적 요약표(2026-10-10 사용자 지정) — 참고 줄 '전적'을 누르면 아래 상대전적 섹션의 요약표(핸승/핸무/무/역 × 승·무·패)를
+// 같은 모양으로 그 줄 바로 밑에 띄운다(동배 상자와 같은 자리). 줄: 전체기준 · 홈기준(여기까지 아래 섹션과 같음) ·
+// '- 첫경기'(홈기준 중 이번과 같은 N번째 맞대결이었던 것 — 전적 괄호 값) · '- 최근5'(홈기준 중 이번 시즌 제외 최근 5시즌 —
+// 전적 '최근5' 값). 아래 두 줄은 홈기준에 딸린 줄이다. 기준 팀은 이번 홈팀. 재료는 /api/pick_ai가 이미 준 맞대결 목록.
+function H2hSummaryPop({ matches, row }) {
+  const ms = Array.isArray(matches) ? matches : []
+  const host = String(row.HT || '').trim()
+  const me = 1 + ms.filter((x) => String(x.S) === String(row.S)).length
+  const sameOrder = ms.filter((m) => String(m.HT || '').trim() === host && meetingOrder(m, ms) === me)
+  const si = seasonIdx(row.S)
+  const recent = si === null ? [] : ms.filter((m) => {
+    const k = seasonIdx(m.S)
+    return k !== null && k >= si - RECENT_SEASONS && k <= si - 1
+  })
+  // 아래 두 줄은 '홈기준' 안에서 더 좁힌 것이라 이름 앞에 '- '를 붙여 홈기준에 딸린 줄로 보이게 한다(2026-10-10 사용자 지정).
+  const orderTitle = me === 1 ? '첫경기' : me === 2 ? '두번째 경기' : `${me}번째 경기`
+  const rows = [
+    { title: '전체기준', wdl: wdlBreakdown(ms, host, false) },
+    { title: '홈기준', wdl: wdlBreakdown(ms, host, true) },
+    { title: `- ${orderTitle}`, wdl: wdlBreakdown(sameOrder, host, true) },
+    { title: `- 최근${RECENT_SEASONS}`, wdl: wdlBreakdown(recent, host, true) },
+  ]
+  return (
+    <span className="h2h-pop">
+      <span className="h2h-pop-head">상대전적 요약 — {host} 기준 · 맞대결 {ms.length}경기</span>
+      <WdlGrid rows={rows} />
+      <span className="h2h-pop-note">
+        홈기준 안에서 — {orderTitle} = 이번이 이 시즌 {me}번째 맞대결이라 그 시즌 {me}번째 맞대결이었던 홈 경기만 · 최근{RECENT_SEASONS} = 이번 시즌 제외 최근 {RECENT_SEASONS}시즌 홈 경기만
+      </span>
+    </span>
+  )
+}
+
 // 2026-10-09 경기지표 '참고' 줄 글자로 내렸다 — 전적 우세 방향은 마감 시장 예상 대비 단통 플핸 몫이
 // 우세=정배 −0.2%p · 우세=언더독 −0.9%p로 시장이 이미 아는 정보였다. 숫자 색 규칙(h2hTone)은 그대로.
 function h2hRefs(verdict, loading, recent, row, pick, h2hMatches) {
@@ -720,25 +773,17 @@ function h2hRefs(verdict, loading, recent, row, pick, h2hMatches) {
       </RefItem>,
     ]
   }
-  const recentTitle = recent
-    ? recent.title
-    : `최근 ${RECENT_SEASONS}시즌(이번 시즌 제외) 안에는 이 구장에서 만난 적이 없습니다.`
   // 전적은 두 줄(2026-10-09 사용자 지정) — 1줄 '홈기준 전체 (이번과 같은 N번째 맞대결이었던 경기)', 2줄 '최근5'
   const so = Array.isArray(h2hMatches) ? sameOrderHome(h2hMatches, row) : null
-  const orderName = so ? (so.order === 1 ? '전반기' : so.order === 2 ? '후반기' : `${so.order}번째`) : ''
-  const orderTitle = so
-    ? `괄호 = 이번 경기가 이 시즌 ${so.order}번째 맞대결(${orderName})이라, 지난 홈 경기 중 그 시즌 ${so.order}번째 맞대결이었던 ${so.n}경기만 센 승/무/패입니다.\n`
-      + '같은 시즌 맞대결 순서는 날짜 순으로 판단해서 컵 대회·연기로 순서가 바뀐 경기는 실제와 다를 수 있습니다.\n\n'
-    : ''
   return [
-    <RefItem key="h2h" label="전적" compact title={`${orderTitle}${verdict.title}`}>
+    <RefItem key="h2h" label="전적" compact clickPop pop={<H2hSummaryPop matches={h2hMatches} row={row} />} title="누르면 상대전적 요약표(전체·홈·N번째 경기·최근 5시즌)">
       홈기준{' '}
       <span style={h2hValueText(verdict.w, verdict.d, verdict.l, row, pick)}>
         {verdict.w}/{verdict.d}/{verdict.l}
       </span>
       {so && <span> ({so.w}/{so.d}/{so.l})</span>}
     </RefItem>,
-    <RefItem key="h2h-recent" label="" compact title={recentTitle}>
+    <RefItem key="h2h-recent" label="" compact clickPop pop={<H2hSummaryPop matches={h2hMatches} row={row} />} title="누르면 상대전적 요약표(전체·홈·N번째 경기·최근 5시즌)">
       최근5{' '}
       {recent
         ? <span style={h2hValueText(recent.w, recent.d, recent.l, row, pick)}>{recent.w}/{recent.d}/{recent.l}</span>

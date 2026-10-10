@@ -108,7 +108,7 @@ export function h2hVerdict(wdlAll, wdlHome) {
 // ⚠ 2026-09-27 수정 — 예전엔 둘 다 앞 두 자리만 읽어 '2023'·'2024'·'2026'이 전부 20이 됐다.
 //   그래서 K리그(내 데이터 리그)는 '최근5'(이번 시즌 제외 최근 5시즌) 창에 한 경기도 안 들어가
 //   항상 '최근5 －'로 나왔다(사용자 제보: K1 22R 강원 vs 인천).
-function seasonIdx(s) {
+export function seasonIdx(s) {
   const t = String(s || '').trim()
   if (/^\d{4}$/.test(t)) return Number(t) % 100
   const n = parseInt(t.slice(0, 2), 10)
@@ -164,4 +164,36 @@ export function h2hVerdictRecent(matches, host, season) {
       + `${w}승 ${d}무 ${l}패 (${n}경기) → 표본보정 ${h.toFixed(2)} (평균 ${BASE_HOME.toFixed(2)})\n`
       + `기준은 위 전체 판정과 같습니다(±${MARGIN.toFixed(2)}, 보정 K=${SHRINK}) — 표본만 최근 것으로 좁혔습니다.`,
   }
+}
+
+// 상대전적 W/D/L × 핸승/핸무/무/역 집계 — HeadToHeadResult(상대전적 섹션)와 상세보기 참고 줄 전적 요약표가 같이 쓴다
+// (2026-10-10 HeadToHeadResult.jsx에서 옮김 — 컴포넌트 파일이 함수를 내보내면 화면 자동 새로고침이 깨진다).
+// 기간을 좁히면 위 요약표(전체기준/홈기준)도 그 기간만으로 다시 세야 한다.
+// 백엔드 _wdl_breakdown(api/main.py)과 같은 규칙을 그대로 옮긴 것이다 — 기준 팀이
+// 그 경기에서 홈이었든 원정이었든 실제 스코어로 W/D/L을 판정하고, 그 안에서 RT를 쪼갠다.
+// 스코어가 없는 경기(예정·취소)는 백엔드와 똑같이 뺀다.
+//
+// 기간을 안 좁혔을 때는 이걸 쓰지 않고 백엔드 값을 그대로 쓴다 — 경기 목록은 limit으로
+// 잘릴 수 있어서(총 N경기 중 최근 200경기만), 잘린 목록으로 다시 세면 백엔드 값보다
+// 작게 나온다. 3·5년 창은 limit보다 훨씬 짧아 잘릴 일이 없다.
+export function wdlBreakdown(matches, referenceTeam, homeOnly) {
+  const out = {
+    W: { total: 0, breakdown: {} },
+    D: { total: 0, breakdown: {} },
+    L: { total: 0, breakdown: {} },
+  }
+  matches.forEach((m) => {
+    const hs = m.HS
+    const as_ = m.AS
+    if (hs === null || hs === undefined || as_ === null || as_ === undefined) return
+    const rowHt = String(m.HT ?? '').trim()
+    if (homeOnly && rowHt !== referenceTeam) return
+    const mine = rowHt === referenceTeam ? hs : as_
+    const theirs = rowHt === referenceTeam ? as_ : hs
+    const letter = mine > theirs ? 'W' : mine < theirs ? 'L' : 'D'
+    const lab = m.RT_label || '기타'
+    out[letter].breakdown[lab] = (out[letter].breakdown[lab] || 0) + 1
+    out[letter].total += 1
+  })
+  return out
 }

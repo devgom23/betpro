@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import { scoreClass } from '../../utils/format'
 import RtBadge from '../RtBadge/RtBadge'
+import { wdlBreakdown } from '../../utils/h2hVerdict'
 import './HeadToHeadResult.css'
 
 // 승점은 '이 조회의 기준 홈팀'(home prop) 기준(승3/무1/패0) — 그 팀이 각 과거
@@ -138,35 +139,6 @@ function filterFav(matches, favJ, favY) {
   })
 }
 
-// 기간을 좁히면 위 요약표(전체기준/홈기준)도 그 기간만으로 다시 세야 한다.
-// 백엔드 _wdl_breakdown(api/main.py)과 같은 규칙을 그대로 옮긴 것이다 — 기준 팀이
-// 그 경기에서 홈이었든 원정이었든 실제 스코어로 W/D/L을 판정하고, 그 안에서 RT를 쪼갠다.
-// 스코어가 없는 경기(예정·취소)는 백엔드와 똑같이 뺀다.
-//
-// 기간을 안 좁혔을 때는 이걸 쓰지 않고 백엔드 값을 그대로 쓴다 — 경기 목록은 limit으로
-// 잘릴 수 있어서(총 N경기 중 최근 200경기만), 잘린 목록으로 다시 세면 백엔드 값보다
-// 작게 나온다. 3·5년 창은 limit보다 훨씬 짧아 잘릴 일이 없다.
-function wdlBreakdown(matches, referenceTeam, homeOnly) {
-  const out = {
-    W: { total: 0, breakdown: {} },
-    D: { total: 0, breakdown: {} },
-    L: { total: 0, breakdown: {} },
-  }
-  matches.forEach((m) => {
-    const hs = m.HS
-    const as_ = m.AS
-    if (hs === null || hs === undefined || as_ === null || as_ === undefined) return
-    const rowHt = String(m.HT ?? '').trim()
-    if (homeOnly && rowHt !== referenceTeam) return
-    const mine = rowHt === referenceTeam ? hs : as_
-    const theirs = rowHt === referenceTeam ? as_ : hs
-    const letter = mine > theirs ? 'W' : mine < theirs ? 'L' : 'D'
-    const lab = m.RT_label || '기타'
-    out[letter].breakdown[lab] = (out[letter].breakdown[lab] || 0) + 1
-    out[letter].total += 1
-  })
-  return out
-}
 
 const RT_ORDER = ['핸승', '핸무', '무', '역']
 // 상대전적 표는 핸승/핸무/무/역 개별 색이 아니라, 그 칸이 속한 승/무/패(W/D/L) 그룹
@@ -247,8 +219,9 @@ function WdlRow({ title, wdl, scope, onTotalClick, activeMode }) {
 // 홈이었던 맞대결만)을 같은 표 안에 두 줄로 이어 붙여, 헤더 하나로 바로 비교할 수 있게 한다.
 // 헤더는 한 줄로 압축한다 — W/D/L 접두어 없이 핸승/핸무/무/역만 반복해서 보여주고(그룹
 // 구분은 세로선으로), 맨 뒤 토탈은 승/무/패 세 칸으로 나눠 W/D/L 각각의 합계를 바로 본다.
-function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode }) {
-  if (!wdl) return null
+// rows를 넘기면 그 줄들({title, wdl})을 그린다 — 상세보기 참고 줄 '전적' 요약표가 같은 표 모양을 쓴다(2026-10-10).
+export function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode, rows }) {
+  if (!wdl && !rows) return null
   return (
     <table className="detail-table h2h-wdl-grid">
       <WdlCols />
@@ -268,8 +241,12 @@ function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode }) {
         </tr>
       </thead>
       <tbody>
-        <WdlRow title="전체기준" wdl={wdl} scope="all" onTotalClick={onTotalClick} activeMode={activeMode} />
-        <WdlRow title="홈기준" wdl={wdlHome} scope="home" onTotalClick={onTotalClick} activeMode={activeMode} />
+        {rows ? rows.map((r) => <WdlRow key={r.title} title={r.title} wdl={r.wdl} />) : (
+          <>
+            <WdlRow title="전체기준" wdl={wdl} scope="all" onTotalClick={onTotalClick} activeMode={activeMode} />
+            <WdlRow title="홈기준" wdl={wdlHome} scope="home" onTotalClick={onTotalClick} activeMode={activeMode} />
+          </>
+        )}
       </tbody>
     </table>
   )
