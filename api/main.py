@@ -2108,12 +2108,16 @@ def weekly_picks(user: dict = Depends(get_current_user)):
             keep_idx = sorted(key_index[k] for k in starred if k in key_index)
             if not keep_idx:
                 continue
+            # 경기별 세팅값의 내 예측(확신·맞겠지·애매해·틀릴듯) — 공식 리그 경기에만 있다(2026-10-10 사용자 지정, 카드 뱃지)
+            preds = MYPICKS.round_miss_pred_lookup(username, code) if scope == PATHS.SCOPE_MASTER else {}
             for rec in DATA.df_to_records(df.loc[keep_idx]):
                 key = _my_pick_key(rec.get("S"), rec.get("R"), rec.get("No"),
                                    rec.get("HT"), rec.get("AT"))
                 p = starred.get(key)
                 if p is None:
                     continue
+                rec["MY_PRED"] = preds.get((MYPICKS.normalize(rec.get("S")), re.sub(r"\D", "", str(rec.get("R") or "")),
+                                            MYPICKS.normalize(rec.get("HT")), MYPICKS.normalize(rec.get("AT"))))
                 rec["L"] = code
                 rec["L_LABEL"] = labels.get(code, code)
                 rec["scope"] = scope
@@ -2375,7 +2379,10 @@ def week_list(start: Optional[str] = None, end: Optional[str] = None,
                 continue
             records = DATA.df_to_records(df.loc[keep])
             _attach_my_picks(records, user["username"], code, scope)
+            preds = MYPICKS.round_miss_pred_lookup(user["username"], code)   # 경기별 세팅값의 내 예측(확신·맞겠지·애매해·틀릴듯)
             for rec in records:
+                rec["MY_PRED"] = preds.get((MYPICKS.normalize(rec.get("S")), re.sub(r"\D", "", str(rec.get("R") or "")),
+                                            MYPICKS.normalize(rec.get("HT")), MYPICKS.normalize(rec.get("AT"))))
                 rec["L"] = code
                 rec["L_LABEL"] = labels.get(code, code)
                 rec["scope"] = scope

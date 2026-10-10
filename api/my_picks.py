@@ -448,7 +448,7 @@ def list_round_picks(username: str, code: str, scope: str, s: str, round_no: int
     import re
     con = _connect(username)
     try:
-        rows = con.execute("SELECT R, HT, AT, pick, p, hit, odds_mark, tag_verdict, tag_zone, tag_rel, tag_sample "
+        rows = con.execute("SELECT R, HT, AT, pick, p, hit, odds_mark, tag_verdict, tag_zone, tag_rel, tag_sample, starred "
                            "FROM my_picks WHERE code=? AND scope=? AND S=?",
                            (code, scope, normalize(s))).fetchall()
         out = {}
@@ -457,10 +457,11 @@ def list_round_picks(username: str, code: str, scope: str, s: str, round_no: int
                 continue
             # done = 내픽·상세픽·의견·배당 클릭 + 판정·구간·상대·표본 드롭박스, 여덟 가지를 전부 입력함 — 경기 칸 글자에 밑줄을
             # 긋는 표시(2026-10-10 사용자 지정: 하나라도 빠지면 밑줄 없음. 배당 클릭을 풀거나 드롭박스를 '선택'으로 되돌리면 바로 빠진다).
-            if row["pick"] or row["p"] or row["hit"] or row["odds_mark"]:
+            if row["pick"] or row["p"] or row["hit"] or row["odds_mark"] or row["starred"]:
                 done = all(row[c] for c in ("pick", "p", "hit", "odds_mark", "tag_verdict", "tag_zone", "tag_rel", "tag_sample"))
                 out[f"{row['HT']}|{row['AT']}"] = {"pick": row["pick"] or "", "p": row["p"] or "", "hit": row["hit"] or "", "done": done,
-                                                    "marks": [m for m in str(row["odds_mark"] or "").split(",") if m]}   # 배당 줄 노랑 표시용
+                                                    "marks": [m for m in str(row["odds_mark"] or "").split(",") if m],
+                                                    "star": int(row["starred"] or 0)}   # 머리글 별표(리스트 별표와 같은 값)   # 배당 줄 노랑 표시용
         return out
     finally:
         con.close()
@@ -488,6 +489,19 @@ def list_round_miss_preds(username: str, code: str, s: str, r: str) -> dict:
         rows = con.execute("SELECT HT, AT, pred FROM round_miss_preds WHERE code=? AND S=? AND R=?",
                            (code, normalize(s), normalize(r))).fetchall()
         return {f"{row['HT']}|{row['AT']}": row["pred"] for row in rows}
+    finally:
+        con.close()
+
+
+def round_miss_pred_lookup(username: str, code: str) -> dict:
+    """그 리그의 내 예측 전부 — {(시즌, 라운드 숫자, 홈, 원정): 예측}. 이번주 픽 카드 뱃지용(2026-10-10 사용자 지정).
+    라운드는 '8R'·'8' 모두 숫자만 비교한다(표에 저장된 건 숫자, 리그 행은 '8R')."""
+    import re
+    con = _connect(username)
+    try:
+        _ensure_round_miss_preds(con)
+        rows = con.execute("SELECT S, R, HT, AT, pred FROM round_miss_preds WHERE code=?", (code,)).fetchall()
+        return {(normalize(r["S"]), re.sub(r"\D", "", str(r["R"])), normalize(r["HT"]), normalize(r["AT"])): r["pred"] for r in rows}
     finally:
         con.close()
 

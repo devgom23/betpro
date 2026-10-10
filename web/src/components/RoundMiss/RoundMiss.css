@@ -355,3 +355,10 @@
   color: var(--chip-yellow-fg);
   font-weight: 700;
 }
+
+/* 머리글 별표 — 별 색만 바뀌고(없음 회색 · 반개 · 온별 금색) 칸 배경은 그대로(2026-10-10 사용자 지정) */
+.rm-table th .rm-star {
+  font-size: 13px;
+  padding: 0 3px 0 0;
+  vertical-align: baseline;
+}

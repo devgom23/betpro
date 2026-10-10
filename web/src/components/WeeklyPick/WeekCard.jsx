@@ -5,6 +5,8 @@ import { LAB, cellHit, homeFavOf, lineText, pickSide } from './weekBet'
 
 const f2 = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(2))
 const P_CLS = { 핸승: 'is-blue', 핸무: 'is-green', 무: 'is-gray', 역: 'is-red' }
+// 내 예측(경기별 세팅값에서 고른 확신·맞겠지·애매해·틀릴듯) — 색은 그 표의 글자색과 같다(2026-10-10 사용자 지정)
+const PRED_CLS = { 확신: 'is-yellow', 맞겠지: 'is-green', 애매해: 'is-gray', 틀릴듯: 'is-red' }
 
 function timeText(tm) {
   const s = String(tm ?? '').replace(/\D/g, '').padStart(4, '0')
@@ -16,8 +18,8 @@ export default function WeekCard({ row, markets, picked, onToggle, onOpen, onHid
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
   const fav = homeFavOf(row)
   const memo = stripMemo(row.MEMO_PRE || '') || stripMemo(row.MEMO || '')
-  // 축-고민은 메인 칸에 있어도 별 1개로 보인다(2026-09-27 사용자 지정 — 아직 확정 전이라는 표시).
-  const star = row.MY_HIT === '축-고민' || Number(row.IMPORTANT) < 2 ? '★' : '★★'
+  // 의견에 '고민'이 들어 있으면 별 1개로 보인다(2026-09-27 사용자 지정 — 아직 확정 전이라는 표시). 칸도 사이드(weekBet.mainSideOf).
+  const star = String(row.MY_HIT || '').includes('고민') || Number(row.IMPORTANT) < 2 ? '★' : '★★'
   const isOn = (m, i) => picked?.some((s) => s.m === m && s.i === i)
   return (
     <div className={`wk-card${picked?.length ? ' has-pick' : ''}`}>
@@ -41,6 +43,7 @@ export default function WeekCard({ row, markets, picked, onToggle, onOpen, onHid
         <span className={`wk-chip ${side === '정' ? 'is-blue' : side === '플' ? 'is-red' : 'is-gray'}`}>{row.MY_PICK || '미정'}</span>
         {row.MY_P && (<><span className="wk-lb">상세픽</span><span className={`wk-chip ${P_CLS[row.MY_P] || 'is-gray'}`}>{row.MY_P}</span></>)}
         {row.MY_HIT && (<><span className="wk-lb">의견</span><span className={`wk-chip ${row.MY_HIT === 'Pass' ? 'is-gray' : 'is-yellow'}`}>{row.MY_HIT}</span></>)}
+        {row.MY_PRED && (<><span className="wk-lb">예측</span><span className={`wk-chip ${PRED_CLS[row.MY_PRED] || 'is-gray'}`} title="경기별 세팅값에서 고른 내 예측(이 판정이 맞을지)">{row.MY_PRED}</span></>)}
       </div>
       {memo && <div className="wk-memo" title={memo}>{memo}</div>}
       {markets.map((mk) => (

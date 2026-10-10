@@ -1,5 +1,8 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
+import StarButton, { nextStarLevel } from '../StarButton/StarButton'
+import { pickPatchBody } from '../../utils/pickSave'
+import { emitStar, STAR_EVENT } from '../../utils/starSync'
 import { LEAGUE_LABEL, useRoundDetail, useRoundMissSummary } from './useRoundMiss'
 import { myPickStyle } from '../LeagueTable/columnGroups'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
@@ -94,6 +97,31 @@ export function RoundMissGames({ lg, season, round, mkt, noHead }) {
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lg, season, round])
+  // 머리글 별표 — 리스트와 같은 내 기록(my_picks.starred)을 쓴다. 누르면 화면에 바로 반영하고 서버에 저장, 실패하면 되돌린다.
+  // 리스트(LeagueTable)가 같은 화면에 있으면 방송(emitStar)으로 그쪽 별도 바로 따라가고, 리스트에서 바꾼 것도 아래 효과로 받는다.
+  const setStar = (g) => {
+    const key = `${g.ht}|${g.at}`
+    const before = picks[key]?.star || 0
+    const next = nextStarLevel(before)
+    const row = { S: season, R: `${round}R`, No: g.no, HT: g.ht, AT: g.at }
+    const apply = (v) => setPicks((p) => ({ ...p, [key]: { ...(p[key] || { pick: '', p: '', hit: '', done: false, marks: [] }), star: v } }))
+    apply(next)
+    emitStar(row, next, 'rm')
+    api.post(`/api/leagues/${lg}/my_picks`, pickPatchBody('master', row, { important: next })).catch(() => { apply(before); emitStar(row, before, 'rm') })
+  }
+  useEffect(() => {
+    const onStar = (e) => {
+      const d = e.detail
+      if (!d || d.who === 'rm' || String(d.S) !== String(season)) return
+      if (String(d.R).replace(/\D/g, '') !== String(round)) return
+      setPicks((p) => {
+        const key = `${d.HT}|${d.AT}`
+        return { ...p, [key]: { ...(p[key] || { pick: '', p: '', hit: '', done: false, marks: [] }), star: d.level } }
+      })
+    }
+    window.addEventListener(STAR_EVENT, onStar)
+    return () => window.removeEventListener(STAR_EVENT, onStar)
+  }, [season, round])
   // 고르면 화면에 바로 반영하고 서버에는 뒤따라 저장한다(실패하면 되돌린다).
   const setPred = (g, value) => {
     const key = `${g.ht}|${g.at}`
@@ -138,7 +166,12 @@ export function RoundMissGames({ lg, season, round, mkt, noHead }) {
                     <th key={g.key} colSpan={g.n} className={[g.wd === '토' ? 'blue' : g.wd === '일' ? 'red' : '', gi > 0 ? 'rm-day-start' : ''].filter(Boolean).join(' ') || undefined}>{g.wd}요일</th>
                   ))}
                 </tr>
-                <tr>{sel.map((g, i) => <th key={i} className={dc(i)} title={`${g.ht} vs ${g.at}`}>{i + 1}경기<Sz /></th>)}</tr>
+                <tr>{sel.map((g, i) => (
+                  <th key={i} className={dc(i)} title={`${g.ht} vs ${g.at}`}>
+                    {/* 별표(2026-10-10 사용자 지정) — 아래 리스트 별표와 같은 값. 별 색만 바뀌고 칸 배경은 그대로, 누르면 없음→반개→온별 순환 */}
+                    <StarButton className="rm-star" level={picks[`${g.ht}|${g.at}`]?.star || 0} onClick={() => setStar(g)} />{i + 1}경기<Sz />
+                  </th>
+                ))}</tr>
               </thead>
               <tbody>
                 <tr>

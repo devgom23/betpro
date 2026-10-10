@@ -11,7 +11,7 @@ import '../components/WeeklyPick/WeeklyPick.css'
 import './WeeklyPickPage.css'
 
 // 이번주 픽(2026-09-27 개편, 사용자 지정 — 목업 web/public/mockups/weekly_pick_mock.html).
-//   위: 날짜 탭 + 카드 보드(메인/사이드 = 의견 B-Ma·B-Si·축-Si, 없으면 별 단계 × 정/플 = 내픽 계열). 카드의 배당을 눌러 벳에 담는다.
+//   위: 날짜 탭 + 카드 보드(메인/사이드 = 의견 B-Ma·B-Si·축-Si·고민, 없으면 별 단계 × 정/플 = 내픽 계열). 카드의 배당을 눌러 벳에 담는다.
 //   가운데: 이번주 벳 = 사다리(경기 하나가 한 층, 층마다 하나씩 고른 모든 조합이 한 줄). 층 수 제한 없음.
 //   아래: 저장된 벳(프로토 구매내역처럼 한 줄씩, 접힘/펼침) → 벳 등록하면 베팅내역으로.
 // 예전 화면(리그 표 목록 + 선택 1~4 벳 슬립, components/BetSlip)은 이 화면으로 바뀌었다.
@@ -282,7 +282,7 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
         )}
       </div>
       <p className="wp-desc">
-        별표 경기 {rows.length}개 · 메인/사이드는 의견(B-Ma·B-Si·축-Si, 없으면 ★★ 메인 / ★ 사이드), 정·플은 내픽으로 나눕니다 · 카드의 배당을 눌러 이번주 벳에 담습니다
+        별표 경기 {rows.length}개 · 메인/사이드는 의견(B-Ma·B-Si·축-Si·고민, 없으면 ★★ 메인 / ★ 사이드), 정·플은 내픽으로 나눕니다 · 카드의 배당을 눌러 이번주 벳에 담습니다
         (한 경기에서 1칸 = <b>축</b>, 2칸 이상 = <b>복수</b> — 가로·세로 모두 가능)
       </p>
 
@@ -307,8 +307,8 @@ export default function WeeklyPickPage({ onGoBetHistory }) {
           </div>
 
           <div className="wk-board">
-            <div className="wk-grp is-main">메인 <small>B-Ma · 축-정·플·고민 · ★★</small></div>
-            <div className="wk-grp">사이드 <small>B-Si · 축-Si · ★</small></div>
+            <div className="wk-grp is-main">메인 <small>B-Ma · 축-정·플 · ★★</small></div>
+            <div className="wk-grp">사이드 <small>B-Si · 축-Si · 고민 · ★</small></div>
             {BOXES.map(([ms, side], bi) => (
               <div key={`h${bi}`} className={`wk-sub ${side === '정' ? 'is-jung' : 'is-pl'}${bi === 1 ? ' is-edge' : ''}`}>
                 {side}<small>{shown.filter((r) => boxOf(r) === ms + side).length}경기</small>

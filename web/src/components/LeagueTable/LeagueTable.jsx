@@ -11,6 +11,7 @@ import { LEAGUE_LABELS } from '../../utils/format'
 import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
 import RtBadge from '../RtBadge/RtBadge'
 import StarButton, { nextStarLevel, starLevel } from '../StarButton/StarButton'
+import { emitStar, STAR_EVENT } from '../../utils/starSync'
 import { api } from '../../api/client'
 import { pickPatchBody } from '../../utils/pickSave'
 import { sameOddsGroupTitle } from '../../utils/sameOdds'
@@ -116,7 +117,25 @@ function plOddsKey(row, p = '') {
   return v.toFixed(2)
 }
 
-// 서버 응답의 묶음 4종 — 어떤 칸에 밑줄을 긋고 호버에 뭐라고 쓸지까지 여기서 정한다.
+// 역배 — 정배의 반대편 국내 배당(승·패 중 큰 쪽). 정배와 같은 이유로 승=패는 뺀다.
+function dogOddsKey(row, p = '') {
+  const w = Number(row?.[p + SAME_ODDS_W])
+  const l = Number(row?.[p + SAME_ODDS_L])
+  if (!Number.isFinite(w) || !Number.isFinite(l) || w <= 0 || l <= 0 || w === l) return null
+  return Math.max(w, l).toFixed(2)
+}
+
+// 정배 쪽 핸디배당 — 플핸(언더독 핸디)의 반대편. 홈이 정배면 핸디승, 원정이 정배면 핸디패.
+function fhOddsKey(row, p = '') {
+  const w = Number(row?.[p + SAME_ODDS_W])
+  const l = Number(row?.[p + SAME_ODDS_L])
+  if (!Number.isFinite(w) || !Number.isFinite(l) || w <= 0 || l <= 0 || w === l) return null
+  const v = Number(row?.[p + (w < l ? SAME_ODDS_HW : SAME_ODDS_HL)])
+  if (!Number.isFinite(v) || v <= 0) return null
+  return v.toFixed(2)
+}
+
+// 서버 응답의 묶음 8종(2026-10-10 — 무만 빼고 승/패 4칸 전부) — 어떤 칸에 밑줄을 긋고 호버에 뭐라고 쓸지까지 여기서 정한다.
 // col은 **화면 컬럼 키**다: 배변 줄도 표에서는 KW/KL/KHW/KHL 칸에 E 값을 넣어 그리므로
 // 접두사 없는 키를 돌려준다(값을 고를 때만 E를 붙인다).
 const DUP_KINDS = [
@@ -124,6 +143,10 @@ const DUP_KINDS = [
   { key: 'pl', p: '', final: false, label: '플핸(언더독 핸디)', mark: '플' },
   { key: 'efav', p: 'E', final: true, label: '정배(배변)', mark: '정' },
   { key: 'epl', p: 'E', final: true, label: '플핸(언더독 핸디, 배변)', mark: '플' },
+  { key: 'dog', p: '', final: false, label: '역배', mark: '역' },
+  { key: 'fh', p: '', final: false, label: '정배 쪽 핸디', mark: '정' },
+  { key: 'edog', p: 'E', final: true, label: '역배(배변)', mark: '역' },
+  { key: 'efh', p: 'E', final: true, label: '정배 쪽 핸디(배변)', mark: '정' },
 ]
 
 function dupPick(r, kind) {
@@ -131,6 +154,12 @@ function dupPick(r, kind) {
   const homeFav = Number(r[p + SAME_ODDS_W]) < Number(r[p + SAME_ODDS_L])
   if (kind.key === 'fav' || kind.key === 'efav') {
     return { col: homeFav ? SAME_ODDS_W : SAME_ODDS_L, odds: favOddsKey(r, p), markHome: homeFav }
+  }
+  if (kind.key === 'dog' || kind.key === 'edog') {
+    return { col: homeFav ? SAME_ODDS_L : SAME_ODDS_W, odds: dogOddsKey(r, p), markHome: !homeFav }
+  }
+  if (kind.key === 'fh' || kind.key === 'efh') {
+    return { col: homeFav ? SAME_ODDS_HW : SAME_ODDS_HL, odds: fhOddsKey(r, p), markHome: homeFav }
   }
   return { col: homeFav ? SAME_ODDS_HL : SAME_ODDS_HW, odds: plOddsKey(r, p), markHome: !homeFav }
 }
@@ -316,7 +345,7 @@ export default function LeagueTable({
               markHome: dupPick(o, kind).markHome,
               hs: o.HS ?? null, as_: o.AS ?? null, rt: o.RT ?? null,
             }))
-            // 한 경기가 정배·플핸 양쪽에 걸릴 수 있어 칸(col)별로 따로 담는다.
+            // 한 경기가 여러 종류(정배·역배·플핸·정배 핸디)에 걸릴 수 있어 칸(col)별로 따로 담는다.
             target.set(`${key}\u0000${col}`, sameOddsGroupTitle(kind.label, odds, entries, kind.mark))
           }
         }
@@ -430,6 +459,7 @@ export default function LeagueTable({
     const next = { ...prevValue, ...patch }
     pickOverridesRef.current = { ...pickOverridesRef.current, [key]: next }
     setPickOverrides(pickOverridesRef.current)
+    if ('important' in patch) emitStar(row, patch.important, 'table')    // 경기별 세팅값 머리글 별표가 같이 바뀐다
     try {
       await api.post(`/api/leagues/${rowCode(row)}/my_picks`, pickPatchBody(rowScope(row), row, patch))
     } catch {
@@ -438,6 +468,19 @@ export default function LeagueTable({
       setPickOverrides(pickOverridesRef.current)
     }
   }
+
+  // 경기별 세팅값 머리글 별표를 눌렀을 때(다른 부품이 방송) — 이 표의 같은 경기 별표를 바로 바꾼다. 저장은 보낸 쪽이 한다.
+  useEffect(() => {
+    const onStar = (e) => {
+      const d = e.detail
+      if (!d || d.who === 'table') return
+      const key = matchKey(d)
+      pickOverridesRef.current = { ...pickOverridesRef.current, [key]: { ...(pickOverridesRef.current[key] || {}), important: d.level } }
+      setPickOverrides(pickOverridesRef.current)
+    }
+    window.addEventListener(STAR_EVENT, onStar)
+    return () => window.removeEventListener(STAR_EVENT, onStar)
+  }, [])
 
   // 화면에는 항상 딱 20행만 보이게 높이를 고정하고, 그 이상은 표 내부 스크롤로 본다.
   // 헤더 2줄 + 실제 데이터 행 높이(글씨 크기에 따라 달라짐)를 직접 측정해서 계산한다.

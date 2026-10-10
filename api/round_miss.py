@@ -43,7 +43,7 @@ ODDS_FIN = ["EFW", "EFD", "EFL", "EKW", "EKD", "EKL", "EKHW", "EKHL"]
 BASE_OF = dict(zip(ODDS_FIN, ODDS_INIT))
 # 경기별 세팅값 '배당' 줄(2026-10-10)에 보여 줄 국내 초기 칸 — 승무패(KW·KD·KL)와 핸디 승무패(KHW·KHD·KHL)·기준점(KH)
 SHOW_ODDS = ["KW", "KD", "KL", "KHW", "KHD", "KHL", "KH"]
-NEED = ["S", "R", "DT", "TM", "HT", "AT", "HS", "AS", "RT"] + ODDS_INIT + ODDS_FIN + ["KHD", "KH"]
+NEED = ["S", "R", "DT", "TM", "HT", "AT", "HS", "AS", "RT"] + ODDS_INIT + ODDS_FIN + ["KHD", "KH", "No"]
 
 CODES = ["K-W", "K-L", "K-PL", "TK-W", "TK-L", "TK-PL", "F-W", "F-L", "TF-W", "TF-L"]
 
@@ -294,6 +294,7 @@ def build(db: str | None = None) -> pd.DataFrame:
         "k": st["k"], "kw": st["kw"], "f": st["f"], "fw": st["fw"], "v": st["v"], "vs": st["vs"],
         "hf": _home_fav_arr(sub),
         **{f"o_{c}": pd.to_numeric(sub[c], errors="coerce").to_numpy(float) for c in SHOW_ODDS},
+        "no": pd.to_numeric(sub["No"], errors="coerce").to_numpy(float),     # 별표 저장 키(내 기록은 S·R·No·팀으로 찾는다)
     })
     return out
 
@@ -313,7 +314,7 @@ def _home_fav_arr(sub: pd.DataFrame) -> np.ndarray:
 def get(db: str | None = None) -> pd.DataFrame:
     """캐시 — 리그 표가 바뀌면 다시 만든다(약 5초). 경기 하나 = 한 줄."""
     db = db or PATHS.get_master_db()
-    return DATA.cached_derive(db, "round_miss:v7", lambda: build(db), tables=tuple(PATHS.LEAGUES))
+    return DATA.cached_derive(db, "round_miss:v8", lambda: build(db), tables=tuple(PATHS.LEAGUES))
 
 
 def _miss_counts(df: pd.DataFrame, side_col: str, split_col: str | None = None) -> pd.DataFrame:
@@ -387,6 +388,7 @@ def detail(lg: str, r: int, db: str | None = None) -> dict:
             "d": str((pd.Timestamp("2000-01-01") + pd.Timedelta(days=int(rec["ord"]))).date()),
             "wd": _wd_of(rec["ord"], rec["hour"]), "kno": kn["kno"] if kn else None,
             "hf": int(rec["hf"]),
+            "no": None if pd.isna(rec["no"]) else int(rec["no"]),
             "o": [None if pd.isna(rec[f"o_{c}"]) else round(float(rec[f"o_{c}"]), 2) for c in SHOW_ODDS],   # [KW,KD,KL,KHW,KHD,KHL,KH]
         })
     for gl in seasons.values():          # 와이즈토토 순서가 있으면 그 순서, 없으면 날짜·시각 순

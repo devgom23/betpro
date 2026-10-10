@@ -25,6 +25,11 @@
   단 배변은 **실제로 움직인 경기만**(2026-10-10 — 안 움직여도 배변 칸에 초기 값이 들어 있어 같은 묶음이
   배변 줄에 또 나왔다. _moved 참고).
   K1/K2(내 데이터)는 빼고 6대리그끼리만 본다.
+
+[2026-10-10 사용자 지정 — "무 빼고 승/패를 다 찾아줘"] 정배·플핸 둘만 보던 것에 반대편 둘을 더했다.
+  역배 : max(승, 패) — 정배의 반대편 국내 배당.
+  정배 핸디(fh) : 정배 쪽 핸디배당 — 플핸(언더독 핸디)의 반대편. 승 > 패(홈이 언더독)면 핸디패, 아니면 핸디승.
+  그래서 무(KD·KHD)만 빼고 승·패 4칸(KW·KL·KHW·KHL)이 전부 동배당 찾기에 들어간다. 초기·배변 따로는 그대로.
 """
 import re
 from datetime import date, timedelta
@@ -42,8 +47,8 @@ COLS = ("S", "R", "No", "DT", "TM", "HT", "AT", "HS", "AS", "RT",
         "EKW", "EKD", "EKL", "EKHW", "EKHD", "EKHL")
 
 # 묶음 종류 — (응답 키, 배당 컬럼 접두사, 정배/플핸)
-KINDS = (("fav", "", "fav"), ("pl", "", "pl"),
-         ("efav", "E", "fav"), ("epl", "E", "pl"))
+KINDS = (("fav", "", "fav"), ("dog", "", "dog"), ("pl", "", "pl"), ("fh", "", "fh"),
+         ("efav", "E", "fav"), ("edog", "E", "dog"), ("epl", "E", "pl"), ("efh", "E", "fh"))
 
 
 def round_key(dt_str) -> str | None:
@@ -76,7 +81,7 @@ def _moved(row, kind: str) -> bool:
     """배변이 실제로 움직였나 — 국배는 안 움직여도 배변 칸(EKW…)에 초기와 같은 값이 들어 있다(6대리그 배변 30,122경기 중
     22,464경기). 정배 묶음은 승·무·패, 플핸 묶음은 핸디 승·무·패 세 값이 초기와 모두 같으면 '배변 안 됨'으로 본다
     (2026-10-10 사용자 지정 — 배변이 없는데 초기와 같은 동배당이 배변 줄에 또 나왔다. 표본의 '배변이 안되었습니다'와 같은 생각)."""
-    cols = ("KW", "KD", "KL") if kind == "fav" else ("KHW", "KHD", "KHL")
+    cols = ("KW", "KD", "KL") if kind in ("fav", "dog") else ("KHW", "KHD", "KHL")
     for c in cols:
         a, b = _num(row.get(c)), _num(row.get("E" + c))
         if (None if a is None else round(a, 2)) != (None if b is None else round(b, 2)):
@@ -95,7 +100,11 @@ def odds_of(row, prefix: str, kind: str) -> str | None:
         return None
     if kind == "fav":
         return f"{min(w, l):.2f}"
-    v = _num(row.get(prefix + ("KHW" if w > l else "KHL")))
+    if kind == "dog":
+        return f"{max(w, l):.2f}"
+    # pl = 언더독 쪽 핸디(홈이 언더독이면 핸디승) · fh = 정배 쪽 핸디(그 반대)
+    home_dog = w > l
+    v = _num(row.get(prefix + ("KHW" if home_dog == (kind == "pl") else "KHL")))
     return None if v is None else f"{v:.2f}"
 
 
@@ -129,7 +138,7 @@ def _build(db: str) -> dict:
 def index(db: str | None = None) -> dict:
     """회차별 동배당 묶음(캐시). DB가 바뀌면 data_access 캐시가 알아서 다시 만든다."""
     db = db or PATHS.get_master_db()
-    return DATA.cached_derive(db, "same_odds_index_v3", lambda: _build(db),
+    return DATA.cached_derive(db, "same_odds_index_v4", lambda: _build(db),
                               tables=tuple(PATHS.LEAGUES))
 
 
@@ -146,9 +155,10 @@ def _trio(rec, prefix: str, kind: str):
     w, l = _num(rec.get(prefix + "KW")), _num(rec.get(prefix + "KL"))
     if w is None or l is None or w == l:
         return None, None
-    base = prefix + ("KH" if kind == "pl" else "K")
+    base = prefix + ("KH" if kind in ("pl", "fh") else "K")
     vals = [_num(rec.get(base + s)) for s in ("W", "D", "L")]
-    hit = (0 if w < l else 2) if kind == "fav" else (0 if w > l else 2)
+    hit = {"fav": 0 if w < l else 2, "dog": 0 if w > l else 2,
+           "pl": 0 if w > l else 2, "fh": 0 if w < l else 2}[kind]
     return [None if v is None else f"{v:.2f}" for v in vals], hit
 
 
@@ -157,8 +167,8 @@ def _sort_key(g):
 
 
 def for_match(row: dict, db: str | None = None) -> dict | None:
-    """상세보기 '같은 회차 동배당 결과' 섹션 — 이 경기가 속한 묶음 4종(초기·배변 ×
-    정배·플핸)에서 자기 자신을 뺀 나머지. 같은 배당이 없으면 games=[]로 둔다
+    """상세보기 '같은 회차 동배당 결과' 섹션 — 이 경기가 속한 묶음 8종(초기·배변 ×
+    정배·역배·플핸·정배 핸디)에서 자기 자신을 뺀 나머지. 같은 배당이 없으면 games=[]로 둔다
     (배변이 초기와 똑같아도 줄을 지우지 않는다 — '움직였다가 제자리로 왔구나'까지
     보이게, 2026-09-23 사용자 지정)."""
     rk = round_key(row.get("DT"))

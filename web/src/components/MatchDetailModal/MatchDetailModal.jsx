@@ -426,7 +426,7 @@ function foreignTieRefs(row) {
 // 배변 동배당이 있으면 그것을, 없으면 초기 동배당을 쓴다.
 function sameOddsRefs(sameOdds) {
   const out = []
-  for (const [kind, name] of [['fav', '정'], ['pl', '플']]) {
+  for (const [kind, name] of [['fav', '정'], ['dog', '역'], ['pl', '플'], ['fh', '정핸']]) {
     const groups = (sameOdds?.groups || []).filter((g) => g.kind === kind && g.games.length)
     const g = groups.find((x) => x.phase === '배변') || groups[0]
     if (!g) continue
@@ -1381,7 +1381,9 @@ function flowValue(vals) {
 }
 
 // vals: [핸승,핸무,무,역] 또는 null(재료 없음) 또는 undefined(아직 불러오는 중).
-function seasonSampleCells(vals) {
+// highlight — 정배·플핸 표본의 리그·시즌 줄만 지표별 표본처럼 1등 칸(cell-max)·2등 칸(cell-second)을 칠한다
+// (2026-10-10 사용자 지정 — 통합 줄과 다른 표본 종류는 그대로). 흐름 칸은 칠하지 않는다.
+function seasonSampleCells(vals, highlight) {
   if (vals === undefined) {
     return <td colSpan={5} className="season-sample-loading">불러오는 중…</td>
   }
@@ -1392,7 +1394,7 @@ function seasonSampleCells(vals) {
   return (
     <>
       {[0, 1, 2, 3].map((i) => (
-        <td key={i}>{hasSample ? vals[i] : '-'}</td>
+        <td key={i} className={hasSample && highlight ? maxCellClass(vals, i) || undefined : undefined}>{hasSample ? vals[i] : '-'}</td>
       ))}
       <td className={flowClass}>{flow === null ? '-' : (flow > 0 ? `+${flow}` : flow)}</td>
     </>
@@ -1580,7 +1582,7 @@ function DirectionSampleTable({ kind, entries, season }) {
                 </td>
               )}
               <td className="row-label season-sample-sub">{sub}</td>
-              {seasonSampleCells(vals)}
+              {seasonSampleCells(vals, (kind === 'fav' || kind === 'pl') && sub !== '통합')}
             </tr>
           )))}
         </tbody>
@@ -2815,8 +2817,8 @@ function MultiBookLegend({ onClose }) {
 // ⚠ 이건 신호가 아니라 그냥 알림이다 — "같은 배당이 두 번 뜨면 하나는 깨진다"는 속설은
 // 6대리그 전수조사에서 사실이 아니었다(2026-09-04, LeagueTable.jsx 주석 참고).
 
-const SAME_ODDS_KIND_LABEL = { fav: '정배', pl: '플핸' }
-const SAME_ODDS_KIND_NOTE = { fav: '승/무/패 배당', pl: '핸디 승/무/패 배당' }
+const SAME_ODDS_KIND_LABEL = { fav: '정배', dog: '역배', pl: '플핸', fh: '정배 핸디' }
+const SAME_ODDS_KIND_NOTE = { fav: '승/무/패 배당', dog: '승/무/패 배당', pl: '핸디 승/무/패 배당', fh: '핸디 승/무/패 배당' }
 // 취소(5)·연기(6)처럼 색이 없는 결과는 '무'와 같은 회색 칩으로 떨어뜨린다.
 const SAME_ODDS_RT_CLASS = new Set(['핸승', '핸무', '무', '역'])
 
@@ -2859,7 +2861,7 @@ function SameOddsGame({ g }) {
 function SameOddsColumns({ sameOdds }) {
   return (
     <div className="same-odds-two">
-      {['fav', 'pl'].map((kind) => {
+      {['fav', 'dog', 'pl', 'fh'].map((kind) => {
         const groups = sameOdds.groups.filter((g) => g.kind === kind)
         if (!groups.length) return null
         return (

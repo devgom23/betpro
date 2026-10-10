@@ -24,12 +24,13 @@ export function pickSide(pick) {
 }
 
 // 메인/사이드 — 의견(MY_HIT)으로 정한다(2026-09-27 사용자 지정: 함부르크:쾰른 의견 B-Si → 사이드 정).
-//   의견에 'Si'가 들어가면(B-Si·축-Si) 사이드, 'Ma'가 들어가면(B-Ma)·축-정·축-플·축-고민은 메인.
+//   의견에 'Si'가 들어가면(B-Si·축-Si) 사이드, '고민'이 들어가면(P-고민·B-고민·축-고민) 별과 상관없이 사이드
+//   (2026-10-10 사용자 지정 — 예전엔 축-고민만 메인 칸에 두고 별 1개로 보였다), 'Ma'가 들어가면(B-Ma)·축-정·축-플은 메인.
 //   그 밖의 의견·의견 없음은 별 단계로 — ★★ 메인 / ★ 사이드.
 export function mainSideOf(row) {
   const hit = String(row?.MY_HIT || '')
-  if (hit.includes('Si')) return 'S'
-  if (hit.includes('Ma') || hit.startsWith('축-')) return 'M'   // 축-정·축-플·축-고민은 별과 상관없이 메인(축-Si는 위에서 사이드)
+  if (hit.includes('Si') || hit.includes('고민')) return 'S'
+  if (hit.includes('Ma') || hit.startsWith('축-')) return 'M'   // 축-정·축-플은 별과 상관없이 메인(축-Si·고민은 위에서 사이드)
   return Number(row?.IMPORTANT) >= 2 ? 'M' : 'S'
 }
 
