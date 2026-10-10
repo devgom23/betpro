@@ -1494,6 +1494,34 @@
   min-width: 26px;
 }
 
+.match-ref-has-pop {
+  position: relative;
+}
+
+/* 해배동배에 마우스를 올리면 뜨는 '회차 동배당' 상자 — 아래 섹션과 같은 내용 */
+.match-ref-pop {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 100%;
+  z-index: 30;
+  width: max-content;
+  max-width: 720px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  color: var(--text-primary);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.match-ref-has-pop:hover .match-ref-pop {
+  display: block;
+}
+
 .match-ref-item strong {
   font-weight: 600;
   color: var(--text-primary);

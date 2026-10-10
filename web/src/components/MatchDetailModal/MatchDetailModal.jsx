@@ -280,11 +280,13 @@ function MatchChip({ label, tone, title, children, onClick, extraClass }) {
 // 설명은 칩일 때와 같은 문구가 마우스를 올리면 나온다.
 // 왜 내렸나 — 단통 플핸 기준으로 '마감 시장 예상보다 더 맞힌 몫'이 전부 ±2%p 안이었다(15-16~ 22,589경기,
 // 메모리 reference-match-chip-audit): 똥배 +0.7 · 기대점수 +0.4 · 전적 −0.9~−0.2 · 무 −1.0/+0.7 · 해외만 반전 +0.9 · 해배동배 −1.0.
-function RefItem({ label, tone, title, compact, children }) {
+function RefItem({ label, tone, title, compact, pop, children }) {
   return (
-    <span className={compact ? 'match-ref-item match-ref-compact' : 'match-ref-item'} title={title}>
+    <span className={`${compact ? 'match-ref-item match-ref-compact' : 'match-ref-item'}${pop ? ' match-ref-has-pop' : ''}`} title={pop ? undefined : title}>
       {label !== undefined && <span className="match-ref-label">{label}</span>}
       <strong style={tone ? { color: `var(--chip-${tone}-fg)` } : undefined}>{children}</strong>
+      {/* 마우스를 올리면 뜨는 상자(2026-10-10 사용자 지정) — 글자 툴팁(title)은 표를 못 담아서 따로 그린다 */}
+      {pop && <span className="match-ref-pop">{pop}</span>}
     </span>
   )
 }
@@ -376,6 +378,21 @@ function foreignTieRefs(row) {
         + ' 이 경기는 "접전 배당대의 평범한 경기"로 보시면 됩니다(그 구간 평균 당첨 82.85%).'}
     >
       {fw.toFixed(2)}
+    </RefItem>,
+  ]
+}
+
+// 동배 — 같은 회차에 국내 정배배당이 이 경기와 똑같았던 다른 경기가 있으면 '동배 1.27(무)'(2026-10-10 사용자 지정).
+// 괄호 = 그 동배당 경기들의 결과(끝난 것만, 여러 개면 / 로 이음). 마우스를 올리면 아래 '회차 동배당' 섹션과 같은 내용이 상자로 뜬다.
+// 배변 동배당이 있으면 그것을, 없으면 초기 동배당을 쓴다.
+function sameOddsRefs(sameOdds) {
+  const fav = (sameOdds?.groups || []).filter((g) => g.kind === 'fav' && g.games.length)
+  const g = fav.find((x) => x.phase === '배변') || fav[0]
+  if (!g) return []
+  const res = g.games.map((gm) => rtLabel(gm.rt)).filter(Boolean)
+  return [
+    <RefItem key="sameodds" label="동배" pop={<SameOddsColumns sameOdds={sameOdds} />}>
+      {g.odds}{res.length ? `(${res.join('/')})` : ''}
     </RefItem>,
   ]
 }
@@ -1039,11 +1056,11 @@ function KnoZoneTable({ zone }) {
 
 // '참고' 한 줄 — 판정 줄 바로 밑(2026-10-09). 배당이 이미 말한 사실이라 칩 대신 흐린 글자로 늘어놓는다.
 // 항목 사이 가운뎃점은 글자 공백이 아니라 flex gap으로 벌린다(CLAUDE.md 6-2 — 공백은 브라우저가 합쳐 간격이 들쭉날쭉해진다).
-function MatchRefLine({ row, verdict, h2hLoading, h2hMatches, pick, xg }) {
+function MatchRefLine({ row, verdict, h2hLoading, h2hMatches, pick, xg, sameOdds }) {
   // 전적의 '최근5' — verdict(전체)가 있을 때만 뜻이 있다(h2hRefs 첫맞대결 분기 참고).
   const h2hRecent = verdict ? h2hVerdictRecent(h2hMatches, String(row.HT || '').trim(), row.S) : null
   const items = [...ddongRefs(row), ...xgRefs(row, xg), ...h2hRefs(verdict, h2hLoading, h2hRecent, row, pick, h2hMatches),
-    ...drawRefs(row, pick), ...forFlipRefs(row), ...foreignTieRefs(row)]
+    ...drawRefs(row, pick), ...forFlipRefs(row), ...foreignTieRefs(row), ...sameOddsRefs(sameOdds)]
   if (!items.length) return null
   return (
     <div className="match-ref-line">
@@ -2768,6 +2785,36 @@ function SameOddsGame({ g }) {
   )
 }
 
+// 정배·플핸 두 칸 — 회차 동배당 섹션과 '참고' 줄 해배동배 호버 상자가 같이 쓴다.
+function SameOddsColumns({ sameOdds }) {
+  return (
+    <div className="same-odds-two">
+      {['fav', 'pl'].map((kind) => {
+        const groups = sameOdds.groups.filter((g) => g.kind === kind)
+        if (!groups.length) return null
+        return (
+          <div className="same-odds-col" key={kind}>
+            <div className="same-odds-colhead">
+              {SAME_ODDS_KIND_LABEL[kind]}
+              <small>{SAME_ODDS_KIND_NOTE[kind]}</small>
+            </div>
+            {groups.map((g) => (
+              <div className="same-odds-grp" key={g.key}>
+                <div className="same-odds-label">{g.phase} <b>{g.odds}</b></div>
+                <div className="same-odds-list">
+                  {g.games.length
+                    ? g.games.map((gm, i) => <SameOddsGame key={i} g={gm} />)
+                    : <div className="same-odds-none">같은 배당 없음</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function SameOddsSection({ sameOdds, note, onSaveNote }) {
   if (!sameOdds?.groups?.length) return null
   // 제목 옆 설명글은 뺐다(2026-09-24 사용자 지정) — 그 자리에 다른 표본 섹션과 같은 메모 칸.
@@ -2778,30 +2825,7 @@ function SameOddsSection({ sameOdds, note, onSaveNote }) {
         회차 동배당
         <SampleNoteInput value={note} onSave={onSaveNote} placeholder="회차 동배당에 대한 의견" />
       </h3>
-      <div className="same-odds-two">
-        {['fav', 'pl'].map((kind) => {
-          const groups = sameOdds.groups.filter((g) => g.kind === kind)
-          if (!groups.length) return null
-          return (
-            <div className="same-odds-col" key={kind}>
-              <div className="same-odds-colhead">
-                {SAME_ODDS_KIND_LABEL[kind]}
-                <small>{SAME_ODDS_KIND_NOTE[kind]}</small>
-              </div>
-              {groups.map((g) => (
-                <div className="same-odds-grp" key={g.key}>
-                  <div className="same-odds-label">{g.phase} <b>{g.odds}</b></div>
-                  <div className="same-odds-list">
-                    {g.games.length
-                      ? g.games.map((gm, i) => <SameOddsGame key={i} g={gm} />)
-                      : <div className="same-odds-none">같은 배당 없음</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        })}
-      </div>
+      <SameOddsColumns sameOdds={sameOdds} />
     </section>
   )
 }
@@ -4956,7 +4980,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ marks, onToggleMark, row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, h2hMatches, axisV, axisStats, uni, plhan, onPlhanOpen, zone }) {
+function PickBand({ sameOdds, marks, onToggleMark, row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, h2hMatches, axisV, axisStats, uni, plhan, onPlhanOpen, zone }) {
   // '참고' 줄의 무·전적과 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -4994,7 +5018,7 @@ function PickBand({ marks, onToggleMark, row, h2hVerdict: verdict, h2hLoading, x
               onPlhanOpen={onPlhanOpen}
             />
             {/* 참고(2026-10-09 사용자 지정) — 경기지표의 축·확인 바로 아래, 같은 라벨 칸에 세로로. */}
-            <MatchRefLine row={row} verdict={verdict} h2hLoading={h2hLoading} h2hMatches={h2hMatches} pick={pick} xg={xg} />
+            <MatchRefLine row={row} verdict={verdict} h2hLoading={h2hLoading} h2hMatches={h2hMatches} pick={pick} xg={xg} sameOdds={sameOdds} />
             {/* 구간 표(2026-10-09 사용자 지정) — 경기지표 맨 아래 */}
             <KnoZoneTable zone={zone} />
           </div>
@@ -5536,6 +5560,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             고정, 아래만 스크롤). .detail-modal-card 주석 참고. */}
         <div className="detail-modal-scroll">
         <PickBand
+          sameOdds={sameOdds}
           row={row}
           h2hVerdict={h2hMark}
           h2hLoading={!pickData && !pickError}
@@ -5554,7 +5579,43 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           onToggleMark={toggleOddsMark}
         />
 
-        {/* 12개 배당사 — 배당 섹션 바로 아래(2026-09-24 사용자 지정). 자료가 없으면 섹션째 숨긴다. */}
+        {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,
+            배당 바로 아래). 시즌전적·연속기록·최근10 날짜는 pick_ai 응답이 오면 채워진다. */}
+        <section className="detail-section">
+          <h3>
+            {/* '팀 흐름' 글자 자체를 링크로(2026-09-29 사용자 지정 — "시즌전적에 링크 걸지
+                말고 팀흐름에 링크 걸고 시즌전적 단어는 삭제"). 팝업은 그대로 시즌전적 정의. */}
+            <button
+              type="button"
+              className="help-btn"
+              onClick={() => setShowSeasonLegend(true)}
+              title="시즌전적이 정확히 무엇을 세는 표인지 보기"
+            >
+              팀 흐름 <span className="help-mark">?</span>
+            </button>
+            {/* 팀 흐름 메모(2026-09-29 사용자 지정 — "팀흐름 바로 옆에 메모 인풋 박스 넣어주고
+                지금 있는 홈경기 이거는 팝업에 넣어줘"). 설명글(홈경기 스와치·팀 옆 괄호·최다
+                기록 기준)은 위 '?' 팝업(시즌전적 정의)에 옮겼다(SeasonRecordLegend ⑧). */}
+            {sampleNotes !== undefined && (
+              <SampleNoteInput
+                value={sampleNotes?.team_flow?.memo}
+                onSave={(memo) => saveSampleNote('team_flow', { memo: memo || null })}
+                placeholder="팀 흐름에 대한 의견"
+              />
+            )}
+            {pickError && <span className="detail-section-note">{pickError}</span>}
+          </h3>
+          <TeamFlowTable
+            row={row}
+            seasonRows={seasonSig?.rows}
+            streaks={pickData?.streaks}
+            recent10={pickData?.recent10}
+            venueRank={pickData?.venue_rank}
+            leagueAvgXg={seasonSig?.league_avg_xg}
+          />
+        </section>
+
+        {/* 12개 배당사 — 팀 흐름 바로 아래(2026-09-24 배당 아래로 정했다가, 2026-10-10 팀 흐름을 배당 아래로 올리면서 한 칸 내려갔다). 자료가 없으면 섹션째 숨긴다. */}
         <MultiBookSection
           books={books}
           bookDir={bookDir}
@@ -5596,42 +5657,6 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             />,
           } : null}
         />
-
-        {/* 팀 흐름 — 시즌전적·폼 지표·최근10경기를 팀별 한 줄 표로(2026-09-16 사용자 지정,
-            배당 바로 아래). 시즌전적·연속기록·최근10 날짜는 pick_ai 응답이 오면 채워진다. */}
-        <section className="detail-section">
-          <h3>
-            {/* '팀 흐름' 글자 자체를 링크로(2026-09-29 사용자 지정 — "시즌전적에 링크 걸지
-                말고 팀흐름에 링크 걸고 시즌전적 단어는 삭제"). 팝업은 그대로 시즌전적 정의. */}
-            <button
-              type="button"
-              className="help-btn"
-              onClick={() => setShowSeasonLegend(true)}
-              title="시즌전적이 정확히 무엇을 세는 표인지 보기"
-            >
-              팀 흐름 <span className="help-mark">?</span>
-            </button>
-            {/* 팀 흐름 메모(2026-09-29 사용자 지정 — "팀흐름 바로 옆에 메모 인풋 박스 넣어주고
-                지금 있는 홈경기 이거는 팝업에 넣어줘"). 설명글(홈경기 스와치·팀 옆 괄호·최다
-                기록 기준)은 위 '?' 팝업(시즌전적 정의)에 옮겼다(SeasonRecordLegend ⑧). */}
-            {sampleNotes !== undefined && (
-              <SampleNoteInput
-                value={sampleNotes?.team_flow?.memo}
-                onSave={(memo) => saveSampleNote('team_flow', { memo: memo || null })}
-                placeholder="팀 흐름에 대한 의견"
-              />
-            )}
-            {pickError && <span className="detail-section-note">{pickError}</span>}
-          </h3>
-          <TeamFlowTable
-            row={row}
-            seasonRows={seasonSig?.rows}
-            streaks={pickData?.streaks}
-            recent10={pickData?.recent10}
-            venueRank={pickData?.venue_rank}
-            leagueAvgXg={seasonSig?.league_avg_xg}
-          />
-        </section>
 
         {/* 앞뒤 일정 — 두 팀의 직전·다음 경기(리그·컵 포함) 표(2026-09-16 사용자 지정:
             그래프 없이 표만, 배당과 표본 섹션 사이). 일정이 하나도 없으면 섹션째 숨긴다.
