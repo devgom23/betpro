@@ -1361,6 +1361,77 @@ def round_miss_detail(league: str, round: int, user: dict = Depends(get_current_
     return ROUNDMISS.detail(league, round)
 
 
+ROUND_MISS_NOTE_KINDS = ("tab", "games")
+
+
+class RoundMissNoteBody(BaseModel):
+    league: str
+    season: str
+    round: int
+    kind: str
+    memo: Optional[str] = None
+
+
+@app.get("/api/round_miss/note")
+def round_miss_note_get(league: str, season: str, round: int, kind: str,   # noqa: A002
+                        user: dict = Depends(get_current_user)):
+    """라운드별 판정 메모 — 리그×시즌×라운드×자리(tab/games) 하나에 1개."""
+    if league not in PATHS.LEAGUES or kind not in ROUND_MISS_NOTE_KINDS:
+        raise HTTPException(status_code=400, detail="리그나 메모 자리가 올바르지 않습니다.")
+    return {"memo": MYPICKS.get_round_miss_note(user["username"], league, season, str(round), kind)}
+
+
+@app.post("/api/round_miss/note")
+def round_miss_note_save(body: RoundMissNoteBody, user: dict = Depends(get_current_user)):
+    if body.league not in PATHS.LEAGUES or body.kind not in ROUND_MISS_NOTE_KINDS:
+        raise HTTPException(status_code=400, detail="리그나 메모 자리가 올바르지 않습니다.")
+    if not re.match(r"^\d{2}-\d{2}$", body.season):
+        raise HTTPException(status_code=400, detail="시즌 표기가 올바르지 않습니다.")
+    MYPICKS.upsert_round_miss_note(user["username"], body.league, body.season, str(body.round), body.kind, body.memo)
+    return {"ok": True}
+
+
+ROUND_MISS_PREDS = ("확신", "맞겠지", "애매해", "틀릴듯")
+
+
+@app.get("/api/round_miss/picks")
+def round_miss_picks_get(league: str, season: str, round: int, user: dict = Depends(get_current_user)):   # noqa: A002
+    """경기별 세팅값 표의 '내 픽' 줄 — 공식 데이터에서 내가 찍은 내픽·상세픽·의견(읽기 전용)."""
+    if league not in PATHS.LEAGUES:
+        raise HTTPException(status_code=400, detail="리그 코드가 올바르지 않습니다.")
+    return {"picks": MYPICKS.list_round_picks(user["username"], league, PATHS.SCOPE_MASTER, season, round)}
+
+
+class RoundMissPredBody(BaseModel):
+    league: str
+    season: str
+    round: int
+    ht: str
+    at: str
+    pred: Optional[str] = None
+
+
+@app.get("/api/round_miss/preds")
+def round_miss_preds_get(league: str, season: str, round: int, user: dict = Depends(get_current_user)):   # noqa: A002
+    """경기별 세팅값의 내 예측 — 이 판정이 맞을지에 대한 내 생각(확신·맞겠지·애매해·틀릴듯)."""
+    if league not in PATHS.LEAGUES:
+        raise HTTPException(status_code=400, detail="리그 코드가 올바르지 않습니다.")
+    return {"preds": MYPICKS.list_round_miss_preds(user["username"], league, season, str(round))}
+
+
+@app.post("/api/round_miss/pred")
+def round_miss_pred_save(body: RoundMissPredBody, user: dict = Depends(get_current_user)):
+    if body.league not in PATHS.LEAGUES or not re.match(r"^\d{2}-\d{2}$", body.season):
+        raise HTTPException(status_code=400, detail="리그나 시즌이 올바르지 않습니다.")
+    if body.pred and body.pred not in ROUND_MISS_PREDS:
+        raise HTTPException(status_code=400, detail=f"알 수 없는 예측: {body.pred}")
+    # 경기 전에만 고르거나 바꿀 수 있다 — 끝난 경기는 읽기 전용(결과를 보고 고쳐 쓰지 못하게)
+    if ROUNDMISS.is_finished(body.league, body.season, body.round, body.ht, body.at) is True:
+        raise HTTPException(status_code=400, detail="경기가 끝난 뒤에는 예측을 바꿀 수 없습니다.")
+    MYPICKS.set_round_miss_pred(user["username"], body.league, body.season, str(body.round), body.ht, body.at, body.pred or None)
+    return {"ok": True}
+
+
 class SeasonNoteBody(BaseModel):
     scope: str = PATHS.SCOPE_USER
     season: str

@@ -4,8 +4,9 @@ import { RT_COLOR } from '../RtBadge/RtBadge'
 import { summarizeVerdicts, summarizeSystemVerdicts } from '../LeagueTable/columnGroups'
 import { PickSummaryBar } from '../RtSummaryBar/RtSummaryBar'
 import { RichMemoInput } from '../RichMemo/RichMemo'
-import { MarketSwitch, RoundMissDetail } from '../RoundMiss/RoundMiss'
-import { useRoundMissSummary } from '../RoundMiss/useRoundMiss'
+import { MarketSwitch, RoundMissDetail, RoundMissGames } from '../RoundMiss/RoundMiss'
+import RoundMissMemo from '../RoundMiss/RoundMissMemo'
+import { RM_LEAGUES, useRoundMissSummary } from '../RoundMiss/useRoundMiss'
 import './SeasonStats.css'
 
 const RT_ROWS = ['핸승', '핸무', '무', '역']
@@ -219,6 +220,13 @@ export default function SeasonStats({ code, scope, season, round, hide1and3 = fa
         )}
       </div>
 
+      {/* 시즌 지표가 접힌 상태에서도 경기별 세팅값은 보인다(2026-10-10 사용자 지정) — 펼치면 ④ 안에 같은 표가 들어 있다. */}
+      {!open && rmOk && RM_LEAGUES.includes(code) && (
+        <div className="ss-body">
+          <RoundMissGames lg={code} season={data.season} round={Number(String(data.round).replace(/\D/g, ''))} mkt={rmMkt} />
+        </div>
+      )}
+
       {open && (
         <div className="ss-body">
           {/* ① 똥배 격자 — 결과별로 라운드마다 어떤 배당이 나왔는지 */}
@@ -412,10 +420,16 @@ export default function SeasonStats({ code, scope, season, round, hide1and3 = fa
                   {rmOpen ? '◂' : '▸'}
                 </button>
                 ④ 라운드별 판정
-                <span className="ss-hint">
-                  판정 = 배변 시스템 판정(블루 = 정 · 레드 = 플 · 엇(정/플) = 국·해가 갈려 해 쪽 방향) · 그 라운드 첫 경기보다 앞선 경기만으로 다시 계산 · 20-21 시즌부터
-                </span>
-                {rmOpen && <MarketSwitch mkt={rmMkt} setMkt={setRmMkt} />}
+{rmOpen && <MarketSwitch mkt={rmMkt} setMkt={setRmMkt} />}
+                {rmOpen && (
+                  <RoundMissMemo
+                    lg={code}
+                    season={data.season}
+                    round={Number(String(data.round).replace(/\D/g, ''))}
+                    kind="tab"
+                    placeholder="이 라운드 판정에 대한 생각을 입력해주세요"
+                  />
+                )}
               </div>
               {rmOpen && (rmSum ? (
                 <RoundMissDetail

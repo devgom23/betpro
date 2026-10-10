@@ -234,3 +234,63 @@
   font-weight: 400;
   color: var(--chip-yellow-fg);
 }
+
+/* 라운드별 판정 메모 한 줄 — 제목·탭 줄에서 남는 폭을 채운다(앱 공통 메모 칸 그대로) */
+.rm-memo {
+  flex: 1;
+  min-width: 160px;
+}
+
+/* 내 예측 드롭박스 — 칸 너비에 맞추고 고른 값마다 글자색을 달리한다 */
+.rm-pred-cell {
+  white-space: nowrap;
+}
+
+.rm-pred {
+  width: calc(100% - 16px);
+  padding: 2px 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.rm-pred:disabled {
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.rm-pred.rm-p-sure { color: var(--chip-blue-fg); font-weight: 700; }
+.rm-pred.rm-p-likely { color: var(--chip-green-fg); font-weight: 700; }
+.rm-pred.rm-p-unsure { color: var(--chip-gray-fg); }
+.rm-pred.rm-p-unlikely { color: var(--chip-red-fg); font-weight: 700; }
+
+.rm-pred-ok,
+.rm-pred-no {
+  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rm-pred-ok { color: var(--chip-green-fg); }
+.rm-pred-no { color: var(--chip-red-fg); }
+
+/* 내 픽 줄 — 내픽(상세픽/의견)을 글자로만 한 줄에. 색은 정 쪽 파랑·플핸 쪽 빨강뿐(글자색만, 배경·칩 없음) */
+.rm-pick-cell {
+  white-space: nowrap;
+}
+
+.rm-mypick {
+  font-size: 11px;
+}
+
+/* 경기 칸 — 누르면 상세보기가 열린다 */
+.rm-table td.rm-open {
+  cursor: pointer;
+}
+
+.rm-table td.rm-open:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}

@@ -395,6 +395,113 @@ def list_season_week_notes(username: str, season: str) -> dict:
         con.close()
 
 
+def _ensure_round_miss_notes(con) -> None:
+    """라운드별 판정 메모(2026-10-10 사용자 지정) — 리그×시즌×라운드×자리(kind) 하나에 1개.
+    kind: 'tab' = 라운드별 판정 탭 옆 메모 · 'games' = 경기별 세팅값 메모.
+    ⚠ season_notes(시즌 지표 ③ 과거 이력 메모)와는 따로 둔다 — 같은 라운드에 메모가 셋이 되기 때문이다."""
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS round_miss_notes (
+            code TEXT NOT NULL, S TEXT NOT NULL, R TEXT NOT NULL, kind TEXT NOT NULL,
+            memo TEXT, updated_dt TEXT,
+            PRIMARY KEY (code, S, R, kind)
+        )
+        """
+    )
+
+
+def get_round_miss_note(username: str, code: str, s: str, r: str, kind: str) -> str | None:
+    con = _connect(username)
+    try:
+        _ensure_round_miss_notes(con)
+        row = con.execute("SELECT memo FROM round_miss_notes WHERE code=? AND S=? AND R=? AND kind=?",
+                          (code, normalize(s), normalize(r), kind)).fetchone()
+        return row["memo"] if row else None
+    finally:
+        con.close()
+
+
+def upsert_round_miss_note(username: str, code: str, s: str, r: str, kind: str, memo: str | None) -> None:
+    con = _connect(username)
+    try:
+        _ensure_round_miss_notes(con)
+        con.execute(
+            """
+            INSERT INTO round_miss_notes (code, S, R, kind, memo, updated_dt) VALUES (?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(code, S, R, kind) DO UPDATE SET memo = excluded.memo, updated_dt = excluded.updated_dt
+            """,
+            (code, normalize(s), normalize(r), kind, (memo or "").strip() or None),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def list_round_picks(username: str, code: str, scope: str, s: str, round_no: int) -> dict:
+    """그 리그·시즌·라운드에서 내가 찍은 내픽·상세픽(P)·의견 — {'홈|원정': {pick, p, hit}}.
+    라운드는 저장값이 '6R'이든 '6'이든 숫자만 비교한다(경기별 세팅값 표의 '내 픽' 줄)."""
+    import re
+    con = _connect(username)
+    try:
+        rows = con.execute("SELECT R, HT, AT, pick, p, hit FROM my_picks WHERE code=? AND scope=? AND S=?",
+                           (code, scope, normalize(s))).fetchall()
+        out = {}
+        for row in rows:
+            if re.sub(r"\D", "", str(row["R"])) != str(round_no):
+                continue
+            if row["pick"] or row["p"] or row["hit"]:
+                out[f"{row['HT']}|{row['AT']}"] = {"pick": row["pick"] or "", "p": row["p"] or "", "hit": row["hit"] or ""}
+        return out
+    finally:
+        con.close()
+
+
+def _ensure_round_miss_preds(con) -> None:
+    """경기별 세팅값의 '내 예측'(2026-10-10 사용자 지정) — 이 경기의 판정이 맞을지에 대한 내 생각. 경기 하나에 1개.
+    pred: 확신 / 맞겠지 / 애매해 / 틀릴듯 (비우면 삭제)."""
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS round_miss_preds (
+            code TEXT NOT NULL, S TEXT NOT NULL, R TEXT NOT NULL, HT TEXT NOT NULL, AT TEXT NOT NULL,
+            pred TEXT NOT NULL, updated_dt TEXT,
+            PRIMARY KEY (code, S, R, HT, AT)
+        )
+        """
+    )
+
+
+def list_round_miss_preds(username: str, code: str, s: str, r: str) -> dict:
+    """그 리그·시즌·라운드에서 내가 고른 예측 — {'홈|원정': 예측}."""
+    con = _connect(username)
+    try:
+        _ensure_round_miss_preds(con)
+        rows = con.execute("SELECT HT, AT, pred FROM round_miss_preds WHERE code=? AND S=? AND R=?",
+                           (code, normalize(s), normalize(r))).fetchall()
+        return {f"{row['HT']}|{row['AT']}": row["pred"] for row in rows}
+    finally:
+        con.close()
+
+
+def set_round_miss_pred(username: str, code: str, s: str, r: str, ht: str, at: str, pred: str | None) -> None:
+    con = _connect(username)
+    try:
+        _ensure_round_miss_preds(con)
+        key = (code, normalize(s), normalize(r), normalize(ht), normalize(at))
+        if pred:
+            con.execute(
+                """
+                INSERT INTO round_miss_preds (code, S, R, HT, AT, pred, updated_dt) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+                ON CONFLICT(code, S, R, HT, AT) DO UPDATE SET pred = excluded.pred, updated_dt = excluded.updated_dt
+                """,
+                (*key, pred),
+            )
+        else:
+            con.execute("DELETE FROM round_miss_preds WHERE code=? AND S=? AND R=? AND HT=? AND AT=?", key)
+        con.commit()
+    finally:
+        con.close()
+
+
 def upsert_season_week_note(username: str, season: str, wk: str, memo: str | None) -> None:
     con = _connect(username)
     try:

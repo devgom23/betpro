@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
-import { useRoundMissSummary } from './useRoundMiss'
+import { LEAGUE_LABEL, useRoundDetail, useRoundMissSummary } from './useRoundMiss'
+import { myPickStyle } from '../LeagueTable/columnGroups'
+import MatchDetailModal from '../MatchDetailModal/MatchDetailModal'
+import RoundMissMemo from './RoundMissMemo'
 import './RoundMiss.css'
 
 // 라운드별 판정 빗나감(2026-10-10 사용자 지정 — 엑셀 '라운드마다 속성'을 시즌분석에 자동화).
@@ -11,6 +14,10 @@ import './RoundMiss.css'
 
 const RT_TEXT = { 1: '핸승', 2: '핸무', 3: '무', 4: '역' }
 const RT_CLS = { 1: 'blue', 2: 'green', 3: 'gray', 4: 'red' }
+// 내 예측(2026-10-10 사용자 지정) — 이 판정이 맞을 것 같은 정도. 경기 전에만 고르고, 끝나면 읽기 전용 + 맞았는지 표시.
+const PREDS = ['확신', '맞겠지', '애매해', '틀릴듯']
+const PRED_CLS = { 확신: 'rm-p-sure', 맞겠지: 'rm-p-likely', 애매해: 'rm-p-unsure', 틀릴듯: 'rm-p-unlikely' }
+const MIN_SEASON = '20-21'
 const MARKET = [['v', '판정 기준'], ['k', '국배 세팅값 기준']]   // 기본 = 시스템 판정(2026-10-10 사용자 지정)
 
 const missOf = (side, rt) => (side === 1 && (rt === 3 || rt === 4)) || (side === -1 && (rt === 1 || rt === 2))
@@ -68,31 +75,161 @@ export function MarketSwitch({ mkt, setMkt }) {
 }
 
 // ② 같은 라운드를 시즌별로(시즌이 가로) + ③ 이번 시즌 그 라운드의 경기별 세팅값 — 시즌분석과 리그 화면 ④가 같이 쓴다.
-export function RoundMissDetail({ sum, lg, season, round, mkt }) {
-  const [det, setDet] = useState(null)
+// 경기별 세팅값(③) — 단독으로도 쓴다(리그 화면 시즌 지표가 접힌 상태에서도 이 표는 보인다, 2026-10-10 사용자 지정).
+export function RoundMissGames({ lg, season, round, mkt }) {
+  const det = useRoundDetail(lg, round)
+  const [preds, setPreds] = useState({})
+  const [picks, setPicks] = useState({})
+  const [detailRow, setDetailRow] = useState(null)      // 상세보기로 연 경기(2026-10-10 사용자 지정 — 경기 칸을 누르면 열림)
+  const query = `league=${encodeURIComponent(lg)}&season=${encodeURIComponent(season)}&round=${round}`
+  const loadPicks = () => api.get(`/api/round_miss/picks?${query}`).then((r) => setPicks(r?.picks || {})).catch(() => {})
   useEffect(() => {
-    if (!lg || !round) return undefined
+    if (!lg || !round || !season) return undefined
     let alive = true
-    setDet(null)
-    api.get(`/api/round_miss/detail?league=${encodeURIComponent(lg)}&round=${round}`)
-      .then((r) => alive && setDet(r)).catch(() => alive && setDet({ seasons: {} }))
+    setPreds({})
+    setPicks({})
+    api.get(`/api/round_miss/preds?${query}`).then((r) => alive && setPreds(r?.preds || {})).catch(() => {})
+    api.get(`/api/round_miss/picks?${query}`).then((r) => alive && setPicks(r?.picks || {})).catch(() => {})
     return () => { alive = false }
-  }, [lg, round])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lg, season, round])
+  // 고르면 화면에 바로 반영하고 서버에는 뒤따라 저장한다(실패하면 되돌린다).
+  const setPred = (g, value) => {
+    const key = `${g.ht}|${g.at}`
+    const before = preds[key] || ''
+    const apply = (v) => setPreds((p) => { const n = { ...p }; if (v) n[key] = v; else delete n[key]; return n })
+    apply(value)
+    api.post('/api/round_miss/pred', { league: lg, season, round: Number(round), ht: g.ht, at: g.at, pred: value || null })
+      .catch(() => apply(before))
+  }
+  const lgLabel = LEAGUE_LABEL[lg] || ''
+  const sel = det?.seasons?.[season] || []
+  // 경기 칸 너비를 전부 같게(2026-10-10 사용자 지정) — 가장 긴 글자를 모든 칸에 보이지 않게 깔아 둬서 표가 그 너비를 최소로 잡는다
+  // (한글은 영문보다 넓어 글자 수가 아니라 폭으로 가장 긴 것을 고른다). 끝난 경기는 '홈 1:0 원정'처럼 점수가 들어가고,
+  // 내 픽 줄은 '정(핸무/P-고민)'처럼 길 수 있어 그것까지 재서 가장 긴 것을 쓴다.
+  const longest = sel.reduce((best, g) => {
+    const pk = picks[`${g.ht}|${g.at}`]
+    const cands = [`${g.ht} vs ${g.at}`, `${g.ht} 0:0 ${g.at}`, pk ? pickText(pk) : '']
+    return cands.reduce((b, txt) => (textWidth(txt) > textWidth(b) ? txt : b), best)
+  }, '')
+  const Sz = () => <span className="rm-sizer" aria-hidden="true">{longest}</span>
+
+  return (
+    <>
+      {/* ③ 이번 라운드 경기별 세팅값 — 와이즈토토 순서, 요일로 묶음 */}
+      <div className="rm-card">
+        <h3>
+          {season} {lgLabel} {round}R — 경기별 세팅값
+          <RoundMissMemo lg={lg} season={season} round={round} kind="games" placeholder="이 라운드 경기별 세팅값에 대한 생각을 입력해주세요" />
+        </h3>
+        {!det ? <p className="rm-note">불러오는 중…</p> : sel.length === 0 ? <p className="rm-note">{season < MIN_SEASON ? `${MIN_SEASON} 시즌부터 계산합니다` : '이 시즌에는 이 라운드가 없습니다'}</p> : (
+          <div className="rm-scroll">
+            <table className="rm-table rm-games">
+              <thead>
+                <tr>
+                  <th className="rm-lab" rowSpan={2}>{round} Round</th>
+                  {groupByDay(sel).map((g) => (
+                    <th key={g.key} colSpan={g.n} className={g.wd === '토' ? 'blue' : g.wd === '일' ? 'red' : ''}>{g.wd}요일</th>
+                  ))}
+                </tr>
+                <tr>{sel.map((g, i) => <th key={i} title={`${g.ht} vs ${g.at}`}>{i + 1}경기<Sz /></th>)}</tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th className="rm-lab">판정<small>(배변 시스템 판정)</small></th>
+                  {sel.map((g, i) => <td key={i} className={missOf(g.v, g.rt) && mkt === 'v' ? 'rm-bad' : ''}><Setting side={g.v} split={g.vs} /><Sz /></td>)}
+                </tr>
+                <tr>
+                  <th className="rm-lab">국배 세팅값</th>
+                  {sel.map((g, i) => <td key={i} className={missOf(g.k, g.rt) && mkt === 'k' ? 'rm-bad' : ''}><Setting side={g.k} weak={g.kw} /><Sz /></td>)}
+                </tr>
+                <tr>
+                  <th className="rm-lab">결과</th>
+                  {sel.map((g, i) => (
+                    <td key={i}>
+                      {g.rt ? <span className={RT_CLS[g.rt]}>{RT_TEXT[g.rt]}</span> : g.dd ? null : <span className="gray">예정</span>}
+                      {g.dd && (
+                        <span className={g.rt ? 'rm-sub rm-dd' : 'rm-dd'} title="국내 초기배당 1.49 이하 — 리그 표의 똥 순번과 같음(숫자는 정배배당)">
+                          {g.dd} {g.ddo !== null ? g.ddo.toFixed(2) : ''}
+                        </span>
+                      )}
+                      <Sz />
+                    </td>
+                  ))}
+                </tr>
+                <tr className="rm-teams">
+                  <th className="rm-lab">경기</th>
+                  {sel.map((g, i) => (
+                    <td
+                      key={i}
+                      className="rm-open"
+                      title="누르면 상세보기"
+                      onClick={() => setDetailRow({ S: season, R: `${round}R`, HT: g.ht, AT: g.at })}
+                    >
+                      {gameText(g)}<Sz />
+                    </td>
+                  ))}
+                </tr>
+                <tr>
+                  <th className="rm-lab">내 예측<small>(판정이 맞을지)</small></th>
+                  {sel.map((g, i) => {
+                    const v = preds[`${g.ht}|${g.at}`] || ''
+                    const side = mkt === 'k' ? g.k : g.v
+                    // 끝난 경기만 채점 — 확신·맞겠지는 판정이 맞아야 ✓, 틀릴듯은 빗나가야 ✓, 애매해는 채점하지 않는다
+                    const graded = g.rt && side && v && v !== '애매해'
+                    const ok = graded ? (v === '틀릴듯') === missOf(side, g.rt) : null
+                    return (
+                      <td key={i} className="rm-pred-cell">
+                        <select
+                          className={`rm-pred ${PRED_CLS[v] || ''}`}
+                          value={v}
+                          disabled={!!g.rt}
+                          title={g.rt ? '경기가 끝나 예측은 바꿀 수 없습니다(읽기 전용)' : '이 판정이 맞을 것 같은 정도'}
+                          onChange={(e) => setPred(g, e.target.value)}
+                        >
+                          <option value="">—</option>
+                          {PREDS.map((p) => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                        {ok !== null && <span className={ok ? 'rm-pred-ok' : 'rm-pred-no'}>{ok ? '✓' : '✗'}</span>}
+                        <Sz />
+                      </td>
+                    )
+                  })}
+                </tr>
+                <tr>
+                  <th className="rm-lab">내 픽<small>내픽(상세픽/의견)</small></th>
+                  {sel.map((g, i) => (
+                    <td key={i} className="rm-pick-cell" style={myPickStyle(picks[`${g.ht}|${g.at}`]?.pick) || undefined}>
+                      <MyPick pk={picks[`${g.ht}|${g.at}`]} />
+                      <Sz />
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      {detailRow && (
+        <MatchDetailModal
+          code={lg}
+          scope="master"
+          row={detailRow}
+          onClose={() => { setDetailRow(null); loadPicks() }}
+        />
+      )}
+    </>
+  )
+}
+
+export function RoundMissDetail({ sum, lg, season, round, mkt }) {
+  const det = useRoundDetail(lg, round)
 
   const lgLabel = sum.leagues.find((L) => L.code === lg)?.label || ''
   const seasonCols = [...sum.seasons].reverse()          // 오래된 시즌 → 올시즌(오른쪽 끝)
   const newest = sum.seasons[0]
   const pastRows = sum.seasons.filter((s) => s !== newest).map((s) => unpack(sum[mkt]?.[lg]?.[s]?.[round])).filter((x) => x && x.done > 0)
   const pastAvg = pastRows.length ? pastRows.reduce((a, x) => a + x.miss, 0) / pastRows.length : null
-  const sel = det?.seasons?.[season] || []
-  // 경기 칸 너비를 전부 같게(2026-10-10 사용자 지정) — 가장 긴 '홈 vs 원정' 글자를 모든 칸에 보이지 않게 깔아 둬서
-  // 표가 그 너비를 최소로 잡는다(한글은 영문보다 넓어 글자 수가 아니라 폭으로 가장 긴 것을 고른다).
-  // 끝난 경기는 '홈 1:0 원정'처럼 점수가 들어가므로(점수까지 고려 — 사용자 지정) 점수 꼴과 'vs' 꼴 둘 다 재서 가장 긴 것을 쓴다.
-  const longest = sel.reduce((best, g) => {
-    const cands = [`${g.ht} vs ${g.at}`, `${g.ht} 0:0 ${g.at}`]
-    return cands.reduce((b, txt) => (textWidth(txt) > textWidth(b) ? txt : b), best)
-  }, '')
-  const Sz = () => <span className="rm-sizer" aria-hidden="true">{longest}</span>
 
   return (
     <>
@@ -140,56 +277,7 @@ export function RoundMissDetail({ sum, lg, season, round, mkt }) {
         </div>
       </div>
 
-      {/* ③ 이번 라운드 경기별 세팅값 — 와이즈토토 순서, 요일로 묶음 */}
-      <div className="rm-card">
-        <h3>
-          {season} {lgLabel} {round}R — 경기별 세팅값
-          <span className="rm-note">와이즈토토 경기 순서 · 요일은 현지 경기일 · 빨간 테두리 = {mkt === 'k' ? '국배 세팅값' : '판정'}이 빗나간 경기</span>
-        </h3>
-        {!det ? <p className="rm-note">불러오는 중…</p> : sel.length === 0 ? <p className="rm-note">{season < sum.minSeason ? `${sum.minSeason} 시즌부터 계산합니다` : '이 시즌에는 이 라운드가 없습니다'}</p> : (
-          <div className="rm-scroll">
-            <table className="rm-table rm-games">
-              <thead>
-                <tr>
-                  <th className="rm-lab" rowSpan={2}>{round} Round</th>
-                  {groupByDay(sel).map((g) => (
-                    <th key={g.key} colSpan={g.n} className={g.wd === '토' ? 'blue' : g.wd === '일' ? 'red' : ''}>{g.wd}요일</th>
-                  ))}
-                </tr>
-                <tr>{sel.map((g, i) => <th key={i} title={`${g.ht} vs ${g.at}`}>{i + 1}경기<Sz /></th>)}</tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <th className="rm-lab">판정<small>(배변 시스템 판정)</small></th>
-                  {sel.map((g, i) => <td key={i} className={missOf(g.v, g.rt) && mkt === 'v' ? 'rm-bad' : ''}><Setting side={g.v} split={g.vs} /><Sz /></td>)}
-                </tr>
-                <tr>
-                  <th className="rm-lab">국배 세팅값</th>
-                  {sel.map((g, i) => <td key={i} className={missOf(g.k, g.rt) && mkt === 'k' ? 'rm-bad' : ''}><Setting side={g.k} weak={g.kw} /><Sz /></td>)}
-                </tr>
-                <tr>
-                  <th className="rm-lab">결과</th>
-                  {sel.map((g, i) => (
-                    <td key={i}>
-                      {g.rt ? <span className={RT_CLS[g.rt]}>{RT_TEXT[g.rt]}</span> : g.dd ? null : <span className="gray">예정</span>}
-                      {g.dd && (
-                        <span className={g.rt ? 'rm-sub rm-dd' : 'rm-dd'} title="국내 초기배당 1.49 이하 — 리그 표의 똥 순번과 같음(숫자는 정배배당)">
-                          {g.dd} {g.ddo !== null ? g.ddo.toFixed(2) : ''}
-                        </span>
-                      )}
-                      <Sz />
-                    </td>
-                  ))}
-                </tr>
-                <tr className="rm-teams">
-                  <th className="rm-lab">경기</th>
-                  {sel.map((g, i) => <td key={i}>{gameText(g)}<Sz /></td>)}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <RoundMissGames lg={lg} season={season} round={round} mkt={mkt} />
     </>
   )
 }
@@ -238,12 +326,7 @@ export default function RoundMiss({ season, selCol, leagues }) {
   const seasonAvg = avgOf(Object.values(bySeason))
   return (
     <section className="sa-section rm rm-wrap">
-      <h2>
-        라운드별 판정 빗나감
-        <span className="rm-note">
-          판정 = 배변 시스템 판정(블루 = 정 쪽 · 레드 = 플 쪽 · 엇(정/플) = 국·해가 갈려 해 쪽 방향) · 그 라운드 첫 경기보다 앞선 경기만으로 다시 계산 · {sum.minSeason} 시즌부터
-        </span>
-      </h2>
+      <h2>라운드별 판정 빗나감</h2>
       <div className="rm-bar">
         <MarketSwitch mkt={mkt} setMkt={setMkt} />
         <span className="rm-seg" role="tablist" aria-label="리그">
@@ -251,8 +334,7 @@ export default function RoundMiss({ season, selCol, leagues }) {
             <button key={L.code} type="button" role="tab" aria-selected={lg === L.code} className={lg === L.code ? 'is-on' : ''} onClick={() => setLg(L.code)}>{L.label}</button>
           ))}
         </span>
-        <span className="rm-note">
-          빗나감 = 판정과 반대로 나온 경기. 평소에도 판정을 낸 경기의 약 40%(엇갈림 제외 38% · 엇갈림은 48%)는 빗나가고, 라운드 10경기 중 4개 이상 빗나가는 일이 절반쯤입니다(빨강 = 4개 이상).</span>
+        <RoundMissMemo lg={lg} season={season} round={round} kind="tab" placeholder="이 라운드 판정에 대한 생각을 입력해주세요" />
       </div>
 
       {/* ① 올시즌 라운드별 — 라운드가 가로 */}
@@ -300,6 +382,17 @@ function Setting({ side, weak, split }) {
     return <span className={`${side === 1 ? 'blue' : 'red'} rm-split`} title="국·해 판정이 갈린 경기 — 해 쪽 방향으로 셉니다">엇({side === 1 ? '정' : '플'})</span>
   }
   return <span className={side === 1 ? 'blue' : 'red'}>{side === 1 ? '블루' : '레드'}{weak ? '(약)' : ''}</span>
+}
+
+// 내 픽 — '내픽(상세픽/의견)'을 글자로만 보이고, 색은 칸 전체 배경으로(2026-10-10 사용자 지정 — 리그 표 내픽 칸과 같은 방식):
+// 내픽이 정 쪽이면 파랑 배경·글자, 플핸 쪽이면 빨강 배경·글자, 그 밖은 일반. 정/플핸 쪽 구분은 리그 표와 같은 함수(myPickStyle)가 한다.
+// 칸(td)에 스타일을 주므로 위 표 본문에서 적용한다. 읽기 전용 — 고치는 곳은 리그 표·상세보기다.
+// 의견의 '축-정'·'축-플'은 '축정'·'축플'로 붙여 쓴다(2026-10-10 사용자 지정 — 'P-어렵' 같은 나머지는 저장된 글자 그대로).
+const hitText = (h) => (h ? h.replace(/^축-/, '축') : '－')
+const pickText = (pk) => `${pk.pick || '－'}(${pk.p || '－'} / ${hitText(pk.hit)})`
+function MyPick({ pk }) {
+  if (!pk || (!pk.pick && !pk.p && !pk.hit)) return <span className="gray">—</span>
+  return <span className="rm-mypick" title="내가 찍은 내픽(상세픽/의견) — 고치는 곳은 리그 표·상세보기">{pickText(pk)}</span>
 }
 
 // 경기 줄 글자 — 결과가 있으면 점수를 팀 사이에('아스널 1:0 리즈'), 없으면 'vs'

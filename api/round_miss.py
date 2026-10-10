@@ -340,6 +340,15 @@ LEAGUE_LABEL = {"EPL": "EPL", "LALIGA": "라리가", "SERIEA": "세리에A", "BU
                 "EREDIVISIE": "에레디", "LIGUE1": "리그1"}
 
 
+def is_finished(lg: str, s: str, r: int, ht: str, at: str, db: str | None = None):
+    """그 경기에 결과(RT 1~4)가 들어왔나 — True/False, 경기를 못 찾으면 None."""
+    df = get(db)
+    m = df[(df["lg"] == lg) & (df["S"] == s) & (df["r"] == r) & (df["ht"] == ht) & (df["at"] == at)]
+    if m.empty:
+        return None
+    return bool((m["rt"] > 0).any())
+
+
 def detail(lg: str, r: int, db: str | None = None) -> dict:
     """한 리그의 한 라운드를 시즌별로 — 경기마다 국배·해배 세팅값과 결과, 와이즈토토 순서(kno)."""
     db = db or PATHS.get_master_db()
