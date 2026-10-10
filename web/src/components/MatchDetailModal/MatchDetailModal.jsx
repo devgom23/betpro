@@ -2982,22 +2982,25 @@ function ScheduleContextSection({ ctx, note, onSaveNote }) {
   )
 }
 
-// 경기 전 생각 앞 드롭박스 — 정 쪽 값은 칸 배경 파랑, 플 쪽 값은 빨강(2026-10-10 사용자 지정, 리그 표 내픽 칸과 같은 짝)
-const TAG_JUNG = new Set(['정무', '정', '정(약)'])
-const TAG_PL = new Set(['플핸무', '플', '플(약)'])
-// 상대 칸 — 강하다고 고른 팀이 정배면 파랑, 역배면 빨강(2026-10-10 사용자 지정). 정배는 제목의 (정)/(역)과 같은 기준
-// (homeIsFav — 국내 초기 우선, 없으면 해외). 정배를 못 가리면(동배) 색 없음.
+// 경기 전 생각 앞 드롭박스 색(2026-10-10 사용자 지정) — 정 쪽은 파랑·플 쪽은 빨강(리그 표 내픽 칸과 같은 짝).
+// 강한 값(한 결과만 보는 '정'·'플', 상대의 '…강')은 칸 배경까지 칠하고, 약한 값(정배쪽·플핸쪽·정(약)·플(약)·정무·플핸무·
+// 정역·플핸승, 상대의 '…약강')은 배경 없이 글자색만 — 한눈에 강약이 갈리게.
+const TAG_BG = { 정: 'is-jung', 플: 'is-pl' }
+const TAG_TEXT = {
+  정배쪽: 'is-jung-text', '정(약)': 'is-jung-text', 정무: 'is-jung-text', 정역: 'is-jung-text',
+  플핸쪽: 'is-pl-text', '플(약)': 'is-pl-text', 플핸무: 'is-pl-text', 플핸승: 'is-pl-text',
+}
+// 상대 칸 — 강하다고 고른 팀이 정배면 파랑, 역배면 빨강. 정배는 제목의 (정)/(역)과 같은 기준
+// (homeIsFav — 국내 초기 우선, 없으면 해외). 정배를 못 가리면(동배)·'판정못함'이면 색 없음.
 function tagClass(key, value, row) {
-  if (TAG_JUNG.has(value)) return 'is-jung'
-  if (TAG_PL.has(value)) return 'is-pl'
-  // '판정못함'처럼 팀을 고르지 않은 값은 색 없음
-  if (key === 'tagRel' && (value.startsWith('홈팀') || value.startsWith('원정팀'))) {
+  if (key === 'tagRel') {
+    if (!value.startsWith('홈팀') && !value.startsWith('원정팀')) return undefined
     const hf = homeIsFav(row)
     if (hf === null) return undefined
-    const strongIsHome = value.startsWith('홈팀')
-    return strongIsHome === hf ? 'is-jung' : 'is-pl'
+    const side = value.startsWith('홈팀') === hf ? 'jung' : 'pl'
+    return value.endsWith('약강') ? `is-${side}-text` : `is-${side}`
   }
-  return undefined
+  return TAG_BG[value] || TAG_TEXT[value]
 }
 
 function MyPickBar({ row, onSavePick, memoLead }) {

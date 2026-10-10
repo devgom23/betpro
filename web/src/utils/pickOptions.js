@@ -120,10 +120,10 @@ export const HIT_OPTIONS = [
 // 상세보기 '경기 전 생각' 앞 드롭박스 4개(2026-10-10 사용자 지정) — 판정·구간·상대·표본에 대한 내 생각. 참고용이라 판정·집계에 안 쓴다.
 // key = 저장 키(pickSave.js) · field = 행 값 이름(api/main.py _attach_my_picks의 MY_TAG_*) · label = 비었을 때 보이는 이름.
 export const MEMO_TAG_FIELDS = [
-  { key: 'tagVerdict', field: 'MY_TAG_VERDICT', label: '판정', options: ['정무', '정', '플핸무', '플'] },
+  { key: 'tagVerdict', field: 'MY_TAG_VERDICT', label: '판정', options: ['정배쪽', '정', '플핸쪽', '플'] },   // 2026-10-10 정무→정배쪽·플핸무→플핸쪽(저장값도 바꿈)
   { key: 'tagZone', field: 'MY_TAG_ZONE', label: '구간', options: ['정', '정(약)', '플', '플(약)'] },
   { key: 'tagRel', field: 'MY_TAG_REL', label: '상대', options: ['홈팀강', '홈팀약강', '원정팀강', '원정팀약강', '판정못함'] },
-  { key: 'tagSample', field: 'MY_TAG_SAMPLE', label: '표본', options: ['정무', '정', '플핸무', '플'] },
+  { key: 'tagSample', field: 'MY_TAG_SAMPLE', label: '표본', options: ['정무', '정', '정역', '플핸무', '플', '플핸승'] },
 ]
 
 export const REASON_TAG_OPTIONS = [
