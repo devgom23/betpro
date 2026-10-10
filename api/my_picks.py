@@ -443,7 +443,7 @@ def upsert_round_miss_note(username: str, code: str, s: str, r: str, kind: str, 
 
 
 def list_round_picks(username: str, code: str, scope: str, s: str, round_no: int) -> dict:
-    """그 리그·시즌·라운드에서 내가 찍은 내픽·상세픽(P)·의견 — {'홈|원정': {pick, p, hit, done}}(done = 내픽·상세픽·의견·배당 클릭·판정·구간·상대·표본을 전부 입력함).
+    """그 리그·시즌·라운드에서 내가 찍은 내픽·상세픽(P)·의견 — {'홈|원정': {pick, p, hit, done}}(done = 내픽·상세픽·의견·배당 클릭·구간·상대·표본을 전부 입력함).
     라운드는 저장값이 '6R'이든 '6'이든 숫자만 비교한다(경기별 세팅값 표의 '내 픽' 줄)."""
     import re
     con = _connect(username)
@@ -455,10 +455,11 @@ def list_round_picks(username: str, code: str, scope: str, s: str, round_no: int
         for row in rows:
             if re.sub(r"\D", "", str(row["R"])) != str(round_no):
                 continue
-            # done = 내픽·상세픽·의견·배당 클릭 + 판정·구간·상대·표본 드롭박스, 여덟 가지를 전부 입력함 — 경기 칸 글자에 밑줄을
+            # done = 내픽·상세픽·의견·배당 클릭 + 구간·상대·표본 드롭박스, 일곱 가지를 전부 입력함 — 경기 칸 글자에 밑줄을
             # 긋는 표시(2026-10-10 사용자 지정: 하나라도 빠지면 밑줄 없음. 배당 클릭을 풀거나 드롭박스를 '선택'으로 되돌리면 바로 빠진다).
             if row["pick"] or row["p"] or row["hit"] or row["odds_mark"] or row["starred"]:
-                done = all(row[c] for c in ("pick", "p", "hit", "odds_mark", "tag_verdict", "tag_zone", "tag_rel", "tag_sample"))
+                # 2026-10-11 — 판정 드롭박스를 없애(시스템 판정 글자로 바꿈) 밑줄 조건에서 tag_verdict를 뺐다(이제 일곱 가지).
+                done = all(row[c] for c in ("pick", "p", "hit", "odds_mark", "tag_zone", "tag_rel", "tag_sample"))
                 out[f"{row['HT']}|{row['AT']}"] = {"pick": row["pick"] or "", "p": row["p"] or "", "hit": row["hit"] or "", "done": done,
                                                     "marks": [m for m in str(row["odds_mark"] or "").split(",") if m],
                                                     "star": int(row["starred"] or 0)}   # 머리글 별표(리스트 별표와 같은 값)   # 배당 줄 노랑 표시용

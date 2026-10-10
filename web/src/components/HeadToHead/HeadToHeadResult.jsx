@@ -262,6 +262,55 @@ export function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode, rows }) {
 // 부르면 같은 계산을 두 번 하는 셈이라 팝업이 느려진다. preset이 아직 준비 전이면
 // null을, 로딩 중이면 presetLoading=true를 같이 넘긴다(리그탭 "상대전적 조회"처럼
 // preset 없이 쓰는 곳은 예전처럼 그대로 자체 fetch한다).
+// 2부리그 맞대결(2026-10-11 사용자 지정 — api/lower_matches.py, 스코어맨 2부 결과).
+// 위 1부 요약표·전적 배지·판정에는 섞지 않고 따로 보여준다. 결과는 기준 팀(home) 입장 승/무/패와 승점만(2부는 배당이 없다).
+function LowerH2h({ rows, home }) {
+  if (!rows?.length) return null
+  const pts = (m) => homePoints(m, home)
+  const w = rows.filter((m) => pts(m) === 3).length
+  const d = rows.filter((m) => pts(m) === 1).length
+  const l = rows.length - w - d
+  return (
+    <div className="h2h-lower">
+      <p className="h2h-lower-head">
+        <span className="h2h-lower-tag">2부</span>
+        {rows[0].comp} 맞대결 {rows.length}경기 · {home} 기준 {w}승 {d}무 {l}패
+        <span className="h2h-lower-note">위 요약표에는 안 섞음</span>
+      </p>
+      <div className="match-list-scroll">
+        <table className="detail-table match-list">
+          <thead>
+            <tr>
+              <th>시즌</th>
+              <th>R</th>
+              <th>HT</th>
+              <th>HS</th>
+              <th>AS</th>
+              <th>AT</th>
+              <th className="col-narrow">결과</th>
+              <th className="col-narrow">승점</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((m, i) => (
+              <tr key={i} className={i > 0 && m.S !== rows[i - 1].S ? 'season-start' : undefined}>
+                <td>{m.S}</td>
+                <td>{m.R}</td>
+                <td className={`row-label ${m.HT === home ? 'h2h-home-cell' : ''}`}>{m.HT}</td>
+                <td className={scoreClass(m.HS, m.AS, 'home')}>{m.HS ?? ''}</td>
+                <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
+                <td className={`row-label ${m.AT === home ? 'h2h-home-cell' : ''}`}>{m.AT}</td>
+                <td className="col-narrow"><WdlBadge letter={{ 3: 'W', 1: 'D', 0: 'L' }[pts(m)]} /></td>
+                <td className="col-total col-narrow">{pts(m)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function HeadToHeadResult({
   scope, code, home, away, cross = true, limit = 200,
   preset, presetLoading = false, presetError = '',
@@ -315,9 +364,12 @@ export default function HeadToHeadResult({
   if (effLoading) return <p className="loading-text">불러오는 중...</p>
   if (!effData || !effData.summary) {
     return (
-      <p className="detail-empty">
-        {home} vs {away} 맞대결 기록 없음
-      </p>
+      <>
+        <p className="detail-empty">
+          {home} vs {away} {effData?.lower?.length ? '1부 ' : ''}맞대결 기록 없음
+        </p>
+        <LowerH2h rows={effData?.lower} home={home} />
+      </>
     )
   }
 
@@ -454,6 +506,7 @@ export default function HeadToHeadResult({
           최근 {effData.matches.length}경기만 표시 (총 {effData.total}경기)
         </p>
       )}
+      <LowerH2h rows={effData.lower} home={home} />
     </>
   )
 }

@@ -98,6 +98,7 @@ import collect_jobs as JOBS    # noqa: E402
 import axis_stats as AXIS      # noqa: E402
 import same_odds as SAMEODDS  # noqa: E402
 import similar_season as SIMSEASON  # noqa: E402
+import lower_matches as LOWER  # noqa: E402
 import sample_dir as SAMPLEDIR  # noqa: E402
 import book_dir as BOOKDIR      # noqa: E402
 import triple_sample as TRIPLE  # noqa: E402
@@ -159,6 +160,10 @@ def _warm_master_cache_async():
                 DATA.load_league_df_ev(db_path, lg)
             DATA.load_total_df(db_path)        # 통합DB 탭이 쓰는 전체 표
             DATA.load_total_h2h_df(db_path)    # 상세보기(상대전적)가 쓰는 슬림 표
+        except Exception:
+            pass
+        try:
+            ROUNDMISS.summary()            # 경기별 세팅값·시즌 지표 ④ 요약 — 서버를 켠 뒤 처음 여는 리그 화면이 기다리지 않게(2026-10-11)
         except Exception:
             pass
         TRIPLE.warm(db_path)               # 상세보기 '표본' 섹션 색인(12사 평균·국배 배열) — 첫 조회를 기다리지 않게
@@ -3090,6 +3095,23 @@ def _head_to_head_calc(total_df: pd.DataFrame, home: str, away: str,
     }
 
 
+def _lower_h2h(home: str, away: str, before_dt=None) -> list:
+    """두 팀의 2부리그 맞대결(api/lower_matches.py, 2026-10-11 사용자 지정) — 상대전적 화면에 따로 보여주는 목록.
+    요약표(전체기준·홈기준)·전적 배지·판정에는 섞지 않는다(1부 계산은 그대로). before_dt('YY-MM-DD …')를 주면 그날 이전 경기만."""
+    rows = LOWER.pair_matches(home, away)
+    cut = None
+    m = re.match(r"^(\d{2})-(\d{2})-(\d{2})", str(before_dt or "").strip())
+    if m:
+        cut = f"20{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    out = []
+    for r in rows:
+        if cut and str(r.get("kickoff") or "")[:10] >= cut:
+            continue
+        out.append({"S": r["S"], "R": r["rnd"], "DT": str(r.get("kickoff") or "")[:10], "comp": r["comp_name"],
+                    "HT": r["home_name"], "AT": r["away_name"], "HS": r["hs"], "AS": r["as_"]})
+    return out
+
+
 def _season_matches(total_df: pd.DataFrame, team: str, season, round_, no) -> list:
     """종합픽의 '시즌전적' 신호용 — team이 이번 시즌(season)에 홈/원정 상관없이 치른
     경기 중 '이 경기 직전까지'만 원본 목록으로 준다. standings.recent10_before와 같은
@@ -3148,7 +3170,10 @@ def head_to_head(scope: str = PATHS.SCOPE_MASTER,
         _check_league_for(code, scope, user)
     db = _resolve_scope_db(scope, user)
     df = _h2h_source_df(db, scope, code)
-    return _head_to_head_calc(df, home, away, cross=cross, limit=limit)
+    h2h = _head_to_head_calc(df, home, away, cross=cross, limit=limit)
+    if scope != PATHS.SCOPE_USER:
+        h2h["lower"] = _lower_h2h(home, away)          # 2부 맞대결(따로 표시, 요약표엔 안 섞음)
+    return h2h
 
 
 # ─────────────────────────── 아카이브(팀·맞대결 태그) ───────────────────────────
@@ -3503,6 +3528,8 @@ def pick_ai(body: PickAiBody, user: dict = Depends(get_current_user)):
     # 상세보기의 "상대전적" 카드가 여기서 이미 구한 h2h를 그대로 재사용하도록 함께
     # 내려준다 — 예전엔 이 계산(리그 마스킹·정렬·WDL 집계)을 /api/head_to_head가
     # 팝업을 열 때마다 통째로 한 번 더 했다(같은 두 팀, 같은 데이터를 두 번 계산).
+    if h2h is not None and body.scope != PATHS.SCOPE_USER:
+        h2h = dict(h2h, lower=_lower_h2h(ht, at, body.row.get("DT")))   # 2부 맞대결 — 이 경기 날짜 이전만(요약·판정엔 안 섞음)
     result["h2h"] = h2h
     # 최고 연속 기록(최다연승/무패/무승/연패). 상대전적은 통합DB를 뒤지지만 이 값은
     # 사용자 지정대로 '그 리그 안에서만' 세므로 리그 하나만 따로 읽는다.

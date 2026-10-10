@@ -799,6 +799,7 @@ function drawRefs(row, pick) {
     <RefItem
       key="draw"
       label="무"
+      compact
       title={`무배당 국배 ${kd ? kd.toFixed(2) : '-'}`
         + `${fd ? ` · 해배 ${fd.toFixed(2)}` : ''}.\n`
         + (heavy
@@ -1117,15 +1118,40 @@ function sameSeasonRefs(row, samples) {
   const fav = Math.min(kw, kl)
   const pl = numOrNull(kw > kl ? row.KHW : row.KHL)
   const lines = [['fav', '정', fav], ['pl', '플', pl]]
-    .map(([key, name, odds]) => [key, name, odds, samples[key]?.[0]?.season])
-    .filter(([, , odds, vals]) => odds !== null && Array.isArray(vals))
+    .map(([key, name, odds]) => [key, name, odds, samples[key]?.[0]])
+    .filter(([, , odds, entry]) => odds !== null && Array.isArray(entry?.season))
   const tip = '이번 시즌 6대리그에서 같은 국내 배당이 이 경기와 같은 쪽(홈/원정)에 뜬 경기의 결과 — 핸승 / 핸무 / 무 / 역.\n'
-    + '정 = 정배 배당 · 플 = 플핸(언더독 핸디) 배당. 아래 정배 표본·플핸 표본의 \'시즌\' 칸과 같은 숫자입니다.'
-  return lines.map(([key, name, odds, vals], i) => (
-    <RefItem key={`same-season-${key}`} label={i === 0 ? '동배' : ''} compact title={tip}>
-      {name}){odds.toFixed(2)}{fmtCounts(vals)}
-    </RefItem>
-  ))
+    + '정 = 정배 배당 · 플 = 플핸(언더독 핸디) 배당. 아래 정배 표본·플핸 표본의 \'시즌\' 칸과 같은 숫자입니다. 누르면 그 이번 시즌 경기 카드가 뜹니다.'
+  return lines.map(([key, name, odds, entry], i) => {
+    // 누르면 뜨는 상자 — 아래 정배 표본·플핸 표본 카드 중 이번 시즌 경기만(2026-10-11 사용자 지정, 결과 숫자 = 이 카드 수)
+    const cards = (entry.cards?.matches || []).filter((m) => String(m.s) === String(row.S))
+    const favCode = key === 'fav' ? (kw < kl ? 'K-W' : 'K-L') : undefined
+    return (
+      <RefItem
+        key={`same-season-${key}`}
+        label={i === 0 ? '배당' : ''}
+        compact
+        clickPop
+        title={tip}
+        pop={(
+          <span className="same-season-pop">
+            <span className="same-season-pop-head">
+              {name}){odds.toFixed(2)}{fmtCounts(entry.season)} — 이번 시즌 같은 배당 경기
+            </span>
+            {cards.length ? (
+              <span className="same-season-pop-cards">
+                {cards.map((m, j) => (
+                  <SeasonSampleCard key={`${m.league}-${m.r}-${m.ht}-${j}`} m={m} kind={key} favCode={favCode} season={row.S} curRow={row} />
+                ))}
+              </span>
+            ) : <span className="same-season-pop-none">이번 시즌 같은 배당 경기가 없습니다</span>}
+          </span>
+        )}
+      >
+        {name}){odds.toFixed(2)}{fmtCounts(entry.season)}
+      </RefItem>
+    )
+  })
 }
 
 function MatchRefLine({ row, verdict, h2hLoading, h2hMatches, pick, xg, samples }) {
@@ -2856,7 +2882,8 @@ function SameOddsColumns({ sameOdds }) {
   return (
     <div className="same-odds-two">
       {['fav', 'dog', 'pl', 'fh'].map((kind) => {
-        const groups = sameOdds.groups.filter((g) => g.kind === kind)
+        // 같은 배당 경기가 있는 묶음만(2026-10-11 사용자 지정) — 없는 칸·없는 초기/배변 줄은 아예 안 그린다
+        const groups = sameOdds.groups.filter((g) => g.kind === kind && g.games.length)
         if (!groups.length) return null
         return (
           <div className="same-odds-col" key={kind}>
@@ -2902,6 +2929,14 @@ function simDiffText(m, name) {
 
 // 설명글은 제목 옆 ? 팝업으로(2026-10-10 사용자 지정), 제목 옆 입력칸은 표본 메모(sample_notes, kind='sim_season').
 function SimilarSeasonSection({ data, row, onHelp, note, onSaveNote }) {
+  // 카드를 누르면 보더에 노란 하이라이트, 다시 누르면 해제(2026-10-11 사용자 지정). 이 화면에서만 기억하고 저장하지 않는다.
+  const [picked, setPicked] = useState(() => new Set())
+  const togglePick = (key) => setPicked((prev) => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    return next
+  })
   if (data === null) return null
   const homeFav = data?.base?.home_fav
   return (
@@ -2936,7 +2971,13 @@ function SimilarSeasonSection({ data, row, onHelp, note, onSaveNote }) {
                       {/* 비슷한 경기가 없으면 칸을 그냥 비워 둔다(2026-10-10 사용자 지정) */}
                       {m && (
                         <>
-                          <SeasonSampleCard m={m} kind="fav" favCode={favCode} curRow={row} />
+                          <div
+                            className={`sim-card-hit${picked.has(`${basis}|${l.code}`) ? ' is-picked' : ''}`}
+                            onClick={() => togglePick(`${basis}|${l.code}`)}
+                            title="누르면 노란 테두리로 표시 · 다시 누르면 해제"
+                          >
+                            <SeasonSampleCard m={m} kind="fav" favCode={favCode} curRow={row} />
+                          </div>
                           <span className="sim-diff" title={`기준 ${data.base[basis].toFixed(2)}와의 호가 단계 차이 · 승·무·패 세 값 호가 단계 합`}>{simDiffText(m, name)}</span>
                           {/* 그 리그에서 같은 조건(기준 3단계·무 6단계 안)을 통과한 경기 전부의 결과 수 — 엑셀 카드 밑 4칸 */}
                           <div className="sim-counts" title={`${l.label}에서 같은 조건을 통과한 이번 시즌 경기 ${m.counts.reduce((a, b) => a + b, 0)}개의 결과`}>
@@ -3023,7 +3064,10 @@ function SameOddsSection({ sameOdds, note, onSaveNote }) {
         회차 동배당
         <SampleNoteInput value={note} onSave={onSaveNote} placeholder="회차 동배당에 대한 의견" />
       </h3>
-      <SameOddsColumns sameOdds={sameOdds} />
+      {/* 같은 배당이 하나도 없으면 네 카드를 그리지 않고 한 줄로(2026-10-11 사용자 지정) */}
+      {sameOdds.groups.some((g) => g.games.length)
+        ? <SameOddsColumns sameOdds={sameOdds} />
+        : <div className="same-odds-none">이번 회차 같은 배당 없음</div>}
     </section>
   )
 }
@@ -3146,6 +3190,31 @@ function tagClass(key, value, row) {
   return TAG_BG[value] || TAG_TEXT[value]
 }
 
+// 판정 — 시스템 판정을 글자로(2026-10-11 사용자 지정: 예전 '판정' 드롭박스는 내 사심이 들어가 지우고, 2026-09-26의 VerdictLead를 되살려
+// 앞에 작은 '판정' 이름표를 붙였다). 값은 판정 줄(PickBand)이 최종으로 쓰는 것과 같다 — 배변 판정, 배변에 픽이 없으면 초기 판정.
+// 정 쪽(정무 등)=파랑 · 플 쪽(플핸무 등)=빨강 · 엇갈림(엇(정)/엇(플))=회색 글자색만(배경 없음).
+function VerdictLead({ row }) {
+  const init = phaseVerdict(row, false, '초기')
+  const fin = phaseVerdict(row, true, '배변')
+  const v = fin.pick ? fin : init
+  if (!v.pick) return null
+  const name = v.split ? v.display : v.pick
+  const cls = v.split ? 'is-gray' : DIR_SIDE[v.pick] === '정' ? 'is-blue' : 'is-red'
+  const pct = v.rate !== null && v.rate !== undefined ? ` · 표본 실측 ${v.rate.toFixed(2)}%(${(v.n ?? 0).toLocaleString()}건)` : ''
+  return (
+    <span
+      className={`mypick-bar-field verdict-lead ${cls}`}
+      title={`최종 ${v.label} 시스템 판정: ${name}${v.split ? ' (국내·해외 지표가 갈렸습니다)' : ''}${pct}`}
+    >
+      <span className="mypick-tag-lab">판정</span>
+      {name}
+    </span>
+  )
+}
+
+// 경기 전 생각 앞 드롭박스 — 판정(tagVerdict)은 2026-10-11에 빼고 시스템 판정 글자(VerdictLead)로 바꿨다. 저장된 값은 DB에 그대로.
+const MEMO_TAG_SHOWN = MEMO_TAG_FIELDS.filter((t) => t.key !== 'tagVerdict')
+
 function MyPickBar({ row, onSavePick, memoLead }) {
   const [pick, setPick] = useState(row.MY_PICK || '')
   const [p, setP] = useState(row.MY_P || '')
@@ -3250,7 +3319,8 @@ function MyPickBar({ row, onSavePick, memoLead }) {
       {/* 줄 순서(2026-10-10 사용자 지정) — 1줄: 뱃지·판정/구간/상대/표본·경기 전 생각, 2줄: 내픽~결과반성 */}
       <div className="mypick-bar-row">
         {memoLead}
-        {MEMO_TAG_FIELDS.map((t) => (
+        <VerdictLead row={row} />
+        {MEMO_TAG_SHOWN.map((t) => (
           <label key={t.key} className="mypick-bar-field mypick-tag" title={`${t.label}에 대한 내 생각 — 참고용(판정·집계에 안 쓰임)`}>
             {/* 값을 고른 뒤에도 무슨 칸인지 보이게 앞에 아주 작은 이름표(2026-10-10 사용자 지정) */}
             <span className="mypick-tag-lab">{t.label}</span>

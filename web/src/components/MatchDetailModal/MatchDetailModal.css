@@ -1769,10 +1769,10 @@
 }
 
 /* 카드가 이제 통합 전체에서 뽑혀 지난 시즌 경기도 섞여 나온다 — 지금 보는 경기와
-   같은(이번) 시즌인 카드만 노란 테두리로 구분한다(2026-09-13 사용자 지정). RtBadge의
-   matched 테두리와 같은 톤(--chip-yellow-fg)을 재사용한다. */
+   같은(이번) 시즌인 카드만 테두리로 구분한다(2026-09-13 사용자 지정 — 노랑, 2026-10-11 파랑으로 변경:
+   노랑은 선택·강조 전용이라 겹쳐 보인다는 이유). --chip-blue-fg를 쓴다. */
 .season-sample-card-thisseason {
-  border-color: var(--chip-yellow-fg);
+  border-color: var(--chip-blue-fg);
   border-width: 2px;
   padding: 5px;
 }
@@ -2747,4 +2747,64 @@
   font-size: 11px;
   font-weight: 400;
   text-align: left;
+}
+
+/* 이번 시즌 유사 경기 카드를 누르면 보더에 노란 하이라이트(2026-10-11) — 이번 시즌 파랑 테두리보다 우선 */
+.sim-card-hit {
+  cursor: pointer;
+}
+
+.sim-card-hit.is-picked .season-sample-card {
+  border-color: var(--chip-yellow-fg);
+  border-width: 2px;
+  padding: 5px;
+  box-shadow: 0 0 0 1px var(--chip-yellow-fg);
+}
+
+/* 참고 줄 '배당'(정)2.10(1/0/0/0))을 누르면 뜨는 상자 — 이번 시즌 같은 배당 경기 카드(2026-10-11) */
+.same-season-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: default;
+}
+
+.same-season-pop-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.same-season-pop-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 560px;
+}
+
+.same-season-pop-none {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 판정 — 시스템 판정 글자(2026-10-11, 예전 '판정' 드롭박스 자리). 앞 작은 이름표는 드롭박스들(.mypick-tag-lab)과 같다.
+   세로는 가운데 맞춤 — 처음엔 글자 밑줄(baseline) 기준이라 '판정' 이름표만 1.8px 내려가 구간·상대·표본 이름표와 어긋났다(같은 날 실측) */
+.verdict-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.verdict-lead.is-blue { color: var(--chip-blue-fg); }
+.verdict-lead.is-red { color: var(--chip-red-fg); }
+.verdict-lead.is-gray { color: var(--chip-gray-fg); }
+
+.verdict-lead .mypick-tag-lab {
+  font-weight: 400;
 }
