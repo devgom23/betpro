@@ -1157,7 +1157,7 @@ function MatchRefLine({ row, verdict, h2hLoading, h2hMatches, pick, xg, samples 
 //   서울(1)
 //   (정)
 // 팝업 제목 줄은 한 줄에 "서울(1위)(정)"로 그대로 둔다 — 거기는 가로 폭이 넉넉하다.
-function OddsTable({ row, weekRank, marks, onToggleMark }) {
+function OddsTable({ row, weekRank, marks, onToggleMark, schedule }) {
   // 5번째 자리(final)는 그 배당의 배변(최종배당) 칸 이름 — 해외 핸디는 스코어맨이
   // 무(D) 값을 안 주고 최종배당 자체를 안 모으므로 배변 행이 없다.
   const rows = [
@@ -1169,7 +1169,6 @@ function OddsTable({ row, weekRank, marks, onToggleMark }) {
   const ht = String(row.HT || '').trim()
   const at = String(row.AT || '').trim()
   const hasScore = row.HS !== null && row.HS !== undefined && row.AS !== null && row.AS !== undefined
-  const homeFav = homeIsFav(row)
   // 시즌 막판(남은 경기 10 이하) 뱃지 — 예전엔 리그 표(LeagueTable)의 팀명 칸 옆에
   // 붙었는데, 배당 표 팀명 위로 옮겼다(2026-09-13 사용자 지정, 스샷 그대로 — 유로파/
   // 챔스✔ 같은 알약 배지가 팀명 칸 머리 위에 온다). 계산 근거는 utils/seasonStake.js.
@@ -1188,18 +1187,19 @@ function OddsTable({ row, weekRank, marks, onToggleMark }) {
     const n = Number(v)
     return Number.isNaN(n) ? '' : `(${Math.trunc(n)})`
   }
-  // (정)/(역)은 팀명·순위 아래 줄로 내린다. 줄바꿈을 이 함수 안에 같이 넣어 둬야
-  // 배당이 없어 정/역을 못 가리는 경기(homeFav === null)에서 빈 줄만 남지 않는다.
-  // 시즌 막판 뱃지(유로파/챔스✔ 등)는 그 (정)/(역) 오른쪽에 같은 줄로 붙인다
-  // (2026-09-13 사용자 지정 — "팀이름 아래 (정)/(역) 오른쪽으로 배치").
+  // 팀명·순위 아래 줄 — 그 팀의 직전 경기가 며칠 전이었나('5일 전', 누르면 앞뒤 일정 상자)와 시즌 막판 뱃지(유로파/챔스✔ 등).
+  // 예전엔 이 자리에 (정)/(역)을 썼다 — 2026-10-11 사용자 지정으로 '며칠 전'으로 바꿨다(정배 쪽은 칸 배경색으로 여전히 보인다).
+  // 줄바꿈을 이 함수 안에 같이 넣어 둬야 일정·뱃지가 둘 다 없는 경기에서 빈 줄만 남지 않는다.
   const roleSuffix = (isHome, stake) => {
-    if (homeFav === null) return null
-    const isFav = isHome ? homeFav : !homeFav
+    const teamCtx = isHome ? schedule?.ctx?.home : schedule?.ctx?.away
+    const rest = schedule?.ctx ? <ScheduleRest teamCtx={teamCtx} schedule={schedule} /> : null
+    const badge = stakeBadge(stake)
+    if (!rest && !badge) return null
     return (
       <>
         <br />
-        <span className={isFav ? 'odds-role-fav' : 'odds-role-dog'}>{isFav ? '(정)' : '(역)'}</span>
-        {stakeBadge(stake)}
+        {rest}
+        {badge}
       </>
     )
   }
@@ -2822,7 +2822,6 @@ function MultiBookLegend({ onClose }) {
 // 6대리그 전수조사에서 사실이 아니었다(2026-09-04, LeagueTable.jsx 주석 참고).
 
 const SAME_ODDS_KIND_LABEL = { fav: '정배', dog: '역배', pl: '플핸', fh: '정배 핸디' }
-const SAME_ODDS_KIND_NOTE = { fav: '승/무/패 배당', dog: '승/무/패 배당', pl: '핸디 승/무/패 배당', fh: '핸디 승/무/패 배당' }
 // 취소(5)·연기(6)처럼 색이 없는 결과는 '무'와 같은 회색 칩으로 떨어뜨린다.
 const SAME_ODDS_RT_CLASS = new Set(['핸승', '핸무', '무', '역'])
 
@@ -2842,16 +2841,7 @@ function SameOddsGame({ g }) {
           달라는 사용자 지정(2026-09-24). 어느 경기인지는 날짜·팀명·배당으로 충분히
           가려진다(같은 회차 안에서만 비교하므로 라운드 자체도 의미가 크지 않다). */}
       <span className="same-odds-teams">{g.home}VS{g.away}</span>
-      {g.odds && (
-        <span className="same-odds-nums">
-          ({g.odds.map((v, i) => (
-            <Fragment key={i}>
-              {i > 0 && ' / '}
-              {i === g.hit ? <span className="same-odds-hit">{v ?? '-'}</span> : (v ?? '-')}
-            </Fragment>
-          ))})
-        </span>
-      )}
+      {/* 승/무/패 배당 괄호는 뺐다(2026-10-11 사용자 지정 — 머리 '정배 초기 2.10'에 같은 값이 있어 경기 줄을 짧게 한 줄로) */}
       {/* 내픽(2026-10-10 사용자 지정) — 예전 '예정' 자리. 없으면 '-', 결과가 나오면 내픽 옆에 결과. 색은 리그 표 내픽 칸과 같다. */}
       {g.pick
         ? <span className="same-odds-pick" style={myPickStyle(g.pick) || undefined} title="이 경기에 찍은 내 내픽">{g.pick}</span>
@@ -2870,16 +2860,20 @@ function SameOddsColumns({ sameOdds }) {
         if (!groups.length) return null
         return (
           <div className="same-odds-col" key={kind}>
-            <div className="same-odds-colhead">
-              {SAME_ODDS_KIND_LABEL[kind]}
-              <small>{SAME_ODDS_KIND_NOTE[kind]}</small>
-            </div>
+            {/* 한 줄 '정배 초기 2.10  10-11(일) 니스VS스트라스 -'(2026-10-11 사용자 지정 — 예전 '정배 · 승/무/패 배당' 머리 +
+                왼쪽 '초기 1.48' 칸을 합쳐 경기 줄 앞에 붙였다). 같은 배당 경기가 여럿이면 둘째 경기부터 아랫줄, 초기·배변은 묶음마다 한 줄씩. */}
             {groups.map((g) => (
               <div className="same-odds-grp" key={g.key}>
-                <div className="same-odds-label">{g.phase} <b>{g.odds}</b></div>
+                <div className="same-odds-colhead">{SAME_ODDS_KIND_LABEL[kind]} {g.phase} <b>{g.odds}</b></div>
                 <div className="same-odds-list">
                   {g.games.length
-                    ? g.games.map((gm, i) => <SameOddsGame key={i} g={gm} />)
+                    ? g.games.map((gm, i) => (
+                      // 여러 경기는 ' / '로 이어 한 줄로(2026-10-11 사용자 지정, 라치오/몬차) — 칸 폭이 모자라면 경기 단위로 아랫줄에 이어진다
+                      <Fragment key={i}>
+                        {i > 0 && <span className="same-odds-gsep" aria-hidden="true">/</span>}
+                        <SameOddsGame g={gm} />
+                      </Fragment>
+                    ))
                     : <div className="same-odds-none">같은 배당 없음</div>}
                 </div>
               </div>
@@ -3046,7 +3040,8 @@ function scheduleDaysText(days) {
 
 const SCHEDULE_RESULT_CLASS = { 승: 'win', 무: 'draw', 패: 'loss' }
 
-function ScheduleContextSection({ ctx, note, onSaveNote }) {
+// 앞뒤 일정 표 — 2026-10-11부터 섹션이 아니라 경기지표 '참고' 줄 '일정'을 누르면 뜨는 상자 안에 있다(사용자 지정).
+function ScheduleContextTable({ ctx }) {
   if (!ctx) return null
   // '팀' 칸 — 예전엔 실제 팀명(헤타페/말라가)을 적었는데, 폭을 줄이려고 이 경기의
   // 홈/원정 소속만 남긴다(2026-09-23 사용자 지정 — 옆의 '같은 회차 동배당 결과'에
@@ -3060,13 +3055,6 @@ function ScheduleContextSection({ ctx, note, onSaveNote }) {
   }
   if (rows.length === 0) return null
   return (
-    <section className="detail-section schedule-ctx-section">
-      <h3>
-        앞뒤 일정
-        {/* 설명글 삭제(2026-09-29 사용자 지정 — "앞뒤 일정 뒤에 메모 인풋 박스 넣어주고
-            설명글은 삭제 처리") — 그 자리에 이 표에 대한 의견 메모칸을 넣는다. */}
-        {onSaveNote && <SampleNoteInput value={note} onSave={onSaveNote} placeholder="앞뒤 일정에 대한 의견" />}
-      </h3>
       <div className="schedule-ctx-wrap">
         <table className="detail-table schedule-ctx-table">
           <thead>
@@ -3112,7 +3100,28 @@ function ScheduleContextSection({ ctx, note, onSaveNote }) {
           </tbody>
         </table>
       </div>
-    </section>
+  )
+}
+
+// 배당 표 팀 이름 밑 '5일 전' — 그 팀의 직전 경기가 며칠 전이었나. 누르면 앞뒤 일정 표와 메모칸이 상자로 뜬다
+// (2026-10-11 사용자 지정 — 예전 (정)/(역) 자리. 예전 '앞뒤 일정' 섹션을 옮겼다. 메모칸은 상자에서 뺐다 — 적어 둔 메모는 DB에 그대로).
+function ScheduleRest({ teamCtx, schedule }) {
+  const ctx = schedule?.ctx
+  if (!ctx || (!ctx.home && !ctx.away)) return null
+  return (
+    <RefItem
+      compact
+      clickPop
+      title="이 팀의 직전 경기가 며칠 전이었나 — 누르면 앞뒤 일정 표(두 팀의 직전·다음 경기, 리그·컵 포함)"
+      pop={(
+        <span className="schedule-pop">
+          <span className="schedule-pop-head">앞뒤 일정</span>
+          <ScheduleContextTable ctx={ctx} />
+        </span>
+      )}
+    >
+      {teamCtx?.prev ? scheduleDaysText(teamCtx.prev.days) : '-'}
+    </RefItem>
   )
 }
 
@@ -5188,7 +5197,7 @@ function NewSystemVerdict({ row, init, fin }) {
   )
 }
 
-function PickBand({ samples, marks, onToggleMark, row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, h2hMatches, axisV, axisStats, uni, plhan, onPlhanOpen, zone }) {
+function PickBand({ samples, schedule, marks, onToggleMark, row, h2hVerdict: verdict, h2hLoading, xg, weekRank, archiveTags, extraOdds, h2hMatches, axisV, axisStats, uni, plhan, onPlhanOpen, zone }) {
   // '참고' 줄의 무·전적과 '시스템 판정' 줄 모두 같은 pick을 봐야 앞뒤가
   // 맞는다 — 여기서 새 판정(배당표 4칸 기반, phaseVerdict)을 한 번만 계산해
   // 내려준다. 옛 판정(9줄, resolveSystemPick)은 2026-09-06에 화면에서 걷어내며
@@ -5208,7 +5217,7 @@ function PickBand({ samples, marks, onToggleMark, row, h2hVerdict: verdict, h2hL
               배당
               {extraOddsChips(row, extraOdds)}
             </h3>
-            <OddsTable row={row} weekRank={weekRank} marks={marks} onToggleMark={onToggleMark} />
+            <OddsTable row={row} weekRank={weekRank} marks={marks} onToggleMark={onToggleMark} schedule={schedule} />
           </div>
           {/* 3칸(2026-10-09 사용자 지정): 배당 | 경기지표(좁게) | 확률 지표. 경기지표는 예전엔 확률 지표 표 밑에 있었다. */}
           <div className="pick-band-risk-col pick-band-match">
@@ -5786,6 +5795,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
         <div className="detail-modal-scroll">
         <PickBand
           samples={seasonSample?.samples}
+          schedule={{ ctx: scheduleCtx }}
           row={row}
           h2hVerdict={h2hMark}
           h2hLoading={!pickData && !pickError}
@@ -5809,11 +5819,6 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
             오른쪽에 '같은 회차 동배당 결과'를 나란히 둔다(2026-09-23 사용자 지정) —
             한쪽이 없으면 남은 쪽이 폭을 다 쓴다(schedule-ctx-row는 auto-fit 그리드). */}
         <div className="schedule-ctx-row">
-          <ScheduleContextSection
-            ctx={scheduleCtx}
-            note={sampleNotes?.schedule?.memo}
-            onSaveNote={(memo) => saveSampleNote('schedule', { memo: memo || null })}
-          />
           <SameOddsSection
             sameOdds={sameOdds}
             note={sampleNotes?.same_odds?.memo}

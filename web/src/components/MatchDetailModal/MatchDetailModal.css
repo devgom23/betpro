@@ -619,13 +619,6 @@
   min-width: 0;
 }
 
-/* 두 섹션 모두 글자가 한 줄로 다 보이는 폭(max-content)을 기본으로 잡고, 그보다 좁아지지는 않는다(min-content) —
-   가로 스크롤이 생기지 않게(2026-10-10 사용자 지정, 엘체 vs 셀타비고). 남는 폭은 동배당이 3 : 앞뒤 일정이 2로 나눠 가지고,
-   둘이 한 줄에 못 들어가면 앞뒤 일정이 아랫줄로 내려간다. */
-.schedule-ctx-row > .schedule-ctx-section {
-  flex: 2 1 max-content;
-  min-width: min-content;
-}
 
 .schedule-ctx-row > .same-odds-section {
   flex: 3 1 max-content;
@@ -635,9 +628,10 @@
 /* 같은 회차 동배당 결과 — 좌 정배 / 우 플핸, 각 칸 안에서 초기·배변 두 줄 */
 .same-odds-two {
   display: grid;
-  /* 각 칸은 글자가 한 줄로 다 보이는 폭(max-content) 이하로는 안 줄어든다 — 안 그러면 경기 줄이 칸 밖으로 삐져나온다
-     (2026-10-10 엘체 vs 셀타비고 플핸 칸). 남는 폭은 두 칸이 똑같이 나눈다. */
-  grid-template-columns: repeat(2, minmax(max-content, 1fr));
+  /* 칸 폭 = 내용 폭(auto) — 경기가 여럿인 칸은 ' / '로 이은 한 줄이 다 들어가게 넓어지고, 남는 폭은 나눠 가진다.
+     자리가 모자라면 가장 긴 경기 하나(min-content)까지만 줄고 경기 단위로 아랫줄에 이어진다 — 가로 스크롤 없음
+     (2026-10-10 엘체 vs 셀타비고 플핸 칸 삐져나옴 → 10-11 라치오/몬차 정배 칸 세 경기 한 줄). */
+  grid-template-columns: repeat(2, minmax(min-content, auto));
   gap: 10px;
 }
 
@@ -649,51 +643,41 @@
   padding: 8px 10px;
 }
 
-.same-odds-colhead {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 6px;
-  padding-bottom: 5px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.same-odds-colhead small {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-muted);
-}
-
+/* 묶음 한 줄 — 왼쪽 '정배 초기 2.10', 오른쪽 경기 줄(2026-10-11 사용자 지정) */
 .same-odds-grp {
   display: flex;
-  gap: 6px;
   align-items: baseline;
-  padding: 4px 0;
+  gap: 8px;
 }
 
 .same-odds-grp + .same-odds-grp {
-  border-top: 1px dashed var(--border);
+  margin-top: 4px;
 }
 
-.same-odds-label {
+.same-odds-colhead {
   flex: none;
-  width: 50px;
-  font-size: 10px;
-  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
-.same-odds-label b {
-  font-size: 11px;
-  color: var(--text-primary);
+.same-odds-colhead b {
   font-variant-numeric: tabular-nums;
 }
 
 .same-odds-list {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;            /* 경기들을 ' / '로 이어 한 줄로 — 칸이 좁으면 경기 단위로 다음 줄(2026-10-11) */
+  align-items: baseline;
+  column-gap: 6px;
+}
+
+.same-odds-gsep {
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
 .same-odds-game {
@@ -720,19 +704,6 @@
   flex: none;
   color: var(--text-primary);
   white-space: nowrap;
-}
-
-.same-odds-nums {
-  flex: none;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* 겹친 배당 값만 파랑 — 어디가 같은 값인지 한눈에 보이게(사용자 지정) */
-.same-odds-hit {
-  color: var(--chip-blue-fg);
-  font-weight: 700;
 }
 
 .same-odds-none {
@@ -2751,3 +2722,29 @@
 .sim-count.is-mu { background: var(--chip-gray-bg); color: var(--chip-gray-fg); }
 .sim-count.is-yk { background: var(--chip-red-bg); color: var(--chip-red-fg); }
 .sim-count.is-zero { opacity: 0.35; }
+
+/* 배당 표 팀 이름 밑 '5일 전'을 누르면 뜨는 상자 — 제목, 그 아래 앞뒤 일정 표(2026-10-11) */
+.schedule-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: default;
+}
+
+.schedule-pop-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.schedule-pop .schedule-ctx-table {
+  width: max-content;
+  margin-bottom: 0;
+}
+
+/* 배당 표 팀 이름 밑 '5일 전' — 예전 (정)/(역) 자리. 머리글 칸 굵기·가운데 정렬을 물려받지 않게 표 본문 글자로 */
+.odds-table th .match-ref-item {
+  font-size: 11px;
+  font-weight: 400;
+  text-align: left;
+}
