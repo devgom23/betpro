@@ -6,7 +6,7 @@ import { PickSummaryBar } from '../RtSummaryBar/RtSummaryBar'
 import { RichMemoInput } from '../RichMemo/RichMemo'
 import { MarketSwitch, RoundMissDetail, RoundMissGames } from '../RoundMiss/RoundMiss'
 import RoundMissMemo from '../RoundMiss/RoundMissMemo'
-import { RM_LEAGUES, useRoundMissSummary } from '../RoundMiss/useRoundMiss'
+import { LEAGUE_LABEL, RM_LEAGUES, useRoundMissSummary } from '../RoundMiss/useRoundMiss'
 import './SeasonStats.css'
 
 const RT_ROWS = ['핸승', '핸무', '무', '역']
@@ -78,6 +78,7 @@ export default function SeasonStats({ code, scope, season, round, hide1and3 = fa
   // ④ 라운드별 판정(2026-10-10 사용자 지정) — 판정은 공식 데이터(master) 기준이라 개인 데이터(user) 탭에서는 뺀다.
   // 위에서 고른 시즌·라운드를 그대로 쓴다(시즌분석 화면처럼 라운드를 따로 고르지 않는다).
   const [rmOpen, setRmOpen] = useState(true)
+  const [rmGamesOpen, setRmGamesOpen] = useState(true)   // ⑤ 경기별 세팅값 접기(2026-10-10 — ④에서 나눔)
   const [rmMkt, setRmMkt] = useState('v')
   const rmOk = !hide1and3 && scope !== 'user'
   const { sum: rmSum } = useRoundMissSummary(open && rmOk && rmOpen)
@@ -220,7 +221,7 @@ export default function SeasonStats({ code, scope, season, round, hide1and3 = fa
         )}
       </div>
 
-      {/* 시즌 지표가 접힌 상태에서도 경기별 세팅값은 보인다(2026-10-10 사용자 지정) — 펼치면 ④ 안에 같은 표가 들어 있다. */}
+      {/* 시즌 지표가 접힌 상태에서도 경기별 세팅값은 보인다(2026-10-10 사용자 지정) — 펼치면 ⑤에 같은 표가 들어 있다. */}
       {!open && rmOk && RM_LEAGUES.includes(code) && (
         <div className="ss-body">
           <RoundMissGames lg={code} season={data.season} round={Number(String(data.round).replace(/\D/g, ''))} mkt={rmMkt} />
@@ -412,36 +413,40 @@ export default function SeasonStats({ code, scope, season, round, hide1and3 = fa
           </div>
           )}
 
-          {/* ④ 라운드별 판정 — 같은 라운드를 시즌별로, 이번 라운드를 경기별로(세팅값=배변 판정) */}
-          {rmOk && (!rmSum || rmSum.leagues.some((L) => L.code === code)) && (
-            <div className="ss-block">
-              <div className="ss-title">
-                <button className="ss-fold ss-fold-sub" onClick={() => setRmOpen((v) => !v)}>
-                  {rmOpen ? '◂' : '▸'}
-                </button>
-                ④ 라운드별 판정
-{rmOpen && <MarketSwitch mkt={rmMkt} setMkt={setRmMkt} />}
-                {rmOpen && (
-                  <RoundMissMemo
-                    lg={code}
-                    season={data.season}
-                    round={Number(String(data.round).replace(/\D/g, ''))}
-                    kind="tab"
-                    placeholder="이 라운드 판정에 대한 생각을 입력해주세요"
-                  />
-                )}
-              </div>
-              {rmOpen && (rmSum ? (
-                <RoundMissDetail
-                  sum={rmSum}
-                  lg={code}
-                  season={data.season}
-                  round={Number(String(data.round).replace(/\D/g, ''))}
-                  mkt={rmMkt}
-                />
-              ) : <p className="ss-hint">라운드별 판정 계산 중… (처음 한 번은 5초쯤 걸립니다)</p>)}
-            </div>
-          )}
+          {/* ④ 시즌별 · ⑤ 경기별 세팅값(2026-10-10 사용자 지정 — 예전 '④ 라운드별 판정' 하나에 둘이 들어 있던 것을 두 블록으로 나눔).
+              판정 = 배변 시스템 판정. 위 '판정 기준/국배 세팅값 기준' 스위치는 ④·⑤에 같이 걸린다. */}
+          {rmOk && (!rmSum || rmSum.leagues.some((L) => L.code === code)) && (() => {
+            const rn = Number(String(data.round).replace(/\D/g, ''))
+            return (
+              <>
+                <div className="ss-block">
+                  <div className="ss-title">
+                    <button className="ss-fold ss-fold-sub" onClick={() => setRmOpen((v) => !v)}>
+                      {rmOpen ? '◂' : '▸'}
+                    </button>
+                    ④ {LEAGUE_LABEL[code] || code} {rn}R 시즌별
+                    {rmOpen && <MarketSwitch mkt={rmMkt} setMkt={setRmMkt} />}
+                    {rmOpen && (
+                      <RoundMissMemo lg={code} season={data.season} round={rn} kind="tab" placeholder="이 라운드 판정에 대한 생각을 입력해주세요" />
+                    )}
+                  </div>
+                  {rmOpen && (rmSum ? (
+                    <RoundMissDetail sum={rmSum} lg={code} season={data.season} round={rn} mkt={rmMkt} noGames noHead />
+                  ) : <p className="ss-hint">라운드별 판정 계산 중… (처음 한 번은 5초쯤 걸립니다)</p>)}
+                </div>
+                <div className="ss-block">
+                  <div className="ss-title">
+                    <button className="ss-fold ss-fold-sub" onClick={() => setRmGamesOpen((v) => !v)}>
+                      {rmGamesOpen ? '◂' : '▸'}
+                    </button>
+                    ⑤ {data.season} {LEAGUE_LABEL[code] || code} {rn}R 경기별 세팅값
+                    <RoundMissMemo lg={code} season={data.season} round={rn} kind="games" placeholder="이 라운드 경기별 세팅값에 대한 생각을 입력해주세요" />
+                  </div>
+                  {rmGamesOpen && <RoundMissGames lg={code} season={data.season} round={rn} mkt={rmMkt} noHead />}
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
     </div>

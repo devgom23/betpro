@@ -76,7 +76,8 @@ export function MarketSwitch({ mkt, setMkt }) {
 
 // ② 같은 라운드를 시즌별로(시즌이 가로) + ③ 이번 시즌 그 라운드의 경기별 세팅값 — 시즌분석과 리그 화면 ④가 같이 쓴다.
 // 경기별 세팅값(③) — 단독으로도 쓴다(리그 화면 시즌 지표가 접힌 상태에서도 이 표는 보인다, 2026-10-10 사용자 지정).
-export function RoundMissGames({ lg, season, round, mkt }) {
+// noHead — 리그 화면 시즌 지표 ⑤처럼 블록 제목·메모를 밖에서 달 때 이 카드의 제목 줄을 뺀다(2026-10-10).
+export function RoundMissGames({ lg, season, round, mkt, noHead }) {
   const det = useRoundDetail(lg, round)
   const [preds, setPreds] = useState({})
   const [picks, setPicks] = useState({})
@@ -121,10 +122,12 @@ export function RoundMissGames({ lg, season, round, mkt }) {
     <>
       {/* ③ 이번 라운드 경기별 세팅값 — 와이즈토토 순서, 요일로 묶음 */}
       <div className="rm-card">
-        <h3>
-          {season} {lgLabel} {round}R — 경기별 세팅값
-          <RoundMissMemo lg={lg} season={season} round={round} kind="games" placeholder="이 라운드 경기별 세팅값에 대한 생각을 입력해주세요" />
-        </h3>
+        {!noHead && (
+          <h3>
+            {season} {lgLabel} {round}R — 경기별 세팅값
+            <RoundMissMemo lg={lg} season={season} round={round} kind="games" placeholder="이 라운드 경기별 세팅값에 대한 생각을 입력해주세요" />
+          </h3>
+        )}
         {!det ? <p className="rm-note">불러오는 중…</p> : sel.length === 0 ? <p className="rm-note">{season < MIN_SEASON ? `${MIN_SEASON} 시즌부터 계산합니다` : '이 시즌에는 이 라운드가 없습니다'}</p> : (
           <div className="rm-scroll">
             <table className="rm-table rm-games">
@@ -225,7 +228,8 @@ export function RoundMissGames({ lg, season, round, mkt }) {
   )
 }
 
-export function RoundMissDetail({ sum, lg, season, round, mkt }) {
+// noGames — 경기별 세팅값(③)을 안 붙인다 · noHead — 제목 글자를 빼고 설명만(리그 화면 시즌 지표 ④·⑤로 나눠 그릴 때, 2026-10-10).
+export function RoundMissDetail({ sum, lg, season, round, mkt, noGames, noHead }) {
   const det = useRoundDetail(lg, round)
 
   const lgLabel = sum.leagues.find((L) => L.code === lg)?.label || ''
@@ -239,7 +243,7 @@ export function RoundMissDetail({ sum, lg, season, round, mkt }) {
       {/* ② 같은 라운드, 시즌별 — 시즌이 가로 */}
       <div className="rm-card">
         <h3>
-          {lgLabel} {round}R — 시즌별
+          {!noHead && `${lgLabel} ${round}R — 시즌별`}
           <span className="rm-note">{pastAvg !== null && `지난 시즌 평균 ${pastAvg.toFixed(1)}경기 빗나감 · `}같은 라운드 번호끼리 비교</span>
         </h3>
         <div className="rm-scroll">
@@ -280,7 +284,7 @@ export function RoundMissDetail({ sum, lg, season, round, mkt }) {
         </div>
       </div>
 
-      <RoundMissGames lg={lg} season={season} round={round} mkt={mkt} />
+      {!noGames && <RoundMissGames lg={lg} season={season} round={round} mkt={mkt} />}
     </>
   )
 }
