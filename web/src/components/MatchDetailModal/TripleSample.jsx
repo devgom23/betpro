@@ -130,23 +130,24 @@ const scoreTitle = ({ total, p }, final) => `${final ? '배변' : '초기'} 표�
   + `\n같은 리그 ${p.lg}/6 · 최근 ${p.rc}/6 · 팀 등장 ${p.tm}/16(무가 비슷할 때만)`
   + '\n닮은 정도를 보여주는 값입니다 — 과거 실측에서 점수가 높아도 결과가 평소와 같았습니다(도움말 ⑥)'
 
-function Card({ c, ck, game, trusted, distrusted, onTrust, onDistrust, teams, avgLabel, ptag }) {
+function Card({ c, ck, game, trusted, resulted, finished, onTrust, onResult, teams, avgLabel, ptag }) {
   const sameH = c.kh !== null && game.kh !== null && c.kh === game.kh
   const hRef = [game.khw, game.khd, game.khl]
   const hVals = [c.khw, c.khd, c.khl]
   return (
-    <div className={`ts-card${c.prev ? ' ts-prev' : ''}${trusted ? ' ts-trust' : ''}${distrusted ? ' ts-distrust' : ''}`} title={c.prev ? '더 좁은 폭(앞 탭)의 표본에도 있던 경기' : undefined}>
+    <div className={`ts-card${c.prev ? ' ts-prev' : ''}${trusted ? ' ts-trust' : ''}${resulted ? ' ts-result' : ''}`} title={c.prev ? '더 좁은 폭(앞 탭)의 표본에도 있던 경기' : undefined}>
       <div className="ts-card-top">
         <b className={Number(c.dt.slice(0, 4)) >= 2020 ? 'ts-date-new' : undefined} title={Number(c.dt.slice(0, 4)) >= 2020 ? '2020년 이후 경기' : undefined}>{c.dt.slice(2)}</b>
-        {/* 신뢰·비신뢰(2026-09-30 사용자 지정 — "[체크] 신뢰 [체크]비신뢰") — 둘은 동시에 체크되지 않는다. */}
+        {/* 신뢰·결과(2026-10-10 사용자 지정 — 예전 '비신뢰'를 '결과'로) — 경기 전엔 신뢰만, 경기가 끝나면 결과만 체크할 수 있다.
+            끝난 뒤의 신뢰는 읽기만 된다(체크는 그대로 보이고 못 바꾼다). 둘은 따로 저장돼 한 카드에 같이 걸릴 수 있다. */}
         <span className="ts-trust-wrap">
-          <label className="ts-trust-lab" title="이 표본을 신뢰하면 체크">
-            <input type="checkbox" checked={!!trusted} onChange={() => onTrust(ck)} />
+          <label className={`ts-trust-lab${finished ? ' is-off' : ''}`} title={finished ? '경기가 끝나 신뢰 표시는 바꿀 수 없습니다(읽기 전용)' : '이 표본을 신뢰하면 체크'}>
+            <input type="checkbox" checked={!!trusted} disabled={finished} onChange={() => onTrust(ck)} />
             신뢰
           </label>
-          <label className="ts-distrust-lab" title="이 표본을 믿지 않으면 체크">
-            <input type="checkbox" checked={!!distrusted} onChange={() => onDistrust(ck)} />
-            비신뢰
+          <label className={`ts-result-lab${finished ? '' : ' is-off'}`} title={finished ? '이 카드가 실제 결과와 맞았으면 체크' : '경기가 끝난 뒤에 체크할 수 있습니다'}>
+            <input type="checkbox" checked={!!resulted} disabled={!finished} onChange={() => onResult(ck)} />
+            결과
           </label>
         </span>
         {/* 첫 줄 오른쪽 = '초기 · 45점'(2026-10-05 사용자 지정 — 카드 위 꼬리표를 카드 안으로) */}
@@ -218,7 +219,7 @@ function TabText({ k, a, trusted, keyOf, sum }) {
 //   ① 이번 경기 줄: 초기 → 배변 값과 변화(0.39▼)
 //   (변화 요약표는 2026-10-05 사용자 지정으로 뺐다 — "이거 안 본다, 화면에서 삭제". 결과 칸 머리의 '1 → 0건'은 그대로)
 //   ③ [초기 · 배변 · 같이] 버튼: 같이 보면 결과 칸 안에 초기 카드 → 배변 카드 순서로, 카드 첫 줄 오른쪽 꼬리표·왼쪽 띠 색으로 구분
-// 카드 모양·값 표시 규칙·신뢰/비신뢰·폭 탭·의견칸은 예전과 똑같다(초기·배변을 각자 따로 고른다).
+// 카드 모양·값 표시 규칙·신뢰/결과·폭 탭·의견칸은 예전과 똑같다(초기·배변을 각자 따로 고른다).
 const PHASES = ['init', 'final']
 const PHASE_LABEL = { init: '초기', final: '배변' }
 const keyOfPhase = (p) => (c) => (p === 'final' ? 'f:' : '') + cardKey(c)   // 배변 카드 신뢰 체크는 'f:'로 따로
@@ -239,7 +240,7 @@ function CountMove({ a, b }) {
 }
 
 // 영역 하나(같은 리그 / 통합) — 보이는 단계(초기·배변·둘 다)의 폭 탭 + 결과 4칸 카드
-function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distrusted, onTrust, onDistrust, teams, notes, s0 }) {
+function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, resulted, finished, onTrust, onResult, teams, notes, s0 }) {
   const both = shown.length === 2
   return (
     <div className="ts-band">
@@ -308,7 +309,7 @@ function CompareBand({ areaKey, title, shown, data, sel, setWide, trusted, distr
                     )
                     return (
                       <div key={`${p}${i}`} className={`ts-cmp-item${both ? ` ts-cmp-${p}` : ''}`}>
-                        <Card c={c} ck={ck} game={data[p].game} trusted={trusted.has(ck)} distrusted={distrusted.has(ck)} onTrust={onTrust} onDistrust={onDistrust} teams={teams} avgLabel={p === 'final' ? '마감' : '평균'} ptag={ptag} />
+                        <Card c={c} ck={ck} game={data[p].game} trusted={trusted.has(ck)} resulted={resulted.has(ck)} finished={finished} onTrust={onTrust} onResult={onResult} teams={teams} avgLabel={p === 'final' ? '마감' : '평균'} ptag={ptag} />
                       </div>
                     )
                   })
@@ -432,12 +433,14 @@ export default function TripleSampleSection({ code, scope, row, noteSlots }) {
   // 폭 탭(기본/넓힌) — 단계·영역마다 따로 고른다.
   const [wide, setWideState] = useState({})
   const setWide = (p, key, v) => setWideState((w) => ({ ...w, [`${p}:${key}`]: v }))
-  // 신뢰/비신뢰 체크 — 이 경기에서 내가 믿는/믿지 않는 표본 카드들. 서버 DB에 저장한다(2026-09-30 사용자 지정 —
+  // 신뢰/결과 체크 — 이 경기에서 내가 믿는 표본 카드들(경기 전)과 실제 결과와 맞았던 카드들(경기 후). 서버 DB에 저장한다(2026-09-30 사용자 지정 —
   // 예전엔 브라우저 localStorage라 다른 기기와 공유가 안 되고 나중에 '신뢰한 카드가 실제로 더 맞았나'도 못 쟀다).
-  // marks = {카드키: 'trust' | 'distrust'} — 한 카드에는 둘 중 하나만 걸린다. 배변 카드는 키 앞에 'f:'.
+  // marks = {카드키: 'trust', 'r:카드키': 'result'} — 신뢰와 결과는 키가 달라 한 카드에 같이 걸릴 수 있다. 배변 카드는 키 앞에 'f:'.
   const [marks, setMarks] = useState({})
   const trusted = useMemo(() => new Set(Object.keys(marks).filter((k) => marks[k] === 'trust')), [marks])
-  const distrusted = useMemo(() => new Set(Object.keys(marks).filter((k) => marks[k] === 'distrust')), [marks])
+  const resulted = useMemo(() => new Set(Object.keys(marks).filter((k) => marks[k] === 'result').map((k) => k.slice(2))), [marks])
+  // 경기가 끝났나(결과 RT 1~4) — 끝나기 전엔 신뢰만, 끝난 뒤엔 결과만 바꿀 수 있다(서버도 같은 규칙으로 막는다).
+  const finished = [1, 2, 3, 4].includes(Number(row.RT))
   // 이번 경기의 두 팀 — 표본 카드에 같은 팀이 나오면 팀명을 하이라이트한다(홈·원정 위치는 상관없이).
   const teams = new Set([String(row.HT || '').trim(), String(row.AT || '').trim()])
   const markUrl = `/api/leagues/${code}/sample_card_marks`
@@ -452,15 +455,19 @@ export default function TripleSampleSection({ code, scope, row, noteSlots }) {
         const next = { ...(res.marks || {}) }
         // 예전에 이 브라우저(localStorage)에만 남겨 둔 신뢰/비신뢰가 있으면 DB로 옮기고 브라우저 것은 지운다(초기 표본 것만 있었다).
         const legacyKeys = [[`ts-trust:${code}|${scope}|${row.S}|${row.R}|${row.HT}|${row.AT}`, 'trust'],
-          [`ts-distrust:${code}|${scope}|${row.S}|${row.R}|${row.HT}|${row.AT}`, 'distrust']]
+          [`ts-distrust:${code}|${scope}|${row.S}|${row.R}|${row.HT}|${row.AT}`, 'distrust']]   // 옛 비신뢰 — 저장 건수 0건, 지우기만 한다
         const moved = []
         for (const [lk, mk] of legacyKeys) {
           let list = []
           try { list = JSON.parse(localStorage.getItem(lk) || '[]') } catch { list = [] }
+          if (mk !== 'trust') continue
           for (const ck of list) if (!next[ck]) { next[ck] = mk; moved.push([ck, mk]) }
         }
-        if (moved.length) await Promise.all(moved.map(([ck, mk]) => api.post(markUrl, markBody(ck, mk))))
-        try { legacyKeys.forEach(([lk]) => localStorage.removeItem(lk)) } catch { /* 저장 불가 환경 */ }
+        // 서버가 거절하면(경기가 이미 끝난 신뢰 등) 브라우저 기록을 지우지 않고 남긴다.
+        const done = await Promise.allSettled(moved.map(([ck, mk]) => api.post(markUrl, markBody(ck, mk))))
+        if (done.every((d) => d.status === 'fulfilled')) {
+          try { legacyKeys.forEach(([lk]) => localStorage.removeItem(lk)) } catch { /* 저장 불가 환경 */ }
+        }
         if (alive) setMarks(next)
       } catch { /* 못 불러오면 체크 없는 상태로 둔다 */ }
     })()
@@ -479,9 +486,9 @@ export default function TripleSampleSection({ code, scope, row, noteSlots }) {
     apply(mark)
     api.post(markUrl, markBody(ck, mark)).catch(() => apply(before))
   }
-  // 신뢰·비신뢰는 한 카드에 동시에 걸리지 않는다 — 한쪽을 체크하면 다른 쪽은 자동으로 풀린다.
-  const toggleTrust = (ck) => setMark(ck, marks[ck] === 'trust' ? null : 'trust')
-  const toggleDistrust = (ck) => setMark(ck, marks[ck] === 'distrust' ? null : 'distrust')
+  // 신뢰는 경기 전에만, 결과는 경기가 끝난 뒤에만 바꾼다. 결과는 'r:' 키로 따로 저장한다(신뢰와 같이 걸릴 수 있다).
+  const toggleTrust = (ck) => { if (!finished) setMark(ck, marks[ck] === 'trust' ? null : 'trust') }
+  const toggleResult = (ck) => { if (finished) setMark(`r:${ck}`, marks[`r:${ck}`] === 'result' ? null : 'result') }
   const key = `${code}|${scope}|${row.S}|${row.R}|${row.HT}|${row.AT}`
   useEffect(() => {
     let alive = true
@@ -559,9 +566,10 @@ export default function TripleSampleSection({ code, scope, row, noteSlots }) {
                   sel={sel}
                   setWide={setWide}
                   trusted={trusted}
-                  distrusted={distrusted}
+                  resulted={resulted}
+                  finished={finished}
                   onTrust={toggleTrust}
-                  onDistrust={toggleDistrust}
+                  onResult={toggleResult}
                   teams={teams}
                   notes={noteSlots?.[k] || null}
                   s0={seasonNo(row.S)}
@@ -600,7 +608,7 @@ function TripleSampleLegend({ onClose, final }) {
           맨 위 <b>이번 경기</b> 줄은 초기 → 배변 값과 변화(오르면 빨강 ▲ · 내리면 파랑 ▼ · 그대로 0.00 ■), 결과 칸 머리의
           <b>1 → 0건</b>은 그 결과의 표본 건수가 초기 → 배변으로 어떻게 바뀌었는지입니다(늘면 빨강 · 줄면 파랑).
           카드는 <b>[초기 · 배변 · 같이]</b> 버튼으로 고르고, '같이'에서는 결과 칸 안에 초기 카드 → 배변 카드 순서로 카드 첫 줄 오른쪽(초기·배변)과 왼쪽 띠 색으로 구분합니다.
-          폭 탭·신뢰/비신뢰·의견칸은 초기와 배변이 <b>따로</b>입니다. 이번 경기에 국내 배당 배변이 아직 없으면 초기만 보입니다.
+          폭 탭·신뢰/결과·의견칸은 초기와 배변이 <b>따로</b>입니다. 이번 경기에 국내 배당 배변이 아직 없으면 초기만 보입니다.
         </p>
         {final && (
           <p className="help-legend-note">
@@ -700,7 +708,7 @@ function TripleSampleLegend({ onClose, final }) {
             <tr><td><b className="ts-date-new">24-09-14</b></td><td>카드 날짜가 <b>2020년 이후</b> 경기면 날짜 색이 다릅니다(최근 경기 구분용).</td></tr>
             <tr><td><span className="ts-team-hit">첼시</span></td><td>카드의 팀이 <b>이번 경기에 나오는 팀</b>과 같으면 팀명 글자색이 노랑으로 바뀌고 굵어집니다(홈·원정 자리는 상관없음).</td></tr>
             <tr><td>☑ 신뢰</td><td>카드 날짜 옆 체크박스 — <b>이 표본은 믿는다</b>고 표시하면 <b>신뢰</b> 글자가 초록 굵은 글씨로 바뀌고, 위쪽 탭 제목의 표본 건수 옆에 <b>(신뢰ㆍ1건)</b>처럼 체크한 카드 수가 붙습니다(체크한 게 없으면 안 붙습니다). 경기별로 서버에 저장되어 다른 기기·브라우저에서도 같게 보입니다.</td></tr>
-            <tr><td>☑ 비신뢰</td><td>신뢰 옆 체크박스 — <b>이 표본은 믿지 않는다</b>고 표시하면 <b>비신뢰</b> 글자가 빨간 굵은 글씨로 바뀝니다. 신뢰와 비신뢰는 <b>한 카드에 동시에 체크되지 않아</b> 한쪽을 체크하면 다른 쪽은 저절로 풀립니다. 신뢰와 같이 경기별로 서버에 저장됩니다.</td></tr>
+            <tr><td>☑ 결과</td><td>신뢰 옆 체크박스 — <b>경기가 끝난 뒤에 이 카드가 실제 결과와 맞았다</b>고 표시하는 용도입니다(2026-10-10, 예전 &apos;비신뢰&apos; 자리). <b>경기 전에는 신뢰만, 끝난 뒤에는 결과만</b> 체크할 수 있고, 끝난 뒤의 신뢰 체크는 그대로 보이되 바꿀 수 없습니다. 신뢰와 결과는 따로 저장돼 한 카드에 같이 체크될 수 있습니다.</td></tr>
             <tr><td><span className="ts-tab ts-tab-static"><span className="ts-k ts-k-yellow">±1칸</span></span> <span className="ts-tab ts-tab-static"><span className="ts-k ts-k-green">±3칸</span></span> <span className="ts-tab ts-tab-static"><span className="ts-k ts-k-red">±7칸</span></span></td><td><b>탭 색</b> — 탭 글자 중 <b>±N칸</b>에만 색이 있습니다. 표본을 찾는 데 쓴 폭이 <b>±0~1칸이면 노랑, ±2~4칸이면 초록, ±5칸 이상이면 빨강</b>입니다(좁을수록 배당이 더 비슷한 표본이라는 눈 표시이고, <b>과거 32,591경기 실측에서는 폭이 좁다고 결과가 더 잘 맞지는 않았습니다</b>). 지금 보고 있는 탭은 <b>테두리 색</b>이 바뀝니다. 탭 글자에서 &apos;표본&apos;은 보통 굵기, 건수(예: <b>1건 (0/1/0/0)</b>)는 굵게 보입니다.</td></tr>
             <tr><td>핸디 +1</td><td>국내 핸디 배당(홈팀 기준선 ±1). 기준선이 같을 때만 같은 값·차이를 표시합니다. 핸디 배당은 20-21 시즌부터 거의 전 경기에 있고 그 이전은 없는 경우가 많아 <b>-</b>로 보입니다</td></tr>
           </tbody>

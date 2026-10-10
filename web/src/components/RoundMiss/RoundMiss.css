@@ -1,0 +1,224 @@
+/* 라운드별 판정 빗나감(2026-10-10) — 시즌분석 아래 표 3개. 색은 앱 공통 토큰(--chip-*)만 쓴다.
+   표는 라운드·시즌이 가로축이다(사용자 지정 — 엑셀 원본은 세로였다). */
+.rm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.rm-seg {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.rm-seg button {
+  padding: 4px 10px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.rm-seg button:last-child {
+  border-right: 0;
+}
+
+.rm-seg button.is-on {
+  background: var(--border);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.rm .sa-card h3 {
+  flex-wrap: wrap;
+}
+
+.rm-table {
+  border-collapse: collapse;
+}
+
+.rm-table td,
+.rm-table th {
+  min-width: 52px;
+  vertical-align: middle;
+}
+
+.rm-table td b {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+/* 왼쪽 줄 이름 칸 — 가로로 스크롤해도 따라온다 */
+.rm-table .rm-lab {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  min-width: 128px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.rm-table .rm-lab small {
+  color: var(--text-muted);
+}
+
+.rm-sub {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.rm-sub span {
+  font-weight: 700;
+}
+
+.rm-table th.rm-rd {
+  cursor: pointer;
+}
+
+.rm-table th.rm-rd:hover {
+  color: var(--text-primary);
+}
+
+.rm-table .sel {
+  box-shadow: inset 0 0 0 2px var(--chip-yellow-fg);
+}
+
+.rm-table td.rm-none {
+  color: var(--text-muted);
+}
+
+/* 한 라운드에서 4경기 이상 빗나간 칸 */
+.rm-table td.rm-hot {
+  background: color-mix(in srgb, var(--chip-red-bg) 70%, transparent);
+}
+
+.rm-table td.rm-hot b {
+  color: var(--chip-red-fg);
+}
+
+/* 시즌 표 — 빗나간 경기 목록 칸 */
+.rm-seasons td {
+  min-width: 112px;
+}
+
+.rm-table td.rm-list {
+  min-width: 190px;
+  vertical-align: top;
+  text-align: left;
+  white-space: normal;
+}
+
+.rm-game {
+  display: block;
+  margin: 2px 0;
+  font-size: 11px;
+}
+
+.rm-game small {
+  font-size: 11px;
+}
+
+/* 경기별 세팅값 표 */
+.rm-games td {
+  min-width: 78px;
+}
+
+.rm-table td.rm-bad {
+  box-shadow: inset 0 0 0 2px var(--chip-red-fg);
+}
+
+.rm-teams td {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 어느 화면에서든 같은 모양(시즌분석 · 리그 화면 시즌 지표 ④) — .sa-page 아래 규칙에 기대지 않는다 */
+.rm-card {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.rm-card h3 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.rm-note {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.rm-scroll {
+  overflow-x: auto;
+}
+
+.rm-table {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rm-table th,
+.rm-table td {
+  padding: 4px 5px;
+  border: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.rm-table th {
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rm-table th small {
+  display: block;
+  font-weight: 400;
+}
+
+.rm-table .blue,
+.rm-card .blue { color: var(--chip-blue-fg); font-weight: 700; }
+.rm-table .red,
+.rm-card .red { color: var(--chip-red-fg); font-weight: 700; }
+.rm-table .green,
+.rm-card .green { color: var(--chip-green-fg); font-weight: 700; }
+.rm-table .gray,
+.rm-card .gray { color: var(--chip-gray-fg); }
+
+/* 결과가 나오기 전 칸에 대신 보이는 똥 순번(리그 표의 똥1·똥2와 같은 값) */
+.rm-table .rm-dd {
+  color: var(--chip-yellow-fg);
+  font-weight: 700;
+}
+
+/* 국·해가 갈린 판정(엇(정)·엇(플)) — 확신이 약한 표시라 살짝 흐리게 */
+.rm-table .rm-split {
+  opacity: 0.8;
+}
+
+/* 엇갈림 판정에서 나온 빗나감 수 — 정배→플핸·플핸→정배 칸 안에 작게 */
+.rm-table .rm-sp {
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--chip-yellow-fg);
+}

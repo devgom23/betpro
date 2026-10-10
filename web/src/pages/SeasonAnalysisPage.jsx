@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { RichMemoInput } from '../components/RichMemo/RichMemo'
 import CupCollectButton from '../components/CupCollectButton/CupCollectButton'
+import RoundMiss from '../components/RoundMiss/RoundMiss'
 import { useAuth } from '../context/AuthContext'
 import './SeasonAnalysisPage.css'
 
@@ -462,6 +463,8 @@ export default function SeasonAnalysisPage() {
           onNoteSaved={onNoteSaved}
         />
       )}
+      {/* 라운드별 판정 빗나감(2026-10-10 사용자 지정) — 위 회차 표에서 고른 회차의 라운드가 기본 선택 */}
+      <RoundMiss season={resp.season} selCol={sel !== null ? data.cols[sel] : null} leagues={data.leagues} />
     </div>
   )
 }

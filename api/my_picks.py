@@ -300,11 +300,12 @@ def sync_auto_sample_notes(username: str, scope: str, notes: dict, prefix: str) 
 
 
 def _ensure_sample_card_marks(con) -> None:
-    """상세보기 '표본' 카드의 신뢰/비신뢰 체크(2026-09-30 사용자 지정 — "신뢰/비신뢰는 DB에
+    """상세보기 '표본' 카드의 신뢰/결과 체크(2026-09-30 사용자 지정 — "신뢰/비신뢰는 DB에
     저장") — 경기 하나 × 표본 카드 하나에 1개. card_key는 화면의 카드 고유키('리그|시즌|라운드|
     홈|원정')를 그대로 쓴다. 예전엔 브라우저(localStorage)에만 남아 다른 기기·브라우저와 공유가
     안 되고 나중에 '신뢰한 카드가 실제로 더 맞았나'를 잴 수도 없었다(그래서 DB로 옮겼다).
-    mark: 'trust'(신뢰) 또는 'distrust'(비신뢰) — 둘은 한 카드에 동시에 걸리지 않는다."""
+    mark: 'trust'(신뢰, 경기 전) 또는 'result'(결과, 경기 후 — card_key 앞에 'r:'). 신뢰와 결과는 키가 달라 한 카드에 같이 걸릴 수 있다.
+    (옛 'distrust'(비신뢰)는 2026-10-10에 결과로 바뀌었다 — 저장돼 있던 건수 0건.)"""
     con.execute(
         """
         CREATE TABLE IF NOT EXISTS sample_card_marks (
@@ -327,7 +328,7 @@ def _ensure_sample_card_marks(con) -> None:
 
 def list_sample_card_marks(username: str, code: str, scope: str,
                            s: str, r: str, no: str, ht: str, at: str) -> dict:
-    """그 경기에서 내가 체크한 표본 카드 전부 — ({card_key: 'trust' | 'distrust'}, [경기 시작 뒤에 표시한 card_key])."""
+    """그 경기에서 내가 체크한 표본 카드 전부 — ({card_key: 'trust' | 'result'}, [경기 시작 뒤에 표시한 card_key])."""
     con = _connect(username)
     try:
         _ensure_sample_card_marks(con)
@@ -344,7 +345,7 @@ def list_sample_card_marks(username: str, code: str, scope: str,
 
 def set_sample_card_mark(username: str, code: str, scope: str, s: str, r: str, no: str,
                          ht: str, at: str, card_key: str, mark, pre_match=None) -> None:
-    """mark가 'trust'/'distrust'면 저장(있으면 덮어쓰기 — 신뢰↔비신뢰 전환), 비어 있으면 그 카드의 체크를 지운다.
+    """mark가 'trust'/'result'면 저장(있으면 덮어쓰기), 비어 있으면 그 카드의 체크를 지운다.
     pre_match = 이번 표시가 경기 시작 전인가(1/0/None) — 표시할 때마다 그 순간 기준으로 다시 적는다."""
     con = _connect(username)
     try:

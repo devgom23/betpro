@@ -257,8 +257,8 @@
   color: var(--chip-red-fg);
 }
 
-/* 신뢰·비신뢰 체크 — 날짜 옆 체크박스 둘, 체크하면 그 글자만 굵게(신뢰=초록, 비신뢰=빨강,
-   카드 배경은 그대로). 둘은 동시에 체크되지 않는다(2026-09-30 사용자 지정). */
+/* 신뢰·결과 체크 — 날짜 옆 체크박스 둘, 체크하면 그 글자만 굵게(신뢰=초록, 결과=파랑, 카드 배경은 그대로).
+   경기 전엔 신뢰만, 끝난 뒤엔 결과만 바꿀 수 있고 막힌 쪽은 흐리게 보인다(2026-10-10 사용자 지정 — 예전 비신뢰). */
 .ts-trust-wrap {
   display: inline-flex;
   align-items: center;
@@ -268,7 +268,7 @@
 }
 
 .ts-trust-lab,
-.ts-distrust-lab {
+.ts-result-lab {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -278,7 +278,7 @@
 }
 
 .ts-card-top .ts-trust-lab input,
-.ts-card-top .ts-distrust-lab input {
+.ts-card-top .ts-result-lab input {
   margin: 0;
 }
 
@@ -287,9 +287,21 @@
   font-weight: 700;
 }
 
-.ts-card.ts-distrust .ts-distrust-lab {
-  color: var(--chip-red-fg);
+.ts-card.ts-result .ts-result-lab {
+  color: var(--chip-blue-fg);
   font-weight: 700;
+}
+
+/* 지금은 바꿀 수 없는 쪽 — 값(체크)은 그대로 보이고 읽기만 된다 */
+.ts-trust-lab.is-off,
+.ts-result-lab.is-off {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ts-trust-lab.is-off input,
+.ts-result-lab.is-off input {
+  cursor: not-allowed;
 }
 
 /* 2020년 이후 경기 — 카드 날짜 색 */

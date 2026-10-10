@@ -4,6 +4,8 @@ import { RT_COLOR } from '../RtBadge/RtBadge'
 import { summarizeVerdicts, summarizeSystemVerdicts } from '../LeagueTable/columnGroups'
 import { PickSummaryBar } from '../RtSummaryBar/RtSummaryBar'
 import { RichMemoInput } from '../RichMemo/RichMemo'
+import { MarketSwitch, RoundMissDetail } from '../RoundMiss/RoundMiss'
+import { useRoundMissSummary } from '../RoundMiss/useRoundMiss'
 import './SeasonStats.css'
 
 const RT_ROWS = ['핸승', '핸무', '무', '역']
@@ -72,6 +74,12 @@ export default function SeasonStats({ code, scope, season, round, hide1and3 = fa
   const [ddongOpen, setDdongOpen] = useState(false)
   const [resultOpen, setResultOpen] = useState(true)
   const [historyOpen, setHistoryOpen] = useState(true)
+  // ④ 라운드별 판정(2026-10-10 사용자 지정) — 판정은 공식 데이터(master) 기준이라 개인 데이터(user) 탭에서는 뺀다.
+  // 위에서 고른 시즌·라운드를 그대로 쓴다(시즌분석 화면처럼 라운드를 따로 고르지 않는다).
+  const [rmOpen, setRmOpen] = useState(true)
+  const [rmMkt, setRmMkt] = useState('v')
+  const rmOk = !hide1and3 && scope !== 'user'
+  const { sum: rmSum } = useRoundMissSummary(open && rmOk && rmOpen)
   // 표①·표②는 라운드 열이 서로 포개져 보여야 하므로, 한쪽을 가로 스크롤하면
   // 다른 쪽도 같은 위치로 맞춘다(폭은 이미 같은 grid-template-columns라 동일하니
   // 스크롤 위치만 맞추면 된다).
@@ -394,6 +402,31 @@ export default function SeasonStats({ code, scope, season, round, hide1and3 = fa
               </div>
             )}
           </div>
+          )}
+
+          {/* ④ 라운드별 판정 — 같은 라운드를 시즌별로, 이번 라운드를 경기별로(세팅값=배변 판정) */}
+          {rmOk && (!rmSum || rmSum.leagues.some((L) => L.code === code)) && (
+            <div className="ss-block">
+              <div className="ss-title">
+                <button className="ss-fold ss-fold-sub" onClick={() => setRmOpen((v) => !v)}>
+                  {rmOpen ? '◂' : '▸'}
+                </button>
+                ④ 라운드별 판정
+                <span className="ss-hint">
+                  판정 = 배변 시스템 판정(블루 = 정 · 레드 = 플 · 엇(정/플) = 국·해가 갈려 해 쪽 방향) · 그 라운드 첫 경기보다 앞선 경기만으로 다시 계산 · 20-21 시즌부터
+                </span>
+                {rmOpen && <MarketSwitch mkt={rmMkt} setMkt={setRmMkt} />}
+              </div>
+              {rmOpen && (rmSum ? (
+                <RoundMissDetail
+                  sum={rmSum}
+                  lg={code}
+                  season={data.season}
+                  round={Number(String(data.round).replace(/\D/g, ''))}
+                  mkt={rmMkt}
+                />
+              ) : <p className="ss-hint">라운드별 판정 계산 중… (처음 한 번은 5초쯤 걸립니다)</p>)}
+            </div>
           )}
         </div>
       )}

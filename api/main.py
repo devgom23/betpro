@@ -104,6 +104,7 @@ import plhan_score as PLHAN  # noqa: E402
 import odds_lookup as ODDSLOOK  # noqa: E402
 import misc_matches as MISC    # noqa: E402
 import season_view as SEASONVIEW  # noqa: E402
+import round_miss as ROUNDMISS  # noqa: E402
 from deps import get_current_user, get_admin_user, COOKIE_NAME  # noqa: E402
 
 # React 개발 서버(Vite=5173, CRA=3000) 등 허용 오리진
@@ -1345,6 +1346,21 @@ def save_my_pick(code: str, body: MyPickBody, user: dict = Depends(get_current_u
     return {"ok": True}
 
 
+# ───────────────── 라운드별 판정 빗나감(2026-10-10 사용자 지정 — round_miss.py) ─────────────────
+@app.get("/api/round_miss")
+def round_miss_summary(user: dict = Depends(get_current_user)):
+    """리그·시즌·라운드마다 배변 국배/해배 세팅값(그 라운드 이전 경기만으로 낸 판정)이 빗나간 경기 수."""
+    return ROUNDMISS.summary()
+
+
+@app.get("/api/round_miss/detail")
+def round_miss_detail(league: str, round: int, user: dict = Depends(get_current_user)):
+    """한 리그의 한 라운드를 시즌별 경기 목록(세팅값·결과)으로."""
+    if league not in PATHS.LEAGUES:
+        raise HTTPException(status_code=400, detail="리그 코드가 올바르지 않습니다.")
+    return ROUNDMISS.detail(league, round)
+
+
 class SeasonNoteBody(BaseModel):
     scope: str = PATHS.SCOPE_USER
     season: str
@@ -1428,8 +1444,11 @@ def save_sample_note(code: str, body: SampleNoteBody, user: dict = Depends(get_c
     return {"ok": True}
 
 
-# 표본 카드 신뢰/비신뢰 체크(2026-09-30 사용자 지정 — DB 저장). 경기 하나 × 카드 하나에 1개.
-SAMPLE_CARD_MARKS = ("trust", "distrust")
+# 표본 카드 신뢰/결과 체크(2026-09-30 사용자 지정 — DB 저장). 경기 하나 × 카드 하나에 1개.
+#   신뢰(trust)  = 경기 전에 '이 표본은 믿는다' — 경기가 끝나면 읽기만 된다.
+#   결과(result) = 경기 끝난 뒤 '이 카드가 실제 결과와 맞았다' 체크(2026-10-10 — 예전 '비신뢰'를 대신한다). 카드 키 앞에 'r:'을 붙여 신뢰와 따로 저장한다
+#                  (한 카드에 신뢰와 결과가 같이 걸릴 수 있다). 옛 'distrust'는 저장 건수가 0건이라 그대로 두고 화면에서만 뺐다.
+SAMPLE_CARD_MARKS = ("trust", "result")
 
 
 class SampleCardMarkBody(BaseModel):
@@ -1440,7 +1459,7 @@ class SampleCardMarkBody(BaseModel):
     HT: str
     AT: str
     card_key: str
-    mark: Optional[str] = None   # 'trust' / 'distrust' / 비면 체크 해제
+    mark: Optional[str] = None   # 'trust' / 'result' / 비면 체크 해제
 
 
 @app.get("/api/leagues/{code}/sample_card_marks")
@@ -1458,6 +1477,15 @@ def save_sample_card_mark(code: str, body: SampleCardMarkBody, user: dict = Depe
         raise HTTPException(status_code=400, detail=f"알 수 없는 표시: {body.mark}")
     if not body.card_key.strip():
         raise HTTPException(status_code=400, detail="카드 키가 비어 있습니다.")
+    # 경기 전엔 신뢰만, 경기가 끝난 뒤엔 결과만 바꿀 수 있다(2026-10-10 사용자 지정 — 서버에서도 막는다).
+    is_result = body.card_key.startswith("r:")
+    if body.mark and (body.mark == "result") != is_result:
+        raise HTTPException(status_code=400, detail="표시 종류와 카드 키가 맞지 않습니다.")
+    finished = _is_finished(_resolve_scope_db(body.scope, user), code, body.S, body.R, body.No, body.HT, body.AT)
+    if finished is True and not is_result:
+        raise HTTPException(status_code=400, detail="경기가 끝난 뒤에는 신뢰 표시를 바꿀 수 없습니다.")
+    if finished is False and is_result:
+        raise HTTPException(status_code=400, detail="결과 표시는 경기가 끝난 뒤에 할 수 있습니다.")
     pre = None
     if body.mark:
         ko = _kickoff_of(_resolve_scope_db(body.scope, user), code, body.S, body.R, body.No, body.HT, body.AT)
@@ -1465,6 +1493,18 @@ def save_sample_card_mark(code: str, body: SampleCardMarkBody, user: dict = Depe
     MYPICKS.set_sample_card_mark(user["username"], code, body.scope, body.S, body.R, body.No,
                                  body.HT, body.AT, body.card_key, body.mark or None, pre)
     return {"ok": True, "pre_match": pre}
+
+
+def _is_finished(db: str, code: str, s, r, no, ht, at):
+    """경기에 결과(RT 1~4)가 들어왔나 — True/False, 경기를 못 찾으면 None(그땐 막지 않는다)."""
+    try:
+        idx = _pick_key_index(db, code).get(_my_pick_key(s, r, no, ht, at))
+        if idx is None:
+            return None
+        rt = pd.to_numeric(DATA.load_league_df(db, code).loc[idx].get("RT"), errors="coerce")
+        return bool(not pd.isna(rt) and int(rt) in (1, 2, 3, 4))
+    except (ValueError, TypeError, KeyError):
+        return None
 
 
 def _kickoff_of(db: str, code: str, s, r, no, ht, at):

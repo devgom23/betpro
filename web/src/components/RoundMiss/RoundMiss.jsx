@@ -1,0 +1,302 @@
+import { useEffect, useMemo, useState } from 'react'
+import { api } from '../../api/client'
+import { useRoundMissSummary } from './useRoundMiss'
+import './RoundMiss.css'
+
+// 라운드별 판정 빗나감(2026-10-10 사용자 지정 — 엑셀 '라운드마다 속성'을 시즌분석에 자동화).
+// 세팅값 = 배변 판정(국배·해배) — 블루(정 쪽) / 레드(플 쪽). 빗나감 = 세팅과 반대로 나온 경기:
+//   정배→플핸 = 세팅 블루인데 무·역 / 플핸→정배 = 세팅 레드인데 핸승·핸무.
+// 판정은 그 라운드 첫 경기보다 앞선 경기만으로 다시 센 값이다(api/round_miss.py) — 지난 시즌 판정이 미래를 보지 않게.
+// 표는 사용자 요청대로 라운드·시즌이 가로축이다(엑셀은 세로였다).
+
+const RT_TEXT = { 1: '핸승', 2: '핸무', 3: '무', 4: '역' }
+const RT_CLS = { 1: 'blue', 2: 'green', 3: 'gray', 4: 'red' }
+const MARKET = [['v', '판정 기준'], ['k', '국배 세팅값 기준']]   // 기본 = 시스템 판정(2026-10-10 사용자 지정)
+
+const missOf = (side, rt) => (side === 1 && (rt === 3 || rt === 4)) || (side === -1 && (rt === 1 || rt === 2))
+
+// 요약 배열 [전체, 결과, 세팅, 정→플 무, 정→플 역, 플→정 핸무, 플→정 핸승, 그중 엇(정), 그중 엇(플)] 풀기
+function unpack(a) {
+  if (!a) return null
+  const [tot, done, set, jpMu, jpYk, pjHm, pjHs, jpSp = 0, pjSp = 0] = a
+  return { tot, done, set, jpMu, jpYk, pjHm, pjHs, jpSp, pjSp, jp: jpMu + jpYk, pj: pjHm + pjHs, miss: jpMu + jpYk + pjHm + pjHs }
+}
+
+// 엇갈림 판정이었던 경기 수 — 엇(정)은 정 쪽, 엇(플)은 플 쪽 판정이라 각각 정배→플핸, 플핸→정배 안에 들어 있다.
+function SplitTag({ n, label }) {
+  if (!n) return null
+  return <small className="rm-sp" title={`이 중 ${label} 판정(국·해가 갈려 해 쪽 방향으로 센 경기)이 ${n}경기`}>{label} {n}</small>
+}
+
+function Sub({ parts }) {
+  const shown = parts.filter(([n]) => n > 0)
+  if (!shown.length) return null
+  return (
+    <small className="rm-sub">
+      {shown.map(([n, label, cls], i) => <span key={label} className={cls}>{i ? ' ' : ''}{n}{label}</span>)}
+    </small>
+  )
+}
+
+// 같은 3줄(빗나감 / 정배→플핸 / 플핸→정배)을 라운드 표와 시즌 표가 같이 쓴다. ri = 줄 번호(0·1·2).
+function countCell(x, ri) {
+  if (!x) return { cls: 'rm-none', node: null }
+  if (!x.done) return { cls: 'rm-none', node: <span className="gray">예정</span> }
+  if (ri === 0) return { cls: x.miss >= 4 ? 'rm-hot' : '', node: <b>{x.miss}</b> }
+  if (ri === 1) {
+    return { cls: '', node: <>{x.jp || <span className="gray">·</span>}<SplitTag n={x.jpSp} label="엇(정)" /><Sub parts={[[x.jpMu, '무', 'gray'], [x.jpYk, '역', 'red']]} /></> }
+  }
+  return { cls: '', node: <>{x.pj || <span className="gray">·</span>}<SplitTag n={x.pjSp} label="엇(플)" /><Sub parts={[[x.pjHm, '핸무', 'green'], [x.pjHs, '핸승', 'blue']]} /></> }
+}
+
+const cx = (...a) => a.filter(Boolean).join(' ') || undefined
+
+const ROW_LABELS = [
+  ['빗나감', <>빗나간 경기</>],
+  ['jp', <><span className="blue">정배</span> → <span className="red">플핸</span><small>정 쪽인데 무·역</small></>],
+  ['pj', <><span className="red">플핸</span> → <span className="blue">정배</span><small>플 쪽인데 핸승·핸무</small></>],
+]
+
+export function MarketSwitch({ mkt, setMkt }) {
+  return (
+    <span className="rm-seg" role="tablist" aria-label="시장">
+      {MARKET.map(([v, lab]) => (
+        <button key={v} type="button" role="tab" aria-selected={mkt === v} className={mkt === v ? 'is-on' : ''} onClick={() => setMkt(v)}>{lab}</button>
+      ))}
+    </span>
+  )
+}
+
+// ② 같은 라운드를 시즌별로(시즌이 가로) + ③ 이번 시즌 그 라운드의 경기별 세팅값 — 시즌분석과 리그 화면 ④가 같이 쓴다.
+export function RoundMissDetail({ sum, lg, season, round, mkt }) {
+  const [det, setDet] = useState(null)
+  useEffect(() => {
+    if (!lg || !round) return undefined
+    let alive = true
+    setDet(null)
+    api.get(`/api/round_miss/detail?league=${encodeURIComponent(lg)}&round=${round}`)
+      .then((r) => alive && setDet(r)).catch(() => alive && setDet({ seasons: {} }))
+    return () => { alive = false }
+  }, [lg, round])
+
+  const lgLabel = sum.leagues.find((L) => L.code === lg)?.label || ''
+  const seasonCols = [...sum.seasons].reverse()          // 오래된 시즌 → 올시즌(오른쪽 끝)
+  const newest = sum.seasons[0]
+  const pastRows = sum.seasons.filter((s) => s !== newest).map((s) => unpack(sum[mkt]?.[lg]?.[s]?.[round])).filter((x) => x && x.done > 0)
+  const pastAvg = pastRows.length ? pastRows.reduce((a, x) => a + x.miss, 0) / pastRows.length : null
+  const sel = det?.seasons?.[season] || []
+
+  return (
+    <>
+      {/* ② 같은 라운드, 시즌별 — 시즌이 가로 */}
+      <div className="rm-card">
+        <h3>
+          {lgLabel} {round}R — 시즌별
+          <span className="rm-note">{pastAvg !== null && `지난 시즌 평균 ${pastAvg.toFixed(1)}경기 빗나감 · `}같은 라운드 번호끼리 비교</span>
+        </h3>
+        <div className="rm-scroll">
+          <table className="rm-table rm-seasons">
+            <thead>
+              <tr>
+                <th className="rm-lab">시즌</th>
+                {seasonCols.map((s) => <th key={s} className={s === season ? 'sel' : undefined}>{s === newest ? `${s} 올시즌` : s}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {ROW_LABELS.map(([key, label], ri) => (
+                <tr key={key}>
+                  <th className="rm-lab">{label}</th>
+                  {seasonCols.map((s) => {
+                    const cell = countCell(unpack(sum[mkt]?.[lg]?.[s]?.[round]), ri)
+                    return <td key={s} className={cx(cell.cls, s === season && 'sel')}>{cell.node}</td>
+                  })}
+                </tr>
+              ))}
+              <tr>
+                <th className="rm-lab">경기 목록<small>(점수 · 결과)</small></th>
+                {seasonCols.map((s) => {
+                  const gl = (det?.seasons?.[s] || []).filter((g) => g.rt && missOf(g[mkt], g.rt))
+                  return (
+                    <td key={s} className={`rm-list${s === season ? ' sel' : ''}`}>
+                      {!det ? <span className="gray">…</span> : gl.length === 0 ? <span className="gray">·</span> : gl.map((g) => (
+                        <span key={`${g.ht}-${g.at}`} className={`rm-game ${RT_CLS[g.rt]}`}>
+                          {g.ht} vs {g.at} <small>({g.hs}:{g.as} {RT_TEXT[g.rt]}{mkt === 'v' && g.vs ? ` · 엇(${g.v === 1 ? '정' : '플'})` : ''})</small>
+                        </span>
+                      ))}
+                    </td>
+                  )
+                })}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ③ 이번 라운드 경기별 세팅값 — 와이즈토토 순서, 요일로 묶음 */}
+      <div className="rm-card">
+        <h3>
+          {season} {lgLabel} {round}R — 경기별 세팅값
+          <span className="rm-note">와이즈토토 경기 순서 · 요일은 현지 경기일 · 빨간 테두리 = {mkt === 'k' ? '국배 세팅값' : '판정'}이 빗나간 경기</span>
+        </h3>
+        {!det ? <p className="rm-note">불러오는 중…</p> : sel.length === 0 ? <p className="rm-note">{season < sum.minSeason ? `${sum.minSeason} 시즌부터 계산합니다` : '이 시즌에는 이 라운드가 없습니다'}</p> : (
+          <div className="rm-scroll">
+            <table className="rm-table rm-games">
+              <thead>
+                <tr>
+                  <th className="rm-lab" rowSpan={2}>{round} Round</th>
+                  {groupByDay(sel).map((g) => (
+                    <th key={g.key} colSpan={g.n} className={g.wd === '토' ? 'blue' : g.wd === '일' ? 'red' : ''}>{g.wd}요일</th>
+                  ))}
+                </tr>
+                <tr>{sel.map((g, i) => <th key={i} title={`${g.ht} vs ${g.at}`}>{i + 1}경기</th>)}</tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th className="rm-lab">판정<small>(배변 시스템 판정)</small></th>
+                  {sel.map((g, i) => <td key={i} className={missOf(g.v, g.rt) && mkt === 'v' ? 'rm-bad' : ''}><Setting side={g.v} split={g.vs} /></td>)}
+                </tr>
+                <tr>
+                  <th className="rm-lab">국배 세팅값</th>
+                  {sel.map((g, i) => <td key={i} className={missOf(g.k, g.rt) && mkt === 'k' ? 'rm-bad' : ''}><Setting side={g.k} weak={g.kw} /></td>)}
+                </tr>
+                <tr>
+                  <th className="rm-lab">결과</th>
+                  {sel.map((g, i) => (
+                    <td key={i}>
+                      {g.rt ? <span className={RT_CLS[g.rt]}>{RT_TEXT[g.rt]}</span>
+                        : g.dd ? <span className="rm-dd" title="국내 초기배당 1.49 이하 — 리그 표의 똥 순번과 같음">{g.dd}</span> : <span className="gray">예정</span>}
+                      {g.rt && g.hs !== null ? <small className="rm-sub">{g.hs}:{g.as}</small> : null}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="rm-teams">
+                  <th className="rm-lab">경기</th>
+                  {sel.map((g, i) => <td key={i}>{g.ht}<small className="rm-sub">{g.at}</small></td>)}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+export default function RoundMiss({ season, selCol, leagues }) {
+  const { sum, error } = useRoundMissSummary()
+  const [mkt, setMkt] = useState('v')
+  const [lg, setLg] = useState('')
+  const [round, setRound] = useState(null)
+
+  // 처음 고르는 리그·라운드 — 위 회차 표에서 고른 회차의 첫 리그와 그 라운드(없으면 라리가 최근 라운드)
+  const bySeason = sum?.[mkt]?.[lg]?.[season] || {}
+  const playedRounds = Object.keys(bySeason).map(Number).filter((r) => bySeason[r][1] > 0).sort((a, b) => a - b)
+  useEffect(() => {
+    if (!sum) return
+    const codes = (leagues || sum.leagues).map((L) => L.code)
+    setLg((cur) => (selCol && codes.find((c) => selCol.rounds?.[c] !== undefined)) || cur || codes[0])
+  }, [sum, selCol?.key, leagues])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!sum || !lg) return
+    const want = selCol?.rounds?.[lg]
+    const last = playedRounds.length ? playedRounds[playedRounds.length - 1] : 1
+    setRound(want !== undefined ? want : last)
+    // 회차·리그·시즌이 바뀔 때만 다시 고른다(라운드를 직접 누른 뒤에는 건드리지 않는다)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sum, lg, season, selCol?.key])
+
+  const maxRound = useMemo(() => {
+    let m = 0
+    Object.values(sum?.[mkt]?.[lg] || {}).forEach((rs) => Object.keys(rs).forEach((r) => { m = Math.max(m, Number(r)) }))
+    return m
+  }, [sum, mkt, lg])
+
+  if (error) return <section className="sa-section"><p className="sa-error">라운드별 판정 빗나감을 불러오지 못했습니다 — {error}</p></section>
+  if (!sum) return <section className="sa-section"><p className="rm-note">라운드별 판정 빗나감 계산 중… (처음 한 번은 5초쯤 걸립니다)</p></section>
+
+  const tooOld = season < sum.minSeason
+  const lgLabel = sum.leagues.find((L) => L.code === lg)?.label || ''
+  const rounds = Array.from({ length: maxRound }, (_, i) => i + 1)
+  // 올시즌 평균(라운드당 빗나감) — 결과가 다 난 라운드만
+  const avgOf = (rs) => {
+    const xs = rs.map(unpack).filter((x) => x && x.done > 0)
+    if (!xs.length) return null
+    return xs.reduce((a, x) => a + x.miss, 0) / xs.length
+  }
+  const seasonAvg = avgOf(Object.values(bySeason))
+  return (
+    <section className="sa-section rm rm-wrap">
+      <h2>
+        라운드별 판정 빗나감
+        <span className="rm-note">
+          판정 = 배변 시스템 판정(블루 = 정 쪽 · 레드 = 플 쪽 · 엇(정/플) = 국·해가 갈려 해 쪽 방향) · 그 라운드 첫 경기보다 앞선 경기만으로 다시 계산 · {sum.minSeason} 시즌부터
+        </span>
+      </h2>
+      <div className="rm-bar">
+        <MarketSwitch mkt={mkt} setMkt={setMkt} />
+        <span className="rm-seg" role="tablist" aria-label="리그">
+          {sum.leagues.map((L) => (
+            <button key={L.code} type="button" role="tab" aria-selected={lg === L.code} className={lg === L.code ? 'is-on' : ''} onClick={() => setLg(L.code)}>{L.label}</button>
+          ))}
+        </span>
+        <span className="rm-note">
+          빗나감 = 판정과 반대로 나온 경기. 평소에도 판정을 낸 경기의 약 40%(엇갈림 제외 38% · 엇갈림은 48%)는 빗나가고, 라운드 10경기 중 4개 이상 빗나가는 일이 절반쯤입니다(빨강 = 4개 이상).</span>
+      </div>
+
+      {/* ① 올시즌 라운드별 — 라운드가 가로 */}
+      <div className="rm-card">
+        <h3>
+          {season} 시즌 {lgLabel} — 라운드별
+          <span className="rm-note">라운드를 누르면 아래 ②③이 그 라운드로 바뀝니다{seasonAvg !== null && ` · 라운드당 평균 ${seasonAvg.toFixed(1)}경기 빗나감`}</span>
+        </h3>
+        {tooOld ? <p className="rm-note">{sum.minSeason} 시즌부터 계산합니다 — 위 시즌 선택을 바꿔 주세요</p> : (
+          <div className="rm-scroll">
+            <table className="rm-table">
+              <thead>
+                <tr>
+                  <th className="rm-lab">라운드</th>
+                  {rounds.map((r) => (
+                    <th key={r} className={`rm-rd${r === round ? ' sel' : ''}`} onClick={() => setRound(r)}>{r}R</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ROW_LABELS.map(([key, label], ri) => (
+                  <tr key={key}>
+                    <th className="rm-lab">{label}</th>
+                    {rounds.map((r) => {
+                      const cell = countCell(unpack(bySeason[r]), ri)
+                      return <td key={r} className={cx(cell.cls, r === round && 'sel')}>{cell.node}</td>
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <RoundMissDetail sum={sum} lg={lg} season={season} round={round} mkt={mkt} />
+    </section>
+  )
+}
+
+function Setting({ side, weak, split }) {
+  if (!side) return <span className="gray">—</span>
+  // 국·해 판정이 갈린 경기는 앱처럼 '엇(정)'·'엇(플)' — 해 쪽 방향으로 적중을 센다(phaseVerdict)
+  if (split) {
+    return <span className={`${side === 1 ? 'blue' : 'red'} rm-split`} title="국·해 판정이 갈린 경기 — 해 쪽 방향으로 셉니다">엇({side === 1 ? '정' : '플'})</span>
+  }
+  return <span className={side === 1 ? 'blue' : 'red'}>{side === 1 ? '블루' : '레드'}{weak ? '(약)' : ''}</span>
+}
+
+// 요일이 같은 경기끼리 묶어 머리글 칸(colspan)으로 — 순서(와이즈토토)는 그대로 둔다
+function groupByDay(games) {
+  const out = []
+  games.forEach((g) => {
+    const last = out[out.length - 1]
+    if (last && last.wd === g.wd) last.n += 1
+    else out.push({ key: `${out.length}-${g.wd}`, wd: g.wd, n: 1 })
+  })
+  return out
+}
