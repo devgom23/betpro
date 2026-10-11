@@ -197,3 +197,22 @@ export function wdlBreakdown(matches, referenceTeam, homeOnly) {
   })
   return out
 }
+
+
+// ── 1·2부 맞대결 합치기(2026-10-11 사용자 지정) ────────────────────────────────
+// 서버 상대전적 응답의 matches(1부) + lower(2부, api/lower_matches.py)를 한 목록으로 — 날짜순(최신이 위).
+// L = 1 · 2(1부/2부). 2부는 배당·RT가 없어 결과(승/무/패)·승점만 뜻이 있다.
+// 상대전적 표·요약표, 경기지표 '참고' 줄 '전적'이 같이 쓴다. 플핸85·첫맞대결·축 판정은 1부만 그대로 쓴다(실측한 기준).
+export function h2hDateKey(m) {
+  const s = String(m.DT || '')
+  const a = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  if (a) return a[0]
+  const b = /^(\d{2})-(\d{2})-(\d{2})/.exec(s)
+  return b ? `20${b[1]}-${b[2]}-${b[3]}` : ''
+}
+
+export function withLowerH2h(matches, lower) {
+  const top = (matches || []).map((m) => ({ ...m, L: 1 }))
+  if (!lower?.length) return top
+  return [...top, ...lower.map((m) => ({ ...m, L: 2 }))].sort((x, y) => h2hDateKey(y).localeCompare(h2hDateKey(x)))
+}

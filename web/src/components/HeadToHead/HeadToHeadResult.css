@@ -210,30 +210,20 @@
 
 /* .rt-badge 모양은 components/RtBadge/RtBadge.css 로 옮겼다 (RtBadge·WdlBadge 공용). */
 
-/* 2부리그 맞대결(2026-10-11) — 1부 목록 아래 따로. 요약표에는 안 섞는다 */
-.h2h-lower {
-  margin-top: 12px;
-}
-
-.h2h-lower-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 6px;
-  font-size: 12px;
-  color: var(--text-primary);
-}
-
-.h2h-lower-tag {
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  background: var(--chip-purple-bg);
-  color: var(--chip-purple-fg);
-}
-
-.h2h-lower-note {
-  font-size: 11px;
+/* 상대전적 목록 L 칸(2026-10-11) — 1부/2부. 2부는 보라 글자로 구분(1·2부를 한 표로 합치면서) */
+.h2h-lg {
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
+}
+
+.h2h-lg.is-lower {
+  color: var(--chip-purple-fg);
+  font-weight: 700;
+}
+
+/* 홈기준에 딸린 줄('- 첫경기'·'- 최근5') — 이름을 한 칸 들여 홈기준 밑에 붙어 보이게(참고 줄 요약 상자 .h2h-pop과 같은 모양, 2026-10-11) */
+.h2h-wdl-grid .h2h-sub-row .row-label {
+  padding-left: 14px;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }

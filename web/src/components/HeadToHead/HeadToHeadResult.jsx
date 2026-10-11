@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import { scoreClass } from '../../utils/format'
 import RtBadge from '../RtBadge/RtBadge'
-import { wdlBreakdown } from '../../utils/h2hVerdict'
+import { wdlBreakdown, withLowerH2h } from '../../utils/h2hVerdict'
 import './HeadToHeadResult.css'
 
 // 승점은 '이 조회의 기준 홈팀'(home prop) 기준(승3/무1/패0) — 그 팀이 각 과거
@@ -172,8 +172,9 @@ const WDL_KO = { W: '승', D: '무', L: '패' }
 function WdlRow({ title, wdl, scope, onTotalClick, activeMode }) {
   if (!wdl) return null
   const clickable = !!onTotalClick
+  // '- '로 시작하는 줄은 홈기준에 딸린 줄 — 이름 칸을 한 칸 들여 쓴다(참고 줄 요약 상자와 같은 모양)
   return (
-    <tr>
+    <tr className={String(title).startsWith('- ') ? 'h2h-sub-row' : undefined}>
       <td className="row-label">{title}</td>
       {['W', 'D', 'L'].map((key) => {
         const isActive = clickable && activeMode?.scope === scope && activeMode?.letter === key
@@ -220,7 +221,7 @@ function WdlRow({ title, wdl, scope, onTotalClick, activeMode }) {
 // 헤더는 한 줄로 압축한다 — W/D/L 접두어 없이 핸승/핸무/무/역만 반복해서 보여주고(그룹
 // 구분은 세로선으로), 토탈은 승/무/패 세 칸으로 나눠 W/D/L 각각의 합계를 바로 본다 — 합계가 '기준' 바로 다음(2026-10-10 사용자 지정), 핸승/핸무/무/역 세부는 그 뒤.
 // rows를 넘기면 그 줄들({title, wdl})을 그린다 — 상세보기 참고 줄 '전적' 요약표가 같은 표 모양을 쓴다(2026-10-10).
-export function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode, rows }) {
+export function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode, rows, extra }) {
   if (!wdl && !rows) return null
   return (
     <table className="detail-table h2h-wdl-grid">
@@ -245,6 +246,7 @@ export function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode, rows }) {
           <>
             <WdlRow title="전체기준" wdl={wdl} scope="all" onTotalClick={onTotalClick} activeMode={activeMode} />
             <WdlRow title="홈기준" wdl={wdlHome} scope="home" onTotalClick={onTotalClick} activeMode={activeMode} />
+            {(extra || []).map((r) => <WdlRow key={r.title} title={r.title} wdl={r.wdl} />)}
           </>
         )}
       </tbody>
@@ -262,59 +264,28 @@ export function WdlGrid({ wdl, wdlHome, onTotalClick, activeMode, rows }) {
 // 부르면 같은 계산을 두 번 하는 셈이라 팝업이 느려진다. preset이 아직 준비 전이면
 // null을, 로딩 중이면 presetLoading=true를 같이 넘긴다(리그탭 "상대전적 조회"처럼
 // preset 없이 쓰는 곳은 예전처럼 그대로 자체 fetch한다).
-// 2부리그 맞대결(2026-10-11 사용자 지정 — api/lower_matches.py, 스코어맨 2부 결과).
-// 위 1부 요약표·전적 배지·판정에는 섞지 않고 따로 보여준다. 결과는 기준 팀(home) 입장 승/무/패와 승점만(2부는 배당이 없다).
-function LowerH2h({ rows, home }) {
-  if (!rows?.length) return null
-  const pts = (m) => homePoints(m, home)
-  const w = rows.filter((m) => pts(m) === 3).length
-  const d = rows.filter((m) => pts(m) === 1).length
-  const l = rows.length - w - d
-  return (
-    <div className="h2h-lower">
-      <p className="h2h-lower-head">
-        <span className="h2h-lower-tag">2부</span>
-        {rows[0].comp} 맞대결 {rows.length}경기 · {home} 기준 {w}승 {d}무 {l}패
-        <span className="h2h-lower-note">위 요약표에는 안 섞음</span>
-      </p>
-      <div className="match-list-scroll">
-        <table className="detail-table match-list">
-          <thead>
-            <tr>
-              <th>시즌</th>
-              <th>R</th>
-              <th>HT</th>
-              <th>HS</th>
-              <th>AS</th>
-              <th>AT</th>
-              <th className="col-narrow">결과</th>
-              <th className="col-narrow">승점</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((m, i) => (
-              <tr key={i} className={i > 0 && m.S !== rows[i - 1].S ? 'season-start' : undefined}>
-                <td>{m.S}</td>
-                <td>{m.R}</td>
-                <td className={`row-label ${m.HT === home ? 'h2h-home-cell' : ''}`}>{m.HT}</td>
-                <td className={scoreClass(m.HS, m.AS, 'home')}>{m.HS ?? ''}</td>
-                <td className={scoreClass(m.HS, m.AS, 'away')}>{m.AS ?? ''}</td>
-                <td className={`row-label ${m.AT === home ? 'h2h-home-cell' : ''}`}>{m.AT}</td>
-                <td className="col-narrow"><WdlBadge letter={{ 3: 'W', 1: 'D', 0: 'L' }[pts(m)]} /></td>
-                <td className="col-total col-narrow">{pts(m)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
+// 승/무/패 요약표에 2부 맞대결을 더한다(2026-10-11 사용자 지정 — "배당이 없으니 그냥 승/무/패 전체·홈기준에 들어가게").
+// 합계 칸(승·무·패)에만 더하고, 핸승·핸무·무·역 세부 칸에는 넣지 않는다 — 2부는 배당·핸디 결과가 없다(세부 합 < 합계가 될 수 있다).
+// 화면 표만 바꾼다: 상세보기 '전적' 배지·판정은 서버가 준 1부 요약(wdl_summary·wdl_summary_home) 그대로 계산한다.
+function addLowerWdl(wdl, rows, home, homeOnly) {
+  if (!wdl || !rows?.length) return wdl
+  const out = Object.fromEntries(['W', 'D', 'L'].map((k) => [k, { total: wdl[k]?.total || 0, breakdown: { ...(wdl[k]?.breakdown || {}) } }]))
+  rows.forEach((m) => {
+    if (homeOnly && m.HT !== home) return
+    const letter = { 3: 'W', 1: 'D', 0: 'L' }[homePoints(m, home)]
+    if (!letter) return
+    out[letter].total += 1
+    out[letter].breakdown['2부'] = (out[letter].breakdown['2부'] || 0) + 1
+  })
+  return out
 }
+
+const EMPTY_WDL = { W: { total: 0, breakdown: {} }, D: { total: 0, breakdown: {} }, L: { total: 0, breakdown: {} } }
 
 export default function HeadToHeadResult({
   scope, code, home, away, cross = true, limit = 200,
   preset, presetLoading = false, presetError = '',
-  homeOnly = false, years = 0, favJ = false, favY = false,
+  homeOnly = false, years = 0, favJ = false, favY = false, subRowsOf,
 }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
@@ -362,14 +333,12 @@ export default function HeadToHeadResult({
 
   if (effError) return <p className="error-text">{effError}</p>
   if (effLoading) return <p className="loading-text">불러오는 중...</p>
-  if (!effData || !effData.summary) {
+  // 1부 맞대결이 없어도 2부 맞대결이 있으면 같은 표로 그린다(요약은 2부만으로)
+  if (!effData || (!effData.summary && !effData.lower?.length)) {
     return (
-      <>
-        <p className="detail-empty">
-          {home} vs {away} {effData?.lower?.length ? '1부 ' : ''}맞대결 기록 없음
-        </p>
-        <LowerH2h rows={effData?.lower} home={home} />
-      </>
+      <p className="detail-empty">
+        {home} vs {away} 맞대결 기록 없음
+      </p>
     )
   }
 
@@ -380,10 +349,14 @@ export default function HeadToHeadResult({
   // 기간을 좁혔거나 정/역을 걸렀을 때만 요약표를 다시 센다(둘 다 안 걸렀으면 백엔드
   // 값 그대로 — 아래 wdlBreakdown 주석 참고).
   const recomputed = years > 0 || favActive
-  const wdl = recomputed ? wdlBreakdown(favMatches, home, false) : effData.wdl_summary
-  const wdlHome = recomputed ? wdlBreakdown(favMatches, home, true) : effData.wdl_summary_home
+  // 2부 맞대결도 승/무/패 합계에 더한다 — 기간(최근 N년)은 같이 적용, 정/역 필터는 2부에 배당이 없어 걸면 2부를 뺀다.
+  const lowerRows = favActive ? [] : withinPeriod(effData.lower || [], years)
+  const wdl = addLowerWdl(recomputed ? wdlBreakdown(favMatches, home, false) : (effData.wdl_summary || EMPTY_WDL), lowerRows, home, false)
+  const wdlHome = addLowerWdl(recomputed ? wdlBreakdown(favMatches, home, true) : (effData.wdl_summary_home || EMPTY_WDL), lowerRows, home, true)
+  // 1·2부를 한 목록으로(2026-10-11 사용자 지정) — L 칸에 1·2. 2부가 있으면 날짜순(최신이 위)으로 섞는다(utils/h2hVerdict withLowerH2h).
+  const mergedMatches = withLowerH2h(favMatches, lowerRows)
   // '홈보기' — 위 요약표 '홈기준' 줄과 같은 기준(home팀이 실제로 홈이었던 경기만).
-  const shownMatches = homeOnly ? favMatches.filter((m) => m.HT === home) : favMatches
+  const shownMatches = homeOnly ? mergedMatches.filter((m) => m.HT === home) : mergedMatches
   // 승/무/패 정렬 — 선택한 결과(homePoints 기준)에 해당하는 경기를 앞으로 뺀다.
   // scope='all'(전체기준)은 2단계: [그 결과인 경기] → [나머지].
   // scope='home'(홈기준)은 3단계: [홈경기 중 그 결과] → [홈경기 중 나머지] →
@@ -427,7 +400,14 @@ export default function HeadToHeadResult({
 
   return (
     <>
-      <WdlGrid wdl={wdl} wdlHome={wdlHome} onTotalClick={handleWdlSortSelect} activeMode={wdlSort} />
+      {/* subRowsOf(상세보기만 넘김) — 홈기준에 딸린 '- 첫경기'·'- 최근5' 줄(참고 줄 요약 상자와 같은 줄, 2026-10-11 사용자 지정).
+          기간·정/역 필터를 건 목록으로 센다. 홈팀 기준이 이번 경기 홈팀이라 리그탭 '상대전적 조회'에는 안 붙는다. */}
+      <WdlGrid wdl={wdl} wdlHome={wdlHome} onTotalClick={handleWdlSortSelect} activeMode={wdlSort} extra={subRowsOf ? subRowsOf(mergedMatches) : null} />
+      {lowerRows.length > 0 && (
+        <p className="h2h-more">
+          승/무/패 합계·목록에 2부 맞대결 {lowerRows.length}경기 포함(L=2, 홈기준 {lowerRows.filter((m) => m.HT === home).length}경기) · 2부는 배당이 없어 핸승·핸무·무·역 세부 칸과 유형 칸에는 안 들어갑니다
+        </p>
+      )}
       {wdlSort && (
         <p className="h2h-more h2h-sort-hint">
           {wdlSort.scope === 'home' ? '홈기준 ' : ''}
@@ -446,6 +426,7 @@ export default function HeadToHeadResult({
             <thead>
               <tr>
                 <th>시즌</th>
+                <th className="col-narrow" title="1 = 1부 · 2 = 2부(배당 없음 — 결과·승점만)">L</th>
                 <th>R</th>
                 <th>HT</th>
                 <th>HS</th>
@@ -465,6 +446,7 @@ export default function HeadToHeadResult({
                 return (
                   <tr key={i} className={seasonStart ? 'season-start' : undefined}>
                     <td>{m.S}</td>
+                    <td className={`col-narrow h2h-lg${m.L === 2 ? ' is-lower' : ''}`} title={m.L === 2 ? (m.comp || '2부') : '1부'}>{m.L}</td>
                     <td>{m.R}</td>
                     <td className={`row-label ${m.HT === home ? 'h2h-home-cell' : ''}`}>
                       {m.HT}
@@ -506,7 +488,6 @@ export default function HeadToHeadResult({
           최근 {effData.matches.length}경기만 표시 (총 {effData.total}경기)
         </p>
       )}
-      <LowerH2h rows={effData.lower} home={home} />
     </>
   )
 }

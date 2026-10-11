@@ -8,7 +8,7 @@ import { formatTime, formatDt, scoreClass, LEAGUE_LABELS_SHORT } from '../../uti
 import { computeAutoVerdict, pickVerdictStyle, opinionStyle, marketVerdictPick, rtToText, myPickStyle } from '../LeagueTable/columnGroups'
 import { PICK_OPTIONS, ODDS_PICK_OPTIONS, ODDS_BET_OPTIONS, P_OPTIONS, HIT_OPTIONS, REASON_TAG_OPTIONS, SAMPLE_DIRECTION_OPTIONS, sampleDirectionText, MEMO_TAG_FIELDS } from '../../utils/pickOptions'
 import { oddsMoveGrade, oddsMoveTitle } from '../../utils/oddsMove'
-import { h2hVerdict, h2hVerdictRecent, RECENT_SEASONS, seasonIdx, wdlBreakdown } from '../../utils/h2hVerdict'
+import { h2hVerdict, h2hVerdictRecent, RECENT_SEASONS, seasonIdx, wdlBreakdown, withLowerH2h } from '../../utils/h2hVerdict'
 import {
   drawTendency, drawRelation, VERDICT_TONE,
 } from '../../utils/systemVerdict'
@@ -697,8 +697,9 @@ function sameOrderHome(ms, row) {
 // 같은 모양으로 그 줄 바로 밑에 띄운다(동배 상자와 같은 자리). 줄: 전체기준 · 홈기준(여기까지 아래 섹션과 같음) ·
 // '- 첫경기'(홈기준 중 이번과 같은 N번째 맞대결이었던 것 — 전적 괄호 값) · '- 최근5'(홈기준 중 이번 시즌 제외 최근 5시즌 —
 // 전적 '최근5' 값). 아래 두 줄은 홈기준에 딸린 줄이다. 기준 팀은 이번 홈팀. 재료는 /api/pick_ai가 이미 준 맞대결 목록.
-function H2hSummaryPop({ matches, row }) {
-  const ms = Array.isArray(matches) ? matches : []
+// 홈기준에 딸린 두 줄('- 첫경기'·'- 최근5') — 참고 줄 요약 상자와 아래 상대전적 섹션 요약표가 같이 쓴다(2026-10-11 사용자 지정:
+// "아래 상대전적도 팝업에서 보이는 것처럼"). ms = 맞대결 목록(1·2부 합친 것), row = 이번 경기.
+function h2hHomeSubRows(ms, row) {
   const host = String(row.HT || '').trim()
   const me = 1 + ms.filter((x) => String(x.S) === String(row.S)).length
   const sameOrder = ms.filter((m) => String(m.HT || '').trim() === host && meetingOrder(m, ms) === me)
@@ -707,13 +708,25 @@ function H2hSummaryPop({ matches, row }) {
     const k = seasonIdx(m.S)
     return k !== null && k >= si - RECENT_SEASONS && k <= si - 1
   })
-  // 아래 두 줄은 '홈기준' 안에서 더 좁힌 것이라 이름 앞에 '- '를 붙여 홈기준에 딸린 줄로 보이게 한다(2026-10-10 사용자 지정).
   const orderTitle = me === 1 ? '첫경기' : me === 2 ? '두번째 경기' : `${me}번째 경기`
+  return {
+    me, orderTitle,
+    rows: [
+      { title: `- ${orderTitle}`, wdl: wdlBreakdown(sameOrder, host, true) },
+      { title: `- 최근${RECENT_SEASONS}`, wdl: wdlBreakdown(recent, host, true) },
+    ],
+  }
+}
+
+function H2hSummaryPop({ matches, row }) {
+  const ms = Array.isArray(matches) ? matches : []
+  const host = String(row.HT || '').trim()
+  // 아래 두 줄은 '홈기준' 안에서 더 좁힌 것이라 이름 앞에 '- '를 붙여 홈기준에 딸린 줄로 보이게 한다(2026-10-10 사용자 지정).
+  const { me, orderTitle, rows: subRows } = h2hHomeSubRows(ms, row)
   const rows = [
     { title: '전체기준', wdl: wdlBreakdown(ms, host, false) },
     { title: '홈기준', wdl: wdlBreakdown(ms, host, true) },
-    { title: `- ${orderTitle}`, wdl: wdlBreakdown(sameOrder, host, true) },
-    { title: `- 최근${RECENT_SEASONS}`, wdl: wdlBreakdown(recent, host, true) },
+    ...subRows,
   ]
   return (
     <span className="h2h-pop">
@@ -753,10 +766,16 @@ function h2hRefs(verdict, loading, recent, row, pick, h2hMatches) {
       </RefItem>,
     ]
   }
-  // 전적은 두 줄(2026-10-09 사용자 지정) — 1줄 '홈기준 전체 (이번과 같은 N번째 맞대결이었던 경기)', 2줄 '최근5'
+  // 전적은 세 줄(2026-10-11 사용자 지정 — 전체 / 홈기준 / - 최근5): 1줄 '전체'(홈·원정 모든 맞대결, 이번 홈팀 기준),
+  // 2줄 '홈기준 (이번과 같은 N번째 맞대결이었던 경기)', 3줄 '- 최근5'(홈기준에 딸린 줄이라 '- '). 1·2부 합친 맞대결로 센다.
   const so = Array.isArray(h2hMatches) ? sameOrderHome(h2hMatches, row) : null
+  const all = Array.isArray(h2hMatches) ? wdlBreakdown(h2hMatches, String(row.HT || '').trim(), false) : null
   return [
-    <RefItem key="h2h" label="전적" compact clickPop pop={<H2hSummaryPop matches={h2hMatches} row={row} />} title="누르면 상대전적 요약표(전체·홈·N번째 경기·최근 5시즌)">
+    <RefItem key="h2h-all" label="전적" compact clickPop pop={<H2hSummaryPop matches={h2hMatches} row={row} />} title="누르면 상대전적 요약표(전체·홈·N번째 경기·최근 5시즌)">
+      전체{' '}
+      {all ? `${all.W.total}/${all.D.total}/${all.L.total}` : '－'}
+    </RefItem>,
+    <RefItem key="h2h" label="" compact clickPop pop={<H2hSummaryPop matches={h2hMatches} row={row} />} title="누르면 상대전적 요약표(전체·홈·N번째 경기·최근 5시즌)">
       홈기준{' '}
       <span style={h2hValueText(verdict.w, verdict.d, verdict.l, row, pick)}>
         {verdict.w}/{verdict.d}/{verdict.l}
@@ -764,7 +783,7 @@ function h2hRefs(verdict, loading, recent, row, pick, h2hMatches) {
       {so && <span> ({so.w}/{so.d}/{so.l})</span>}
     </RefItem>,
     <RefItem key="h2h-recent" label="" compact clickPop pop={<H2hSummaryPop matches={h2hMatches} row={row} />} title="누르면 상대전적 요약표(전체·홈·N번째 경기·최근 5시즌)">
-      최근5{' '}
+      - 최근5{' '}
       {recent
         ? <span style={h2hValueText(recent.w, recent.d, recent.l, row, pick)}>{recent.w}/{recent.d}/{recent.l}</span>
         : '－'}
@@ -5438,6 +5457,13 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
   const h2hMark = pickData && pickData.h2h
     ? h2hVerdict(pickData.h2h.wdl_summary, pickData.h2h.wdl_summary_home)
     : null
+  // '참고' 줄 '전적'에 보여줄 값 — 1부+2부 맞대결 합친 것(2026-10-11 사용자 지정, 상대전적 표와 같은 기준).
+  // 위 h2hMark(1부만)는 플핸85·첫맞대결(플핸 확률 학습 재료)·축 판정용으로 그대로 둔다 — 그 기준은 1부로 실측됐다.
+  const h2hShownMatches = pickData ? withLowerH2h(pickData.h2h?.matches, pickData.h2h?.lower) : null
+  const h2hShownHost = String(row.HT || '').trim()
+  const h2hMarkShown = h2hShownMatches && h2hShownMatches.length
+    ? h2hVerdict(wdlBreakdown(h2hShownMatches, h2hShownHost, false), wdlBreakdown(h2hShownMatches, h2hShownHost, true))
+    : null
 
   useEffect(() => {
     let alive = true
@@ -5867,13 +5893,13 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
           samples={seasonSample?.samples}
           schedule={{ ctx: scheduleCtx }}
           row={row}
-          h2hVerdict={h2hMark}
+          h2hVerdict={h2hMarkShown}
           h2hLoading={!pickData && !pickError}
           xg={seasonXg}
           weekRank={weekRank}
           archiveTags={archiveTags}
           extraOdds={extraOdds}
-          h2hMatches={h2hMatchList}
+          h2hMatches={h2hShownMatches}
           axisV={axisV}
           axisStats={axisStats}
           uni={uni}
@@ -6127,6 +6153,7 @@ function MatchDetailBody({ code, row, scope, sameOdds, sampleDir, books, bookDir
               <HeadToHeadResult
                 scope={scope} code={code} home={ht} away={at} cross
                 preset={pickData ? pickData.h2h : null}
+                subRowsOf={(list) => h2hHomeSubRows(list, row).rows}
                 presetLoading={!pickData && !pickError}
                 presetError={pickError}
                 homeOnly={h2hHomeOnly}
