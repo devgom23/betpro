@@ -221,6 +221,17 @@
   font-weight: 700;
 }
 
+/* 결과 뒤에 같은 줄로 붙는 똥 — '핸무(똥1 1.30)'. 결과보다 한 단계 작게, 괄호는 흐리게(2026-10-11) */
+.rm-table .rm-dd-in {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.rm-table .rm-dd-par {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* 국·해가 갈린 판정(엇(정)·엇(플)) — 확신이 약한 표시라 살짝 흐리게 */
 .rm-table .rm-split {
   opacity: 0.8;

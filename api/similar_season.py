@@ -30,6 +30,7 @@ from triple_sample import odds_rank
 STEP_LIMIT = 3   # 기준 배당이 허용하는 호가 단계(감으로 정한 값 — 엑셀 카드 1~3단계)
 DRAW_LIMIT = 6   # 무 배당이 허용하는 호가 단계(엑셀 카드 87장 중 67%가 이 안)
 ROW_MAX = 3      # 한 줄(정배·역배)에 보이는 카드 수 상한
+GAMES_MAX = 80   # 결과 칸을 눌렀을 때 보여 줄 경기 수 상한(리그·줄마다)
 
 
 def _digits(v) -> str:
@@ -83,7 +84,9 @@ def for_match(code: str, s: str, r: str, ht: str, at: str, db: str | None = None
     st_d = step(kd, kd0)                                            # 무 배당 단계
     total = step(kw, kw0) + st_d + step(kl, kl0)                    # 승·무·패 세 값 호가 단계 합
     dkey = pd.to_datetime(pool["DT"].astype(str).str.split(" ").str[0], format="%y-%m-%d", errors="coerce")
-    recent = -dkey.fillna(pd.Timestamp(0)).astype("int64").to_numpy() // 10**9   # 작을수록 최근
+    dkey_ns = dkey.fillna(pd.Timestamp(0)).astype("int64").to_numpy()
+    recent = -dkey_ns // 10**9                                                # 작을수록 최근
+    tkey = pd.to_numeric(pool.get("TM"), errors="coerce").fillna(0).to_numpy()
 
     out = {"base": {"fav": round(float(fav0), 2), "dog": round(float(dog0), 2), "home_fav": bool(home_fav)},
            "leagues": [{"code": c, "label": PATHS.LEAGUE_LABEL.get(c, c)} for c in PATHS.LEAGUES]}
@@ -99,6 +102,10 @@ def for_match(code: str, s: str, r: str, ht: str, at: str, db: str | None = None
             best = idx[np.lexsort((recent[idx], total[idx]))[0]]
             cards[c] = _card(pool.iloc[best].to_dict(), float(diff[best]), st[best], total[best])
             cards[c]["counts"] = [int((rt[idx] == k).sum()) for k in (1, 2, 3, 4)]   # 핸승·핸무·무·역
+            # 결과 칸 아무 데나 누르면 뜨는 카드 목록(2026-10-11 사용자 지정) — 같은 조건 경기 전부(결과 가리지 않고),
+            # 시간순 — 맨 왼쪽이 최신, 오른쪽으로 갈수록 과거(사용자 지정)
+            order = idx[np.lexsort((-tkey[idx], -dkey_ns[idx]))][:GAMES_MAX]
+            cards[c]["games"] = [_card(pool.iloc[j].to_dict(), float(diff[j]), st[j], total[j]) for j in order]
             cards[c]["_recent"] = int(recent[best])
         keep = sorted(cards, key=lambda c: (cards[c]["total_steps"], cards[c]["_recent"]))[:ROW_MAX]
         for c in cards:

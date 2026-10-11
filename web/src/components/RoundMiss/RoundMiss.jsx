@@ -187,10 +187,15 @@ export function RoundMissGames({ lg, season, round, mkt, noHead }) {
                   {sel.map((g, i) => (
                     <td key={i} className={dc(i)}>
                       {g.rt ? <span className={RT_CLS[g.rt]}>{RT_TEXT[g.rt]}</span> : g.dd ? null : <span className="gray">예정</span>}
+                      {/* 결과가 나오면 '핸무(똥1 1.30)' 한 줄(2026-10-11 사용자 지정) — 결과·똥은 각자 색·굵기 그대로, 괄호만 흐리게 */}
                       {g.dd && (
-                        <span className={g.rt ? 'rm-sub rm-dd' : 'rm-dd'} title="국내 초기배당 1.49 이하 — 리그 표의 똥 순번과 같음(숫자는 정배배당)">
-                          {g.dd} {g.ddo !== null ? g.ddo.toFixed(2) : ''}
-                        </span>
+                        <>
+                          {g.rt && <span className="rm-dd-par">(</span>}
+                          <span className={g.rt ? 'rm-dd rm-dd-in' : 'rm-dd'} title="국내 초기배당 1.49 이하 — 리그 표의 똥 순번과 같음(숫자는 정배배당)">
+                            {g.dd} {g.ddo !== null ? g.ddo.toFixed(2) : ''}
+                          </span>
+                          {g.rt && <span className="rm-dd-par">)</span>}
+                        </>
                       )}
                       <Sz />
                     </td>

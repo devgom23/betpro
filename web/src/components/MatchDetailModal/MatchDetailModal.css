@@ -1,6 +1,7 @@
 .modal-backdrop {
   position: fixed;
   inset: 0;
+  overscroll-behavior: contain;   /* 팝업 바깥 어두운 곳에서 굴려도 뒤 본문이 안 움직이게(2026-10-11) */
   background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: flex-start;
@@ -63,6 +64,8 @@
   min-height: 0;
   overflow-y: auto;
   padding-bottom: 24px;
+  /* 맨 위·맨 아래까지 가서 더 굴려도 팝업 뒤 본문이 따라 스크롤되지 않게(2026-10-11 사용자 지정) */
+  overscroll-behavior: contain;
 }
 
 .modal-close {
@@ -2807,4 +2810,47 @@
 
 .verdict-lead .mypick-tag-lab {
   font-weight: 400;
+}
+
+/* 카드 밑 결과 4칸을 누르면 그 칸 경기 카드가 '참고' 줄 상자(.match-ref-pop)처럼 아래로 뜬다(2026-10-11) */
+.sim-counts-wrap {
+  position: relative;
+}
+
+.sim-counts.is-click {
+  cursor: pointer;
+}
+
+.sim-counts.is-click:hover .sim-count {
+  /* 윤곽선을 칸 안쪽으로 — 밖으로 두면 가로 스크롤 영역(.sim-grid, overflow)이 맨 아래 줄(역배)의 윤곽선 아랫변을 잘라 버린다(2026-10-11 사용자 제보) */
+  outline: 1px solid var(--text-secondary);
+  outline-offset: -1px;
+}
+
+.match-ref-pop.sim-rt-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(760px, calc(100vw - 80px));
+  white-space: normal;
+  cursor: default;
+}
+
+.sim-rt-pop-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.sim-rt-pop-head small {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.sim-rt-pop-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

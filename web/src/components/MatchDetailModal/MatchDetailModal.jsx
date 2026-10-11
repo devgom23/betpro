@@ -1160,7 +1160,7 @@ function sameSeasonRefs(row, samples) {
             {cards.length ? (
               <span className="same-season-pop-cards">
                 {cards.map((m, j) => (
-                  <SeasonSampleCard key={`${m.league}-${m.r}-${m.ht}-${j}`} m={m} kind={key} favCode={favCode} season={row.S} curRow={row} />
+                  <SeasonSampleCard key={`${m.league}-${m.r}-${m.ht}-${j}`} m={m} kind={key} favCode={favCode} curRow={row} />
                 ))}
               </span>
             ) : <span className="same-season-pop-none">이번 시즌 같은 배당 경기가 없습니다</span>}
@@ -2956,6 +2956,41 @@ function SimilarSeasonSection({ data, row, onHelp, note, onSaveNote }) {
     else next.add(key)
     return next
   })
+  // (이 상자의 카드는 전부 이번 시즌 경기라 '이번 시즌' 파랑 테두리를 안 준다 — season을 안 넘기면 안 붙는다. 2026-10-11 사용자 지정)
+  // 카드 밑 결과 칸(핸승·핸무·무·역) 아무 숫자나 누르면 그 칸 경기 카드가 결과 가리지 않고 시간순으로, '참고' 줄 상자처럼 뜬다
+  // (2026-10-11 사용자 지정 — 0/0/1/2면 무·역이 같이). { basis, code } 또는 null.
+  const [openRt, setOpenRt] = useState(null)
+  const popRef = useRef(null)
+  useEffect(() => {
+    if (!openRt) return undefined
+    // 상자 위치 — 카드 칸 표(.sim-grid)가 가로 스크롤(overflow)이라 그 안에 absolute로 두면 표 안에서 잘리며 스크롤이 생긴다
+    // (2026-10-11 사용자 제보). 그래서 화면 기준(fixed)으로 누른 칸 바로 아래에 띄우고, 본문(.detail-modal-scroll) 안쪽으로 당긴다.
+    // 자리가 모자라면 칸 위로 띄운다. 본문을 스크롤하면 위치가 어긋나므로 닫는다.
+    const box = popRef.current
+    const bound = box?.closest('.detail-modal-scroll')
+    const anchor = box?.parentElement
+    if (box && bound && anchor) {
+      const bb = bound.getBoundingClientRect()
+      const ab = anchor.getBoundingClientRect()
+      box.style.position = 'fixed'
+      box.style.margin = '0'
+      box.style.left = '0px'
+      box.style.top = `${ab.bottom + 4}px`
+      const pb = box.getBoundingClientRect()
+      const left = Math.max(bb.left + 8, Math.min(ab.left, bb.right - 8 - pb.width))
+      const below = ab.bottom + 4
+      const top = below + pb.height > window.innerHeight - 8 ? Math.max(8, ab.top - 4 - pb.height) : below
+      box.style.left = `${left}px`
+      box.style.top = `${top}px`
+    }
+    const onScroll = () => setOpenRt(null)
+    bound?.addEventListener('scroll', onScroll, { passive: true })
+    const onDown = (e) => { if (!e.target.closest?.('.sim-counts-wrap')) setOpenRt(null) }
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpenRt(null) } }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey, true)
+    return () => { bound?.removeEventListener('scroll', onScroll); document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey, true) }
+  }, [openRt])
   if (data === null) return null
   const homeFav = data?.base?.home_fav
   return (
@@ -2998,11 +3033,37 @@ function SimilarSeasonSection({ data, row, onHelp, note, onSaveNote }) {
                             <SeasonSampleCard m={m} kind="fav" favCode={favCode} curRow={row} />
                           </div>
                           <span className="sim-diff" title={`기준 ${data.base[basis].toFixed(2)}와의 호가 단계 차이 · 승·무·패 세 값 호가 단계 합`}>{simDiffText(m, name)}</span>
-                          {/* 그 리그에서 같은 조건(기준 3단계·무 6단계 안)을 통과한 경기 전부의 결과 수 — 엑셀 카드 밑 4칸 */}
-                          <div className="sim-counts" title={`${l.label}에서 같은 조건을 통과한 이번 시즌 경기 ${m.counts.reduce((a, b) => a + b, 0)}개의 결과`}>
-                            {SIM_RT.map(([lab, cls], k) => (
-                              <span key={lab} className={`sim-count ${cls}${m.counts[k] ? '' : ' is-zero'}`} title={lab}>{m.counts[k] || ''}</span>
-                            ))}
+                          {/* 그 리그에서 같은 조건(기준 3단계·무 6단계 안)을 통과한 경기 전부의 결과 수 — 엑셀 카드 밑 4칸.
+                              숫자 어느 칸을 눌러도 그 칸 경기 전부가 시간순으로 뜨는 상자(참고 줄 상자와 같은 모양) */}
+                          <div className="sim-counts-wrap">
+                            <div
+                              className="sim-counts is-click"
+                              title={`${l.label}에서 같은 조건을 통과한 이번 시즌 경기 ${m.counts.reduce((a, b) => a + b, 0)}개 — 누르면 그 경기 카드가 시간순으로 뜹니다`}
+                              onClick={() => setOpenRt((cur) => (cur && cur.basis === basis && cur.code === l.code ? null : { basis, code: l.code }))}
+                            >
+                              {SIM_RT.map(([lab, cls], k) => (
+                                <span key={lab} className={`sim-count ${cls}${m.counts[k] ? '' : ' is-zero'}`} title={lab}>{m.counts[k] || ''}</span>
+                              ))}
+                            </div>
+                            {openRt && openRt.basis === basis && openRt.code === l.code && (
+                              <span className="match-ref-pop is-open sim-rt-pop" ref={popRef}>
+                                <span className="sim-rt-pop-head">
+                                  {l.label} · {name} {data.base[basis].toFixed(2)} 기준 같은 조건 {m.games?.length || 0}경기 — 왼쪽이 최신
+                                  <small>핸승 {m.counts[0]} · 핸무 {m.counts[1]} · 무 {m.counts[2]} · 역 {m.counts[3]}</small>
+                                </span>
+                                <span className="sim-rt-pop-cards">
+                                  {(m.games || []).map((g, j) => (
+                                    <SeasonSampleCard
+                                      key={`${g.league}-${g.r}-${g.ht}-${j}`}
+                                      m={g}
+                                      kind="fav"
+                                      favCode={favCode}
+                                      curRow={row}
+                                    />
+                                  ))}
+                                </span>
+                              </span>
+                            )}
                           </div>
                         </>
                       )}
